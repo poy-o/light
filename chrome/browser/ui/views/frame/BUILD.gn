@@ -1990,8 +1990,32 @@ if (is_mac) {
     ]
   }
 
+  source_set("light_glass_modal_mac") {
+    sources = [
+      "light_glass_modal_mac.h",
+      "light_glass_modal_mac.mm",
+    ]
+    deps = [
+      "//base",
+      "//chrome/browser/extensions",
+      "//chrome/browser/webauthn",
+      "//ui/gfx",
+      "//ui/views",
+    ]
+    frameworks = [
+      "AppKit.framework",
+      "QuartzCore.framework",
+    ]
+  }
+
   source_set("browser_native_widget_mac_impl") {
-    sources = [ "browser_native_widget_mac.mm" ]
+    sources = [
+      "browser_native_widget_mac.mm",
+      "light_glass_sidebar_controller.h",
+      "light_glass_sidebar_controller.mm",
+      "light_native_settings_controller.h",
+      "light_native_settings_controller.mm",
+    ]
     public_deps = [ ":browser_native_widget_mac" ]
     deps = [
       ":browser_frame_view",
@@ -2002,10 +2026,15 @@ if (is_mac) {
       "//chrome/app:command_ids",
       "//chrome/app:generated_resources",
       "//chrome/browser:app_controller_mac",
+      "//chrome/browser:browser_process",
       "//chrome/browser:global_keyboard_shortcuts_mac",
       "//chrome/browser/apps/app_shim",
+      "//chrome/browser/autocomplete",
       "//chrome/browser/browsing_data",
       "//chrome/browser/media/router:media_router_feature",
+      "//chrome/browser/profiles:profile",
+      "//chrome/browser/search_engines",
+      "//chrome/browser/themes",
       "//chrome/browser/ui:browser_actions",
       "//chrome/browser/ui:browser_command_controller",
       "//chrome/browser/ui:browser_commands",
@@ -2016,7 +2045,9 @@ if (is_mac) {
       "//chrome/browser/ui/cocoa",
       "//chrome/browser/ui/immersive:immersive_mode_controller",
       "//chrome/browser/ui/lens",
+      "//chrome/browser/ui/navigator",
       "//chrome/browser/ui/omnibox",
+      "//chrome/browser/ui/tabs",
       "//chrome/browser/ui/tabs:tab_strip",
       "//chrome/browser/ui/views/frame:browser_view_header",
       "//chrome/browser/ui/views/web_apps/frame_toolbar:web_app_frame_toolbar_utils",
@@ -2026,12 +2057,18 @@ if (is_mac) {
       "//components/input",
       "//components/lens:features",
       "//components/omnibox/browser",
+      "//components/prefs",
       "//components/remote_cocoa/app_shim",
       "//components/remote_cocoa/common:mojo",
+      "//components/search_engines",
+      "//components/tabs:public",
+      "//components/url_formatter",
       "//components/web_distiller/content/browser",
       "//components/web_distiller/core",
       "//components/web_modal",
+      "//content/public/browser",
       "//skia",
+      "//third_party/metrics_proto",
       "//ui/accessibility",
       "//ui/actions",
       "//ui/base",
@@ -2041,6 +2078,7 @@ if (is_mac) {
       "//ui/gfx",
       "//ui/native_theme",
       "//ui/views",
+      "//url",
     ]
   }
 

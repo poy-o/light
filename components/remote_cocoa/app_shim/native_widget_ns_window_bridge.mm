@@ -1890,7 +1890,7 @@ bool NativeWidgetNSWindowBridge::ShouldWaitInPreCommit() {
 }
 
 base::TimeDelta NativeWidgetNSWindowBridge::PreCommitTimeout() {
-  return kUIPaintTimeout;
+  return IsWindowInLiveResize() ? base::Milliseconds(24) : kUIPaintTimeout;
 }
 
 bool NativeWidgetNSWindowBridge::IsWindowInLiveResize() {
@@ -2323,9 +2323,7 @@ void NativeWidgetNSWindowBridge::UpdateWindowGeometry() {
   CheckAndNotifyAllWorkspacesStateChanged();
 
   if (content_resized && window_.visible && !ca_transaction_sync_suppressed_) {
-    if (!base::FeatureList::IsEnabled(::features::kAsyncLiveResize)) {
-      ui::CATransactionCoordinator::Get().Synchronize();
-    }
+    ui::CATransactionCoordinator::Get().Synchronize();
   }
 
   // For a translucent window, the shadow calculation needs to be carried out

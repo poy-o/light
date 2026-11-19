@@ -163,6 +163,10 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
                             bool is_web_app,
                             bool is_post_crash_launch,
                             bool was_restarted) {
+  // Suppress all startup nag infobars and session-crashed bubbles.
+  if ((true)) {
+    return;
+  }
   if (!browser || !profile) {
     return;
   }

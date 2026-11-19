@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>${EXECUTABLE_NAME}</string>
+	<string>Light</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -156,7 +156,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>${CHROMIUM_SHORT_NAME}</string>
+	<string>Light</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleSignature</key>

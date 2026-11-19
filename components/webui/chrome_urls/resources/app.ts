@@ -148,6 +148,10 @@ export class ChromeUrlsAppElement extends CrLitElement {
     return this.internalUisEnabled_ ? 'enabled' : 'disabled';
   }
 
+  protected toLightUrl_(url: string): string {
+    return url.replace(/^chrome:\/\//, 'light://');
+  }
+
   protected getDebugPagesToggleButtonLabel_(): string {
     return this.internalUisEnabled_ ? 'Disable internal debugging pages' :
                                       'Enable internal debugging pages';

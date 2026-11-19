@@ -81,16 +81,6 @@ void RegisterDefaultBrowserPromptPrefs(PrefRegistrySimple* registry) {
 
 void ShowDefaultBrowserPrompt(Profile* profile,
                               base::OnceCallback<void(bool)> done_callback) {
-  // Do not check if Chrome is the default browser if there is a policy in
-  // control of this setting.
-  if (g_browser_process->local_state()->IsManagedPreference(
-          prefs::kDefaultBrowserSettingEnabled)) {
-    // Handling of the browser.default_browser_setting_enabled policy setting is
-    // taken care of in BrowserProcessImpl.
-    return;
-  }
-
-  default_browser::DefaultBrowserManager::From(g_browser_process)
-      ->GetDefaultBrowserState(base::BindOnce(
-          &OnCheckIsDefaultBrowserFinished, profile, std::move(done_callback)));
+  std::move(done_callback).Run(false);
+  return;
 }

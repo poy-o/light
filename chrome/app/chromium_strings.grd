@@ -294,15 +294,15 @@ If you update this file, be sure also to update google_chrome_strings.grd. -->
         </then>
         <else>
           <message name="IDS_PRODUCT_NAME" desc="The Chrome application name" translateable="false">
-            Chromium
+            Light
           </message>
           <message name="IDS_SHORT_PRODUCT_NAME" desc="The Chrome application short name." translateable="false">
-            Chromium
+            Light
           </message>
         </else>
       </if>
       <message name="IDS_APP_MENU_YOUR_CHROME_HEADER" desc="Header title for the Your Chromium section in the main App Menu">
-        Your Chromium
+        Your Light
       </message>
       <if expr="is_win">
         <message name="IDS_SXS_SHORTCUT_NAME" desc="Unused in Chromium builds" translateable="false">
@@ -1159,10 +1159,10 @@ Chromium is unable to recover your settings.
 
       <if expr="is_macosx">
         <message name="IDS_APP_MENU_PRODUCT_NAME" desc="The application's short name, used for the Mac's application menu, activity monitor, etc. This should be less than 16 characters. Example: Chrome, not Google Chrome." translateable="false">
-          Chromium
+          Light
         </message>
         <message name="IDS_HELPER_NAME" desc="The helper application's name.  Should contain the Chrome application name (IDS_PRODUCT_NAME). Example: Google Chrome Helper.">
-          Chromium Helper
+          Light Helper
         </message>
       </if>
 

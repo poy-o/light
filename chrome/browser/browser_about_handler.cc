@@ -52,6 +52,12 @@ bool HandleChromeAboutAndChromeSyncRewrite(
   DCHECK(url->IsAboutBlank() || url->IsAboutSrcdoc() ||
          !url->SchemeIs(url::kAboutScheme));
 
+  if (url->SchemeIs("light")) {
+    GURL::Replacements scheme_rep;
+    scheme_rep.SetSchemeStr(content::kChromeUIScheme);
+    *url = url->ReplaceComponents(scheme_rep);
+  }
+
   // Only handle chrome: URLs.
   if (!url->SchemeIs(content::kChromeUIScheme)) {
     return false;

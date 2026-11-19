@@ -8,7 +8,12 @@
 #include <utility>
 
 #include "base/scoped_observation.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/views/extensions/security_dialog_tracker.h"
+
+#if BUILDFLAG(IS_MAC)
+#include "chrome/browser/ui/views/frame/light_glass_modal_mac.h"
+#endif
 #include "chrome/browser/ui/views/webauthn/authenticator_request_dialog_view.h"
 #include "chrome/browser/ui/views/webauthn/authenticator_request_sheet_view.h"
 #include "chrome/browser/ui/views/webauthn/sheet_view_factory.h"
@@ -53,6 +58,9 @@ AuthenticatorRequestDialogViewControllerViews::
 
   widget_ = constrained_window::ShowWebModalDialogViewsOwned(
       view_, web_contents, views::Widget::InitParams::CLIENT_OWNS_WIDGET);
+#if BUILDFLAG(IS_MAC)
+  LightApplyLiquidGlassToWidget(widget_.get(), 18.0f);
+#endif
   extensions::SecurityDialogTracker::GetInstance()->AddSecurityDialog(
       widget_.get());
 
@@ -60,12 +68,27 @@ AuthenticatorRequestDialogViewControllerViews::
 }
 
 AuthenticatorRequestDialogViewControllerViews::
-    ~AuthenticatorRequestDialogViewControllerViews() = default;
+    ~AuthenticatorRequestDialogViewControllerViews() {
+#if BUILDFLAG(IS_MAC)
+  LightDismissGlassWebAuthnDialog(model_);
+#endif
+}
 
 void AuthenticatorRequestDialogViewControllerViews::OnStepTransition() {
   CHECK(!model_->should_dialog_be_closed(), base::NotFatalUntil::M162);
+#if BUILDFLAG(IS_MAC)
+  if (LightUpdateGlassWebAuthnDialog(model_, widget_.get())) {
+    if (widget_) {
+      widget_->Hide();
+    }
+    return;
+  }
+#endif
   view_->ReplaceCurrentSheetWith(CreateSheetViewForCurrentStepOf(model_));
   view_->Show();
+#if BUILDFLAG(IS_MAC)
+  LightApplyLiquidGlassToWidget(widget_.get(), 18.0f);
+#endif
 }
 
 void AuthenticatorRequestDialogViewControllerViews::OnSheetModelChanged() {

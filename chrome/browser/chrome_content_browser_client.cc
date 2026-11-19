@@ -7881,6 +7881,12 @@ bool ChromeContentBrowserClient::ShowPaymentHandlerWindow(
 bool ChromeContentBrowserClient::HandleWebUIReverse(
     GURL* url,
     content::BrowserContext* browser_context) {
+  if (url->SchemeIs(content::kChromeUIScheme) &&
+      (url->host() == chrome::kChromeUIChromeURLsHost ||
+       url->host() == chrome::kChromeUIAboutHost)) {
+    *url = GURL("light://about/");
+    return true;
+  }
 #if BUILDFLAG(CHROME_ROOT_STORE_CERT_MANAGEMENT_UI)
   // No need to actually reverse-rewrite the URL, but return true to update the
   // displayed URL when rewriting chrome://settings/certificates to

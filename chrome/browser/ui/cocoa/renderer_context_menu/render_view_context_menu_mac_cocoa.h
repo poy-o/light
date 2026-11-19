@@ -7,8 +7,10 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/cocoa/renderer_context_menu/render_view_context_menu_mac.h"
 
+@class LightCtxPinnedActionTarget;
 @class MenuControllerCocoa;
 @class MenuControllerCocoaDelegateImpl;
 
@@ -46,6 +48,9 @@ class RenderViewContextMenuMacCocoa : public RenderViewContextMenuMac {
 
   // The Cocoa parent view.
   NSView* __weak parent_view_;
+
+  LightCtxPinnedActionTarget* __strong pinned_target_;
+  base::WeakPtrFactory<RenderViewContextMenuMacCocoa> weak_factory_{this};
 };
 
 #endif  // CHROME_BROWSER_UI_COCOA_RENDERER_CONTEXT_MENU_RENDER_VIEW_CONTEXT_MENU_MAC_COCOA_H_

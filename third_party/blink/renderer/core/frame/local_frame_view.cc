@@ -1964,11 +1964,27 @@ bool LocalFrameView::ShouldUseColorAdjustBackground() const {
 }
 
 Color LocalFrameView::BaseBackgroundColor() const {
+  if (author_declared_transparent_background_) {
+    return Color::kTransparent;
+  }
   if (ShouldUseColorAdjustBackground()) {
     DCHECK(frame_->GetDocument());
     return frame_->GetDocument()->GetStyleEngine().ColorAdjustBackgroundColor();
   }
   return base_background_color_;
+}
+
+void LocalFrameView::SetAuthorDeclaredTransparentBackground(bool value) {
+  if (author_declared_transparent_background_ == value) {
+    return;
+  }
+  author_declared_transparent_background_ = value;
+  if (auto* layout_view = GetLayoutView()) {
+    layout_view->SetBackgroundNeedsFullPaintInvalidation();
+  }
+  if (!ShouldThrottleRendering()) {
+    GetPage()->Animator().ScheduleVisualUpdate(frame_.Get());
+  }
 }
 
 void LocalFrameView::SetBaseBackgroundColor(const Color& background_color) {

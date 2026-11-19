@@ -319,6 +319,10 @@ class CORE_EXPORT LocalFrameView final
   Color BaseBackgroundColor() const;
   void SetBaseBackgroundColor(const Color&);
   void UpdateBaseBackgroundColorRecursively(const Color&);
+  bool AuthorDeclaredTransparentBackground() const {
+    return author_declared_transparent_background_;
+  }
+  void SetAuthorDeclaredTransparentBackground(bool);
 
   enum class UseColorAdjustBackground {
     // Use the base background color set on this view.
@@ -1232,6 +1236,7 @@ class CORE_EXPORT LocalFrameView final
   UseColorAdjustBackground use_color_adjust_background_{
       UseColorAdjustBackground::kNo};
   Color base_background_color_;
+  bool author_declared_transparent_background_ = false;
 
   // Used for tracking the frame's size and replicating it to the browser
   // process when it changes.

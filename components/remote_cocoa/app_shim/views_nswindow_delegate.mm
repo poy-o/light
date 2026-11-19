@@ -184,55 +184,10 @@
     size = resizedWindowRect.size().ToCGSize();
   }
 
-  // For live-resize, reject the automatic resize. Instead, tell the compositor
-  // to produce a frame of the new size, and then call -[NSWindow setFrame:]
-  // when the new frame is ready.
-  if (base::FeatureList::IsEnabled(features::kAsyncLiveResize) &&
-      [_parent->ns_window() inLiveResize]) {
-    NSWindowLiveResizeEdges edge = [_parent->ns_window() liveResizeEdges];
-
-    // If the user is resizing the window interactively without directly
-    // manipulating the window itself, e.g., through native window tiling,
-    // `liveResizeEdges` will report that no edges are being live resized. In
-    // that case, simply accept the proposed size so as not to break resizing
-    // (see https://crbug.com/583338534).
-    if (edge == NSWindowLiveResizeEdgesNone) {
-      return size;
-    }
-
-    NSRect newWindowFrame = windowFrame;
-    newWindowFrame.size = size;
-
-    const CGFloat width_delta =
-        newWindowFrame.size.width - windowFrame.size.width;
-    const CGFloat height_delta =
-        newWindowFrame.size.height - windowFrame.size.height;
-    // Holding down the Option key while resizing a window causes the window to
-    // resize symmetrically around its center instead of anchoring the opposite
-    // edge or corner. In that case, the window's height and width values will
-    // change at double the rate of the origin shift along the active axes
-    // (e.g., a 100px change in width causes a 50px shift to the x origin).
-    const bool is_resizing_from_horizontal_center =
-        (edge & NSWindowLiveResizeEdgesHorizontal) ==
-        NSWindowLiveResizeEdgesHorizontal;
-    const bool is_resizing_from_vertical_center =
-        (edge & NSWindowLiveResizeEdgesVertical) ==
-        NSWindowLiveResizeEdgesVertical;
-    const CGFloat horizontal_divisor =
-        is_resizing_from_horizontal_center ? 2.0 : 1.0;
-    const CGFloat vertical_divisor =
-        is_resizing_from_vertical_center ? 2.0 : 1.0;
-
-    if (edge & NSWindowLiveResizeEdgesLeft) {
-      newWindowFrame.origin.x -= std::round(width_delta / horizontal_divisor);
-    }
-    if (edge & NSWindowLiveResizeEdgesBottom) {
-      newWindowFrame.origin.y -= std::round(height_delta / vertical_divisor);
-    }
-
-    _parent->OnLiveResizeToFrame(newWindowFrame);
-    return windowFrame.size;
-  }
+  // Let AppKit drive live-resize and macOS 26/27 Window Tiling / Snap / Unsnap
+  // frames directly instead of rejecting windowWillResize:toSize: and fighting
+  // AppKit asynchronously via OnLiveResizeToFrame (which caused 1130<->553
+  // tiling ping-pong and origin jumps when liveResizeEdges == 0).
   return size;
 }
 

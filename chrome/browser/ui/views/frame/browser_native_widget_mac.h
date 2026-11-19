@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_NATIVE_WIDGET_MAC_H_
 #define CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_NATIVE_WIDGET_MAC_H_
 
+#include <memory>
 #include <optional>
 
 #include "base/callback_list.h"
@@ -22,6 +23,7 @@
 
 class BrowserWidget;
 class BrowserView;
+class LightGlassSidebarBridge;
 @class BrowserWindowTouchBarController;
 @class BrowserWindowTouchBarViewsDelegate;
 
@@ -132,6 +134,7 @@ class BrowserNativeWidgetMac : public views::NativeWidgetMac,
   NSView* __strong glass_background_view_;
   NSView* __strong tint_view_;
   NSView* __strong opaque_background_view_;
+  std::unique_ptr<LightGlassSidebarBridge> light_sidebar_bridge_;
 
   std::optional<SkColor> last_theme_color_;
   std::optional<bool> last_is_vertical_tabs_;

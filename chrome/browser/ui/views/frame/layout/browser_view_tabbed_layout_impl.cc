@@ -841,6 +841,10 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
   }
 
   BrowserLayoutParams params = layout_data_->revised_params;
+  if (const int light_pinned_w = delegate().GetLightPinnedSidebarWidth();
+      light_pinned_w > 0) {
+    params.visual_client_area.Inset(gfx::Insets::TLBR(0, light_pinned_w, 0, 0));
+  }
   bool needs_exclusion = true;
   const HorizontalLayout& horizontal_layout = layout_data_->horizontal_layout;
 

@@ -767,6 +767,9 @@ source_set("extension_install_dialog_view_impl") {
     "//ui/gfx/geometry",
     "//ui/views",
   ]
+  if (is_mac) {
+    deps += [ "//chrome/browser/ui/views/frame:light_glass_modal_mac" ]
+  }
 }
 
 source_set("extensions_request_access_button") {
@@ -810,6 +813,9 @@ source_set("extensions_request_access_button_impl") {
     "//ui/gfx/geometry",
     "//ui/views",
   ]
+  if (is_mac) {
+    deps += [ "//chrome/browser/ui/views/frame:light_glass_modal_mac" ]
+  }
 }
 
 source_set("extensions_toolbar_button") {

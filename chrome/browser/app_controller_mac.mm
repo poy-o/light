@@ -989,6 +989,14 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
 }
 
 - (void)cancelConfirmQuitPanel {
+  Class bridgeCls = NSClassFromString(@"LightConfirmQuitBridge");
+  SEL cancelSel = NSSelectorFromString(@"cancelConfirmQuit");
+  if (bridgeCls && [bridgeCls respondsToSelector:cancelSel]) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+    [bridgeCls performSelector:cancelSel];
+#pragma clang diagnostic pop
+  }
   [_confirmQuitPanelController cancel];
   _confirmQuitPanelController = nil;
 }
@@ -1015,37 +1023,18 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
     return ConfirmQuitResultNotPrompted;
   }
 
-  // Check if the preference is turned on.
-  const PrefService* prefs = g_browser_process->local_state();
-  if (!prefs->GetBoolean(prefs::kConfirmToQuitEnabled)) {
-    confirm_quit::RecordHistogram(confirm_quit::kNoConfirm);
-    return ConfirmQuitResultNotPrompted;
+  Class bridgeCls = NSClassFromString(@"LightConfirmQuitBridge");
+  SEL attemptSel = NSSelectorFromString(@"handleConfirmQuitAttempt");
+  if (bridgeCls && [bridgeCls respondsToSelector:attemptSel]) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+    NSNumber* confirmed = [bridgeCls performSelector:attemptSel];
+#pragma clang diagnostic pop
+    return [confirmed boolValue] ? ConfirmQuitResultConfirmed
+                                 : ConfirmQuitResultAborted;
   }
 
-  NSEvent* event = [NSApp currentEvent];
-  // Run only for keyboard-initiated quits.
-  if (!event || CommandForKeyEvent(event).chrome_command != IDC_EXIT) {
-    return ConfirmQuitResultNotPrompted;
-  }
-
-  // In the event of a double-quit attempt (holding command and pressing 'Q'
-  // twice), we will already have a ConfirmQuitPanelController, so only create a
-  // new one if needed.
-  if (!_confirmQuitPanelController) {
-    _confirmQuitPanelController = [[ConfirmQuitPanelController alloc] init];
-  }
-
-  __weak AppController* weakSelf = self;
-  BOOL quitConfirmed = [_confirmQuitPanelController
-      runConfirmQuitLoopWithEvent:event
-                dismissedCallback:^{
-                  AppController* strongSelf = weakSelf;
-                  if (strongSelf && !browser_shutdown::IsTryingToQuit()) {
-                    strongSelf->_confirmQuitPanelController = nil;
-                  }
-                }];
-
-  return quitConfirmed ? ConfirmQuitResultConfirmed : ConfirmQuitResultAborted;
+  return ConfirmQuitResultNotPrompted;
 }
 
 // Handles the NSApplicationWillTerminateNotification notification. (Note to
@@ -2104,6 +2093,16 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
     // Failed to load profile, show Profile Picker instead.
     return;
   }
+  Class nativeSettingsCls = NSClassFromString(@"LightNativeSettingsMenuBridge");
+  SEL sel = NSSelectorFromString(@"openForProfilePtr:");
+  if (nativeSettingsCls && [nativeSettingsCls respondsToSelector:sel]) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+    [nativeSettingsCls performSelector:sel
+                            withObject:[NSValue valueWithPointer:profile]];
+#pragma clang diagnostic pop
+    return;
+  }
   // Re-use an existing browser, or create a new one.
   if (BrowserWindowInterface* browser = ActivateBrowser(profile)) {
     chrome::ShowSettings(browser);
@@ -2126,12 +2125,9 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
     // Failed to load profile, show Profile Picker instead.
     return;
   }
-  // Re-use an existing browser, or create a new one.
-  if (BrowserWindowInterface* browser = ActivateBrowser(profile)) {
-    chrome::ShowAboutChrome(browser);
-  } else {
-    chrome::OpenAboutWindow(profile);
-  }
+  StartupTabs tabs;
+  tabs.emplace_back(GURL("light://about/"), /*is_untrusted_launch=*/false);
+  [self openStartupTabsReplacingNTP:std::move(tabs)];
 }
 
 - (IBAction)toggleConfirmToQuit:(id)sender {

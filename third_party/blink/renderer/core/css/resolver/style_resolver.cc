@@ -3811,6 +3811,15 @@ void StyleResolver::PropagateStyleToViewport() {
       image_rendering = background_style->ImageRendering();
     }
 
+    if (GetDocument().GetFrame() && GetDocument().GetFrame()->IsMainFrame()) {
+      const bool author_transparent =
+          background_style && background_style->HasAuthorBackground() &&
+          background_color.IsFullyTransparent();
+      if (LocalFrameView* fv = GetDocument().View()) {
+        fv->SetAuthorDeclaredTransparentBackground(author_transparent);
+      }
+    }
+
     if (viewport_style.VisitedDependentColor(GetCSSPropertyBackgroundColor()) !=
             background_color ||
         viewport_style.BackgroundLayers() != background_layers ||

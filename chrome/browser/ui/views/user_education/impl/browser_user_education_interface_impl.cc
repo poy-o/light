@@ -167,38 +167,6 @@ bool BrowserUserEducationInterfaceImpl::HasFeaturePromoBeenDismissed(
 
 bool BrowserUserEducationInterfaceImpl::MaybeShowFeaturePromo(
     user_education::FeaturePromoParams params) {
-  // Trying to show a promo before the browser is initialized can result in a
-  // failure to retrieve accelerators, which can cause issues for screen reader
-  // users.
-  if (state_ != State::kInitialized) {
-    std::string_view state_desc;
-    switch (state_) {
-      case State::kUninitialized:
-        state_desc = " before browser initialization";
-        break;
-      case State::kInitializationPending:
-        state_desc = " before browser initialization complete";
-        break;
-      case State::kTornDown:
-        state_desc = " after browser shutdown";
-        break;
-      case State::kInitialized:
-        NOTREACHED();
-    }
-    LOG(ERROR) << "Attempting to show IPH " << params.feature->name
-               << state_desc << "; IPH will not be shown.";
-    PostShowPromoFailure(std::move(params),
-                         user_education::FeaturePromoResult::kError);
-    return false;
-  }
-
-  if (auto* const controller = GetFeaturePromoController()) {
-    const auto& feature = *params.feature;
-    controller->MaybeShowPromo(std::move(params), user_education_context_);
-    return controller->IsPromoActive(
-        feature, user_education::FeaturePromoStatus::kQueued);
-  }
-
   PostShowPromoFailure(std::move(params),
                        user_education::FeaturePromoResult::kBlockedByContext);
   return false;
@@ -206,21 +174,9 @@ bool BrowserUserEducationInterfaceImpl::MaybeShowFeaturePromo(
 
 bool BrowserUserEducationInterfaceImpl::MaybeShowStartupFeaturePromo(
     user_education::FeaturePromoParams params) {
-  if (state_ == State::kUninitialized ||
-      state_ == State::kInitializationPending) {
-    queued_params_.push_back(std::move(params));
-    return true;
-  }
-
-  if (state_ == State::kTornDown) {
-    LOG(ERROR) << "Attempting to show IPH " << params.feature->name
-               << " after browser shutdown; IPH will not be shown.";
-    PostShowPromoFailure(std::move(params),
-                         user_education::FeaturePromoResult::kError);
-    return false;
-  }
-
-  return MaybeShowStartupFeaturePromoImpl(std::move(params));
+  PostShowPromoFailure(std::move(params),
+                       user_education::FeaturePromoResult::kBlockedByContext);
+  return false;
 }
 
 bool BrowserUserEducationInterfaceImpl::AbortFeaturePromo(

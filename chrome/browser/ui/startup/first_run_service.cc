@@ -91,7 +91,7 @@ FirstRunService::FirstRunService(Profile& profile,
 FirstRunService::~FirstRunService() = default;
 
 bool FirstRunService::ShouldOpenFirstRun() const {
-  return ::ShouldOpenFirstRun(&profile_.get());
+  return false;
 }
 
 void FirstRunService::TryMarkFirstRunAlreadyFinished(

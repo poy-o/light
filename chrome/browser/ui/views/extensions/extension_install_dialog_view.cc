@@ -69,6 +69,10 @@
 #include "ui/views/window/dialog_delegate.h"
 #include "ui/views/window/non_client_view.h"
 
+#if BUILDFLAG(IS_MAC)
+#include "chrome/browser/ui/views/frame/light_glass_modal_mac.h"
+#endif
+
 using content::OpenURLParams;
 using content::Referrer;
 using extensions::InstallPromptData;
@@ -146,6 +150,13 @@ void ShowExtensionInstallDialogImpl(
       browser->GetTabStripModel()->GetActiveWebContents() != web_contents) {
     BrowserWebContentsDelegate::From(browser)->ActivateContents(web_contents);
   }
+
+#if BUILDFLAG(IS_MAC)
+  if (LightShowGlassExtensionInstallDialog(show_params, done_callback,
+                                           prompt)) {
+    return;
+  }
+#endif
 
   gfx::NativeWindow parent_window = show_params->GetParentWindow();
   auto dialog = std::make_unique<ExtensionInstallDialogView>(

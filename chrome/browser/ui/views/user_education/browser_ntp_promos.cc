@@ -165,6 +165,9 @@ void InvokeOmniboxEverywherePromo(ContextPtr context) {
 }  // namespace
 
 void MaybeRegisterNtpPromos(user_education::NtpPromoRegistry& registry) {
+  if ((true)) {
+    return;
+  }
   if (registry.AreAnyPromosRegistered()) {
     return;
   }

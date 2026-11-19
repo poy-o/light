@@ -138,6 +138,7 @@ source_set("webauthn") {
     ]
 
     deps += [
+      "//chrome/browser/ui/views/frame:light_glass_modal_mac",
       "//components/device_event_log",
       "//device/fido/strings:strings_grit",
     ]

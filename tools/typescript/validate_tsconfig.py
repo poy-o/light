@@ -320,9 +320,10 @@ def validateDefinitionDeps(
       and f_from_gen not in definitions_normalized
       and not any(f_from_cwd.startswith(exception) for exception in exceptions)
     ):
-      missing_inputs.append(
-        os.path.relpath(f_from_cwd, _SRC_DIR).replace('\\', '/')
-      )
+      rel_to_src = os.path.relpath(f_from_cwd, _SRC_DIR).replace('\\', '/')
+      if rel_to_src.startswith('../') and '/node_modules/' in f'/{rel_to_src}':
+        continue
+      missing_inputs.append(rel_to_src)
 
   if not missing_inputs:
     return True, None

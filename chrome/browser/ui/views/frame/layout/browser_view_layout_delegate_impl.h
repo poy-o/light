@@ -34,6 +34,7 @@ class BrowserViewLayoutDelegateImpl : public BrowserViewLayoutDelegate {
   bool IsBookmarkBarVisible() const override;
   bool IsInfobarVisible() const override;
   bool IsContentsSeparatorEnabled() const override;
+  int GetLightPinnedSidebarWidth() const override;
   bool IsActiveTabSplit() const override;
   bool IsActiveTabAtLeadingWindowEdge() const override;
   const ImmersiveModeController* GetImmersiveModeController() const override;

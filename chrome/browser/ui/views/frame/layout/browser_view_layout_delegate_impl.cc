@@ -7,6 +7,9 @@
 #include "base/callback_list.h"
 #include "base/feature_list.h"
 #include "build/build_config.h"
+#if BUILDFLAG(IS_MAC)
+#include "chrome/browser/ui/views/frame/light_glass_sidebar_controller.h"
+#endif
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/animation/browser_animation_controller.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
@@ -53,6 +56,11 @@ BrowserViewLayoutDelegateImpl::~BrowserViewLayoutDelegateImpl() = default;
 
 BrowserViewLayoutDelegate::TabStripType
 BrowserViewLayoutDelegateImpl::GetTabStripType() const {
+#if BUILDFLAG(IS_MAC)
+  if (browser_view_->GetIsNormalType()) {
+    return TabStripType::kNone;
+  }
+#endif
   // Can there be a tabstrip at all right now?
   if (!browser_view_->ShouldDrawTabStrip()) {
     return TabStripType::kNone;
@@ -145,14 +153,29 @@ views::LayoutAlignment BrowserViewLayoutDelegateImpl::GetWindowTitleAlignment()
 }
 
 bool BrowserViewLayoutDelegateImpl::IsToolbarVisible() const {
+#if BUILDFLAG(IS_MAC)
+  if (browser_view_->GetIsNormalType()) {
+    return false;
+  }
+#endif
   return browser_view_->IsToolbarVisible();
 }
 
 bool BrowserViewLayoutDelegateImpl::IsBookmarkBarVisible() const {
+#if BUILDFLAG(IS_MAC)
+  if (browser_view_->GetIsNormalType()) {
+    return false;
+  }
+#endif
   return browser_view_->IsBookmarkBarVisible();
 }
 
 bool BrowserViewLayoutDelegateImpl::IsInfobarVisible() const {
+#if BUILDFLAG(IS_MAC)
+  if (browser_view_->GetIsNormalType()) {
+    return false;
+  }
+#endif
   auto* const container = browser_view_->infobar_container();
   if (!container || container->IsEmpty()) {
     return false;
@@ -164,12 +187,26 @@ bool BrowserViewLayoutDelegateImpl::IsInfobarVisible() const {
 }
 
 bool BrowserViewLayoutDelegateImpl::IsContentsSeparatorEnabled() const {
+#if BUILDFLAG(IS_MAC)
+  if (browser_view_->GetIsNormalType()) {
+    return false;
+  }
+#endif
   // Web app windows manage their own separator.
   // TODO(crbug.com/40102629): Make PWAs set the visibility of the ToolbarView
   // based on whether it is visible instead of setting the height to 0px. This
   // will enable BrowserViewLayout to hide the contents separator on its own
   // using the same logic used by normal BrowserElementsViews.
   return !web_app::AppBrowserController::From(browser_view_->browser());
+}
+
+int BrowserViewLayoutDelegateImpl::GetLightPinnedSidebarWidth() const {
+#if BUILDFLAG(IS_MAC)
+  return LightGlassSidebarBridge::GetPinnedSidebarWidthForBrowserView(
+      &browser_view_.get());
+#else
+  return 0;
+#endif
 }
 
 bool BrowserViewLayoutDelegateImpl::IsActiveTabSplit() const {

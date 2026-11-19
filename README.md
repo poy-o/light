@@ -1,21 +1,28 @@
-# ![Logo](chrome/app/theme/chromium/product_logo_64.png) Chromium
+# Light
 
-Chromium is an open-source browser project that aims to build a safer, faster,
-and more stable way for all users to experience the web.
+Liquid glass sidebar, native passkeys support (see below), redesigned UI.
 
-The project's web site is https://www.chromium.org.
+Because `com.apple.developer.web-browser.public-key-credential`, `com.apple.application-identifier`, and `keychain-access-groups` are restricted Apple entitlements, macOS AMFI (`amfid`) rejects ad-hoc signed builds carrying them unless the binary's `cdhash` is allowed with [**Lakr233/amfi-allow**](https://github.com/Lakr233/amfi-allow).
 
-To check out the source code locally, don't use `git clone`! Instead,
-follow [the instructions on how to get the code](docs/get_the_code.md).
+## Building
 
-Documentation in the source is rooted in [docs/README.md](docs/README.md).
+1. Generate the build directory and compile `chrome`:
+   ```bash
+   gn gen out/Release_GN_arm64
+   autoninja -C out/Release_GN_arm64 chrome
+   ```
 
-Learn how to [Get Around the Chromium Source Code Directory
-Structure](https://www.chromium.org/developers/how-tos/getting-around-the-chrome-source-code).
+2. Ad-hoc sign the built app (`out/Release_GN_arm64/Chromium.app`) with Passkeys entitlements and register its `cdhash` with `amfi-allow` (auto-installs `amfi-allow` if missing):
+   ```bash
+   ./sign_passkeys.sh
+   ```
 
-For historical reasons, there are some small top level directories. Now the
-guidance is that new top level directories are for product (e.g. Chrome,
-Android WebView, Ash). Even if these products have multiple executables, the
-code should be in subdirectories of the product.
+   You can also pass one or more `.app` bundles explicitly:
+   ```bash
+   ./sign_passkeys.sh --app out/Release_GN_arm64/Chromium.app
+   ```
 
-If you found a bug, please file it at https://crbug.com/new.
+3. Launch the browser:
+   ```bash
+   open out/Release_GN_arm64/Chromium.app
+   ```

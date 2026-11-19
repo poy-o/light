@@ -522,28 +522,10 @@ void StartupBrowserCreatorImpl::DetermineURLsAndLaunch(
   StartupInfoBarObserver::ObserveProfile(*profile_,
                                          std::move(add_infobars_callback));
 
-  // Presentation of promotional and/or educational tabs may be controlled via
-  // administrative policy.
-  bool promotions_enabled = true;
-  const PrefService::Preference* promotions_enabled_pref = nullptr;
+  bool promotions_enabled = false;
+  const bool whats_new_enabled = false;
   PrefService* local_state = g_browser_process->local_state();
-  if (local_state) {
-    promotions_enabled_pref =
-        local_state->FindPreference(prefs::kPromotionsEnabled);
-  }
-  if (promotions_enabled_pref && promotions_enabled_pref->IsManaged()) {
-    // Presentation is managed; obey the policy setting.
-    promotions_enabled = promotions_enabled_pref->GetValue()->GetBool();
-  } else {
-    // Presentation is not managed. Infer an intent to disable if any value for
-    // the RestoreOnStartup policy is mandatory or recommended.
-    promotions_enabled =
-        !SessionStartupPref::TypeIsManaged(profile_->GetPrefs()) &&
-        !SessionStartupPref::TypeHasRecommendedValue(profile_->GetPrefs());
-  }
-
-  const bool whats_new_enabled =
-      whats_new::ShouldShowForState(local_state, promotions_enabled);
+  (void)local_state;
 
   auto result = DetermineStartupTabs(
       StartupTabProviderImpl(), process_startup, is_incognito_or_guest,
@@ -599,17 +581,7 @@ void StartupBrowserCreatorImpl::DetermineURLsAndLaunch(
 
   BrowserWindowInterface* browser = RestoreOrCreateBrowser(
       tabs, behavior, restore_options, process_startup, is_post_crash_launch);
-
-  tab_groups::MaybeShowSharedTabGroupVersionOutOfDateModal(browser);
-  tab_groups::MaybeShowSharedTabGroupVersionUpToDateToast(browser);
-
-  if (base::FeatureList::IsEnabled(features::kNonMilestoneUpdateToast)) {
-    std::string_view current_version_string =
-        current_chrome_version_string_for_testing_.has_value()
-            ? std::string_view(*current_chrome_version_string_for_testing_)
-            : CHROME_VERSION_STRING;
-    MaybeShowNonMilestoneUpdateToast(browser, current_version_string);
-  }
+  (void)browser;
 }
 
 StartupBrowserCreatorImpl::DetermineStartupTabsResult::

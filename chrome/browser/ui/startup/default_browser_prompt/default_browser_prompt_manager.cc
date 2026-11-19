@@ -43,6 +43,9 @@ using default_browser::DefaultBrowserManager;
 using default_browser::DefaultBrowserPromptSurface;
 
 bool ShouldShowPrompts() {
+  if ((true)) {
+    return false;
+  }
   PrefService* local_state = g_browser_process->local_state();
 
   int declined_count =

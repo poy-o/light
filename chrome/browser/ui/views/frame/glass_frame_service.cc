@@ -196,8 +196,16 @@ bool GlassFrameService::HasMultipleOpenProfiles() const {
 }
 
 bool GlassFrameService::IsGlassFrameAllowed() {
+#if BUILDFLAG(IS_MAC)
+  // Light uses a floating AppKit NSGlassEffectView sidebar over an opaque
+  // full-bleed BrowserFrameViewMac. Keeping Chromium's Views GlassFrameService
+  // disabled prevents BrowserFrameViewMac from skipping OnPaint() and prevents
+  // translucent-window gutter flashes / shadow invalidations during live resize.
+  return false;
+#else
   return is_glass_frame_enabled_ && !is_battery_saver_mode_active_ &&
          window_capturing_web_contents_.empty();
+#endif
 }
 
 void GlassFrameService::OnBrowserCreated(BrowserWindowInterface* browser) {

@@ -27,6 +27,7 @@
 #include "chrome/browser/ui/browser_actions.h"
 #include "chrome/browser/ui/browser_command_controller.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #import "chrome/browser/ui/cocoa/browser_window_command_handler.h"
@@ -46,6 +47,8 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/browser_widget.h"
 #include "chrome/browser/ui/views/frame/glass_frame_service.h"
+#include "chrome/browser/ui/views/frame/light_glass_sidebar_controller.h"
+#include "chrome/browser/ui/views/frame/light_native_settings_controller.h"
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_frame_toolbar_utils.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/common/pref_names.h"
@@ -277,6 +280,11 @@ int32_t BrowserNativeWidgetMac::SheetOffsetY() {
 void BrowserNativeWidgetMac::GetWindowFrameTitlebarHeight(
     bool* override_titlebar_height,
     float* titlebar_height) {
+  if (browser_view_ && browser_view_->GetIsNormalType()) {
+    *override_titlebar_height = true;
+    *titlebar_height = 54.0f;
+    return;
+  }
   if (browser_view_ && browser_view_->browser_widget() &&
       browser_view_->browser_widget()->GetFrameView()) {
     *override_titlebar_height = true;
@@ -350,6 +358,10 @@ std::optional<int> BrowserNativeWidgetMac::GetGlassFrameWidth() const {
 }
 
 void BrowserNativeWidgetMac::OnFocusWindowToolbar() {
+  if (light_sidebar_bridge_) {
+    light_sidebar_bridge_->FocusAddressBar(/*select_all=*/true);
+    return;
+  }
   if (browser_view_) {
     chrome::ExecuteCommand(browser_view_->browser(), IDC_FOCUS_TOOLBAR);
   }
@@ -399,6 +411,7 @@ void BrowserNativeWidgetMac::OnWidgetDestroyed(views::Widget* widget) {
     [opaque_background_view_ removeFromSuperview];
     opaque_background_view_ = nil;
   }
+  light_sidebar_bridge_.reset();
   browser_view_ = nullptr;
   last_theme_color_.reset();
   last_is_vertical_tabs_.reset();
@@ -682,6 +695,37 @@ bool BrowserNativeWidgetMac::ExecuteCommand(
 
   BrowserWindowInterface* browser = browser_view_->browser();
 
+  if (command == IDC_OPTIONS) {
+    LightNativeSettingsController::ShowForBrowser(browser);
+    return true;
+  }
+
+  if (light_sidebar_bridge_) {
+    if (command == IDC_FOCUS_LOCATION || command == IDC_FOCUS_TOOLBAR) {
+      light_sidebar_bridge_->FocusAddressBar(/*select_all=*/true);
+      return true;
+    }
+    if (command == IDC_NEW_TAB) {
+      chrome::NewTab(browser, NewTabTypes::kNewTabCommand);
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](base::WeakPtr<BrowserView> bv,
+                 LightGlassSidebarBridge* bridge) {
+                if (bv && bridge) {
+                  bridge->FocusAddressBar(/*select_all=*/true);
+                }
+              },
+              browser_view_->GetAsWeakPtr(), light_sidebar_bridge_.get()));
+      return true;
+    }
+    if (command == IDC_TOGGLE_VERTICAL_TABS ||
+        command == IDC_TOGGLE_VERTICAL_TABS_COLLAPSE) {
+      light_sidebar_bridge_->ToggleCollapsed();
+      return true;
+    }
+  }
+
   if (command == IDC_TOGGLE_VERTICAL_TABS) {
     if (auto* controller =
             tabs::VerticalTabStripStateController::From(browser)) {
@@ -761,11 +805,7 @@ void BrowserNativeWidgetMac::PopulateCreateWindowParams(
 
     // Ensure tabstrip/profile button are visible.
     params->titlebar_appears_transparent = true;
-
-    // Hosted apps draw their own window title.
-    if (browser_view_->GetIsWebAppType()) {
-      params->window_title_hidden = true;
-    }
+    params->window_title_hidden = true;
   } else {
     params->window_class = remote_cocoa::mojom::WindowClass::kDefault;
   }
@@ -813,20 +853,37 @@ void BrowserNativeWidgetMac::OnWidgetInitDone() {
       GetWidget()->RegisterPaintAsActiveChangedCallback(
           base::BindRepeating(&BrowserNativeWidgetMac::UpdateBackgroundColor,
                               base::Unretained(this)));
+  if (browser_view_ && browser_view_->GetIsNormalType() && GetNSWindowHost()) {
+    if (NSWindow* ns_window = GetNSWindowHost()->GetInProcessNSWindow()) {
+      light_sidebar_bridge_ =
+          LightGlassSidebarBridge::Create(browser_view_, ns_window);
+    }
+  }
+
+  // Enable behind-window Liquid Glass for Light windows so author-transparent
+  // pages show native macOS translucency instead of solid #121212.
+  if (light_sidebar_bridge_) {
+    UpdateGlassEligibility(true);
+  }
+
   // GlassFrameService is only available if glass frame is enabled.
-  if (auto* const glass_frame_service = GlassFrameService::GetInstance()) {
-    glass_eligibility_subscription_ =
-        glass_frame_service->RegisterGlassFrameEligibilityChangedCallback(
-            browser_view_->browser(),
-            base::BindRepeating(&BrowserNativeWidgetMac::UpdateGlassEligibility,
-                                base::Unretained(this)));
-    multiple_open_profiles_subscription_ =
-        glass_frame_service->RegisterMultipleOpenProfilesChangedCallback(
-            base::BindRepeating(&BrowserNativeWidgetMac::UpdateBackgroundColor,
-                                base::Unretained(this)));
-    if (glass_frame_service->IsBrowserWindowEligible(
-            browser_view_->browser())) {
-      UpdateGlassEligibility(true);
+  if (!light_sidebar_bridge_) {
+    if (auto* const glass_frame_service = GlassFrameService::GetInstance()) {
+      glass_eligibility_subscription_ =
+          glass_frame_service->RegisterGlassFrameEligibilityChangedCallback(
+              browser_view_->browser(),
+              base::BindRepeating(
+                  &BrowserNativeWidgetMac::UpdateGlassEligibility,
+                  base::Unretained(this)));
+      multiple_open_profiles_subscription_ =
+          glass_frame_service->RegisterMultipleOpenProfilesChangedCallback(
+              base::BindRepeating(
+                  &BrowserNativeWidgetMac::UpdateBackgroundColor,
+                  base::Unretained(this)));
+      if (glass_frame_service->IsBrowserWindowEligible(
+              browser_view_->browser())) {
+        UpdateGlassEligibility(true);
+      }
     }
   }
 
@@ -1252,7 +1309,12 @@ void BrowserNativeWidgetMac::UpdateBackgroundColor() {
       [NSColor colorWithSRGBRed:r green:g blue:b alpha:tint_opacity].CGColor;
 
   if (opaque_background_view_) {
-    opaque_background_view_.layer.backgroundColor =
-        [NSColor colorWithSRGBRed:r green:g blue:b alpha:1.0].CGColor;
+    if (light_sidebar_bridge_) {
+      opaque_background_view_.hidden = YES;
+    } else {
+      opaque_background_view_.hidden = NO;
+      opaque_background_view_.layer.backgroundColor =
+          [NSColor colorWithSRGBRed:r green:g blue:b alpha:1.0].CGColor;
+    }
   }
 }
