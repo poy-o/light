@@ -265,8 +265,6 @@
 #include "ui/android/event_forwarder.h"
 #include "ui/android/view_android.h"
 #include "ui/base/device_form_factor.h"
-#else  // !BUILDFLAG(IS_ANDROID)
-#include "ui/accessibility/accessibility_features.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
@@ -488,14 +486,14 @@ class FullscreenUserData : public base::SupportsUserData::Data {
   FullscreenUserData(const FullscreenUserData&) = delete;
   FullscreenUserData& operator=(const FullscreenUserData&) = delete;
 
-  base::flat_set<raw_ptr<WebContentsImpl, CtnExperimental>>* set() {
+  base::flat_set<raw_ptr<WebContentsImpl, DanglingUntriaged>>* set() {
     return &set_;
   }
 
   std::map<url::Origin, base::TimeTicks>* last_exits() { return &last_exits_; }
 
  private:
-  base::flat_set<raw_ptr<WebContentsImpl, CtnExperimental>> set_;
+  base::flat_set<raw_ptr<WebContentsImpl, DanglingUntriaged>> set_;
   // Track latest exits by origin to briefly block re-entry without a gesture.
   std::map<url::Origin, base::TimeTicks> last_exits_;
 };
@@ -513,7 +511,7 @@ FullscreenUserData* GetFullscreenUserData(BrowserContext* browser_context) {
   return set_holder;
 }
 
-base::flat_set<raw_ptr<WebContentsImpl, CtnExperimental>>*
+base::flat_set<raw_ptr<WebContentsImpl, DanglingUntriaged>>*
 FullscreenContentsSet(BrowserContext* browser_context) {
   return GetFullscreenUserData(browser_context)->set();
 }
@@ -9459,13 +9457,11 @@ void WebContentsImpl::NotifyBeforeFormRepostWarningShow() {
   observers_.NotifyObservers(&WebContentsObserver::BeforeFormRepostWarningShow);
 }
 
-void WebContentsImpl::ActivateAndShowRepostFormWarningDialog() {
+bool WebContentsImpl::ActivateAndShowRepostFormWarningDialog() {
   OPTIONAL_TRACE_EVENT0(
       "content", "WebContentsImpl::ActivateAndShowRepostFormWarningDialog");
   Activate();
-  if (delegate_) {
-    delegate_->ShowRepostFormWarningDialog(this);
-  }
+  return delegate_ && delegate_->ShowRepostFormWarningDialog(this);
 }
 
 bool WebContentsImpl::HasAccessedInitialDocument() {
@@ -10703,95 +10699,6 @@ void WebContentsImpl::DidStopLoading() {
           features::kAndroidSpareRendererCreationAfterLoading) {
     WarmUpAndroidSpareRenderer();
   }
-#endif
-}
-
-ui::AXTreeUpdate WebContentsImpl::RequestAXTreeSnapshotWithinBrowserProcess() {
-  ui::BrowserAccessibilityManager* root_manager =
-      GetRootBrowserAccessibilityManager();
-  // A page can be fully loaded before a user turns on accessibility services,
-  // and we can be in a transient state waiting for managers.
-  if (!root_manager || !root_manager->ax_tree()) {
-    return ui::AXTreeUpdate();
-  }
-
-  ui::AXTreeUpdate combined_update;
-  ui::AXTreeCombiner combiner;
-
-  GetPrimaryMainFrame()->ForEachRenderFrameHostImplWithAction(
-      [this, &combiner](RenderFrameHostImpl* rfhi) {
-        ui::BrowserAccessibilityManager* manager =
-            rfhi->browser_accessibility_manager();
-        if (!manager) {
-          return RenderFrameHost::FrameIterationAction::kContinue;
-        }
-
-        ui::AXTree* tree = manager->ax_tree();
-        if (!tree || !tree->root()) {
-          return RenderFrameHost::FrameIterationAction::kContinue;
-        }
-
-        ui::AXTreeUpdate update_for_frame;
-        update_for_frame.root_id = tree->root()->id();
-        update_for_frame.tree_data = tree->data();
-
-        std::vector<ui::AXNodeData> nodes;
-        RecursivelyConstructAXTree(tree->root(), nodes);
-        update_for_frame.nodes = nodes;
-
-        combiner.AddTree(update_for_frame, rfhi->AccessibilityIsRootFrame());
-
-        return RenderFrameHost::FrameIterationAction::kContinue;
-      });
-
-  // Combine all the individual frame tree updates into one.
-  combiner.Combine();
-  CHECK(combiner.combined());
-  combined_update = std::move(combiner.combined().value());
-  return combined_update;
-}
-
-void WebContentsImpl::RecursivelyConstructAXTree(
-    ui::AXNode* node,
-    std::vector<ui::AXNodeData>& nodes) {
-  nodes.push_back(node->data());
-
-  for (ui::AXNode* child : node->GetAllChildren()) {
-    RecursivelyConstructAXTree(child, nodes);
-  }
-}
-
-void WebContentsImpl::ApplyAXTreeFixingResult(ui::AXTreeID tree_id,
-                                              ui::AXNodeID node_id,
-                                              ax::mojom::Role role) {
-// The AXTreeFixing feature is not currently available on Android.
-#if !BUILDFLAG(IS_ANDROID)
-  CHECK(features::IsAXTreeFixingEnabled());
-
-  GetPrimaryMainFrame()->ForEachRenderFrameHostImplWithAction(
-      [tree_id, node_id, role](RenderFrameHostImpl* rfhi) {
-        ui::BrowserAccessibilityManager* manager =
-            rfhi->browser_accessibility_manager();
-        if (!manager) {
-          return RenderFrameHost::FrameIterationAction::kContinue;
-        }
-
-        ui::AXTree* tree = manager->ax_tree();
-        if (!tree || !tree->root()) {
-          return RenderFrameHost::FrameIterationAction::kContinue;
-        }
-
-        ui::AXNode* node = manager->ax_tree()->GetFromId(node_id);
-        if (!node) {
-          return RenderFrameHost::FrameIterationAction::kContinue;
-        }
-
-        // Update the node's role and stop iterating.
-        ui::AXNodeData new_data = node->data();
-        new_data.role = role;
-        node->SetData(new_data);
-        return RenderFrameHost::FrameIterationAction::kStop;
-      });
 #endif
 }
 

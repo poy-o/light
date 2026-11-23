@@ -193,6 +193,10 @@ std::unique_ptr<content::WebContents> CreateWebContents(
     BrowserWindowInterface* browser_window) {
   content::WebContents::CreateParams create_params(
       browser_window->GetProfile());
+  // Unattached cached and background-rebuilt task `WebContents` must start
+  // hidden so `PermissionRequestManager` treats them as inactive until they are
+  // attached to the side panel view (`SetWebContents()` / `AddedToWidget()`).
+  create_params.initially_hidden = true;
   std::unique_ptr<content::WebContents> web_contents =
       content::WebContents::Create(create_params);
   webui::SetBrowserWindowInterface(web_contents.get(), browser_window);
@@ -527,6 +531,11 @@ ContextualTasksSidePanelCoordinator::permission_controller() {
   return permission_controller_.get();
 }
 
+void ContextualTasksSidePanelCoordinator::AnnounceAlert(
+    const std::u16string& text) {
+  contextual_tasks_panel_host_->AnnounceAlert(text);
+}
+
 // static
 ContextualTasksPanelController* ContextualTasksPanelController::From(
     BrowserWindowInterface* window) {
@@ -763,6 +772,15 @@ void ContextualTasksSidePanelCoordinator::Show(
     // initialized (>= 0).
     int post_onboarding_sessions =
         pref_service_->GetInteger(kContextualTasksSessionCountPostOnboarding);
+    // Ask Google entry points show the Ask Google privacy notice instead of the
+    // onboarding tooltip, and accepting it does not initialize the count.
+    // Treat that acknowledgement as onboarding so these users can still reach
+    // the pinning promo.
+    if (post_onboarding_sessions < 0 &&
+        pref_service_->GetInteger(kContextualTasksAskGTooltipDismissedCount) >
+            0) {
+      post_onboarding_sessions = 0;
+    }
     if (post_onboarding_sessions >= 0) {
       post_onboarding_sessions++;
       pref_service_->SetInteger(kContextualTasksSessionCountPostOnboarding,
@@ -844,6 +862,9 @@ void ContextualTasksSidePanelCoordinator::Close() {
     }
   }
   UpdateOpenState(/*is_open=*/false);
+  if (permission_controller_) {
+    permission_controller_->InvalidateChipTokens();
+  }
   SetErrorPageVisible(false);
   contextual_tasks_panel_host_->Close(
       ContextualTasksPanelHost::AnimationStyle::kStandard);
@@ -1110,10 +1131,13 @@ void ContextualTasksSidePanelCoordinator::ShareTabsWithNewThread(
     return;
   }
   AttachTabsToTask(task->GetTaskId(), tabs_to_attach);
-  if (content::WebContents* panel_contents = GetActiveWebContents()) {
-    ContextualTasksWebContentsUserData::GetOrCreateForWebContents(
-        panel_contents)
-        ->PreservePreStagedContext();
+  if (IsContextualTasksRearchitectureEnabled() ||
+      IsContextualTasksSidePanelRearchitectureEnabled()) {
+    if (content::WebContents* panel_contents = GetActiveWebContents()) {
+      ContextualTasksWebContentsUserData::GetOrCreateForWebContents(
+          panel_contents)
+          ->PreservePreStagedContext();
+    }
   }
 }
 
@@ -1299,13 +1323,16 @@ void ContextualTasksSidePanelCoordinator::UnshareTabs(
     if (active_task_context_provider_) {
       active_task_context_provider_->RemoveLocalTabUnderline(tab_handle);
     }
-    for (content::WebContents* web_contents : target_web_contents) {
-      if (!web_contents) {
-        continue;
+    if (IsContextualTasksRearchitectureEnabled() ||
+        IsContextualTasksSidePanelRearchitectureEnabled()) {
+      for (content::WebContents* web_contents : target_web_contents) {
+        if (!web_contents) {
+          continue;
+        }
+        ContextualTasksWebContentsUserData::GetOrCreateForWebContents(
+            web_contents)
+            ->DeleteTabContext(tab_handle.raw_value());
       }
-      ContextualTasksWebContentsUserData::GetOrCreateForWebContents(
-          web_contents)
-          ->DeleteTabContext(tab_handle.raw_value());
     }
   }
 
@@ -2299,16 +2326,17 @@ void ContextualTasksSidePanelCoordinator::MaybeCreateCachedWebContents(
   // Create new WebContents for the task.
   if (auto* ui_service = GetUiService()) {
     ui_service->SetInitialEntryPointForTask(task_id, entry_point);
-    GURL url;
+    std::optional<GURL> url;
     if (IsContextualTasksSidePanelRearchitectureEnabled()) {
       if (std::optional<GURL> initial_url =
               ui_service->GetInitialUrlForTask(task_id)) {
         url = *initial_url;
-      } else if (ui_service->IsTaskWaitingForUrl(task_id)) {
-        url = GURL("about:blank");
-      } else {
+      } else if (!ui_service->IsTaskWaitingForUrl(task_id)) {
         url = ui_service->GetDefaultAiPageUrlForTask(task_id);
       }
+      // Leave `url` unset when `IsTaskWaitingForUrl()` is true so `WebContents`
+      // stays on its initial `NavigationEntry` and the first real navigation
+      // replaces index 0 (`CanGoBack() == false`).
     } else {
       url = ui_service->GetContextualTaskUrlForTask(task_id);
     }
@@ -2320,10 +2348,12 @@ void ContextualTasksSidePanelCoordinator::MaybeCreateCachedWebContents(
           contextual_search_service_, browser_window_,
           contextual_tasks_service_, this, web_contents, task_id);
       ContextualTasksPanelThreadObserver::CreateForWebContents(web_contents);
-      // Apply required side panel URL params before the initial load, as the
-      // `WebContents` is not attached to a side panel yet.
-      url = ContextualTasksUiService::AddRequiredSidePanelUrlChanges(
-          url, web_contents);
+      if (url.has_value()) {
+        // Apply required side panel URL params before the initial load, as the
+        // `WebContents` is not attached to a side panel yet.
+        url = ContextualTasksUiService::AddRequiredSidePanelUrlChanges(
+            *url, web_contents);
+      }
     }
     // Insert into `task_id_to_web_contents_cache_` before calling `LoadURL()`
     // so that `IsWebContentsInPanel()` returns true during the initial
@@ -2334,9 +2364,11 @@ void ContextualTasksSidePanelCoordinator::MaybeCreateCachedWebContents(
             base::BindOnce(&ContextualTasksSidePanelCoordinator::
                                RecordTimeToFirstContentfulPaint,
                            weak_ptr_factory_.GetWeakPtr()));
-    web_contents->GetController().LoadURL(url, content::Referrer(),
-                                          ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-                                          std::string());
+    if (url.has_value()) {
+      web_contents->GetController().LoadURL(*url, content::Referrer(),
+                                            ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
+                                            std::string());
+    }
   }
 }
 
@@ -2996,11 +3028,13 @@ void ContextualTasksSidePanelCoordinator::AttachTabsToTask(
           ? it->second->web_contents.get()
           : GetActiveWebContents();
 
-  auto* user_data =
-      panel_contents
-          ? ContextualTasksWebContentsUserData::GetOrCreateForWebContents(
-                panel_contents)
-          : nullptr;
+  ContextualTasksWebContentsUserData* user_data = nullptr;
+  if ((IsContextualTasksRearchitectureEnabled() ||
+       IsContextualTasksSidePanelRearchitectureEnabled()) &&
+      panel_contents) {
+    user_data = ContextualTasksWebContentsUserData::GetOrCreateForWebContents(
+        panel_contents);
+  }
   contextual_search::ContextualSearchSessionHandle* session_handle = nullptr;
   if (panel_contents) {
     if (auto* helper = ContextualSearchWebContentsHelper::FromWebContents(
@@ -3125,7 +3159,14 @@ void ContextualTasksSidePanelCoordinator::OnSurfaceStateChanged(
     NotifyActiveTaskContextProvider();
   }
 
-  if (state == ContextualTasksPanelHost::SurfaceState::kClosed) {
+  if (state == ContextualTasksPanelHost::SurfaceState::kVisible) {
+    if (permission_controller_) {
+      permission_controller_->RefreshContentSettingsIcons();
+    }
+  } else if (state == ContextualTasksPanelHost::SurfaceState::kClosed) {
+    if (permission_controller_) {
+      permission_controller_->InvalidateChipTokens();
+    }
     MaybeRemoveImplicitTabContext();
 #if !BUILDFLAG(IS_ANDROID)
     onboarding_controller_->CloseBubble();

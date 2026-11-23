@@ -21,7 +21,6 @@ import androidx.core.view.WindowInsetsCompat;
 
 import org.chromium.base.Callback;
 import org.chromium.base.DeviceInfo;
-import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.MonotonicObservableSupplier;
 import org.chromium.base.supplier.NonNullObservableSupplier;
@@ -62,7 +61,6 @@ import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.insets.InsetObserver;
 import org.chromium.ui.util.TokenHolder;
-import org.chromium.url.GURL;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -124,7 +122,6 @@ public class ToolbarPositionController implements OnSharedPreferenceChangeListen
     // has not been determined yet. Prefer `isToolbarConfiguredToShowOnTop()` call when querying
     // intended placement.
     private static @Nullable Boolean sToolbarShouldShowOnTop;
-    private static final String TAG = "ToolbarPosition";
 
     private final BrowserControlsSizer mBrowserControlsSizer;
     private final NonNullObservableSupplier<Boolean> mIsNtpWithFakeboxShowingSupplier;
@@ -180,8 +177,7 @@ public class ToolbarPositionController implements OnSharedPreferenceChangeListen
     private final NonNullObservableSupplier<Integer> mKeyboardHeightSupplier;
     private final WindowAndroid mWindowAndroid;
     private final int mHairlineHeight;
-    private final boolean mEnableLogs;
-    private final boolean mIsNtpCustomizationV2Enabled;
+    private final boolean mIsNtpThemeCustomizationEnabledByPolicy;
 
     private int mAndroidControlsHidingToken = TokenHolder.INVALID_TOKEN;
 
@@ -304,7 +300,6 @@ public class ToolbarPositionController implements OnSharedPreferenceChangeListen
         mSharedPreferences = sharedPreferences;
         mSharedPreferences.registerOnSharedPreferenceChangeListener(this);
         recordStartupPosition(isToolbarConfiguredToShowOnTop());
-        mEnableLogs = ChromeFeatureList.sNewTabPageCustomizationV2EnableLogs.getValue();
 
         mLayerVisibility = LayerVisibility.HIDDEN;
         mBottomToolbarLayer =
@@ -468,7 +463,8 @@ public class ToolbarPositionController implements OnSharedPreferenceChangeListen
         mKeyboardHeightSupplier.addSyncObserverAndPostIfNonNull(mKeyboardHeightProgressBarCallback);
 
         // Set up observer to handle edge-to-edge changes.
-        mIsNtpCustomizationV2Enabled = NtpCustomizationUtils.isNtpThemeCustomizationEnabled();
+        mIsNtpThemeCustomizationEnabledByPolicy =
+                NtpCustomizationUtils.isNtpThemeCustomizationEnabledByPolicy();
         mTopInsetProviderObserver = this::onToEdgeChange;
         if (EdgeToEdgeUtils.isEdgeToEdgeRefactorEnabled()) {
             mEdgeToEdgeControllerCallback =
@@ -628,10 +624,6 @@ public class ToolbarPositionController implements OnSharedPreferenceChangeListen
                     () -> mCurrentPosition.set(newControlsPosition));
         } else {
             mCurrentPosition.set(newControlsPosition);
-        }
-
-        if (mEnableLogs) {
-            Log.i(TAG, "Set a new control position: %d.", newControlsPosition);
         }
 
         if (newControlsPosition == ControlsPosition.TOP) {
@@ -927,9 +919,6 @@ public class ToolbarPositionController implements OnSharedPreferenceChangeListen
 
         mTopInset = shouldToolbarConsumeTopInset ? systemTopInset : 0;
         mToolbarLayout.onToEdgeChange(mTopInset);
-        if (mEnableLogs) {
-            Log.i(TAG, "The top padding to add on the toolbar is %d.", mTopInset);
-        }
         return true;
     }
 
@@ -939,11 +928,7 @@ public class ToolbarPositionController implements OnSharedPreferenceChangeListen
      */
     @VisibleForTesting
     void maybeForceBottomToolbarLayoutUpdateAndCapture(boolean isNtpShowing) {
-        if (!mIsNtpCustomizationV2Enabled) return;
-
-        if (mEnableLogs) {
-            Log.i(TAG, "Current %s showing a NTP", isNtpShowing ? "is" : "isn't");
-        }
+        if (!mIsNtpThemeCustomizationEnabledByPolicy) return;
 
         if (isNtpShowing) {
             // On certain devices, the toolbar position could switch from top to bottom, and then
@@ -954,20 +939,9 @@ public class ToolbarPositionController implements OnSharedPreferenceChangeListen
             return;
         } else {
             Tab tab = mActiveTabSupplier.get();
-            if (tab != null) {
-                GURL url = tab.getUrl();
-                boolean isEmptyUrl = url.isEmpty();
-                if (mEnableLogs) {
-                    Log.i(
-                            TAG,
-                            "URL of the current tab: [isEmpty: %b] [isValid: %b]",
-                            isEmptyUrl,
-                            url.isValid());
-                }
-                if (isEmptyUrl) {
-                    // Also skips calling onToEdgeChange() if the URL is empty.
-                    return;
-                }
+            if (tab != null && tab.getUrl().isEmpty()) {
+                // Also skips calling onToEdgeChange() if the URL is empty.
+                return;
             }
         }
 

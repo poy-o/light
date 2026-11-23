@@ -84,12 +84,6 @@ struct Config {
   // visits in case there are a few very large clusters in the same batch.
   size_t max_persisted_cluster_visits_to_fetch_soft_cap = 1000;
 
-  // The number of days of persisted clusters to recluster when updating
-  // clusters. E.g., if set to 2, and clusters up to 1/10 have been persisted,
-  // then the next request will include visits from clusters from 1/8 and 1/9,
-  // and unclustered visits from 1/10.
-  size_t persist_clusters_recluster_window_days = 0;
-
   // The `kOmniboxHistoryClusterProvider` feature and child params.
 
   // Enables `HistoryClusterProvider` to surface Journeys as a suggestion row
@@ -145,7 +139,7 @@ struct Config {
   // Maximum number of keywords to keep per cluster.
   size_t max_num_keywords_per_cluster = 20;
 
-  // The `kOnDeviceClustering` feature and child params.
+  // On-device clustering params.
 
   // Returns the maximum duration between navigations that
   // a visit can be considered for the same cluster.
@@ -157,7 +151,7 @@ struct Config {
 
   // Returns the threshold for which we should mark a cluster as being able to
   // show on prominent UI surfaces.
-  float content_visibility_threshold = 0.7;
+  float content_visibility_threshold = 0.5;
 
   // Returns the threshold used to determine if a cluster, and its visits, has
   // too high site engagement to be likely useful.
@@ -190,11 +184,7 @@ struct Config {
   // visits within a cluster. Will always be greater than or equal to 0.
   float has_url_keyed_image_ranking_weight = 1.5;
 
-  // The `kHistoryClustersNavigationContextClustering` feature and child params.
-
-  // Whether to use the new clustering path that does context clustering at
-  // navigation and embellishes clusters for display at UI time.
-  bool use_navigation_context_clusters = true;
+  // Navigation context clustering params.
 
   // The duration between context clustering clean up passes.
   base::TimeDelta context_clustering_clean_up_duration = base::Minutes(10);

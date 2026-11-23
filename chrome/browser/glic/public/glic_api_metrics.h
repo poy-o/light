@@ -126,6 +126,8 @@ enum class GlicHostApiRequestId {
   kOnOptinRejected = 112,
   kOnUserInputHeldForOnboarding = 113,
   kSetGuestUrlQueryParam = 114,
+  kSwitchAssistant = 115,
+  kShowDrivePicker = 116,
 };
 // LINT.ThenChange(
 // //tools/metrics/histograms/metadata/glic/histograms.xml:ApiRequestType,

@@ -493,6 +493,11 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     }
 
     @Override
+    public boolean hasTranslucentBackgroundColor() {
+        return mDataHolder.mTranslucentBackgroundColor != null;
+    }
+
+    @Override
     public @ColorInt int getTranslucentBackgroundColor(Context context) {
         int defValue = SemanticColorUtils.getDefaultBgColor(context);
         int bg =
@@ -809,6 +814,35 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
             builder.setAndroidBrowserHelperVersion(
                     IntentUtils.safeGetIntExtra(intent, EXTRA_ANDROID_BROWSER_HELPER_VERSION, 0));
             builder.setRequestedWindowFeatures(extractRequestedWindowFeatures(intent, uiType));
+            populateColorSchemeAndTimeoutExtras(builder, intent);
+            int fedCmId = IntentUtils.safeGetIntExtra(intent, IntentHandler.EXTRA_FEDCM_ID, -1);
+            if (fedCmId != -1) {
+                builder.setFedCmId(fedCmId);
+            }
+            if (customTabMode == CustomTabProfileType.REGULAR) {
+                builder.setEmbedderTabId(
+                        IntentUtils.safeGetStringExtra(
+                                intent, CustomTabResumeManager.EXTRA_EMBEDDER_TAB_ID));
+                builder.setRestoreTab(
+                        IntentUtils.safeGetBooleanExtra(
+                                intent, CustomTabResumeManager.EXTRA_RESTORE_TAB, false));
+                if (IntentUtils.safeHasExtra(
+                        intent, CustomTabResumeManager.EXTRA_MAX_RESUMPTION_TABS)) {
+                    builder.setMaxResumptionTabs(
+                            IntentUtils.safeGetIntExtra(
+                                    intent,
+                                    CustomTabResumeManager.EXTRA_MAX_RESUMPTION_TABS,
+                                    CustomTabResumeManager.DEFAULT_MAX_RESUMPTION_TABS));
+                }
+                if (IntentUtils.safeHasExtra(
+                        intent, CustomTabResumeManager.EXTRA_RESUMPTION_TAB_TTL_MS)) {
+                    builder.setResumptionTabTtlMs(
+                            IntentUtils.safeGetLongExtra(
+                                    intent,
+                                    CustomTabResumeManager.EXTRA_RESUMPTION_TAB_TTL_MS,
+                                    CustomTabResumeManager.DEFAULT_RESUMPTION_TAB_TTL_MS));
+                }
+            }
 
             mDataHolder = builder.build();
         }
@@ -836,7 +870,29 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
         maybeAddOpenInBrowserOption(context, oibState);
         maybeAddShareOption(context);
 
-        logCustomTabFeatures(intent, colorScheme);
+        if (dataHolder == null) {
+            logCustomTabFeatures(intent, colorScheme);
+        }
+    }
+
+    static void populateColorSchemeAndTimeoutExtras(
+            CustomTabIntentDataHolder.Builder builder, Intent intent) {
+        builder.setColorScheme(
+                IntentUtils.safeGetIntExtra(
+                        intent,
+                        CustomTabsIntent.EXTRA_COLOR_SCHEME,
+                        CustomTabsIntent.COLOR_SCHEME_SYSTEM));
+        if (IntentUtils.safeHasExtra(
+                intent, CustomTabActivityTimeoutHandler.EXTRA_TIMEOUT_MINUTES)) {
+            builder.setTimeoutMinutes(
+                    IntentUtils.safeGetIntExtra(
+                            intent, CustomTabActivityTimeoutHandler.EXTRA_TIMEOUT_MINUTES, 0));
+        }
+        if (IntentUtils.safeGetParcelableExtra(
+                        intent, CustomTabActivityTimeoutHandler.EXTRA_TIMEOUT_PENDING_INTENT)
+                instanceof PendingIntent pi) {
+            builder.setTimeoutPendingIntent(pi);
+        }
     }
 
     /** Returns the toolbar corner radius in px. */
@@ -2142,5 +2198,45 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     @Override
     public CustomTabIntentDataHolder getCustomTabIntentDataHolder() {
         return mDataHolder;
+    }
+
+    @Override
+    public @Nullable Integer getTimeoutMinutes() {
+        return mDataHolder.mTimeoutMinutes;
+    }
+
+    @Override
+    public @Nullable PendingIntent getTimeoutPendingIntent() {
+        return mDataHolder.mTimeoutPendingIntent;
+    }
+
+    @Override
+    public @Nullable String getEmbedderTabId() {
+        return mDataHolder.mEmbedderTabId;
+    }
+
+    @Override
+    public boolean isRestoreTabRequested() {
+        return mDataHolder.mRestoreTab;
+    }
+
+    @Override
+    public void clearResumptionExtras() {
+        mDataHolder.clearResumptionExtras();
+    }
+
+    @Override
+    public @Nullable Integer getMaxResumptionTabs() {
+        return mDataHolder.mMaxResumptionTabs;
+    }
+
+    @Override
+    public @Nullable Long getResumptionTabTtlMs() {
+        return mDataHolder.mResumptionTabTtlMs;
+    }
+
+    @Override
+    public @Nullable Integer getFedCmId() {
+        return mDataHolder.mFedCmId;
     }
 }

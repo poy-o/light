@@ -15,7 +15,9 @@
 #include "base/byte_size.h"
 #include "base/cancelable_callback.h"
 #include "base/functional/callback_forward.h"
+#include "base/memory/raw_ref.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
 #include "base/time/time.h"
 #include "cc/paint/paint_record.h"
@@ -96,7 +98,6 @@ enum class RasterMode;
 class MODULES_EXPORT BaseRenderingContext2D
     : public CanvasRenderingContext,
       public Canvas2DRecorderContext,
-      public CanvasResource::Client,
       public MemoryManagedPaintRecorder::Client,
       public FlushForImageObserver,
       public CanvasMemoryDumpClient,
@@ -340,7 +341,6 @@ class MODULES_EXPORT BaseRenderingContext2D
   uint64_t GetSwSnapshotSkImageIdForTesting() const {
     return sw_snapshot_sk_image_id_;
   }
-  int NumInflightResourcesForTesting() const;
   bool HasUnusedResourcesForTesting() const;
   bool UnusedResourcesReclaimTimerIsRunningForTesting() const;
 
@@ -452,10 +452,6 @@ class MODULES_EXPORT BaseRenderingContext2D
 
   scoped_refptr<StaticBitmapImage> UnacceleratedSnapshot();
 
-  // CanvasResource::Client implementation.
-  void OnResourceRefReturned(scoped_refptr<CanvasResource> resource) override;
-  void OnDestroyResource() override { --num_inflight_resources_; }
-
   // CanvasMemoryDumpClient implementation.
   void OnMemoryDump(base::trace_event::ProcessMemoryDump*) override;
   size_t GetSize() const override;
@@ -492,15 +488,29 @@ class MODULES_EXPORT BaseRenderingContext2D
   // recycling.
   static constexpr int kMaxRecycledCanvasResources = 3;
 
+  // Pool-scoped helper bound weakly into resource release callbacks so
+  // returning resources can recycle into the exact `image_pool_` they came
+  // from (if recycling is enabled) without binding `BaseRenderingContext2D`.
+  // Resetting `resource_recycler_` in `ResetSharedImagePool()` invalidates
+  // callbacks for resources from any previous pool.
+  struct ResourceRecycler {
+    explicit ResourceRecycler(gpu::SharedImagePool<CanvasResource>& pool);
+    ~ResourceRecycler();
+
+    void Recycle(scoped_refptr<CanvasResource> resource);
+
+    raw_ref<gpu::SharedImagePool<CanvasResource>> pool;
+    bool enabled = true;
+    base::WeakPtrFactory<ResourceRecycler> weak_ptr_factory{this};
+  };
+
   Canvas2DColorParams color_params_;
-  // If this instance is single-buffered or `resource_recycling_enabled_` is
+  // If this instance is single-buffered or `resource_recycler_->enabled` is
   // false, `image_pool_` will not recycle resources.
   std::unique_ptr<gpu::SharedImagePool<CanvasResource>> image_pool_;
+  std::optional<ResourceRecycler> resource_recycler_;
   scoped_refptr<CanvasResource> resource_;
   bool is_accelerated_ = false;
-  bool resource_recycling_enabled_ = true;
-  int num_inflight_resources_ = 0;
-  int max_inflight_resources_ = 0;
   sk_sp<SkSurface> surface_;
   std::unique_ptr<CanvasImageProvider> canvas_image_provider_;
   // Initialized on GPU-composited SharedImage backing creation and checked to
@@ -550,8 +560,6 @@ class MODULES_EXPORT BaseRenderingContext2D
   base::RepeatingClosure on_restore_failed_callback_for_testing_;
   Vector<scoped_refptr<const cc::AnimatedImageFrameIndexMap>>
       animated_image_frame_index_maps_;
-  base::WeakPtrFactory<CanvasResource::Client>
-      resource_client_weak_ptr_factory_{this};
 };
 
 }  // namespace blink

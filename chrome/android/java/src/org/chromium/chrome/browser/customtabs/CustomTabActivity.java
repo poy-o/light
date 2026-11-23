@@ -156,7 +156,9 @@ public class CustomTabActivity extends BaseCustomTabActivity {
     public void performPreInflationStartup() {
         super.performPreInflationStartup();
         var savedInstanceState = getSavedInstanceState();
-        mTimeoutHandler = new CustomTabActivityTimeoutHandler(this, this::finish, getIntent());
+        var intentDataProvider = assertNonNull(getIntentDataProvider());
+        mTimeoutHandler =
+                new CustomTabActivityTimeoutHandler(this, this::finish, intentDataProvider);
 
         // If the activity is being recreated, #onEnterAnimationComplete() doesn't get called.
         // So, we need to manually set mIsEnterAnimationCompleted to true. See crbug.com/399194973.
@@ -165,7 +167,6 @@ public class CustomTabActivity extends BaseCustomTabActivity {
                 mIsEnterAnimationCompleted = true;
             }
         }
-        var intentDataProvider = assertNonNull(getIntentDataProvider());
         mOpenTimeRecorder =
                 new CustomTabsOpenTimeRecorder(
                         getLifecycleDispatcher(),
@@ -224,23 +225,25 @@ public class CustomTabActivity extends BaseCustomTabActivity {
         // branch and leave the compositor view hidden indefinitely for navigations that
         // never emit FCP.
         int bg = intentDataProvider.getTranslucentBackgroundColor(this);
-        if (CustomTabIntentDataProvider.hasTranslucentBackgroundColor(getIntent())
+        if (intentDataProvider.hasTranslucentBackgroundColor()
                 && bg != SemanticColorUtils.getDefaultBgColor(this)) {
-            setContentVisibility(false);
             getWindow().setBackgroundDrawable(new ColorDrawable(bg));
-            PageLoadMetrics.addObserver(
-                    new PageLoadMetrics.Observer() {
-                        @Override
-                        public void onFirstContentfulPaint(
-                                WebContents webContents,
-                                long navigationId,
-                                long navigationStartMicros,
-                                long firstContentfulPaintMs) {
-                            setContentVisibility(true);
-                            PageLoadMetrics.removeObserver(this);
-                        }
-                    },
-                    true);
+            if (getSavedInstanceState() == null) {
+                setContentVisibility(false);
+                PageLoadMetrics.addObserver(
+                        new PageLoadMetrics.Observer() {
+                            @Override
+                            public void onFirstContentfulPaint(
+                                    WebContents webContents,
+                                    long navigationId,
+                                    long navigationStartMicros,
+                                    long firstContentfulPaintMs) {
+                                setContentVisibility(true);
+                                PageLoadMetrics.removeObserver(this);
+                            }
+                        },
+                        true);
+            }
         }
     }
 
@@ -381,7 +384,7 @@ public class CustomTabActivity extends BaseCustomTabActivity {
             mPopupBoundsAdjuster.destroy();
             mPopupBoundsAdjuster = null;
         }
-        if (mTimeoutHandler != null) mTimeoutHandler.onDestroy();
+        if (mTimeoutHandler != null) mTimeoutHandler.onDestroy(this);
         super.onDestroyInternal();
     }
 
@@ -600,16 +603,28 @@ public class CustomTabActivity extends BaseCustomTabActivity {
     @Override
     protected boolean requiresFirstRunToBeCompleted(Intent intent) {
         // Custom Tabs can be used to open Chrome help pages before the ToS has been accepted.
-        if (CustomTabIntentDataProvider.isTrustedCustomTab(intent, mSession)
-                && IntentUtils.safeGetIntExtra(
-                                intent,
-                                CustomTabIntentDataProvider.EXTRA_UI_TYPE,
-                                CustomTabIntentDataProvider.CustomTabsUiType.DEFAULT)
-                        == CustomTabIntentDataProvider.CustomTabsUiType.INFO_PAGE) {
-            return false;
+        // Checked in #onCreateInternal (before IntentDataProvider exists; recreated launches have
+        // a stripped |intent| and must read saved state) and #onStart (after IntentDataProvider is
+        // built and savedInstanceState may have been cleared).
+        boolean isTrustedInfoPage;
+        var dataProvider = getIntentDataProvider();
+        var savedHolder = dataProvider == null ? getSavedDataHolder() : null;
+        if (dataProvider != null) {
+            isTrustedInfoPage = dataProvider.isTrustedIntent() && dataProvider.isInfoPage();
+        } else if (savedHolder != null) {
+            isTrustedInfoPage =
+                    savedHolder.mIsTrustedIntent
+                            && savedHolder.mUiType == CustomTabsUiType.INFO_PAGE;
+        } else {
+            isTrustedInfoPage =
+                    CustomTabIntentDataProvider.isTrustedCustomTab(intent, mSession)
+                            && IntentUtils.safeGetIntExtra(
+                                            intent,
+                                            CustomTabIntentDataProvider.EXTRA_UI_TYPE,
+                                            CustomTabsUiType.DEFAULT)
+                                    == CustomTabsUiType.INFO_PAGE;
         }
-
-        return super.requiresFirstRunToBeCompleted(intent);
+        return isTrustedInfoPage ? false : super.requiresFirstRunToBeCompleted(intent);
     }
 
     @Override

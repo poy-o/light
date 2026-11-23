@@ -233,7 +233,7 @@ base::TimeDelta GetTimedBudget(int times_yielded) {
   return kLongParserBudgetValue;
 }
 
-class EndIfDelayedForbiddenScope {
+class [[nodiscard]] EndIfDelayedForbiddenScope {
   STACK_ALLOCATED();
 
  public:
@@ -247,7 +247,7 @@ class EndIfDelayedForbiddenScope {
   HTMLDocumentParserState* state_;
 };
 
-class AttemptToEndForbiddenScope {
+class [[nodiscard]] AttemptToEndForbiddenScope {
   STACK_ALLOCATED();
 
  public:
@@ -260,7 +260,7 @@ class AttemptToEndForbiddenScope {
   HTMLDocumentParserState* state_;
 };
 
-class ShouldCompleteScope {
+class [[nodiscard]] ShouldCompleteScope {
   STACK_ALLOCATED();
 
  public:
@@ -1759,9 +1759,6 @@ void HTMLDocumentParser::MaybeFetchQueuedPreloads() {
   base::ElapsedTimer timer;
   preloader_->TakeAndPreload(queued_preloads_);
   base::TimeDelta elapsed_time = timer.Elapsed();
-  base::UmaHistogramTimes(base::StrCat({"Blink.FetchQueuedPreloadsTime",
-                                        GetPreloadHistogramSuffix()}),
-                          elapsed_time);
   if (metrics_reporter_) {
     metrics_reporter_->AddFetchQueuedPreloadsTime(
         elapsed_time.InMicroseconds());

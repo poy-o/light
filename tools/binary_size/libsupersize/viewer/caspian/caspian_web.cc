@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <iostream>
 #include <memory>
@@ -181,7 +182,7 @@ bool BuildTree(bool method_count_mode,
                const char* include_regex_str,
                const char* exclude_regex_str,
                const char* include_sections,
-               int minimum_size_bytes,
+               int minimum_size,
                int match_flag,
                bool non_overhead,
                bool disassembly_mode,
@@ -199,20 +200,6 @@ bool BuildTree(bool method_count_mode,
       return diff_status == DiffStatus::kAdded ||
              diff_status == DiffStatus::kRemoved;
     });
-  }
-
-  if (minimum_size_bytes > 0) {
-    if (!diff_mode) {
-      filters.push_back([minimum_size_bytes](const GroupedPath&,
-                                             const BaseSymbol& sym) -> bool {
-        return sym.Pss() >= minimum_size_bytes;
-      });
-    } else {
-      filters.push_back([minimum_size_bytes](const GroupedPath&,
-                                             const BaseSymbol& sym) -> bool {
-        return abs(sym.Pss()) >= minimum_size_bytes;
-      });
-    }
   }
 
   // It's currently not useful to filter on more than one flag, so
@@ -309,7 +296,7 @@ bool BuildTree(bool method_count_mode,
     exit(1);
   }
   builder->Build(std::move(lens), sep, method_count_mode, filters,
-                 relocations_mode);
+                 relocations_mode, minimum_size);
 
   return bool(diff_info);
 }
@@ -351,6 +338,21 @@ const char* QueryAncestryById(uint32_t id) {
   v["ancestorIds"] = builder->GetAncestryById(id);
   cached_result = JsonSerialize(v);
   return cached_result.c_str();
+}
+
+// Returns a malloc-allocated NUL-terminated CSV string that the caller must
+// pass to free(), or nullptr if no tree has been built or allocation fails.
+char* DumpCsv() {
+  if (!builder) {
+    return nullptr;
+  }
+  std::string csv = builder->DumpCsv();
+  char* out = static_cast<char*>(malloc(csv.size() + 1));
+  if (!out) {
+    return nullptr;
+  }
+  memcpy(out, csv.c_str(), csv.size() + 1);
+  return out;
 }
 
 }  // extern "C"

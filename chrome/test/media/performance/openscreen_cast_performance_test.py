@@ -1,3 +1,4 @@
+#!/usr/bin/env vpython3
 # Copyright 2025 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -57,6 +58,8 @@ CHROME_OPTIONS = [
     "webrtc_logging*=3,*mirroring*=3,*openscreen*=3",
     # Force-enable stats collection loop, RTCP reporting, and 60fps streaming.
     "--enable-features=EnableRtcpReporting,CastStreaming60fps",
+    # Disable features that trigger blank-password Windows logon checks.
+    f"--disable-features={','.join(common.CHROME_DISABLED_FEATURES)}",
     # Skips the first-run experience modal.
     "--no-first-run",
     # Prevents the "Set as default browser" prompt from appearing.
@@ -1006,7 +1009,9 @@ def _run_tests(reporter):
                 f"--enable-features={','.join(enabled_features)}"
             )
 
-            disabled_features = config.get('disable_features', [])
+            disabled_features = list(common.CHROME_DISABLED_FEATURES) + list(
+                config.get('disable_features', [])
+            )
             if disabled_features:
                 chrome_options_list.append(
                     f"--disable-features={','.join(disabled_features)}"

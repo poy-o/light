@@ -506,13 +506,16 @@ class TabImpl implements Tab {
             setDelegateFactory(tabDelegateFactory);
         }
 
+        boolean wasDetached = mIsDetachedFromActivity;
         updateWindowAndroid(window);
 
+        mTabViewManager.onAttachedToWindow();
         mNativePageController.onAttachToWindow();
 
-        // Notify observers only on a full re-attachment (reparenting), not on a window-only swap
-        // where tabDelegateFactory is null.
-        if (tabDelegateFactory != null) {
+        // Notify observers on a full re-attachment (reparenting) or when a detached tab regains an
+        // activity (e.g. ReparentingTask#finishAsNoOp()), not on a window-only swap where
+        // tabDelegateFactory is null.
+        if (tabDelegateFactory != null || (wasDetached && !mIsDetachedFromActivity)) {
             for (TabObserver observer : mObservers) {
                 observer.onActivityAttachmentChanged(this, window);
             }
@@ -524,6 +527,7 @@ class TabImpl implements Tab {
         // detached so callers of getWindowAndroid() do not crash with NullPointerException, while
         // callers (e.g. ReparentingTask#detach()) clear webContents.setTopLevelNativeWindow(null).
         updateIsDetachedFromActivity(/* window= */ null);
+        mTabViewManager.onDetachedFromWindow();
         mNativePageController.onDetachFromWindow(getActivity(mWindowAndroid));
 
         // Clear the current tab supplier during detachment/reparenting to indicate that the

@@ -12,6 +12,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -58,6 +59,7 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tasks.tab_management.vertical_tabs.VerticalTabListCoordinator.ExternalDragObserver;
 import org.chromium.chrome.browser.tasks.tab_management.vertical_tabs.VerticalTabListProperties.RailCollapseState;
+import org.chromium.chrome.browser.ui.side_ui.SideUiContainer;
 import org.chromium.chrome.browser.ui.side_ui.SideUiCoordinator;
 import org.chromium.chrome.browser.ui.side_ui.SideUiCoordinator.AnchorSide;
 import org.chromium.chrome.browser.ui.side_ui.SideUiCoordinator.HeightType;
@@ -113,19 +115,27 @@ public class VerticalTabsSideUiCoordinatorUnitTest {
         setWindowWidthPx(mWideWindowWidth);
         mTabListView = new View(mActivity);
         when(mMockTabListCoordinator.getView()).thenReturn(mTabListView);
-        mCollapseController =
-                new VerticalTabRailCollapseController(
-                        mMockTabListCoordinator::setRailCollapseState,
-                        mMockTabListCoordinator::setCollapseButtonEnabled,
-                        mMockWindowAndroid);
-        when(mMockTabListCoordinator.getCollapseController()).thenReturn(mCollapseController);
+        doAnswer(
+                        invocation -> {
+                            SideUiContainer container = invocation.getArgument(0);
+                            assertNotNull(container.getView());
+                            return null;
+                        })
+                .when(mMockSideUiCoordinator)
+                .registerSideUiContainer(any());
+        createCoordinator();
+    }
 
+    private void createCoordinator() {
         mCoordinator =
                 new VerticalTabsSideUiCoordinator(
                         mActivity,
                         mMockWindowAndroid,
                         mMockSideUiCoordinator,
-                        mMockTabListCoordinator,
+                        collapseController -> {
+                            mCollapseController = collapseController;
+                            return mMockTabListCoordinator;
+                        },
                         mIsVerticalTabsActiveSupplier);
     }
 
@@ -927,13 +937,7 @@ public class VerticalTabsSideUiCoordinatorUnitTest {
         mTabListView = new View(mActivity);
         when(mMockTabListCoordinator.getView()).thenReturn(mTabListView);
 
-        mCoordinator =
-                new VerticalTabsSideUiCoordinator(
-                        mActivity,
-                        mMockWindowAndroid,
-                        mMockSideUiCoordinator,
-                        mMockTabListCoordinator,
-                        mIsVerticalTabsActiveSupplier);
+        createCoordinator();
 
         assertShowableWidth(ViewUtils.dpToPx(mActivity, 300), mWideWindowWidth);
     }
@@ -943,6 +947,7 @@ public class VerticalTabsSideUiCoordinatorUnitTest {
         verify(mMockWindowAndroid).addActivityStateObserver(mCoordinator);
         mCoordinator.destroy();
         verify(mMockWindowAndroid).removeActivityStateObserver(mCoordinator);
+        verify(mMockWindowAndroid).removeActivityStateObserver(mCollapseController);
         mCoordinator = null;
     }
 

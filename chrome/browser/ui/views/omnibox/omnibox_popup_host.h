@@ -6,10 +6,6 @@
 #define CHROME_BROWSER_UI_VIEWS_OMNIBOX_OMNIBOX_POPUP_HOST_H_
 
 #include <memory>
-#include <optional>
-#include <string>
-
-#include "ui/gfx/range/range.h"
 
 class OmniboxPopupDeactivationBlocker;
 class OmniboxPopupWebUIBaseContent;
@@ -77,24 +73,17 @@ class OmniboxPopupHost {
   virtual void OnFileDialogOpened() {}
   virtual void OnFileDialogClosed(bool file_selected) {}
 
-  // The text and selection the omnibox had when a modal dialog blurred it, and
-  // whether it showed the full URL rather than the elided one.
-  struct FocusStateToRestore {
-    std::u16string text;
-    gfx::Range selection;
-    bool show_full_url = false;
-  };
-
-  // Called when the omnibox is refocused. Returns the focus state the omnibox
-  // had when a modal dialog blurred it, so that the caller restores it. Only
-  // the first call after the dialog closes returns it. Returns nullopt if there
-  // is none, or if the omnibox text has changed since.
-  virtual std::optional<FocusStateToRestore>
-  TakeFocusStateToRestoreAfterModalDialog() = 0;
-
   // Called when the active tab changes. Forgets any state recorded for a modal
   // dialog, which belongs to the previous tab's omnibox.
   virtual void OnTabChanged() {}
+
+  // Called by `OmniboxPopupView::ReshowPopup()` before it reopens the popup
+  // for a draft. Returns true if the host can't show the popup yet, in which
+  // case the host calls `ReshowPopup()` again once it can.
+  // TODO(crbug.com/588536651): Remove once NativeWidgetNSWindowBridge no
+  // longer leaves a child window unattached when it's shown while its parent
+  // is off the active Space, which is the only reason a host defers.
+  virtual bool DeferReshowPopup() = 0;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_OMNIBOX_OMNIBOX_POPUP_HOST_H_

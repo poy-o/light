@@ -209,11 +209,6 @@ inline constexpr char kGroupPromoPrototypeCpaName[] =
 inline constexpr char kGroupPromoPrototypeCpaDescription[] =
     "Enables contextual toolbar button for group promo prototype.";
 
-inline constexpr char kNewTabPageCustomizationV2Name[] =
-    "Customize the new tab page V2";
-inline constexpr char kNewTabPageCustomizationV2Description[] =
-    "Allows users to customize the new tab page, like appearance.";
-
 inline constexpr char kAndroidAutoProjectedName[] = "Android Auto Projected";
 inline constexpr char kAndroidAutoProjectedDescription[] =
     "Enables Android Auto Projected support.";
@@ -1131,12 +1126,6 @@ inline constexpr char kAutofillEnableGradientGoogleLogosName[] =
 inline constexpr char kAutofillEnableGradientGoogleLogosDescription[] =
     "When enabled, gradient-style GPay and Wallet branding logos will be used.";
 
-inline constexpr char kAutofillGmailOtpPreLaunchMetricsName[] =
-    "Enable Gmail OTP Pre-launch Metrics";
-inline constexpr char kAutofillGmailOtpPreLaunchMetricsDescription[] =
-    "Enables pre-launch metrics for one-time passwords (OTPs) received in "
-    "Gmail.";
-
 inline constexpr char kAutofillShowGmailOtpSuggestionsName[] =
     "Show Gmail OTP Suggestions";
 inline constexpr char kAutofillShowGmailOtpSuggestionsDescription[] =
@@ -1975,6 +1964,11 @@ inline constexpr char kGlicChromeStatusIconWinName[] =
     "Glic Chrome Status Icon Windows";
 inline constexpr char kGlicChromeStatusIconWinDescription[] =
     "Use an alt logo as glic OS status bar icon on Windows.";
+inline constexpr char kGlicCicName[] = "Glic CiC (UNSAFE)";
+inline constexpr char kGlicCicDescription[] =
+    "Proxies Glic panel requests to the CiC server while preserving the Glic "
+    "guest origin. Use with caution; intended for development and testing "
+    "only.";
 inline constexpr char kGlicContextMenuBelowSearchName[] =
     "Glic Context Menu Below Search";
 inline constexpr char kGlicContextMenuBelowSearchDescription[] =
@@ -3310,11 +3304,6 @@ inline constexpr char kLensOverlayForceEmptyCsbQueryName[] =
 inline constexpr char kLensOverlayForceEmptyCsbQueryDescription[] =
     "Forces Lens overlay to issue an empty CSB query on invocation.";
 
-inline constexpr char kLensOverlayImageContextMenuActionsName[] =
-    "Lens overlay image context menu actions";
-inline constexpr char kLensOverlayImageContextMenuActionsDescription[] =
-    "Enables image context menu actions in the Lens overlay.";
-
 inline constexpr char kLensOverlayNonBlockingPrivacyNoticeName[] =
     "Lens overlay non-blocking privacy notice";
 inline constexpr char kLensOverlayNonBlockingPrivacyNoticeDescription[] =
@@ -3348,11 +3337,6 @@ inline constexpr char kLensOverlayLatencyOptimizationsName[] =
     "Lens overlay latency optimizations";
 inline constexpr char kLensOverlayLatencyOptimizationsDescription[] =
     "Enables latency optimizations for the Lens overlay.";
-
-inline constexpr char kLensOverlayUpdatedVisualsName[] =
-    "Lens overlay updated visuals";
-inline constexpr char kLensOverlayUpdatedVisualsDescription[] =
-    "Enables updated visuals in the Lens selection overlay.";
 
 inline constexpr char kLensSearchAimM3Name[] =
     "Enables AIM in Lens side panel.";
@@ -5365,6 +5349,12 @@ inline constexpr char
         "populated "
         "using the Android supplemental description API.";
 
+inline constexpr char kAccessibilitySelectionOffsetTypesName[] =
+    "Accessibility Selection Offset Types";
+inline constexpr char kAccessibilitySelectionOffsetTypesDescription[] =
+    "Propagates and consumes explicit text vs. child selection endpoint offset "
+    "types on Android.";
+
 inline constexpr char kAccessibilitySequentialFocusName[] =
     "Accessibility Sequential Focus Navigation";
 inline constexpr char kAccessibilitySequentialFocusDescription[] =
@@ -6369,6 +6359,12 @@ inline constexpr char kAndroidNavigationBlurTransitionAnimationDescription[] =
     "Display a blur animation during cross-site navigations to provide an "
     "enhanced transition experience where the white loading screen is avoided.";
 
+inline constexpr char kNewTabPageCustomizationThemeDebugName[] =
+    "New tab page theme customization debug options";
+inline constexpr char kNewTabPageCustomizationThemeDebugDescription[] =
+    "Debug options for the new tab page theme customization, like showing the "
+    "color picker or forcing the theme tip bottom sheet.";
+
 inline constexpr char kNewTabPageCustomizationThemeSyncName[] =
     "New Tab Page Customization Theme Sync";
 inline constexpr char kNewTabPageCustomizationThemeSyncDescription[] =
@@ -6805,12 +6801,6 @@ inline constexpr char kAllowAllSitesToInitiateMirroringDescription[] =
     "via Presentation API. Requires #cast-media-route-provider to also be "
     "enabled";
 
-inline constexpr char kAXTreeFixingName[] = "AXTree Fixing";
-inline constexpr char kAXTreeFixingDescription[] =
-    "When enabled, allows Chrome to dynamically fix the AXTree of sites. This "
-    "is experimental and may cause breaking changes to users of assistive "
-    "technology.";
-
 inline constexpr char kBrowserInitiatedAutomaticPictureInPictureName[] =
     "Browser initiated automatic picture in picture";
 inline constexpr char kBrowserInitiatedAutomaticPictureInPictureDescription[] =
@@ -7003,11 +6993,6 @@ inline constexpr char kMultistepFilterDescription[] =
     "Allows users to quickly apply search filters when "
     "browsing supported websites. Suggestions are based on recent "
     "browsing activity and filters are saved locally on the device.";
-
-inline constexpr char kMuteNotificationSnoozeActionName[] =
-    "Snooze action for mute notifications";
-inline constexpr char kMuteNotificationSnoozeActionDescription[] =
-    "Adds a Snooze action to mute notifications shown while sharing a screen.";
 
 inline constexpr char kNtpAlphaBackgroundCollectionsName[] =
     "NTP Alpha Background Collections";

@@ -5,6 +5,7 @@
 #include "chrome/browser/glic/browser_ui/activity_list_bubble/glic_activity_list_bubble_controller.h"
 
 #include <algorithm>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -15,7 +16,6 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
-#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/actor/actor_keyed_service.h"
 #include "chrome/browser/actor/actor_task.h"
 #include "chrome/browser/actor/ui/actor_ui_metrics.h"
@@ -36,12 +36,8 @@
 #include "chrome/browser/tab_list/tab_list_interface.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/vector_icons/vector_icons.h"
 #include "ui/base/base_window.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/ui_base_features.h"
-#include "ui/color/color_id.h"
-#include "ui/gfx/vector_icon_types.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/android/tab_android.h"
@@ -90,28 +86,14 @@ bool IsProcessedTabClosedRow(actor::ActorTask::State state,
   return !has_tab && !requires_processing;
 }
 
-const gfx::VectorIcon& GetRowIcon(actor::ActorTask::State state) {
+GlicActivityIcon GetRowIcon(actor::ActorTask::State state) {
   if (LegacyGlicActivityManager::RequiresAttention(state)) {
-    return features::IsRoundedIconsEnabled() ? kHourglassIcon
-                                             : kHourglassOldIcon;
+    return GlicActivityIcon::kHourglass;
   }
   if (state == actor::ActorTask::State::kFinished) {
-    return features::IsRoundedIconsEnabled() ? kTaskSparkIcon
-                                             : kTaskSparkOldIcon;
+    return GlicActivityIcon::kTaskSpark;
   }
-  return kCursorSparkIcon;
-}
-
-ui::ColorId GetRowColor(bool is_enabled,
-                        bool requires_processing,
-                        bool needs_review) {
-  if (!is_enabled) {
-    return ui::kColorSysStateDisabled;
-  }
-  if (requires_processing && needs_review) {
-    return ui::kColorSysPrimary;
-  }
-  return ui::kColorMenuIcon;
+  return GlicActivityIcon::kCursorSpark;
 }
 
 std::u16string GetRowSubtitle(
@@ -161,7 +143,6 @@ GlicActivityRowViewModel CreateActorTaskActivityRow(
   model.task_id = item.task_id;
   model.has_tab = item.has_tab;
   model.needs_review = (item.state == GlicActivityState::kNeedsAttention);
-  model.has_been_seen = item.has_been_seen;
   model.is_enabled = item.is_enabled;
   model.icon = item.icon;
 #if BUILDFLAG(IS_ANDROID)
@@ -178,8 +159,8 @@ GlicActivityRowViewModel CreateActorTaskActivityRow(
     }
   }
 #endif
-  model.icon_and_subtitle_color =
-      GetRowColor(item.is_enabled, !item.has_been_seen, model.needs_review);
+  model.is_highlighted =
+      item.is_enabled && !item.has_been_seen && model.needs_review;
   model.title = item.title.empty()
                     ? l10n_util::GetStringUTF16(IDS_GLIC_ACTIVITY_UNTITLED_TASK)
                     : item.title;
@@ -219,12 +200,12 @@ GlicActivityRowViewModel CreateConversationActivityRow(
   const std::string& conv_id = item.key.id;
   GlicActivityRowViewModel model;
   model.conversation_id = conv_id;
-  model.has_been_seen = item.has_been_seen;
   model.has_tab = true;
   model.is_enabled = true;
-  model.icon = item.icon ? item.icon.get() : &vector_icons::kChatSparkIcon;
-  model.icon_and_subtitle_color =
-      !item.has_been_seen ? ui::kColorSysPrimary : ui::kColorMenuIcon;
+  model.icon = item.icon != GlicActivityIcon::kNone
+                   ? item.icon
+                   : GlicActivityIcon::kChatSpark;
+  model.is_highlighted = !item.has_been_seen;
   model.title = item.title.empty()
                     ? l10n_util::GetStringUTF16(IDS_GLIC_ACTIVITY_NEW_CHAT)
                     : item.title;
@@ -303,10 +284,8 @@ GlicActivityListBubbleController::GetActorTaskRowViewModels(
     model.has_tab = has_tab;
     model.tab_id = tab_id;
     model.needs_review = needs_review;
-    model.has_been_seen = !requires_processing;
-    model.icon = &GetRowIcon(task_state.value());
-    model.icon_and_subtitle_color =
-        GetRowColor(is_enabled, requires_processing, needs_review);
+    model.icon = GetRowIcon(task_state.value());
+    model.is_highlighted = is_enabled && requires_processing && needs_review;
     model.is_enabled = is_enabled;
 
     model.title =
@@ -566,29 +545,18 @@ GlicActivityListBubbleController::RegisterBubbleDestroyedCallback(
 }
 
 void GlicActivityListBubbleController::OnTaskRowClicked(actor::TaskId task_id) {
+  // Close the bubble before activating tabs/windows so synchronous focus or
+  // active-tab notifications see the bubble as closed instead of rebuilding it.
+  CloseBubble();
   Profile* profile = browser_->GetProfile();
   actor::ui::ActorUiStateManager* manager =
       actor::ui::ActorUiStateManager::Get(profile);
-  if (auto last_tab_opt = manager->GetLastActedOnTab(task_id);
-      last_tab_opt && *last_tab_opt) {
-    tabs::TabInterface* last_tab = *last_tab_opt;
-    TabListInterface::From(last_tab->GetBrowserWindowInterface())
-        ->ActivateTab(last_tab->GetHandle());
-    // Activate the window that the tab is in as it may not be the current one.
-    if (auto* window = last_tab->GetBrowserWindowInterface()->GetWindow()) {
-      window->Activate();
-    }
-    if (auto* glic_service =
-            glic::GlicKeyedServiceFactory::GetGlicKeyedService(profile)) {
-      glic_service->ShowUI(browser_,
-                           glic::mojom::InvocationSource::kActorTaskIcon);
-      if (auto* instance = glic_service->GetInstanceForTab(last_tab)) {
-        instance->NotifyActorTaskListRowClicked(task_id.value());
-      }
-    }
-  }
-  // Regardless of tab navigation, process the row and close the bubble when
-  // done.
+  auto last_tab_opt =
+      manager ? manager->GetLastActedOnTab(task_id) : std::nullopt;
+
+  // Mark the task seen before activating tabs so synchronous OnActiveTabChanged
+  // handlers compute the post-click state in one pass, and process the row
+  // regardless of tab navigation.
   if (base::FeatureList::IsEnabled(features::kGlicActivityHub)) {
     if (auto* activity_manager = glic::GlicActivityManager::Get(profile)) {
       activity_manager->MarkActivitySeen(task_id);
@@ -597,27 +565,52 @@ void GlicActivityListBubbleController::OnTaskRowClicked(actor::TaskId task_id) {
                  glic::LegacyGlicActivityManager::Get(profile)) {
     activity_manager->ProcessRowInTaskListBubble(task_id);
   }
-  CloseBubble();
+
+  if (last_tab_opt && *last_tab_opt) {
+    tabs::TabInterface* last_tab = *last_tab_opt;
+    if (BrowserWindowInterface* target_browser =
+            last_tab->GetBrowserWindowInterface()) {
+      if (auto* tab_list = TabListInterface::From(target_browser)) {
+        tab_list->ActivateTab(last_tab->GetHandle());
+      }
+      // Activate the window that the tab is in as it may not be the current
+      // one.
+      if (auto* window = target_browser->GetWindow()) {
+        window->Activate();
+      }
+      if (auto* glic_service =
+              glic::GlicKeyedServiceFactory::GetGlicKeyedService(profile)) {
+        glic_service->ShowUI(target_browser,
+                             glic::mojom::InvocationSource::kActorTaskIcon);
+        if (auto* instance = glic_service->GetInstanceForTab(last_tab)) {
+          instance->NotifyActorTaskListRowClicked(task_id.value());
+        }
+      }
+    }
+  }
+
   actor::ui::LogTaskListBubbleRowClicked();
 }
 
 void GlicActivityListBubbleController::OnConversationRowClicked(
     const std::string& conversation_id) {
+  // Copy before closing the bubble in case destroying row views/models
+  // invalidates the referenced string, and close before activating/invoking so
+  // synchronous OnActiveTabChanged notifications see the bubble as closed.
+  const std::string conv_id = conversation_id;
+  CloseBubble();
   Profile* profile = browser_->GetProfile();
   if (auto* glic_service = GlicKeyedService::Get(profile)) {
-    GlicActivityKey key{GlicActivityType::kConversationResponse,
-                        conversation_id};
+    GlicActivityKey key{GlicActivityType::kConversationResponse, conv_id};
     glic_service->activity_manager().MarkActivitySeen(key);
-    glic_service->instance_coordinator().ActivateTabWithConversation(
-        conversation_id);
+    glic_service->instance_coordinator().ActivateTabWithConversation(conv_id);
     Target target;
-    target.conversation = ConversationId(conversation_id);
+    target.conversation = ConversationId(conv_id);
     target.surface = LastActiveOrNew{browser_};
     GlicInvokeOptions options(std::move(target),
                               mojom::InvocationSource::kActivityListBubble);
     glic_service->Invoke(std::move(options));
   }
-  CloseBubble();
 }
 
 GlicActivityListBubbleControllerDelegate*

@@ -1344,26 +1344,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Memory.Discardable.LockingSuccess"
-    enum="BooleanLockingSuccess" expires_after="2023-05-07">
-  <owner>thiabaud@google.com</owner>
-  <owner>lizeb@chromium.org</owner>
-  <summary>
-    Boolean metric which tracks whether or not discardable memory had already
-    been discarded when an attempt is made to lock it.
-  </summary>
-</histogram>
-
-<histogram name="Memory.Discardable.VirtualSize.Foreground" units="KiB"
-    expires_after="2023-03-19">
-  <owner>thiabaud@google.com</owner>
-  <owner>lizeb@chromium.org</owner>
-  <summary>
-    Virtual memory used by ClientDiscardableMemoryManager in the foreground
-    only. Recorded during |OnMemoryDump|.
-  </summary>
-</histogram>
-
 <histogram name="Memory.Dump.Type.{DetailLevel}" enum="MemoryDumpType"
     expires_after="2027-05-02">
   <owner>joenotcharles@google.com</owner>
@@ -2082,37 +2062,6 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram
-    name="Memory.Experimental.UserLevelMemoryPressureSignal.TotalPrivateMemoryFootprintVisibleOrHigherPriorityRenderersAfter"
-    units="MB" expires_after="2024-05-05">
-  <owner>tasak@google.com</owner>
-  <owner>chrome-memory-tok@google.com</owner>
-  <summary>
-    The total private memory footprint excluding lower priority renderers' 10
-    seconds after a user-level memory pressure signal is generated. Recorded on
-    Android.
-  </summary>
-</histogram>
-
-<histogram
-    name="Memory.Experimental.UserLevelMemoryPressureSignal.TotalPrivateMemoryFootprintVisibleOrHigherPriorityRenderersBefore"
-    units="MB" expires_after="2024-05-05">
-  <owner>tasak@google.com</owner>
-  <owner>chrome-memory-tok@google.com</owner>
-  <summary>
-    The total private memory footprint excluding lower priority renderers' right
-    before a user-level memory pressure signal is generated. Recorded on
-    Android.
-
-    This memory footprint metric cannot be compared across platforms because
-    each platform relies on platform-level APIs for accounting. As such, though
-    this attempts to measure private memory footprint as best as possible, it
-    does not measure the same thing on each platform. We have not found a good
-    way to compare any system level memory metric across platforms due to the
-    different nature of memory management on each platform.
-  </summary>
-</histogram>
-
-<histogram
     name="Memory.Experimental.Utility2.Custom{ProcessMemoryAllocatorCustom2}"
     units="bytes" expires_after="2026-01-10">
   <owner>sashamcintosh@chromium.org</owner>
@@ -2468,21 +2417,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Memory.NativeLibrary.NotResidentOrderedCodeMemoryFootprint"
-    units="KB" expires_after="2024-04-28">
-  <owner>lizeb@chromium.org</owner>
-  <owner>pasko@chromium.org</owner>
-  <summary>
-    The size of the native library code which was ordered, yet is not resident
-    in memory, across all processes. This metric is computed by parsing
-    proc/self/pagemap and counting native library pages that are mapped and
-    present in RAM for at least one Chrome process. Available only on Android.
-
-    Recorded at Poisson sampled time intervals with a mean of 5 minutes on
-    Android and 30 minutes on other platforms.
-  </summary>
-</histogram>
-
 <histogram name="Memory.NativeLibrary.ResidentNotOrderedCodeMemoryFootprint"
     units="KB" expires_after="2024-02-04">
   <owner>lizeb@chromium.org</owner>
@@ -2736,18 +2670,6 @@ chromium-metrics-reviews@google.com.
     Windows.HasHighResolutionTimeTicks for the affected sample.
 
     This histogram was expired before 2024-03-19, be careful of missing data.
-  </summary>
-</histogram>
-
-<histogram name="Memory.ParkableString.TotalParkingThreadTime.5min" units="ms"
-    expires_after="2025-02-23">
-  <owner>lizeb@chromium.org</owner>
-  <owner>pasko@chromium.org</owner>
-  <summary>
-    Total thread time (on background threads) used by ParkableStrings for
-    compression over the first 5 minutes of a renderer lifetime. Starting time
-    is from the first ParkableString being added. This always happens on
-    background thread, so the reported value is thread time, not wall clock.
   </summary>
 </histogram>
 

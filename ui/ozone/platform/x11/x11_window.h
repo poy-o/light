@@ -28,6 +28,7 @@
 #include "ui/gfx/x/event.h"
 #include "ui/gfx/x/sync.h"
 #include "ui/gfx/x/xfixes.h"
+#include "ui/gfx/x/xinput.h"
 #include "ui/gfx/x/xproto.h"
 #include "ui/platform_window/extensions/workspace_extension.h"
 #include "ui/platform_window/extensions/x11_extension.h"
@@ -49,6 +50,7 @@ namespace ui {
 class PlatformWindowDelegate;
 class X11ExtensionDelegate;
 class X11MoveLoop;
+class X11WmMoveLoop;
 class WorkspaceExtensionDelegate;
 
 // PlatformWindow implementation for X11.
@@ -280,6 +282,8 @@ class X11Window : public PlatformWindow,
   void SetWMStateMaximize(bool maximize);
   bool IsActive() const;
   bool IsTargetedBy(const x11::Event& xev) const;
+  // Returns the XI2 touch event being dispatched, if any.
+  const x11::Input::DeviceEvent* GetDispatchingTouchEvent() const;
   void HandleEvent(const x11::Event& xev);
 
   bool IsMinimized() const;
@@ -397,6 +401,9 @@ class X11Window : public PlatformWindow,
   gfx::Rect restored_bounds_in_pixels_;
 
   std::unique_ptr<X11DesktopWindowMoveClient> x11_window_move_client_;
+
+  // Set while the window manager moves the window during a move loop.
+  std::unique_ptr<X11WmMoveLoop> wm_move_loop_;
 
   // Whether the drop handler has notified that the drag has entered.
   bool notified_enter_ = false;

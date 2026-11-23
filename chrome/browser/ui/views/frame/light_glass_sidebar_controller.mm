@@ -3094,7 +3094,7 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
     if (wc && wc->IsLoading()) {
       chrome::Stop(b);
     } else {
-      chrome::Reload(b, WindowOpenDisposition::CURRENT_TAB);
+      chrome::Reload(b, WindowOpenDisposition::kCurrentTab);
     }
   }
 
@@ -3179,7 +3179,7 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
     if (BrowserWindowInterface* b = browser()) {
       NavigateParams params(b, GURL("chrome://extensions/"),
                             ui::PAGE_TRANSITION_LINK);
-      params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+      params.disposition = WindowOpenDisposition::kNewForegroundTab;
       Navigate(&params);
     }
   }
@@ -3290,7 +3290,7 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
         wc->GetVisibleURL() != it->second) {
       model->ActivateTabAt(index);
       NavigateParams params(b, it->second, ui::PAGE_TRANSITION_AUTO_BOOKMARK);
-      params.disposition = WindowOpenDisposition::CURRENT_TAB;
+      params.disposition = WindowOpenDisposition::kCurrentTab;
       Navigate(&params);
     }
   }
@@ -3681,7 +3681,7 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
     }
 
     NavigateParams params(b, destination_url, transition);
-    params.disposition = WindowOpenDisposition::CURRENT_TAB;
+    params.disposition = WindowOpenDisposition::kCurrentTab;
     Navigate(&params);
     FocusActiveWebContents();
   }
@@ -3740,7 +3740,7 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
       GURL url(base::SysNSStringToUTF8(item.directUrlSpec));
       if (url.is_valid()) {
         NavigateParams params(b, url, ui::PAGE_TRANSITION_TYPED);
-        params.disposition = WindowOpenDisposition::CURRENT_TAB;
+        params.disposition = WindowOpenDisposition::kCurrentTab;
         Navigate(&params);
         FocusActiveWebContents();
         return;
@@ -3753,7 +3753,7 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
         const AutocompleteMatch& match = result.match_at(idx);
         if (match.destination_url.is_valid()) {
           NavigateParams params(b, match.destination_url, match.transition);
-          params.disposition = WindowOpenDisposition::CURRENT_TAB;
+          params.disposition = WindowOpenDisposition::kCurrentTab;
           Navigate(&params);
           FocusActiveWebContents();
           return;
@@ -3901,7 +3901,7 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
     }
   }
 
-  void OnTabPinnedStateChanged(tabs::TabInterface* tab, int index) override {
+  void OnTabPinnedStateChanged(tabs::TabHandle tab) override {
     if (@available(macOS 26.0, *)) {
       [controller_ reloadTabsAndNavigation];
     }
@@ -3910,8 +3910,7 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
   void TabGroupedStateChanged(TabStripModel* tab_strip_model,
                               std::optional<tab_groups::TabGroupId> old_group,
                               std::optional<tab_groups::TabGroupId> new_group,
-                              tabs::TabInterface* tab,
-                              int index) override {
+                              tabs::TabHandle tab) override {
     if (@available(macOS 26.0, *)) {
       [controller_ reloadTabsAndNavigation];
     }

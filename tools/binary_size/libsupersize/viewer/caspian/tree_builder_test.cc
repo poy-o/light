@@ -114,7 +114,7 @@ TEST(TreeBuilderTest, TestIdPathLens) {
   TreeBuilder builder(size_info.get());
   FilterList filters;
   builder.Build(std::make_unique<IdPathLens>(), '/', false, filters,
-                /*relocations_mode=*/false);
+                /*relocations_mode=*/false, /*minimum_size=*/0);
   CheckAllTreeNodesFindable(builder, builder.Open(""));
   EXPECT_EQ("Dt", builder.Open("")["type"].asString());
 }
@@ -125,7 +125,7 @@ TEST(TreeBuilderTest, TestComponentLens) {
   TreeBuilder builder(size_info.get());
   FilterList filters;
   builder.Build(std::make_unique<ComponentLens>(), '>', false, filters,
-                /*relocations_mode=*/false);
+                /*relocations_mode=*/false, /*minimum_size=*/0);
   CheckAllTreeNodesFindable(builder, builder.Open(""));
   EXPECT_EQ("Gt", builder.Open("A")["type"].asString());
   EXPECT_EQ(20, builder.Open("A")["size"].asInt());
@@ -149,7 +149,7 @@ TEST(TreeBuilderTest, TestTemplateLens) {
   TreeBuilder builder(size_info.get());
   FilterList filters;
   builder.Build(std::make_unique<TemplateLens>(), '/', false, filters,
-                /*relocations_mode=*/false);
+                /*relocations_mode=*/false, /*minimum_size=*/0);
   CheckAllTreeNodesFindable(builder, builder.Open(""));
   EXPECT_EQ(
       "Gt",
@@ -165,7 +165,7 @@ TEST(TreeBuilderTest, TestNoNameUnderGroup) {
   TreeBuilder builder(size_info.get());
   FilterList filters;
   builder.Build(std::make_unique<ComponentLens>(), '>', false, filters,
-                /*relocations_mode=*/false);
+                /*relocations_mode=*/false, /*minimum_size=*/0);
   CheckAllTreeNodesFindable(builder, builder.Open(""));
   EXPECT_EQ("A>B>C/(No path)",
             builder.Open("A>B>C")["children"][0]["idPath"].asString());
@@ -179,7 +179,7 @@ TEST(TreeBuilderTest, TestJoinDexMethodClasses) {
   TreeBuilder builder(size_info.get());
   FilterList filters;
   builder.Build(std::make_unique<IdPathLens>(), '>', false, filters,
-                /*relocations_mode=*/false);
+                /*relocations_mode=*/false, /*minimum_size=*/0);
   CheckAllTreeNodesFindable(builder, builder.Open(""));
 
   Json::Value class_symbol = builder.Open("a/b/c/zL2");
@@ -199,7 +199,7 @@ TEST(TreeBuilderTest, TestJoinDexMethodClassesStringLiteral) {
   TreeBuilder builder(size_info.get());
   FilterList filters;
   builder.Build(std::make_unique<IdPathLens>(), '>', false, filters,
-                /*relocations_mode=*/false);
+                /*relocations_mode=*/false, /*minimum_size=*/0);
   CheckAllTreeNodesFindable(builder, builder.Open(""));
 
   Json::Value class_symbol = builder.Open("a/b/c");
@@ -224,7 +224,7 @@ TEST(TreeBuilderTest, TestManyPathsRehash) {
   TreeBuilder builder(size_info.get());
   FilterList filters;
   builder.Build(std::make_unique<ComponentLens>(), '>', false, filters,
-                /*relocations_mode=*/false);
+                /*relocations_mode=*/false, /*minimum_size=*/0);
   CheckAllTreeNodesFindable(builder, builder.Open(""));
   EXPECT_EQ(200u, builder.Open("Comp>Sub")["children"].size());
 }
@@ -239,7 +239,7 @@ TEST(TreeBuilderTest, TestRelocationsMode) {
   TreeBuilder builder(size_info.get());
   FilterList filters;
   builder.Build(std::make_unique<IdPathLens>(), '/', false, filters,
-                /*relocations_mode=*/true);
+                /*relocations_mode=*/true, /*minimum_size=*/0);
   Json::Value root = builder.Open("");
   EXPECT_FLOAT_EQ(5.0f, root["size"].asFloat());
   Json::Value file_node = builder.Open("a/b/c");
@@ -267,7 +267,7 @@ TEST(TreeBuilderTest, TestRelocationsDiffModePreservesFileDiffStatus) {
   TreeBuilder builder(&diff);
   FilterList filters;
   builder.Build(std::make_unique<IdPathLens>(), '/', false, filters,
-                /*relocations_mode=*/true);
+                /*relocations_mode=*/true, /*minimum_size=*/0);
 
   Json::Value file_node = builder.Open("a/b/c");
   EXPECT_FALSE(file_node.isMember("diffStatus"));
@@ -350,7 +350,7 @@ TEST(TreeBuilderTest, TestDiffModeFiltersTinyAliasPss) {
   TreeBuilder builder(&diff);
   FilterList filters;
   builder.Build(std::make_unique<IdPathLens>(), '/', false, filters,
-                /*relocations_mode=*/false);
+                /*relocations_mode=*/false, /*minimum_size=*/0);
   CheckAllTreeNodesFindable(builder, builder.Open(""));
 
   // dir2/b.cc only had tiny alias deltas and should be omitted completely.
@@ -447,7 +447,7 @@ TEST(TreeBuilderTest, TestDiffModeAggregatesSmallAliasDeltas) {
   TreeBuilder builder(&diff);
   FilterList filters;
   builder.Build(std::make_unique<ContainerLens>(), '/', false, filters,
-                /*relocations_mode=*/false);
+                /*relocations_mode=*/false, /*minimum_size=*/0);
   CheckAllTreeNodesFindable(builder, builder.Open(""));
 
   // c1: dir_matched is omitted, dir_added keeps the +2.46 B alias, and
@@ -481,7 +481,7 @@ TEST(TreeBuilderTest, TestDiffModeAggregatesSmallAliasDeltas) {
   // into one aggregate symbol with an empty container name.
   TreeBuilder id_builder(&diff);
   id_builder.Build(std::make_unique<IdPathLens>(), '/', false, filters,
-                   /*relocations_mode=*/false);
+                   /*relocations_mode=*/false, /*minimum_size=*/0);
   CheckAllTreeNodesFindable(id_builder, id_builder.Open(""));
   Json::Value no_path = id_builder.Open("(No path)");
   ASSERT_EQ(1u, no_path["children"].size());
@@ -540,7 +540,7 @@ TEST(TreeBuilderTest, TestDiffModeAggregatesSmallAliasDeltasPerLens) {
   {
     TreeBuilder builder(&diff);
     builder.Build(std::make_unique<ComponentLens>(), '>', false, filters,
-                  /*relocations_mode=*/false);
+                  /*relocations_mode=*/false, /*minimum_size=*/0);
     CheckAllTreeNodesFindable(builder, builder.Open(""));
     EXPECT_EQ(nullptr, builder.Find("(No component)"));
     EXPECT_NEAR(2.0f, builder.Open("CompA>Sub")["size"].asFloat(), 1e-4f);
@@ -556,7 +556,7 @@ TEST(TreeBuilderTest, TestDiffModeAggregatesSmallAliasDeltasPerLens) {
   {
     TreeBuilder builder(&diff);
     builder.Build(std::make_unique<GeneratedLens>(), '/', false, filters,
-                  /*relocations_mode=*/false);
+                  /*relocations_mode=*/false, /*minimum_size=*/0);
     CheckAllTreeNodesFindable(builder, builder.Open(""));
     EXPECT_NEAR(4.0f, builder.Open("Mojo")["size"].asFloat(), 1e-4f);
     EXPECT_NEAR(4.0f, builder.Open("Mojo/(No path)")["size"].asFloat(), 1e-4f);
@@ -574,7 +574,7 @@ TEST(TreeBuilderTest, TestDiffModeAggregatesSmallAliasDeltasPerLens) {
         },
     };
     builder.Build(std::make_unique<TemplateLens>(), '/', false, tmpl_filters,
-                  /*relocations_mode=*/false);
+                  /*relocations_mode=*/false, /*minimum_size=*/0);
     CheckAllTreeNodesFindable(builder, builder.Open(""));
     EXPECT_EQ(nullptr, builder.Find("Overhead: aggregate small symbol diffs"));
     EXPECT_NEAR(4.0f, builder.Open("MyTemplate<>")["size"].asFloat(), 1e-4f);
@@ -633,7 +633,7 @@ TEST(TreeBuilderTest, TestDiffModeFiltersTinyRelocationPss) {
   TreeBuilder builder(&diff);
   FilterList filters;
   builder.Build(std::make_unique<IdPathLens>(), '/', false, filters,
-                /*relocations_mode=*/true);
+                /*relocations_mode=*/true, /*minimum_size=*/0);
   CheckAllTreeNodesFindable(builder, builder.Open(""));
 
   EXPECT_EQ(nullptr, builder.Find("dir2"));
@@ -664,7 +664,7 @@ TEST(TreeBuilderTest, TestSnapshotModeKeepsSmallAliasPss) {
     TreeBuilder builder(size_info.get());
     FilterList filters;
     builder.Build(std::make_unique<IdPathLens>(), '/', false, filters,
-                  /*relocations_mode=*/false);
+                  /*relocations_mode=*/false, /*minimum_size=*/0);
     Json::Value file_node = builder.Open("a/b.cc");
     EXPECT_EQ(25u, file_node["children"].size());
     EXPECT_NEAR(2.0f, file_node["size"].asFloat(), 1e-4f);
@@ -674,7 +674,7 @@ TEST(TreeBuilderTest, TestSnapshotModeKeepsSmallAliasPss) {
     TreeBuilder builder(size_info.get());
     FilterList filters;
     builder.Build(std::make_unique<IdPathLens>(), '/', false, filters,
-                  /*relocations_mode=*/true);
+                  /*relocations_mode=*/true, /*minimum_size=*/0);
     Json::Value file_node = builder.Open("a/b.cc");
     EXPECT_EQ(25u, file_node["children"].size());
     EXPECT_NEAR(1.0f, file_node["size"].asFloat(), 1e-4f);
@@ -693,11 +693,358 @@ TEST(TreeBuilderTest, TestMethodCountDiffModeKeepsSmallAliasPss) {
   FilterList filters;
   builder.Build(std::make_unique<IdPathLens>(), '/',
                 /*method_count_mode=*/true, filters,
-                /*relocations_mode=*/false);
+                /*relocations_mode=*/false, /*minimum_size=*/0);
 
   Json::Value class_node = builder.Open("a/Foo.java/Foo");
   EXPECT_EQ(25u, class_node["children"].size());
   EXPECT_EQ(25, class_node["childStats"]["m"]["count"].asInt());
+}
+
+TEST(TreeBuilderTest, TestMinSizeNormalModeSnapshot) {
+  // Snapshot mode: filters on `Symbol::Pss()`.
+  std::unique_ptr<SizeInfo> size_info = MakeSizeInfo();
+  MakeSymbol(size_info.get(), SectionId::kText, 40, "a/b.cc", "", "small");
+  MakeSymbol(size_info.get(), SectionId::kText, 50, "a/b.cc", "", "exact");
+  // 2-alias 60 B group -> `Pss() == 30` (< 50, excluded).
+  MakeAliasSymbols(size_info.get(), SectionId::kText, 60, "a/b.cc",
+                   "small_alias_", 0, 2);
+  // 2-alias 100 B group -> `Pss() == 50` (>= 50, kept).
+  MakeAliasSymbols(size_info.get(), SectionId::kText, 100, "a/b.cc",
+                   "keep_alias_", 0, 2);
+  MakeAliasGroup(size_info.get(), 2, 4);
+  MakeAliasGroup(size_info.get(), 4, 6);
+
+  TreeBuilder builder(size_info.get());
+  FilterList filters;
+  builder.Build(std::make_unique<IdPathLens>(), '/', false, filters,
+                /*relocations_mode=*/false, /*minimum_size=*/50);
+
+  Json::Value file_node = builder.Open("a/b.cc");
+  ASSERT_EQ(3u, file_node["children"].size());
+  EXPECT_EQ(150, file_node["size"].asInt());
+}
+
+TEST(TreeBuilderTest, TestMinSizeNormalModeDiff) {
+  // Diff mode: filters on `|DeltaSymbol::Pss()|`.
+  std::unique_ptr<SizeInfo> before = MakeSizeInfo();
+  MakeSymbol(before.get(), SectionId::kText, 100, "a/b.cc", "", "small_inc");
+  MakeSymbol(before.get(), SectionId::kText, 100, "a/b.cc", "", "keep_inc");
+  MakeSymbol(before.get(), SectionId::kText, 100, "a/b.cc", "", "keep_dec");
+  MakeSymbol(before.get(), SectionId::kText, 100, "a/b.cc", "", "small_dec");
+
+  std::unique_ptr<SizeInfo> after = MakeSizeInfo();
+  MakeSymbol(after.get(), SectionId::kText, 140, "a/b.cc", "", "small_inc");
+  MakeSymbol(after.get(), SectionId::kText, 150, "a/b.cc", "", "keep_inc");
+  MakeSymbol(after.get(), SectionId::kText, 40, "a/b.cc", "", "keep_dec");
+  MakeSymbol(after.get(), SectionId::kText, 60, "a/b.cc", "", "small_dec");
+  MakeAliasSymbols(after.get(), SectionId::kText, 80, "a/b.cc", "added_alias_",
+                   0, 2);
+  MakeAliasGroup(after.get(), 4, 6);
+
+  DeltaSizeInfo diff = Diff(before.get(), after.get(), nullptr, nullptr);
+  TreeBuilder builder(&diff);
+  FilterList filters;
+  builder.Build(std::make_unique<IdPathLens>(), '/', false, filters,
+                /*relocations_mode=*/false, /*minimum_size=*/50);
+
+  Json::Value file_node = builder.Open("a/b.cc");
+  ASSERT_EQ(2u, file_node["children"].size());
+  EXPECT_EQ("keep_dec", file_node["children"][0]["fullName"].asString());
+  EXPECT_EQ(-60, file_node["children"][0]["size"].asInt());
+  EXPECT_EQ("keep_inc", file_node["children"][1]["fullName"].asString());
+  EXPECT_EQ(50, file_node["children"][1]["size"].asInt());
+}
+
+TEST(TreeBuilderTest, TestMinSizeRelocationsModeSnapshot) {
+  std::unique_ptr<SizeInfo> size_info = MakeSizeInfo();
+  // Large byte size (1000 B) but only 2 relocations -> excluded.
+  MakeSymbol(size_info.get(), SectionId::kDataRelRo, 1000, "a/b.cc", "",
+             "big_bytes_few_relocs");
+  size_info->raw_symbols.back().relocation_count_ = 2;
+  // Small byte size (8 B) with 3 relocations -> kept.
+  MakeSymbol(size_info.get(), SectionId::kDataRelRo, 8, "a/b.cc", "",
+             "small_bytes_enough_relocs");
+  size_info->raw_symbols.back().relocation_count_ = 3;
+  // 2-alias group with 4 relocations (`RelocationPss() == 2.0f`) -> excluded.
+  MakeAliasSymbols(size_info.get(), SectionId::kDataRelRo, 100, "a/b.cc",
+                   "alias_few_", 0, 2, /*relocation_count=*/4);
+  // 2-alias group with 6 relocations (`RelocationPss() == 3.0f`) -> kept.
+  MakeAliasSymbols(size_info.get(), SectionId::kDataRelRo, 100, "a/b.cc",
+                   "alias_keep_", 0, 2, /*relocation_count=*/6);
+  MakeAliasGroup(size_info.get(), 2, 4);
+  MakeAliasGroup(size_info.get(), 4, 6);
+
+  TreeBuilder builder(size_info.get());
+  FilterList filters;
+  builder.Build(std::make_unique<IdPathLens>(), '/', false, filters,
+                /*relocations_mode=*/true, /*minimum_size=*/3);
+
+  Json::Value file_node = builder.Open("a/b.cc");
+  ASSERT_EQ(3u, file_node["children"].size());
+  EXPECT_FLOAT_EQ(9.0f, file_node["size"].asFloat());
+  EXPECT_EQ("alias_keep_0", file_node["children"][0]["fullName"].asString());
+  EXPECT_EQ("alias_keep_1", file_node["children"][1]["fullName"].asString());
+  EXPECT_EQ("small_bytes_enough_relocs",
+            file_node["children"][2]["fullName"].asString());
+  EXPECT_FLOAT_EQ(3.0f, file_node["children"][2]["size"].asFloat());
+}
+
+TEST(TreeBuilderTest, TestMinSizeRelocationsModeDiff) {
+  std::unique_ptr<SizeInfo> before = MakeSizeInfo();
+  MakeSymbol(before.get(), SectionId::kDataRelRo, 100, "a/b.cc", "",
+             "small_inc");
+  before->raw_symbols.back().relocation_count_ = 1;
+  MakeSymbol(before.get(), SectionId::kDataRelRo, 100, "a/b.cc", "",
+             "keep_inc");
+  before->raw_symbols.back().relocation_count_ = 1;
+  MakeSymbol(before.get(), SectionId::kDataRelRo, 100, "a/b.cc", "",
+             "keep_dec");
+  before->raw_symbols.back().relocation_count_ = 5;
+  MakeSymbol(before.get(), SectionId::kDataRelRo, 100, "a/b.cc", "",
+             "small_dec");
+  before->raw_symbols.back().relocation_count_ = 4;
+
+  std::unique_ptr<SizeInfo> after = MakeSizeInfo();
+  // +2 relocations, +200 B -> excluded in relocations mode with
+  // `minimum_size=3`.
+  MakeSymbol(after.get(), SectionId::kDataRelRo, 300, "a/b.cc", "",
+             "small_inc");
+  after->raw_symbols.back().relocation_count_ = 3;
+  // +3 relocations, +8 B -> kept.
+  MakeSymbol(after.get(), SectionId::kDataRelRo, 108, "a/b.cc", "", "keep_inc");
+  after->raw_symbols.back().relocation_count_ = 4;
+  // -4 relocations (|-4| >= 3) -> kept.
+  MakeSymbol(after.get(), SectionId::kDataRelRo, 100, "a/b.cc", "", "keep_dec");
+  after->raw_symbols.back().relocation_count_ = 1;
+  // -2 relocations (|-2| < 3) -> excluded.
+  MakeSymbol(after.get(), SectionId::kDataRelRo, 100, "a/b.cc", "",
+             "small_dec");
+  after->raw_symbols.back().relocation_count_ = 2;
+
+  DeltaSizeInfo diff = Diff(before.get(), after.get(), nullptr, nullptr);
+  TreeBuilder builder(&diff);
+  FilterList filters;
+  builder.Build(std::make_unique<IdPathLens>(), '/', false, filters,
+                /*relocations_mode=*/true, /*minimum_size=*/3);
+
+  Json::Value file_node = builder.Open("a/b.cc");
+  ASSERT_EQ(2u, file_node["children"].size());
+  EXPECT_EQ("keep_dec", file_node["children"][0]["fullName"].asString());
+  EXPECT_FLOAT_EQ(-4.0f, file_node["children"][0]["size"].asFloat());
+  EXPECT_EQ("keep_inc", file_node["children"][1]["fullName"].asString());
+  EXPECT_FLOAT_EQ(3.0f, file_node["children"][1]["size"].asFloat());
+  EXPECT_FLOAT_EQ(-1.0f, builder.Open("")["size"].asFloat());
+}
+
+TEST(TreeBuilderTest, TestDumpCsvNormalModeSnapshot) {
+  std::unique_ptr<SizeInfo> size_info = MakeSizeInfo();
+  MakeSymbol(size_info.get(), SectionId::kText, 104, "a/b.cc", "",
+             "foo(int, \"bar\")");
+  size_info->raw_symbols.back().address_ = 0x1a0;
+  size_info->raw_symbols.back().padding_ = 4;
+
+  MakeSymbol(size_info.get(), SectionId::kData, 50, "", "", "obj_sym");
+  size_info->raw_symbols.back().address_ = 0x20;
+  size_info->raw_symbols.back().object_path_ = "obj/c.o";
+
+  MakeAliasSymbols(size_info.get(), SectionId::kText, 120, "a/d.cc", "alias_",
+                   0, 2);
+  for (size_t i = 2; i < 4; ++i) {
+    size_info->raw_symbols[i].address_ = 0x300;
+    size_info->raw_symbols[i].padding_ = 8;
+  }
+  MakeAliasGroup(size_info.get(), 2, 4);
+
+  MakeSymbol(size_info.get(), SectionId::kRoData, 30, "", "", "no_path");
+  size_info->raw_symbols.back().address_ = static_cast<int32_t>(0x80000010u);
+
+  MakeSymbol(size_info.get(), SectionId::kText, 10, "a/b.cc", "",
+             "tiny_filtered");
+
+  TreeBuilder builder(size_info.get());
+  FilterList filters;
+  builder.Build(std::make_unique<IdPathLens>(), '/', false, filters,
+                /*relocations_mode=*/false, /*minimum_size=*/20);
+
+  EXPECT_EQ(5u, builder.Open("")["symbolCount"].asUInt());
+  EXPECT_FALSE(builder.Open("a/b.cc").isMember("symbolCount"));
+
+  EXPECT_EQ(
+      "address,full_name,path,size_without_padding,num_aliases\n"
+      "0x1a0,\"foo(int, \"\"bar\"\")\",a/b.cc,100,1\n"
+      "0x300,alias_0,a/d.cc,112,2\n"
+      "0x300,alias_1,a/d.cc,112,2\n"
+      "0x20,obj_sym,obj/c.o,50,1\n"
+      "0x80000010,no_path,,30,1\n",
+      builder.DumpCsv());
+
+  TreeBuilder empty_builder(size_info.get());
+  empty_builder.Build(std::make_unique<IdPathLens>(), '/', false, filters,
+                      /*relocations_mode=*/false, /*minimum_size=*/1000);
+  EXPECT_EQ(0u, empty_builder.Open("")["symbolCount"].asUInt());
+  EXPECT_EQ("address,full_name,path,size_without_padding,num_aliases\n",
+            empty_builder.DumpCsv());
+}
+
+TEST(TreeBuilderTest, TestDumpCsvNormalModeDiff) {
+  std::unique_ptr<SizeInfo> before = MakeSizeInfo();
+  MakeSymbol(before.get(), SectionId::kText, 10, "a/b.cc", "", "changed");
+  before->raw_symbols.back().padding_ = 2;
+  MakeSymbol(before.get(), SectionId::kText, 40, "a/b.cc", "", "unchanged");
+  MakeAliasSymbols(before.get(), SectionId::kText, 64, "a/b.cc", "removed_", 0,
+                   2);
+  for (size_t i = 2; i < 4; ++i) {
+    before->raw_symbols[i].padding_ = 4;
+  }
+  MakeAliasGroup(before.get(), 2, 4);
+
+  std::unique_ptr<SizeInfo> after = MakeSizeInfo();
+  MakeSymbol(after.get(), SectionId::kText, 60, "a/b.cc", "", "changed");
+  after->raw_symbols.back().padding_ = 2;
+  MakeSymbol(after.get(), SectionId::kText, 40, "a/b.cc", "", "unchanged");
+  MakeAliasSymbols(after.get(), SectionId::kText, 44, "a/b.cc", "alias_", 0, 2);
+  for (size_t i = 2; i < 4; ++i) {
+    after->raw_symbols[i].padding_ = 4;
+  }
+  MakeAliasGroup(after.get(), 2, 4);
+
+  DeltaSizeInfo diff = Diff(before.get(), after.get(), nullptr, nullptr);
+  TreeBuilder builder(&diff);
+  FilterList filters;
+  builder.Build(std::make_unique<IdPathLens>(), '/', false, filters,
+                /*relocations_mode=*/false, /*minimum_size=*/0);
+
+  EXPECT_EQ(5u, builder.Open("")["symbolCount"].asUInt());
+  EXPECT_EQ(
+      "full_name,path,size_without_padding,num_aliases\n"
+      "changed,a/b.cc,50,1\n"
+      "removed_0,a/b.cc,-60,2\n"
+      "removed_1,a/b.cc,-60,2\n"
+      "alias_0,a/b.cc,40,2\n"
+      "alias_1,a/b.cc,40,2\n",
+      builder.DumpCsv());
+
+  TreeBuilder empty_builder(&diff);
+  empty_builder.Build(std::make_unique<IdPathLens>(), '/', false, filters,
+                      /*relocations_mode=*/false, /*minimum_size=*/1000);
+  EXPECT_EQ(0u, empty_builder.Open("")["symbolCount"].asUInt());
+  EXPECT_EQ("full_name,path,size_without_padding,num_aliases\n",
+            empty_builder.DumpCsv());
+}
+
+TEST(TreeBuilderTest, TestDumpCsvMethodCountModeSnapshot) {
+  std::unique_ptr<SizeInfo> size_info = MakeSizeInfo();
+  MakeSymbol(size_info.get(), SectionId::kDexMethod, 100, "a/z.java", "",
+             "z_method");
+  size_info->raw_symbols.back().address_ = 0x10;
+  MakeSymbol(size_info.get(), SectionId::kDexMethod, 10, "a/a.java", "",
+             "a_method");
+  size_info->raw_symbols.back().address_ = 0x20;
+  MakeSymbol(size_info.get(), SectionId::kText, 500, "a/b.cc", "", "native");
+
+  TreeBuilder builder(size_info.get());
+  FilterList filters = {
+      [](const GroupedPath&, const BaseSymbol& sym) {
+        return sym.Section() == SectionId::kDexMethod;
+      },
+  };
+  builder.Build(std::make_unique<IdPathLens>(), '/',
+                /*method_count_mode=*/true, filters,
+                /*relocations_mode=*/false, /*minimum_size=*/0);
+
+  EXPECT_EQ(2u, builder.Open("")["symbolCount"].asUInt());
+  EXPECT_EQ(
+      "address,full_name,path,method_count,num_aliases\n"
+      "0x20,a_method,a/a.java,1,1\n"
+      "0x10,z_method,a/z.java,1,1\n",
+      builder.DumpCsv());
+}
+
+TEST(TreeBuilderTest, TestDumpCsvMethodCountModeDiff) {
+  std::unique_ptr<SizeInfo> before = MakeSizeInfo();
+  MakeSymbol(before.get(), SectionId::kDexMethod, 10, "a/a.java", "",
+             "unchanged");
+  MakeSymbol(before.get(), SectionId::kDexMethod, 20, "a/b.java", "",
+             "removed");
+
+  std::unique_ptr<SizeInfo> after = MakeSizeInfo();
+  MakeSymbol(after.get(), SectionId::kDexMethod, 10, "a/a.java", "",
+             "unchanged");
+  MakeSymbol(after.get(), SectionId::kDexMethod, 30, "a/a.java", "", "added");
+
+  DeltaSizeInfo diff = Diff(before.get(), after.get(), nullptr, nullptr);
+  TreeBuilder builder(&diff);
+  FilterList filters;
+  builder.Build(std::make_unique<IdPathLens>(), '/',
+                /*method_count_mode=*/true, filters,
+                /*relocations_mode=*/false, /*minimum_size=*/0);
+
+  EXPECT_EQ(2u, builder.Open("")["symbolCount"].asUInt());
+  EXPECT_EQ(
+      "full_name,path,method_count,num_aliases\n"
+      "added,a/a.java,1,1\n"
+      "removed,a/b.java,-1,1\n",
+      builder.DumpCsv());
+}
+
+TEST(TreeBuilderTest, TestDumpCsvRelocationsModeSnapshot) {
+  std::unique_ptr<SizeInfo> size_info = MakeSizeInfo();
+  MakeSymbol(size_info.get(), SectionId::kDataRelRo, 1000, "a/b.cc", "",
+             "no_relocs");
+  MakeSymbol(size_info.get(), SectionId::kDataRelRo, 8, "a/b.cc", "", "single");
+  size_info->raw_symbols.back().address_ = 0x10;
+  size_info->raw_symbols.back().relocation_count_ = 3;
+
+  MakeAliasSymbols(size_info.get(), SectionId::kDataRelRo, 100, "a/c.cc",
+                   "alias_", 0, 2, /*relocation_count=*/10);
+  for (size_t i = 2; i < 4; ++i) {
+    size_info->raw_symbols[i].address_ = 0x20;
+  }
+  MakeAliasGroup(size_info.get(), 2, 4);
+
+  TreeBuilder builder(size_info.get());
+  FilterList filters;
+  builder.Build(std::make_unique<IdPathLens>(), '/', false, filters,
+                /*relocations_mode=*/true, /*minimum_size=*/0);
+
+  EXPECT_EQ(3u, builder.Open("")["symbolCount"].asUInt());
+  EXPECT_EQ(
+      "address,full_name,path,relocation_count,num_aliases\n"
+      "0x20,alias_0,a/c.cc,10,2\n"
+      "0x20,alias_1,a/c.cc,10,2\n"
+      "0x10,single,a/b.cc,3,1\n",
+      builder.DumpCsv());
+}
+
+TEST(TreeBuilderTest, TestDumpCsvRelocationsModeDiff) {
+  std::unique_ptr<SizeInfo> before = MakeSizeInfo();
+  MakeSymbol(before.get(), SectionId::kDataRelRo, 100, "a/b.cc", "", "inc");
+  before->raw_symbols.back().relocation_count_ = 1;
+  MakeSymbol(before.get(), SectionId::kDataRelRo, 100, "a/b.cc", "", "dec");
+  before->raw_symbols.back().relocation_count_ = 6;
+  MakeSymbol(before.get(), SectionId::kDataRelRo, 100, "a/b.cc", "", "same");
+  before->raw_symbols.back().relocation_count_ = 4;
+
+  std::unique_ptr<SizeInfo> after = MakeSizeInfo();
+  MakeSymbol(after.get(), SectionId::kDataRelRo, 100, "a/b.cc", "", "inc");
+  after->raw_symbols.back().relocation_count_ = 4;
+  MakeSymbol(after.get(), SectionId::kDataRelRo, 100, "a/b.cc", "", "dec");
+  after->raw_symbols.back().relocation_count_ = 1;
+  MakeSymbol(after.get(), SectionId::kDataRelRo, 100, "a/b.cc", "", "same");
+  after->raw_symbols.back().relocation_count_ = 4;
+
+  DeltaSizeInfo diff = Diff(before.get(), after.get(), nullptr, nullptr);
+  TreeBuilder builder(&diff);
+  FilterList filters;
+  builder.Build(std::make_unique<IdPathLens>(), '/', false, filters,
+                /*relocations_mode=*/true, /*minimum_size=*/0);
+
+  EXPECT_EQ(2u, builder.Open("")["symbolCount"].asUInt());
+  EXPECT_EQ(
+      "full_name,path,relocation_count,num_aliases\n"
+      "dec,a/b.cc,-5,1\n"
+      "inc,a/b.cc,3,1\n",
+      builder.DumpCsv());
 }
 
 }  // namespace caspian

@@ -121,8 +121,16 @@ if (is_android) {
   }
 
   android_library("java") {
-    srcjar_deps = [ ":jni_headers" ]
+    srcjar_deps = [
+      ":jni_headers",
+      "//components/history/core/browser:time_period_option_id_java",
+    ]
     sources = [
+      "java/src/org/chromium/chrome/browser/history/AppHistoryInfoHeaderPref.java",
+      "java/src/org/chromium/chrome/browser/history/AppHistoryUmaRecorder.java",
+      "java/src/org/chromium/chrome/browser/history/BrowserHistoryInfoHeaderPref.java",
+      "java/src/org/chromium/chrome/browser/history/BrowsingHistoryBridge.java",
+      "java/src/org/chromium/chrome/browser/history/CriticalAction.java",
       "java/src/org/chromium/chrome/browser/history/CriticalActionsCoordinator.java",
       "java/src/org/chromium/chrome/browser/history/CriticalActionsExpansionAnimator.java",
       "java/src/org/chromium/chrome/browser/history/CriticalActionsMediator.java",
@@ -133,9 +141,15 @@ if (is_android) {
       "java/src/org/chromium/chrome/browser/history/FilterSheetMediator.java",
       "java/src/org/chromium/chrome/browser/history/FilterSheetProperties.java",
       "java/src/org/chromium/chrome/browser/history/FilterSheetViewBinder.java",
+      "java/src/org/chromium/chrome/browser/history/HistoryDeletionBridge.java",
+      "java/src/org/chromium/chrome/browser/history/HistoryDeletionInfo.java",
+      "java/src/org/chromium/chrome/browser/history/HistoryItem.java",
+      "java/src/org/chromium/chrome/browser/history/HistoryProvider.java",
       "java/src/org/chromium/chrome/browser/history/HistoryTabHelper.java",
+      "java/src/org/chromium/chrome/browser/history/HistoryUmaRecorder.java",
       "java/src/org/chromium/chrome/browser/history/IncognitoHistoryDisclaimerCoordinator.java",
       "java/src/org/chromium/chrome/browser/history/InfoHeaderPref.java",
+      "java/src/org/chromium/chrome/browser/history/QueryOptions.java",
     ]
 
     deps = [
@@ -143,9 +157,14 @@ if (is_android) {
       "//base:base_java",
       "//chrome/app:java_strings_grd",
       "//chrome/browser/flags:java",
+      "//chrome/browser/preferences:java",
+      "//chrome/browser/profiles/android:java",
       "//chrome/browser/tab:java",
       "//chrome/browser/tabmodel:java",
       "//components/browser_ui/bottomsheet/android:java",
+      "//components/browser_ui/widget/android:java",
+      "//components/browsing_data/core:java",
+      "//components/critical_actions/core/browser:critical_actions_enums_java",
       "//content/public/android:content_java",
       "//third_party/androidx:androidx_annotation_annotation_java",
       "//third_party/androidx:androidx_appcompat_appcompat_resources_java",
@@ -153,13 +172,18 @@ if (is_android) {
       "//third_party/androidx:androidx_recyclerview_recyclerview_java",
       "//third_party/jni_zero:jni_zero_java",
       "//ui/android:ui_full_java",
+      "//url:gurl_java",
     ]
     resources_package = "org.chromium.chrome.browser.history"
   }
 
   generate_jni("jni_headers") {
-    sources =
-        [ "java/src/org/chromium/chrome/browser/history/HistoryTabHelper.java" ]
+    sources = [
+      "java/src/org/chromium/chrome/browser/history/BrowsingHistoryBridge.java",
+      "java/src/org/chromium/chrome/browser/history/HistoryDeletionBridge.java",
+      "java/src/org/chromium/chrome/browser/history/HistoryDeletionInfo.java",
+      "java/src/org/chromium/chrome/browser/history/HistoryTabHelper.java",
+    ]
   }
 
   android_resources("java_resources") {
@@ -185,11 +209,13 @@ if (is_android) {
     resources_package = "org.chromium.chrome.browser.history"
 
     sources = [
+      "java/src/org/chromium/chrome/browser/history/BrowsingHistoryBridgeTest.java",
       "java/src/org/chromium/chrome/browser/history/CriticalActionsCoordinatorTest.java",
       "java/src/org/chromium/chrome/browser/history/CriticalActionsExpansionAnimatorTest.java",
       "java/src/org/chromium/chrome/browser/history/CriticalActionsMediatorTest.java",
       "java/src/org/chromium/chrome/browser/history/CriticalActionsViewBinderTest.java",
       "java/src/org/chromium/chrome/browser/history/FilterSheetCoordinatorTest.java",
+      "java/src/org/chromium/chrome/browser/history/HistoryDeletionBridgeTest.java",
       "java/src/org/chromium/chrome/browser/history/IncognitoHistoryDisclaimerCoordinatorAnchorUnitTest.java",
       "java/src/org/chromium/chrome/browser/history/IncognitoHistoryDisclaimerCoordinatorUnitTest.java",
     ]
@@ -202,16 +228,24 @@ if (is_android) {
       "//base:base_junit_test_support",
       "//chrome/android:chrome_app_java_resources",
       "//chrome/browser/flags:java",
+      "//chrome/browser/profiles/android:java",
       "//chrome/browser/tabmodel:java",
       "//components/browser_ui/bottomsheet/android:java",
       "//components/browser_ui/theme/android:java_resources",
+      "//components/browsing_data/core:java",
+      "//components/critical_actions/core/browser:critical_actions_enums_java",
       "//third_party/androidx:androidx_test_core_java",
       "//third_party/androidx:androidx_test_ext_junit_java",
       "//third_party/junit",
       "//third_party/mockito:mockito_java",
       "//ui/android:ui_java_test_support",
       "//ui/android:ui_no_recycler_view_java",
+      "//url:gurl_java",
     ]
+
+    # Java deps resolve through subtargets, so assert on the header jar rather
+    # than the //chrome/android:chrome_java group.
+    assert_no_deps = [ "//chrome/android:chrome_java__header" ]
   }
 }
 

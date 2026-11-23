@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/flat_set.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
 #include "base/types/expected.h"
@@ -17,10 +18,12 @@
 #include "components/contextual_search/contextual_search_context_controller.h"
 #include "components/contextual_search/contextual_search_types.h"
 #include "components/lens/lens_bitmap_processing.h"
+#include "components/sessions/core/session_id.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/omnibox_proto/model_mode.pb.h"
 #include "third_party/omnibox_proto/tool_mode.pb.h"
 #include "ui/base/mojom/window_open_disposition.mojom-forward.h"
+#include "url/gurl.h"
 
 class Profile;
 class BrowserWindowInterface;
@@ -224,6 +227,17 @@ void UpdateAiModeThreadForTask(ContextualTasksService& service,
 // Mode (matches the composebox '+' menu tab picker eligibility).
 bool IsUrlValidForContextSharing(const GURL& url);
 
+// Returns true if `tab` at `url` can be listed in a recent tabs picker. Tabs in
+// `always_include_tab_ids` stay listed even when they are internal or
+// page-context-ineligible pages so users can deselect them. If
+// `exclude_page_context_ineligible_tabs` is true, other tabs are listed only
+// when their last known page context eligibility is `kEligible`.
+bool IsRecentTabSelectable(
+    tabs::TabInterface& tab,
+    const GURL& url,
+    const base::flat_set<SessionID>& always_include_tab_ids,
+    bool exclude_page_context_ineligible_tabs);
+
 // Returns the effective pin state for the contextual tasks button.
 bool GetEffectivePinState(Profile* profile);
 
@@ -330,6 +344,12 @@ enum class ContextualTasksLinkOpenDisposition {
 // disposition.
 void RecordSidePanelLinkClickedMetrics(
     ui::mojom::WindowOpenDisposition disposition);
+
+// Returns the URL to associate with a feedback report: prefers the active tab's
+// committed URL in `browser` when non-empty, falling back to
+// `fallback_web_contents`'s committed URL.
+GURL GetFeedbackPageUrl(BrowserWindowInterface* browser,
+                        content::WebContents* fallback_web_contents);
 
 }  // namespace contextual_tasks
 

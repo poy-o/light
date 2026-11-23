@@ -21,10 +21,6 @@
 
 class GURL;
 
-namespace base {
-class DictValue;
-}  // namespace base
-
 namespace updater {
 enum class UpdaterScope;
 }  // namespace updater
@@ -67,29 +63,10 @@ using MatcherGroup = std::list<Matcher>;
 // CHECKs that `target_url` is valid and has no query or fragment.
 [[nodiscard]] Matcher GetTargetURLMatcher(GURL target_url);
 
-// Returns a matcher that succeeds if the regexes in
-// `expected_content_regex_sequence` partially match non-overlapping substrings
-// of `decoded_content` in order, case-insensitively. CHECKs that each regex is
-// valid.
-[[nodiscard]] Matcher GetContentMatcher(
-    const std::vector<std::string>& expected_content_regex_sequence);
-
 // Returns a matcher that succeeds if the decoded body is a JSON dict that
 // matches `matcher`, after renaming protocol V3 names to their V4 names (see
 // `ParseJsonContent()`).
 [[nodiscard]] Matcher GetJSONContentMatcher(json::ValueMatcher matcher);
-
-// Returns a matcher that succeeds if the decoded body is a JSON dict that
-// covers `expected_target` (see `json::Covers()`). Use protocol V4 names; they
-// match V3 requests too.
-[[nodiscard]] Matcher GetJSONContentMatcher(
-    const base::DictValue& expected_target);
-
-// Returns a matcher that succeeds if an app in the JSON body's `request.apps`
-// covers `expected_app` (see `json::Covers()`). Use protocol V4 names; they
-// match V3 requests too. CHECKs that `expected_app` does not set `event`.
-[[nodiscard]] Matcher GetAppJSONContentMatcher(
-    const base::DictValue& expected_app);
 
 // Returns a matcher that succeeds if `request.ismachine` in the JSON body
 // matches `scope`.

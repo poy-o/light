@@ -4239,10 +4239,11 @@ TEST_F(ContextHubPageHandlerTest,
 TEST_F(ContextHubPageHandlerTest,
        OpenUrlsInTabGroup_FeaturesDisabled_ReportsBadMessage) {
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures({},
-                                {browser::context_hub::mojom::kAutoTodos,
-                                 browser::context_hub::mojom::kTopics,
-                                 browser::context_hub::mojom::kSmartSearch});
+  feature_list.InitWithFeatures(
+      {},
+      {browser::context_hub::mojom::kAutoTodos, launchpad::features::kLaunchpad,
+       browser::context_hub::mojom::kTopics,
+       browser::context_hub::mojom::kSmartSearch});
 
   EXPECT_CALL(*mock_tab_provider_, OpenUrlsInTabGroup(_, _)).Times(0);
 
@@ -4252,17 +4253,18 @@ TEST_F(ContextHubPageHandlerTest,
                                base::DoNothing());
 
   EXPECT_EQ(
-      "OpenUrlsInTabGroup cannot be called without AutoTodos, Topics, or "
-      "SmartSearch enabled.",
+      "OpenUrlsInTabGroup cannot be called without AutoTodos, Launchpad, "
+      "Topics, or SmartSearch enabled.",
       bad_message_observer.WaitForBadMessage());
 }
 
 TEST_F(ContextHubPageHandlerTest,
        OpenUrlsInTabGroup_AutoTodosOnlyEnabled_Succeeds) {
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures({browser::context_hub::mojom::kAutoTodos},
-                                {browser::context_hub::mojom::kTopics,
-                                 browser::context_hub::mojom::kSmartSearch});
+  feature_list.InitWithFeatures(
+      {browser::context_hub::mojom::kAutoTodos},
+      {launchpad::features::kLaunchpad, browser::context_hub::mojom::kTopics,
+       browser::context_hub::mojom::kSmartSearch});
 
   std::vector<GURL> opened_urls;
   EXPECT_CALL(*mock_tab_provider_, OpenUrlsInTabGroup("History Todo", _))
@@ -4273,6 +4275,29 @@ TEST_F(ContextHubPageHandlerTest,
 
   base::test::TestFuture<bool> future;
   handler_->OpenUrlsInTabGroup("History Todo", {GURL("https://example.com/a")},
+                               future.GetCallback());
+
+  EXPECT_TRUE(future.Get());
+  EXPECT_THAT(opened_urls, testing::ElementsAre(GURL("https://example.com/a")));
+}
+
+TEST_F(ContextHubPageHandlerTest,
+       OpenUrlsInTabGroup_LaunchpadOnlyEnabled_Succeeds) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures({launchpad::features::kLaunchpad},
+                                {browser::context_hub::mojom::kAutoTodos,
+                                 browser::context_hub::mojom::kTopics,
+                                 browser::context_hub::mojom::kSmartSearch});
+
+  std::vector<GURL> opened_urls;
+  EXPECT_CALL(*mock_tab_provider_, OpenUrlsInTabGroup("History Task", _))
+      .WillOnce([&](const std::string&, base::span<const GURL> urls) {
+        opened_urls.assign(urls.begin(), urls.end());
+        return true;
+      });
+
+  base::test::TestFuture<bool> future;
+  handler_->OpenUrlsInTabGroup("History Task", {GURL("https://example.com/a")},
                                future.GetCallback());
 
   EXPECT_TRUE(future.Get());
@@ -4351,6 +4376,7 @@ class ContextHubPageHandlerGlicTest : public ChromeRenderViewHostTestHarness {
         TestingBrowserProcess::GetGlobal());
     ASSERT_TRUE(profile_manager_->SetUp());
 
+    LaunchpadServiceFactory::GetInstance();
     ChromeRenderViewHostTestHarness::SetUp();
 
     // Real tabs always carry a SessionTabHelper, and creating one keeps the
@@ -4389,6 +4415,13 @@ class ContextHubPageHandlerGlicTest : public ChromeRenderViewHostTestHarness {
   // profile is built, since the service is created with it.
   std::unique_ptr<TestingProfile> CreateTestingProfile() override {
     TestingProfile::Builder builder;
+    builder.AddTestingFactory(
+        PersonalContextServiceFactory::GetInstance(),
+        base::BindRepeating([](content::BrowserContext* context)
+                                -> std::unique_ptr<KeyedService> {
+          return std::make_unique<
+              personal_context::MockPersonalContextService>();
+        }));
     builder.AddTestingFactory(
         glic::GlicKeyedServiceFactory::GetInstance(),
         base::BindRepeating(
@@ -4438,7 +4471,7 @@ class ContextHubPageHandlerGlicTest : public ChromeRenderViewHostTestHarness {
                    glic::GlicInvokeWithAutoSubmitOptions auto_submit_options) {
               captured_options_ = std::move(options);
               captured_auto_submit_options_ = std::move(auto_submit_options);
-              return base::WeakPtr<glic::GlicInstance>();
+              return showing_instance_.GetWeakPtr();
             });
   }
 
@@ -4678,6 +4711,44 @@ TEST_F(ContextHubPageHandlerGlicTest, RunTodoTaskFailsWhenNotHostedInTab) {
   base::test::TestFuture<bool> future;
   handler_->RunTodoTask("Task: Reply to Alice", future.GetCallback());
   EXPECT_FALSE(future.Get());
+}
+
+class ContextHubPageHandlerGlicLaunchpadTest
+    : public ContextHubPageHandlerGlicTest {
+ private:
+  base::test::ScopedFeatureList feature_list_{launchpad::features::kLaunchpad};
+};
+
+TEST_F(ContextHubPageHandlerGlicLaunchpadTest,
+       RunTodoTaskDelegatesToLaunchpadServiceWhenEnabled) {
+  ASSERT_NE(LaunchpadServiceFactory::GetForProfile(profile()), nullptr);
+
+  AttachWebContentsToTab();
+  ExpectInvokeWithAutoSubmitCapturingOptions();
+
+  base::test::TestFuture<bool> future;
+  handler_->RunTodoTask("Book apartment tour https://example.com/a",
+                        future.GetCallback());
+  EXPECT_TRUE(future.Get());
+
+  ASSERT_TRUE(captured_options_.has_value());
+  EXPECT_EQ(captured_options_->GetInvocationSource(),
+            glic::mojom::InvocationSource::kContextHubAutoTodos);
+  EXPECT_THAT(
+      captured_options_->prompts,
+      testing::ElementsAre("Book apartment tour https://example.com/a"));
+  EXPECT_EQ(captured_options_->feature_mode,
+            glic::mojom::FeatureMode::kActuation);
+  EXPECT_THAT(captured_options_->target.actuation_target,
+              ::testing::VariantWith<glic::mojom::ActuationTarget>(
+                  glic::mojom::ActuationTarget::kAgentDecides));
+  EXPECT_TRUE(std::holds_alternative<glic::NewConversation>(
+      captured_options_->target.conversation));
+  EXPECT_TRUE(std::holds_alternative<glic::DefaultSurface>(
+      captured_options_->target.surface));
+
+  ASSERT_TRUE(captured_auto_submit_options_.has_value());
+  EXPECT_TRUE(captured_auto_submit_options_->show_panel);
 }
 
 TEST_F(ContextHubPageHandlerTest, OpenContextHubPage_Success) {

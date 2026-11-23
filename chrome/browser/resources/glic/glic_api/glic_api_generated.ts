@@ -574,6 +574,39 @@ export enum HostCapability {
   // Indicates that the host supports isolated-world JavaScript execution for
   // browser actuation.
   EXECUTE_JS = 21,
+  // Indicates that the current profile is eligible to switch to another
+  // assistant provider via switchAssistant().
+  SWITCH_ASSISTANT = 22,
+  // Indicates that the host supports the drive picker.
+  DRIVE_PICKER = 23,
+}
+
+// Reason why showDrivePicker() failed.
+export enum DrivePickerErrorReason {
+  UNKNOWN = 0,
+  // The primary account is absent from or signed out of the browser's Google
+  // cookie jar, either before the picker opened or while it was open.
+  WEB_SESSION_SIGNED_OUT = 1,
+  // Chrome has no signed-in primary account or its refresh token is missing or
+  // in a persistent error state (e.g. sign-in paused), so the browser cannot
+  // mint an OAuth token for the picker.
+  CHROME_SIGN_IN_REQUIRED = 2,
+  // The web client's account isn't the browser's primary account.
+  ACCOUNT_MISMATCH = 3,
+  // A picker is already open.
+  ALREADY_ACTIVE = 4,
+  // There is no active browser window or floating Glic window to anchor the
+  // picker dialog to.
+  NO_ANCHOR_WINDOW = 5,
+  // The picker failed to load, returned no valid files, or encountered a token
+  // or IPC error.
+  LOAD_FAILED = 6,
+  // The picker is disabled by policy or Glic is not enabled and consented for
+  // the profile.
+  DISABLED_BY_POLICY = 7,
+  // The picker isn't supported on this platform, provider, or feature
+  // configuration.
+  UNSUPPORTED = 8,
 }
 
 // Lists capabilities that the glic web client may support.
@@ -581,6 +614,32 @@ export enum ClientCapabilities {
   // The glic web client does not use favicons in TabData, so they can
   // be omitted from TabData.
   IGNORES_TAB_DATA_FAVICONS = 0,
+}
+
+// Target assistant for switching the profile's active assistant provider.
+export enum AssistantTarget {
+  // Unknown or unsupported target (e.g. sent by a newer web client). Always
+  // rejected.
+  UNKNOWN = 0,
+  // Consumer Gemini in Chrome (GiC).
+  GEMINI_CONSUMER = 1,
+  // Gemini Enterprise in Chrome (GEiC).
+  GEMINI_ENTERPRISE = 2,
+}
+
+// Result of attempting to switch the active assistant provider.
+export enum SwitchAssistantResult {
+  UNKNOWN = 0,
+  // The assistant selection preference was updated to the requested target and
+  // a browser relaunch was initiated.
+  SUCCESS = 1,
+  // Switching to the requested assistant target is not allowed for the current
+  // profile (e.g. no machine-scoped `GeminiEnterpriseUrl` policy,
+  // off-the-record or managed profile, consumer Gemini disabled by
+  // `GeminiSettings` policy, or already latched to the requested target).
+  ERROR_NOT_ALLOWED = 2,
+  // The requested assistant target is unknown or unsupported.
+  ERROR_INVALID_TARGET = 3,
 }
 
 // Describes the duration of the actions in the task.  This is used by the actor
@@ -1570,6 +1629,45 @@ export declare interface OpenSettingsOptions {
   highlightField?: SettingsPageField;
 }
 
+// Represents a file selected from Google Drive.
+export declare interface DriveFileSelection {
+  // The Google Drive file ID, used to identify and fetch the file.
+  id: string;
+  // The user-visible display name of the file (e.g. "Q3 Report.pdf").
+  title: string;
+  // The file's MIME type (e.g. "application/pdf", "image/png"), used to
+  // validate upload support and choose client rendering.
+  mimeType: string;
+  // The file size in bytes, when reported by Drive (0 for Google Docs editors
+  // files that have no raw byte size).
+  sizeBytes: number;
+  // Optional resource key required alongside `id` to access link-shared Drive
+  // files.
+  resourceKey?: string;
+}
+
+// Options for showing the Drive picker.
+export declare interface DrivePickerOptions {
+  // The web client's obfuscated Gaia ID. The browser fails with
+  // kAccountMismatch if this is empty or does not match the primary account,
+  // whose files the picker shows.
+  accountId: string;
+}
+
+// Options for `SwitchAssistant`.
+export declare interface SwitchAssistantOptions {
+  // The assistant target to switch the current profile to.
+  target: AssistantTarget;
+}
+
+// Response for `SwitchAssistant`. A struct (rather than a bare enum) so that
+// fields can be added later without breaking the glic API's backwards
+// compatibility.
+export declare interface SwitchAssistantResponse {
+  // The result of attempting to switch the active assistant provider.
+  result: SwitchAssistantResult;
+}
+
 // Contains information about the task.
 export declare interface TaskOptions {
   // A user-facing string that describes the task.
@@ -1766,4 +1864,16 @@ export declare interface CapturedRegion {
   // by these points is not required to be closed, and it represents a shape
   // (path), not necessarily a region.
   polyline?: Point[];
+}
+
+// Result of showing the Drive picker. Exactly one field is set: either the
+// selected files (empty if the user cancelled or the picker was closed before
+// a selection was made), or the error reason if the picker could not be shown
+// or failed.
+export declare interface DrivePickerResult {
+  // The files selected by the user, or an empty array if the picker was
+  // cancelled.
+  files?: DriveFileSelection[];
+  // The reason the picker could not be shown or failed.
+  errorReason?: DrivePickerErrorReason;
 }

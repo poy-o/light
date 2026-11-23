@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 
 #include "base/byte_size.h"
 #include "base/callback_list.h"
@@ -122,14 +123,17 @@ class TestManifestAssetManagerComponentState::DelegateImpl final
     }
     VLOG(2) << "RequestUpdate " << public_key_hex;
     Registration& registration = state_->registrations_[public_key_hex];
-    if (state_->is_connection_metered_) {
+    if (state_->is_connection_metered_ || state_->on_demand_update_error_) {
       registration.has_foreground_update_requested = false;
       registration.has_background_update_requested = false;
       if (state_->manager_) {
+        update_client::Error error = state_->is_connection_metered_
+                                         ? update_client::Error::UPDATE_DISABLED
+                                         : *state_->on_demand_update_error_;
         base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
             FROM_HERE, base::BindOnce(&ManifestAssetManagerDelegate::
                                           AssetManager::OnUpdateRequestComplete,
-                                      state_->manager_, public_key_hex));
+                                      state_->manager_, public_key_hex, error));
       }
       return;
     }
@@ -143,6 +147,10 @@ class TestManifestAssetManagerComponentState::DelegateImpl final
 
   void GetFreeDiskSpace(base::OnceCallback<void(std::optional<base::ByteSize>)>
                             callback) const override {
+    if (state_ && state_->defer_disk_space_callbacks_) {
+      state_->pending_disk_space_callbacks_.push_back(std::move(callback));
+      return;
+    }
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(std::move(callback),
@@ -157,6 +165,12 @@ class TestManifestAssetManagerComponentState::DelegateImpl final
 
   bool IsConnectionMetered() const override {
     return state_ && state_->is_connection_metered_;
+  }
+
+  void UpdateDiskSpaceCheckPriority(bool user_visible) override {
+    if (state_) {
+      state_->disk_space_priority_changes_.push_back(user_visible);
+    }
   }
 
   void GetInstalledAssets(base::OnceCallback<void(std::vector<InstalledAsset>)>
@@ -178,6 +192,12 @@ class TestManifestAssetManagerComponentState::DelegateImpl final
  private:
   base::WeakPtr<TestManifestAssetManagerComponentState> state_;
 };
+
+void TestManifestAssetManagerComponentState::RunPendingDiskSpaceCallbacks() {
+  for (auto& callback : std::exchange(pending_disk_space_callbacks_, {})) {
+    std::move(callback).Run(free_disk_space_);
+  }
+}
 
 TestManifestAssetManagerComponentState::InstallableComponent::
     InstallableComponent() = default;
@@ -356,7 +376,8 @@ void TestManifestAssetManagerComponentState::MaybeCompleteDownload(
         FROM_HERE,
         base::BindOnce(&ManifestAssetManagerDelegate::AssetManager::
                            OnUpdateRequestComplete,
-                       manager_, inst_it->second.target.public_key_hex));
+                       manager_, inst_it->second.target.public_key_hex,
+                       update_client::Error::NONE));
   }
 }
 
@@ -437,7 +458,8 @@ void TestManifestAssetManagerComponentState::SimulateDownloadFailed(
   if (!manager_) {
     return;
   }
-  manager_->OnUpdateRequestComplete(public_key);
+  manager_->OnUpdateRequestComplete(public_key,
+                                    update_client::Error::UPDATE_CANCELED);
 }
 
 void TestManifestAssetManagerComponentState::SetConnectionMetered(
@@ -521,6 +543,14 @@ void TestManifestAssetManagerComponentState::SendUpdateEvent(
     int error_code) {
   if (manager_) {
     manager_->OnAssetUpdateEvent(public_key, state, error_category, error_code);
+  }
+}
+
+void TestManifestAssetManagerComponentState::SendUpdateRequestComplete(
+    const std::string& public_key,
+    update_client::Error error) {
+  if (manager_) {
+    manager_->OnUpdateRequestComplete(public_key, error);
   }
 }
 

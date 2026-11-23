@@ -413,7 +413,7 @@ BASE_DECLARE_FEATURE(kPrewarmCryptbase);
 
 // Rate-limits cross-process `ProxyConfigPollerClient::OnLazyProxyConfigPoll()`
 // IPCs sent from `ProxyConfigServiceMojo::OnLazyPoll()` during network activity
-// on polling platforms (Windows and iOS), avoiding redundant Browser IO and UI
+// on polling platforms (just Windows), avoiding redundant Browser IO and UI
 // thread wakeups during page-load request bursts that
 // `PollingProxyConfigService` would discard within its 10-second polling
 // interval.
@@ -444,6 +444,18 @@ BASE_DECLARE_FEATURE_PARAM(std::string, kDnsHostMappingExperimentRules);
 // would break.
 COMPONENT_EXPORT(NETWORK_CPP_FLAGS_AND_SWITCHES)
 BASE_DECLARE_FEATURE(kSocketLayerNetworkThrottling);
+
+// When enabled, clearing session-only cookies (e.g. on exit) also deletes
+// partitioned cookies whose partition's top-level site is session-only, even
+// if the cookie's own domain is allowed to persist. See crbug.com/502262216.
+COMPONENT_EXPORT(NETWORK_CPP_FLAGS_AND_SWITCHES)
+BASE_DECLARE_FEATURE(kClearPartitionedCookiesOnExitByTopLevelSite);
+
+// When enabled, enforces Storage Access API context restrictions (such as
+// `is_storage_access_potentially_allowed` checks in the Network Service and the
+// `storage-access` Permissions Policy on navigations).
+COMPONENT_EXPORT(NETWORK_CPP_FLAGS_AND_SWITCHES)
+BASE_DECLARE_FEATURE(kEnforceStorageAccessApiRestrictions);
 
 }  // namespace network::features
 

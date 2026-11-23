@@ -7,10 +7,12 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
 #include "base/containers/span.h"
+#include "base/i18n/language_tag.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -240,8 +242,12 @@ Suggestion GenerateVirtualCardSuggestionFromCreditCardSuggestion(
     FieldType field_type = UNKNOWN_TYPE) {
   Suggestion virtual_card_suggestion = suggestion;
   virtual_card_suggestion.type = SuggestionType::kVirtualCreditCardEntry;
+
+#if BUILDFLAG(IS_IOS) || BUILDFLAG(IS_ANDROID)
   const std::u16string& virtual_card_label = l10n_util::GetStringUTF16(
       IDS_AUTOFILL_VIRTUAL_CARD_SUGGESTION_OPTION_VALUE);
+#endif
+
 #if BUILDFLAG(IS_IOS)
   virtual_card_suggestion.minor_texts = {};
   virtual_card_suggestion.minor_texts.emplace_back(
@@ -508,7 +514,9 @@ class CreditCardSuggestionGeneratorTest
     return autofill_manager().GetAmountExtractionManager();
   }
 
-  const std::string& app_locale() { return payments_data().app_locale(); }
+  std::string_view app_locale() {
+    return payments_data().app_locale().tag_string();
+  }
 
   void SetCreditCardUploadEnabledForTest(bool credit_card_upload_enabled) {
     autofill_client().set_is_credit_card_upload_enabled(
@@ -1881,9 +1889,10 @@ TEST_F(CreditCardSuggestionGeneratorBnplTest,
       payments::BnplIssuerEligibilityForPage::
           kNotEligibleAmountExtractionErrorUnsupportedCurrency);
 
-  std::vector<Suggestion> suggestions =
-      GetSuggestionsForBnpl({issuer_context}, /*app_locale=*/"en-US",
-                            /*is_card_number_field_empty=*/true);
+  std::vector<Suggestion> suggestions = GetSuggestionsForBnpl(
+      {issuer_context},
+      /*app_locale=*/base::i18n::GetKnownLanguageTag("en-US"),
+      /*is_card_number_field_empty=*/true);
 
   ASSERT_EQ(suggestions.size(), 1U);
   EXPECT_EQ(suggestions[0].acceptability,
@@ -5043,7 +5052,7 @@ TEST_P(DownstreamCardAwarenessIphTest, WithExternallySavedCard) {
 
   FormBundle form_bundle =
       GetFormWithTypes({.fields = {{.role = CREDIT_CARD_NUMBER}}});
-  const std::vector<Suggestion> suggestions = GetSuggestionsForCreditCards(
+  GetSuggestionsForCreditCards(
       form_bundle.form, *form_bundle.form_structure, form_bundle.trigger_field,
       *form_bundle.trigger_autofill_field, autofill_client(),
       /*four_digit_combinations_in_dom=*/{},
@@ -5069,7 +5078,7 @@ TEST_P(DownstreamCardAwarenessIphTest, WithNeverUsedCard) {
 
   FormBundle form_bundle =
       GetFormWithTypes({.fields = {{.role = CREDIT_CARD_NUMBER}}});
-  const std::vector<Suggestion> suggestions = GetSuggestionsForCreditCards(
+  GetSuggestionsForCreditCards(
       form_bundle.form, *form_bundle.form_structure, form_bundle.trigger_field,
       *form_bundle.trigger_autofill_field, autofill_client(),
       /*four_digit_combinations_in_dom=*/{},

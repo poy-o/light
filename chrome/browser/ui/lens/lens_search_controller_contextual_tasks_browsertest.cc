@@ -74,6 +74,7 @@
 #include "components/sessions/core/session_id.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -1144,6 +1145,17 @@ IN_PROC_BROWSER_TEST_F(ContextualTasksLensInteractionBrowserTest,
   }));
 }
 
+class ContextualTasksLensInteractionWebUiComposeboxBrowserTest
+    : public ContextualTasksLensInteractionBrowserTest {
+ protected:
+  std::vector<base::test::FeatureRef> GetAdditionalDisabledFeatures() override {
+    // Disable rearchitecture flags to exercise the WebUI
+    // <contextual-tasks-composebox> path directly.
+    return {contextual_tasks::kContextualTasksRearchitecture,
+            contextual_tasks::kContextualTasksSidePanelRearchitecture};
+  }
+};
+
 #if BUILDFLAG(IS_CHROMEOS)
 #define MAYBE_SubsequentRegionSelectionFromComposeboxAddsVisualSelection \
   DISABLED_SubsequentRegionSelectionFromComposeboxAddsVisualSelection
@@ -1152,7 +1164,7 @@ IN_PROC_BROWSER_TEST_F(ContextualTasksLensInteractionBrowserTest,
   SubsequentRegionSelectionFromComposeboxAddsVisualSelection
 #endif
 IN_PROC_BROWSER_TEST_F(
-    ContextualTasksLensInteractionBrowserTest,
+    ContextualTasksLensInteractionWebUiComposeboxBrowserTest,
     MAYBE_SubsequentRegionSelectionFromComposeboxAddsVisualSelection) {
   // Wait for the page to be painted to prevent flakiness when screenshotting.
   WaitForPaint();
@@ -1936,7 +1948,11 @@ IN_PROC_BROWSER_TEST_F(
   content::WebContents* panel_contents =
       panel_controller->GetActiveWebContents();
   ASSERT_TRUE(panel_contents);
-  EXPECT_EQ(panel_contents->GetVisibleURL(), GURL(url::kAboutBlankURL));
+  EXPECT_TRUE(panel_contents->GetVisibleURL().is_empty());
+  ASSERT_NE(panel_contents->GetController().GetLastCommittedEntry(), nullptr);
+  EXPECT_TRUE(panel_contents->GetController()
+                  .GetLastCommittedEntry()
+                  ->IsInitialEntry());
 
   auto* ui_service =
       contextual_tasks::ContextualTasksUiServiceFactory::GetForBrowserContext(
@@ -1985,4 +2001,85 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_FALSE(ui_service->IsTaskWaitingForUrl(task_id));
   EXPECT_FALSE(controller->IsOff());
   EXPECT_TRUE(overlay_controller->IsOverlayShowing());
+
+  content::WaitForLoadStopWithoutSuccessCheck(panel_contents);
+  EXPECT_EQ(panel_contents->GetController().GetEntryCount(), 1);
+  EXPECT_FALSE(panel_contents->GetController().CanGoBack());
+}
+
+IN_PROC_BROWSER_TEST_F(LensSearchControllerBackgroundRegionQueryTest,
+                       RegionSearchBackNavigationStopsAtInitialPage) {
+  const GURL url = embedded_test_server()->GetURL(kDocumentWithNamedElement);
+  lens::WaitForPaint(browser(), url);
+
+  tabs::TabInterface* original_tab = browser()->GetActiveTabInterface();
+  auto* controller = LensSearchController::From(original_tab);
+  ASSERT_TRUE(controller);
+
+  controller->OpenLensOverlay(lens::LensOverlayInvocationSource::kAppMenu);
+  auto* overlay_controller = controller->lens_overlay_controller();
+  ASSERT_TRUE(base::test::RunUntil([&]() {
+    return overlay_controller->state() ==
+           LensOverlayController::State::kOverlay;
+  }));
+
+  auto region = lens::mojom::CenterRotatedBox::New();
+  region->box = gfx::RectF(0.5f, 0.5f, 0.2f, 0.2f);
+  region->coordinate_type =
+      lens::mojom::CenterRotatedBox_CoordinateType::kNormalized;
+  overlay_controller->IssueLensRegionRequestForTesting(std::move(region),
+                                                       /*is_click=*/false);
+
+  ASSERT_TRUE(
+      base::test::RunUntil([&]() { return IsContextualTasksSidePanelOpen(); }));
+
+  auto* panel_controller =
+      contextual_tasks::ContextualTasksPanelController::From(browser());
+  ASSERT_TRUE(panel_controller);
+  content::WebContents* panel_contents =
+      panel_controller->GetActiveWebContents();
+  ASSERT_TRUE(panel_contents);
+  EXPECT_TRUE(panel_contents->GetVisibleURL().is_empty());
+
+  auto* ui_service =
+      contextual_tasks::ContextualTasksUiServiceFactory::GetForBrowserContext(
+          browser()->GetProfile());
+  ASSERT_TRUE(ui_service);
+  std::optional<contextual_tasks::ContextualTask> task =
+      panel_controller->GetCurrentTask();
+  ASSERT_TRUE(task.has_value());
+  const base::Uuid task_id = task->GetTaskId();
+  EXPECT_TRUE(ui_service->IsTaskWaitingForUrl(task_id));
+
+  SendClusterInfoAndUploadResponses();
+  ASSERT_TRUE(base::test::RunUntil([&]() {
+    return !ui_service->IsTaskWaitingForUrl(task_id) &&
+           panel_contents->GetVisibleURL().SchemeIsHTTPOrHTTPS();
+  }));
+  content::WaitForLoadStopWithoutSuccessCheck(panel_contents);
+
+  const GURL initial_results_url = panel_contents->GetLastCommittedURL();
+  EXPECT_TRUE(initial_results_url.SchemeIsHTTPOrHTTPS());
+  EXPECT_EQ(panel_contents->GetController().GetEntryCount(), 1);
+  EXPECT_FALSE(panel_contents->GetController().CanGoBack());
+
+  // Navigate to a follow-up page inside the side panel, then navigate back and
+  // verify history stops at `initial_results_url` with no blank entry behind
+  // it.
+  const GURL follow_up_url = contextual_tasks::ContextualTasksUiService::
+      AddRequiredSidePanelUrlChanges(
+          GURL("https://www.google.com/search?udm=50&q=followup"),
+          panel_contents);
+  panel_contents->GetController().LoadURL(follow_up_url, content::Referrer(),
+                                          ui::PAGE_TRANSITION_LINK,
+                                          std::string());
+  content::WaitForLoadStopWithoutSuccessCheck(panel_contents);
+  EXPECT_EQ(panel_contents->GetController().GetEntryCount(), 2);
+  EXPECT_TRUE(panel_contents->GetController().CanGoBack());
+
+  panel_contents->GetController().GoBack();
+  content::WaitForLoadStopWithoutSuccessCheck(panel_contents);
+  EXPECT_EQ(panel_contents->GetLastCommittedURL(), initial_results_url);
+  EXPECT_FALSE(panel_contents->GetLastCommittedURL().IsAboutBlank());
+  EXPECT_FALSE(panel_contents->GetController().CanGoBack());
 }

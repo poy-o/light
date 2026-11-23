@@ -8,6 +8,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -32,6 +33,7 @@ import android.widget.TextView;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.robolectric.RuntimeEnvironment;
 
@@ -46,9 +48,13 @@ import org.chromium.chrome.browser.ui.android.webid.AccountSelectionProperties.B
 import org.chromium.chrome.browser.ui.android.webid.AccountSelectionProperties.ContinueButtonProperties;
 import org.chromium.chrome.browser.ui.android.webid.AccountSelectionProperties.DataSharingConsentProperties;
 import org.chromium.chrome.browser.ui.android.webid.AccountSelectionProperties.HeaderProperties.HeaderType;
+import org.chromium.chrome.browser.ui.android.webid.AccountSelectionProperties.IdpProperties;
 import org.chromium.chrome.browser.ui.android.webid.AccountSelectionProperties.ItemProperties;
 import org.chromium.chrome.browser.ui.android.webid.data.Account;
+import org.chromium.chrome.browser.ui.android.webid.data.IdentityProviderData;
 import org.chromium.chrome.browser.ui.android.webid.data.RelyingPartyData;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetObserver;
 import org.chromium.components.ukm.UkmRecorder;
 import org.chromium.components.ukm.UkmRecorderJni;
 import org.chromium.content.webid.IdentityRequestDialogDismissReason;
@@ -557,6 +563,152 @@ public class AccountSelectionButtonModeControllerTest extends AccountSelectionJU
         assertTrue(containsItemOfType(mModel, ItemProperties.CONTINUE_BUTTON));
     }
 
+    @Test
+    public void testLoadingModalDialogClosedByUserDismissesRequest() {
+        when(mMockBottomSheetController.requestShowContent(any(), anyBoolean())).thenReturn(true);
+        mMediator.showLoadingDialog(
+                new RelyingPartyData(
+                        mTestEtldPlusOne, /* iframeForDisplay= */ "", /* rpIcon= */ null),
+                mTestEtldPlusOne2,
+                RpContext.SIGN_IN);
+        mMediator.onModalDialogOpened();
+
+        mMediator.onModalDialogClosedByUser();
+
+        assertTrue(mMediator.wasDismissed());
+        verify(mMockDelegate).onDismissed(IdentityRequestDialogDismissReason.OTHER);
+    }
+
+    @Test
+    public void testIdpPickerShowsIdpRowsThatLogIn() {
+        openIdpPickerFromAccountChooser();
+
+        PropertyModel idpPickerHeader = mModel.get(ItemProperties.HEADER);
+        assertTrue(idpPickerHeader.get(IS_SHOWING_MULTIPLE_IDPS));
+        assertTrue(idpPickerHeader.get(IS_MULTI_IDP_REQUEST));
+        assertNull(idpPickerHeader.get(IDP_FOR_DISPLAY));
+        assertNull(idpPickerHeader.get(HEADER_ICON));
+        assertFalse(mModel.get(ItemProperties.SPINNER_ENABLED));
+        assertFalse(containsItemOfType(mModel, ItemProperties.CONTINUE_BUTTON));
+        assertFalse(containsItemOfType(mModel, ItemProperties.ADD_ACCOUNT_BUTTON));
+
+        assertEquals(2, mSheetAccountItems.size());
+        assertEquals(AccountSelectionProperties.ITEM_TYPE_IDP, mSheetAccountItems.get(0).type);
+        assertEquals(
+                mIdpData,
+                mSheetAccountItems.get(0).model.get(IdpProperties.PROPERTIES).mIdentityProvider);
+        assertEquals(AccountSelectionProperties.ITEM_TYPE_IDP, mSheetAccountItems.get(1).type);
+        assertEquals(
+                mIdpData2,
+                mSheetAccountItems.get(1).model.get(IdpProperties.PROPERTIES).mIdentityProvider);
+
+        clickIdpRow(/* itemIndex= */ 0);
+        verify(mMockDelegate).onLoginToIdP(mTestConfigUrl, mTestLoginUrl);
+    }
+
+    @Test
+    public void testIdpPickerClickRowRespectsComponentShowTime() {
+        showMultiIdpAccountChooser(Arrays.asList(mAnaAccount, mDanAccount));
+        mMediator.setComponentShowTime(-1000);
+        assertTrue(mMediator.showIdpPicker());
+
+        // Without advancing past the show-time threshold after opening the picker, clicking an IDP
+        // row is ignored.
+        IdpProperties.Properties idpProps =
+                mSheetAccountItems.get(0).model.get(IdpProperties.PROPERTIES);
+        idpProps.mOnClickListener.onResult(
+                new ButtonData(/* account= */ null, idpProps.mIdentityProvider.getIdpMetadata()));
+
+        verify(mMockDelegate, never()).onLoginToIdP(any(), any());
+    }
+
+    @Test
+    public void testIdpPickerNotifiesOnAccountsDisplayedWhenFirstShown() {
+        when(mTab.isHidden()).thenReturn(true);
+        showMultiIdpAccountChooser(Arrays.asList(mAnaAccount, mDanAccount));
+        verify(mMockDelegate, never()).onAccountsDisplayed();
+
+        when(mTab.isHidden()).thenReturn(false);
+        assertTrue(mMediator.showIdpPicker());
+        verify(mMockDelegate).onAccountsDisplayed();
+    }
+
+    @Test
+    public void testIdpPickerDismissesWhenShowContentFails() {
+        showMultiIdpAccountChooser(Arrays.asList(mAnaAccount, mDanAccount));
+        when(mMockBottomSheetController.requestShowContent(any(), anyBoolean())).thenReturn(false);
+
+        assertFalse(mMediator.showIdpPicker());
+        assertTrue(mMediator.wasDismissed());
+        verify(mMockDelegate).onDismissed(IdentityRequestDialogDismissReason.OTHER);
+    }
+
+    @Test
+    public void testIdpPickerClosedSheetTypeRecordsAccountSelection() {
+        openIdpPickerFromAccountChooser();
+
+        HistogramWatcher histogramWatcher =
+                HistogramWatcher.newSingleRecordWatcher(
+                        "Blink.FedCm.ClosedSheetType.Android", SheetType.ACCOUNT_SELECTION);
+        hideBottomSheet(BottomSheetController.StateChangeReason.CLOSE_BUTTON);
+
+        histogramWatcher.assertExpected();
+        verify(mMockDelegate).onDismissed(IdentityRequestDialogDismissReason.CLOSE_BUTTON);
+    }
+
+    @Test
+    public void testIdpPickerDismissedBySwipe() {
+        openIdpPickerFromAccountChooser();
+        hideBottomSheet(BottomSheetController.StateChangeReason.SWIPE);
+
+        assertTrue(mMediator.wasDismissed());
+        verify(mMockDelegate).onDismissed(IdentityRequestDialogDismissReason.SWIPE);
+    }
+
+    @Test
+    public void testIdpPickerDismissedByTapScrim() {
+        openIdpPickerFromAccountChooser();
+        hideBottomSheet(BottomSheetController.StateChangeReason.TAP_SCRIM);
+
+        assertTrue(mMediator.wasDismissed());
+        verify(mMockDelegate).onDismissed(IdentityRequestDialogDismissReason.TAP_SCRIM);
+    }
+
+    private void hideBottomSheet(@BottomSheetController.StateChangeReason int reason) {
+        when(mMockBottomSheetController.getCurrentSheetContent()).thenReturn(mBottomSheetContent);
+        ArgumentCaptor<BottomSheetObserver> observerCaptor =
+                ArgumentCaptor.forClass(BottomSheetObserver.class);
+        verify(mMockBottomSheetController).addObserver(observerCaptor.capture());
+        observerCaptor
+                .getValue()
+                .onSheetStateChanged(BottomSheetController.SheetState.HIDDEN, reason);
+    }
+
+    private void showMultiIdpAccountChooser(List<Account> accounts) {
+        when(mMockBottomSheetController.requestShowContent(any(), anyBoolean())).thenReturn(true);
+        mMediator.showAccounts(
+                new RelyingPartyData(
+                        mTestEtldPlusOne, /* iframeForDisplay= */ "", /* rpIcon= */ null),
+                accounts,
+                Arrays.asList(mIdpData, mIdpData2),
+                /* newAccounts= */ Collections.emptyList());
+    }
+
+    private void openIdpPickerFromAccountChooser() {
+        showMultiIdpAccountChooser(Arrays.asList(mAnaAccount, mDanAccount));
+        assertTrue(mMediator.showIdpPicker());
+        assertEquals(HeaderType.IDP_PICKER, mModel.get(ItemProperties.HEADER).get(TYPE));
+    }
+
+    /** Clicks an IDP row on the IDP picker. */
+    private void clickIdpRow(int itemIndex) {
+        mMediator.setComponentShowTime(-1000);
+        IdpProperties.Properties idpProps =
+                mSheetAccountItems.get(itemIndex).model.get(IdpProperties.PROPERTIES);
+        idpProps.mOnClickListener.onResult(
+                new ButtonData(/* account= */ null, idpProps.mIdentityProvider.getIdpMetadata()));
+    }
+
     /**
      * Asserts that the sheet shows the single-account chooser for {@code account}, with a clickable
      * account row and a continue button that selects it, without disclosure text.
@@ -732,6 +884,55 @@ public class AccountSelectionButtonModeControllerTest extends AccountSelectionJU
     }
 
     /**
+     * Tests that the request permission dialog shown for a passive mode request with multiple
+     * identity providers is titled with the selected account's identity provider and shows its RP
+     * icon, and that back shows the active mode account chooser for multiple identity providers,
+     * where selecting another identity provider's account titles the dialog with that one.
+     */
+    @Test
+    @EnableFeatures(ChromeFeatureList.FED_CM_IDP_LINKS)
+    public void testRequestPermissionFromPassiveSheetWithMultipleIdps() {
+        // `mIdpData2` offers to use a different account, which in passive mode means that it has a
+        // filtered out account.
+        showRequestPermissionFromPassiveSheet(
+                Arrays.asList(mNewUserAccount, mNewUserAccountForIdp2, mFilteredOutAccountForIdp2),
+                Arrays.asList(mIdpData, mIdpData2),
+                mNewUserAccountForIdp2);
+
+        PropertyModel headerModel = mModel.get(ItemProperties.HEADER);
+        assertEquals(HeaderType.REQUEST_PERMISSION_MODAL, headerModel.get(TYPE));
+        assertEquals(mTestEtldPlusOne1, headerModel.get(IDP_FOR_DISPLAY));
+        assertSame(
+                mIdpData2.getClientMetadata().getBrandIconBitmap(), headerModel.get(RP_BRAND_ICON));
+        assertTrue(headerModel.get(IS_MULTI_IDP_REQUEST));
+
+        assertTrue(mBottomSheetContent.handleBackPress());
+
+        headerModel = mModel.get(ItemProperties.HEADER);
+        assertEquals(HeaderType.SIGN_IN, headerModel.get(TYPE));
+        assertTrue(headerModel.get(IS_SHOWING_MULTIPLE_IDPS));
+        // One row per account.
+        // TODO(crbug.com/581411351): `mIdpData2` has no row to use a different account until there
+        // is an IDP picker.
+        assertEquals(3, mSheetAccountItems.size());
+        assertEquals(
+                mNewUserAccount, mSheetAccountItems.get(0).model.get(AccountProperties.ACCOUNT));
+        assertTrue(mSheetAccountItems.get(0).model.get(AccountProperties.SHOW_IDP));
+
+        mMediator.setComponentShowTime(-1000);
+        mSheetAccountItems
+                .get(0)
+                .model
+                .get(AccountProperties.ON_CLICK_LISTENER)
+                .onResult(new ButtonData(mNewUserAccount, /* idpMetadata= */ null));
+
+        headerModel = mModel.get(ItemProperties.HEADER);
+        assertEquals(HeaderType.REQUEST_PERMISSION_MODAL, headerModel.get(TYPE));
+        assertEquals(mTestEtldPlusOne2, headerModel.get(IDP_FOR_DISPLAY));
+        verify(mMockDelegate, never()).onAccountSelected(any());
+    }
+
+    /**
      * Tests that continuing or dismissing on the request permission dialog shown for a passive mode
      * request doesn't record `Button.*` UMA or UKM metrics.
      */
@@ -820,12 +1021,22 @@ public class AccountSelectionButtonModeControllerTest extends AccountSelectionJU
      * replaces the passive mode one for a passive mode request with {@code accounts}.
      */
     private void showRequestPermissionFromPassiveSheet(List<Account> accounts) {
+        showRequestPermissionFromPassiveSheet(accounts, Arrays.asList(mIdpData), mNewUserAccount);
+    }
+
+    /**
+     * Shows the request permission dialog for {@code account}, as when the active mode sheet
+     * replaces the passive mode one for a passive mode request with {@code accounts} and {@code
+     * idpDataList}.
+     */
+    private void showRequestPermissionFromPassiveSheet(
+            List<Account> accounts, List<IdentityProviderData> idpDataList, Account account) {
         when(mMockBottomSheetController.requestShowContent(any(), anyBoolean())).thenReturn(true);
         mMediator.showRequestPermissionFromPassiveSheet(
                 new RelyingPartyData(
                         mTestEtldPlusOne, /* iframeForDisplay= */ "", /* rpIcon= */ null),
                 accounts,
-                Arrays.asList(mIdpData),
-                mNewUserAccount);
+                idpDataList,
+                account);
     }
 }

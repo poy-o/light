@@ -76,6 +76,7 @@ class DataSharingBubbleController;
 class DesktopBrowserWindowCapabilities;
 class DevtoolsUIController;
 class EmbedderBrowserWindowFeatures;
+class ExclusiveAccessContext;
 class ExclusiveAccessManager;
 class ExtensionInstalledWatcher;
 class ExtensionKeybindingRegistryViews;
@@ -115,12 +116,12 @@ class TabMenuModelDelegate;
 class TabStripModel;
 class TabStripServiceFeature;
 class TabsFromOtherDevicesSidePanelCoordinator;
+class ToastController;
 class ToastService;
 class TranslateController;
 class UnloadController;
 class UpgradeNotificationController;
 class VerticalTabIphController;
-class WebUIBrowserExclusiveAccessContext;
 class WebUIBrowserSidePanelUI;
 class WindowFeatureController;
 class WindowMetadataController;
@@ -379,6 +380,8 @@ class BrowserWindowFeatures {
   std::unique_ptr<DesktopBrowserWindowCapabilities>
       desktop_browser_window_capabilities_;
 
+  // The context must outlive the manager, which borrows it.
+  std::unique_ptr<ExclusiveAccessContext> exclusive_access_context_;
   std::unique_ptr<ExclusiveAccessManager> exclusive_access_manager_;
   std::unique_ptr<ExtensionInstalledWatcher> extension_installed_watcher_;
 
@@ -460,6 +463,8 @@ class BrowserWindowFeatures {
   std::unique_ptr<TabsFromOtherDevicesSidePanelCoordinator>
       tabs_from_other_devices_side_panel_coordinator_;
   std::unique_ptr<ToastService> toast_service_;
+  // Must be destroyed before toast_service_, which owns its registry.
+  std::unique_ptr<ToastController> toast_controller_;
   std::unique_ptr<TranslateController> translate_bubble_controller_;
   std::unique_ptr<ttc::EntrypointController> ttc_entrypoint_controller_;
   std::unique_ptr<UpgradeNotificationController>
@@ -514,8 +519,6 @@ class BrowserWindowFeatures {
       split_tab_highlight_controller_;
 
   // Members owned only when a WebUIBrowserWindow is used.
-  std::unique_ptr<WebUIBrowserExclusiveAccessContext>
-      webui_browser_exclusive_access_context_;
   std::unique_ptr<WebUIBrowserSidePanelUI> webui_browser_side_panel_ui_;
 
   // Platform-specific members.

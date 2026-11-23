@@ -41,6 +41,7 @@
 #include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/optimization_guide/proto/manifest.pb.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "components/update_client/update_client_errors.h"
 
 class PrefService;
 
@@ -62,6 +63,19 @@ class UsageTracker;
 class ManifestAssetManager : public UsageTracker::Observer,
                              public ManifestAssetManagerDelegate::AssetManager {
  public:
+  // Mode in which a newly registered on-device model component initiates or
+  // awaits downloading in `UpdateRegistrations()`.
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  // LINT.IfChange(OnDeviceModelRegistrationMode)
+  enum class RegistrationMode {
+    kForegroundOnDemand = 0,
+    kDeferredMeteredConnection = 1,
+    kPassiveBackground = 2,
+    kMaxValue = kPassiveBackground,
+  };
+  // LINT.ThenChange(//tools/metrics/histograms/metadata/optimization/enums.xml:OnDeviceModelRegistrationMode)
+
   // Outcome of a component update attempt for an on-device model asset.
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
@@ -145,7 +159,8 @@ class ManifestAssetManager : public UsageTracker::Observer,
   void InstallerRegistered(const std::string& public_key,
                            const std::string& version,
                            bool is_already_installed) override;
-  void OnUpdateRequestComplete(const std::string& public_key) override;
+  void OnUpdateRequestComplete(const std::string& public_key,
+                               update_client::Error error) override;
   void OnMeteredConnectionChanged() override;
   void OnAssetUpdateEvent(const std::string& public_key,
                           update_client::ComponentState state,
@@ -216,6 +231,12 @@ class ManifestAssetManager : public UsageTracker::Observer,
     }
     ComponentState state() const { return state_; }
     std::optional<base::FilePath> install_dir() const { return install_dir_; }
+    bool passive_registration_logged() const {
+      return passive_registration_logged_;
+    }
+    void set_passive_registration_logged() {
+      passive_registration_logged_ = true;
+    }
 
     mojom::BrokerAssetState ToBrokerAssetState() const;
     mojom::BrokerAssetInfoPtr ToBrokerAssetInfo(
@@ -228,7 +249,7 @@ class ManifestAssetManager : public UsageTracker::Observer,
     // Resets the context after the component was uninstalled, whether by this
     // manager or by something else (e.g. the component updater unregistered
     // it). A registration in flight is left to complete. Returns whether
-    // `install_state_` transitioned from `kInstalled` to `kUninstalled`.
+    // `install_state_` transitioned out of `kInstalled`.
     bool SetUninstallComplete();
     void SetRegistering(const std::string& target_version);
     void SetRegistered();
@@ -237,7 +258,7 @@ class ManifestAssetManager : public UsageTracker::Observer,
     OnDeviceModelControl::ModelInstallState SetReady(
         const base::FilePath& install_dir,
         const base::Version& version);
-    void SetUninstalling();
+    void SetUninstalling(Manifest::UninstallReason reason);
     void SetOrphaned(const std::optional<base::Version>& version);
 
    private:
@@ -251,6 +272,11 @@ class ManifestAssetManager : public UsageTracker::Observer,
     ComponentState state_ = ComponentState::kNotRegistered;
     std::optional<base::FilePath> install_dir_;
     std::optional<base::Version> version_;
+    Manifest::UninstallReason uninstall_reason_ =
+        Manifest::UninstallReason::kUnknown;
+    // Components registered passively stay `kRegistered` and this flag is
+    // needed to prevent repeated logs of their registration mode.
+    bool passive_registration_logged_ = false;
   };
 
   // Persists component contexts and base model installation history in prefs.
@@ -332,9 +358,12 @@ class ManifestAssetManager : public UsageTracker::Observer,
 
   bool IsEvictionEnabled() const;
 
+  void RecordRegistrationMode(const std::string& asset_id,
+                              RegistrationMode mode) const;
   void RecordEvictableAssetsCount() const;
-  void RecordUninstallReason(const ComponentContext& context,
-                             const proto::OnDemandComponent* component) const;
+  Manifest::UninstallReason RecordUninstallReason(
+      const ComponentContext& context,
+      const proto::OnDemandComponent* component) const;
 
   // Updates each component to move towards it's intended state.
   // May defer actions due to pending operations, like disk space evaluation

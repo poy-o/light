@@ -794,7 +794,10 @@ void Node::moveBefore(Node* new_child,
   // impossible for nested `moveBefore()` calls to occur. Assert that no atomic
   // move is already in progress.
   DCHECK(!GetDocument().StatePreservingAtomicMoveInProgress());
-  GetDocument().SetStatePreservingAtomicMoveInProgress(true);
+  GetDocument().SetStatePreservingAtomicMoveType(
+      GetTreeScope() == new_child->GetTreeScope()
+          ? Document::AtomicMoveType::kSameTree
+          : Document::AtomicMoveType::kBetweenTrees);
 
   ContainerNode* old_parent = new_child->parentNode();
   auto* moved_element = DynamicTo<Element>(new_child);
@@ -806,7 +809,8 @@ void Node::moveBefore(Node* new_child,
   }
 
   insertBefore(new_child, ref_child, exception_state);
-  GetDocument().SetStatePreservingAtomicMoveInProgress(false);
+  GetDocument().SetStatePreservingAtomicMoveType(
+      Document::AtomicMoveType::kNone);
 
   if (exception_state.HadException()) {
     return;
@@ -2019,6 +2023,12 @@ void Node::AttachLayoutTree(AttachContext& context) {
 }
 
 void Node::DetachLayoutTree(bool performing_reattach) {
+  DetachLayoutTree(performing_reattach,
+                   /*dom_children_already_detached=*/false);
+}
+
+void Node::DetachLayoutTree(bool performing_reattach,
+                            bool dom_children_already_detached) {
   DCHECK(GetDocument().Lifecycle().StateAllowsDetach() ||
          GetDocument().GetStyleEngine().InInterleavedStyleRecalc() ||
          GetDocument().GetStyleEngine().InScrollMarkersAttachment());
@@ -2028,7 +2038,8 @@ void Node::DetachLayoutTree(bool performing_reattach) {
   DocumentLifecycle::DetachScope will_detach(GetDocument().Lifecycle());
 
   if (auto* cache = GetDocument().ExistingAXObjectCache()) {
-    cache->RemoveSubtree(this);
+    cache->RemoveSubtree(this, /*remove_root=*/true, /*notify_parent=*/true,
+                         dom_children_already_detached);
   }
 
   if (performing_reattach) {
@@ -3728,25 +3739,14 @@ HTMLSlotElement* Node::AssignedSlot() const {
     return nullptr;
   }
 
-  SlotAssignmentRecalcInProgressScope::ReportViolationIf(
-      SlotAssignmentRecalcInProgressScope::IsFlatTreeTraversalForbidden(),
-      SlotAssignmentInvariant::kNoFlatTreeAccessWhileForbidden);
-
-  // TODO(hayato): Node::AssignedSlot() shouldn't be called while
-  // in executing RecalcAssignment(), however, unfortunately,
-  // that could happen as follows:
-  //
-  // 1. RecalcAssignment() can detach a node
-  // 2. Then, DetachLayoutTree() may use FlatTreeTraversal via the hook of
-  // AXObjectCacheImpl::ChildrenChanged().
-  //
-  // Note that using FlatTreeTraversal in detaching layout tree should be banned
-  // in the long term.
-  //
-  // If we can remove such code path, we don't need to check
-  // SlotAssignmentRecalcInProgressScope::IsActive() here.
-  if (SlotAssignmentRecalcInProgressScope::IsActive()) {
-    // FlatTreeNodeData is not realiable here. Entering slow path.
+  // FlatTreeNodeData is being recomputed during pass 1 of slot assignment
+  // recalc, so it must not be read then. During pass 2, every shadow root in
+  // the recalc list is clean, so RecalcAssignment() below is a no-op. If this
+  // is reached during pass 1 anyway, use the slow path, since FlatTreeNodeData
+  // is not reliable then.
+  if (SlotAssignmentRecalcInProgressScope::ReportViolationIf(
+          SlotAssignmentRecalcInProgressScope::IsFlatTreeTraversalForbidden(),
+          SlotAssignmentInvariant::kNoFlatTreeAccessWhileForbidden)) {
     return root->AssignedSlotFor(*this);
   }
 
@@ -3770,7 +3770,7 @@ HTMLSlotElement* Node::AssignedSlot() const {
 
 // Used when assignment recalc is forbidden, i.e., DetachLayoutTree().
 // Returned assignedSlot is not guaranteed up to date (see "Stale accessors" in
-// slot_assignment.h).
+// slot_assignment.h). It is accurate during pass 2 of slot assignment recalc.
 HTMLSlotElement* Node::AssignedSlotWithoutRecalc() const {
   if (!GetSlotAssignmentRoot()) {
     return nullptr;

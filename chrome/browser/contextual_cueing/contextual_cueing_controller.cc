@@ -1699,7 +1699,17 @@ void ContextualCueingController::HideCue() {
       kActionAnchoredContextualCue);
   page_action_controller->ClearOverrideTooltip(kActionAnchoredContextualCue);
   page_action_controller->HideAnchoredMessage(kActionAnchoredContextualCue);
+  // The anchored message collapses to a suggestion chip when it times out.
+  page_action_controller->HideSuggestionChip(kActionAnchoredContextualCue);
   page_action_controller->Hide(kActionAnchoredContextualCue);
+#endif
+}
+
+void ContextualCueingController::HideCueForTarget(CueTargetType type) {
+#if !BUILDFLAG(IS_ANDROID)
+  if (active_cue_data_ && active_cue_data_->cue_type == type) {
+    HideCue();
+  }
 #endif
 }
 
@@ -1728,6 +1738,14 @@ void ContextualCueingController::ObserveSidePanel() {
 CueTarget* ContextualCueingController::GetTarget(CueTargetType type) {
   auto iter = cue_targets_.find(type);
   return iter != cue_targets_.end() ? iter->second.get() : nullptr;
+}
+
+std::optional<CueTargetType>
+ContextualCueingController::GetShowingCueTargetType() const {
+  if (!active_cue_data_) {
+    return std::nullopt;
+  }
+  return active_cue_data_->cue_type;
 }
 
 bool ContextualCueingController::ShouldRecordUcbStats(

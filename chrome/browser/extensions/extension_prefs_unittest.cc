@@ -743,6 +743,107 @@ class ExtensionPrefsFlags : public ExtensionPrefsTest {
 };
 TEST_F(ExtensionPrefsFlags, ExtensionPrefsFlags) {}
 
+class ExtensionPrefsPermissionsWithheldOnInstall : public ExtensionPrefsTest {
+ public:
+  void Initialize() override {
+    // 1. Installed with `WITHHOLD_PERMISSIONS`, then updated without the flag
+    // (matching `CrxInstaller::InitializeCreationFlagsForUpdate` behavior).
+    {
+      base::DictValue manifest_v1;
+      manifest_v1.Set(manifest_keys::kName, "withheld_and_updated");
+      manifest_v1.Set(manifest_keys::kVersion, "0.1");
+      manifest_v1.Set(manifest_keys::kManifestVersion, 3);
+      withheld_and_updated_ = prefs_.AddExtensionWithManifestAndFlags(
+          manifest_v1, ManifestLocation::kInternal,
+          Extension::WITHHOLD_PERMISSIONS);
+      EXPECT_TRUE(WerePermissionsWithheldOnInstall(
+          prefs(), withheld_and_updated_->id()));
+
+      base::DictValue manifest_v2;
+      manifest_v2.Set(manifest_keys::kName, "withheld_and_updated");
+      manifest_v2.Set(manifest_keys::kVersion, "0.2");
+      manifest_v2.Set(manifest_keys::kManifestVersion, 3);
+      scoped_refptr<Extension> updated =
+          prefs_.AddExtensionWithManifestAndFlags(
+              manifest_v2, ManifestLocation::kInternal, Extension::NO_FLAGS);
+      ASSERT_EQ(withheld_and_updated_->id(), updated->id());
+    }
+
+    // 2. Installed without `WITHHOLD_PERMISSIONS`, then manually set to
+    // withhold permissions post-install.
+    {
+      base::DictValue manifest;
+      manifest.Set(manifest_keys::kName, "not_withheld_then_toggled");
+      manifest.Set(manifest_keys::kVersion, "0.1");
+      manifest.Set(manifest_keys::kManifestVersion, 3);
+      not_withheld_then_toggled_ = prefs_.AddExtensionWithManifestAndFlags(
+          manifest, ManifestLocation::kInternal, Extension::NO_FLAGS);
+      prefs()->SetWithholdingPermissions(not_withheld_then_toggled_->id(),
+                                         true);
+    }
+
+    // 3. Installed with `WITHHOLD_PERMISSIONS`, uninstalled, and reinstalled
+    // without `WITHHOLD_PERMISSIONS`.
+    {
+      base::DictValue manifest;
+      manifest.Set(manifest_keys::kName, "reinstalled_without_withholding");
+      manifest.Set(manifest_keys::kVersion, "0.1");
+      manifest.Set(manifest_keys::kManifestVersion, 3);
+      reinstalled_without_withholding_ =
+          prefs_.AddExtensionWithManifestAndFlags(
+              manifest, ManifestLocation::kInternal,
+              Extension::WITHHOLD_PERMISSIONS);
+      EXPECT_TRUE(WerePermissionsWithheldOnInstall(
+          prefs(), reinstalled_without_withholding_->id()));
+
+      prefs()->OnExtensionUninstalled(reinstalled_without_withholding_->id(),
+                                      ManifestLocation::kInternal,
+                                      /*external_uninstall=*/false);
+      reinstalled_without_withholding_ =
+          prefs_.AddExtensionWithManifestAndFlags(
+              manifest, ManifestLocation::kInternal, Extension::NO_FLAGS);
+    }
+
+    // 4. Policy-installed extension cannot withhold permissions even if the
+    // creation flag is present.
+    {
+      base::DictValue manifest;
+      manifest.Set(manifest_keys::kName, "policy_extension");
+      manifest.Set(manifest_keys::kVersion, "0.1");
+      manifest.Set(manifest_keys::kManifestVersion, 3);
+      policy_extension_ = prefs_.AddExtensionWithManifestAndFlags(
+          manifest, ManifestLocation::kExternalPolicyDownload,
+          Extension::WITHHOLD_PERMISSIONS);
+    }
+  }
+
+  void Verify() override {
+    EXPECT_TRUE(
+        WerePermissionsWithheldOnInstall(prefs(), withheld_and_updated_->id()));
+    EXPECT_TRUE(
+        prefs()->GetWithholdingPermissions(withheld_and_updated_->id()));
+
+    EXPECT_FALSE(WerePermissionsWithheldOnInstall(
+        prefs(), not_withheld_then_toggled_->id()));
+    EXPECT_TRUE(
+        prefs()->GetWithholdingPermissions(not_withheld_then_toggled_->id()));
+
+    EXPECT_FALSE(WerePermissionsWithheldOnInstall(
+        prefs(), reinstalled_without_withholding_->id()));
+
+    EXPECT_FALSE(
+        WerePermissionsWithheldOnInstall(prefs(), policy_extension_->id()));
+  }
+
+ private:
+  scoped_refptr<Extension> withheld_and_updated_;
+  scoped_refptr<Extension> not_withheld_then_toggled_;
+  scoped_refptr<Extension> reinstalled_without_withholding_;
+  scoped_refptr<Extension> policy_extension_;
+};
+TEST_F(ExtensionPrefsPermissionsWithheldOnInstall,
+       PermissionsWithheldOnInstall) {}
+
 PrefsPrepopulatedTestBase::PrefsPrepopulatedTestBase() {
   base::DictValue simple_dict;
   std::u16string error;
@@ -1658,13 +1759,15 @@ TEST_F(ExtensionPrefsSimpleTest, IncognitoSettingStoredInIncognitoPref) {
   std::string extension_id = prefs.AddExtension("Test Extension")->id();
 
   EXPECT_FALSE(prefs.prefs()->IsIncognitoEnabled(extension_id));
-  EXPECT_FALSE(prefs.prefs()->IsIsolatedModeEnabled(extension_id));
+  EXPECT_EQ(prefs.prefs()->GetIsolatedModeEnabledPref(extension_id),
+            std::nullopt);
   EXPECT_FALSE(prefs.extension_pref_value_map()->CanExtensionControlPref(
       extension_id, "a_pref", /*incognito=*/true));
 
   prefs.prefs()->SetIsIncognitoEnabled(extension_id, true);
   EXPECT_TRUE(prefs.prefs()->IsIncognitoEnabled(extension_id));
-  EXPECT_FALSE(prefs.prefs()->IsIsolatedModeEnabled(extension_id));
+  EXPECT_EQ(prefs.prefs()->GetIsolatedModeEnabledPref(extension_id),
+            std::nullopt);
   EXPECT_TRUE(prefs.extension_pref_value_map()->CanExtensionControlPref(
       extension_id, "a_pref", /*incognito=*/true));
 
@@ -1678,12 +1781,12 @@ TEST_F(ExtensionPrefsSimpleTest, IncognitoSettingStoredInIncognitoPref) {
   prefs.prefs()->SetIsIncognitoEnabled(extension_id, false);
   prefs.prefs()->SetIsIsolatedModeEnabled(extension_id, true);
   EXPECT_FALSE(prefs.prefs()->IsIncognitoEnabled(extension_id));
-  EXPECT_TRUE(prefs.prefs()->IsIsolatedModeEnabled(extension_id));
+  EXPECT_EQ(prefs.prefs()->GetIsolatedModeEnabledPref(extension_id), true);
   EXPECT_FALSE(prefs.extension_pref_value_map()->CanExtensionControlPref(
       extension_id, "a_pref", /*incognito=*/true));
 }
 
-// Tests that IsIsolatedModeEnabled/SetIsIsolatedModeEnabled read and write
+// Tests that GetIsolatedModeEnabledPref/SetIsIsolatedModeEnabled read and write
 // the "isolated_mode" pref, and that ExtensionPrefValueMap uses the Isolated
 // Mode setting when Enterprise Isolated Mode replaces Incognito.
 TEST_F(ExtensionPrefsSimpleTest, IsolatedModeSettingStoredInIsolatedModePref) {
@@ -1700,12 +1803,13 @@ TEST_F(ExtensionPrefsSimpleTest, IsolatedModeSettingStoredInIsolatedModePref) {
   std::string extension_id = prefs.AddExtension("Test Extension")->id();
 
   EXPECT_FALSE(prefs.prefs()->IsIncognitoEnabled(extension_id));
-  EXPECT_FALSE(prefs.prefs()->IsIsolatedModeEnabled(extension_id));
+  EXPECT_EQ(prefs.prefs()->GetIsolatedModeEnabledPref(extension_id),
+            std::nullopt);
   EXPECT_FALSE(prefs.extension_pref_value_map()->CanExtensionControlPref(
       extension_id, "a_pref", /*incognito=*/true));
 
   prefs.prefs()->SetIsIsolatedModeEnabled(extension_id, true);
-  EXPECT_TRUE(prefs.prefs()->IsIsolatedModeEnabled(extension_id));
+  EXPECT_EQ(prefs.prefs()->GetIsolatedModeEnabledPref(extension_id), true);
   EXPECT_FALSE(prefs.prefs()->IsIncognitoEnabled(extension_id));
   EXPECT_TRUE(prefs.extension_pref_value_map()->CanExtensionControlPref(
       extension_id, "a_pref", /*incognito=*/true));
@@ -1719,10 +1823,28 @@ TEST_F(ExtensionPrefsSimpleTest, IsolatedModeSettingStoredInIsolatedModePref) {
   // Isolated Mode is active.
   prefs.prefs()->SetIsIsolatedModeEnabled(extension_id, false);
   prefs.prefs()->SetIsIncognitoEnabled(extension_id, true);
-  EXPECT_FALSE(prefs.prefs()->IsIsolatedModeEnabled(extension_id));
+  EXPECT_EQ(prefs.prefs()->GetIsolatedModeEnabledPref(extension_id), false);
   EXPECT_TRUE(prefs.prefs()->IsIncognitoEnabled(extension_id));
   EXPECT_FALSE(prefs.extension_pref_value_map()->CanExtensionControlPref(
       extension_id, "a_pref", /*incognito=*/true));
+}
+
+// Tests that `GetIsolatedModeEnabledPref` returns `std::nullopt` when the
+// "isolated_mode" pref is unset, and returns the stored value once set.
+TEST_F(ExtensionPrefsSimpleTest, GetIsolatedModeEnabledPref) {
+  content::BrowserTaskEnvironment task_environment;
+  TestExtensionPrefs prefs(base::SingleThreadTaskRunner::GetCurrentDefault(),
+                           std::make_unique<TestingProfile>());
+  std::string extension_id = prefs.AddExtension("Test Extension")->id();
+
+  EXPECT_EQ(prefs.prefs()->GetIsolatedModeEnabledPref(extension_id),
+            std::nullopt);
+
+  prefs.prefs()->SetIsIsolatedModeEnabled(extension_id, true);
+  EXPECT_EQ(prefs.prefs()->GetIsolatedModeEnabledPref(extension_id), true);
+
+  prefs.prefs()->SetIsIsolatedModeEnabled(extension_id, false);
+  EXPECT_EQ(prefs.prefs()->GetIsolatedModeEnabledPref(extension_id), false);
 }
 
 }  // namespace extensions

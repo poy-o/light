@@ -349,14 +349,9 @@ void ChromeAutofillClient::AtMemoryCopyPasteObserver::OnPaste() {
   }
   const SessionID current_tab_id =
       sessions::SessionTabHelper::IdForTab(client_->web_contents());
-  if (tracker->OnPaste(current_tab_id, client_->web_contents()
-                                           ->GetPrimaryMainFrame()
-                                           ->GetPageUkmSourceId())) {
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
-    BUILDFLAG(IS_CHROMEOS)
-    client_->ShowAutofillAtMemoryPromo();
-#endif
-  }
+  tracker->OnPaste(
+      current_tab_id,
+      client_->web_contents()->GetPrimaryMainFrame()->GetPageUkmSourceId());
 }
 
 // Observes direct user interaction events to detect hotkey paste (e.g., Ctrl+V,
@@ -403,25 +398,6 @@ void ChromeAutofillClient::AtMemoryCopyPasteObserver::DidGetUserInteraction(
 
   OnPaste();
 }
-
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
-    BUILDFLAG(IS_CHROMEOS)
-void ChromeAutofillClient::ShowAutofillAtMemoryPromo() {
-  // TODO(crbug.com/519061643) Double check if we also need to check a field
-  // url here.
-  if (!MayPerformAtMemoryAction(AtMemoryAction::kShowIph, *this,
-                                GetLastCommittedPrimaryMainFrameURL())) {
-    return;
-  }
-  auto* user_education_interface =
-      BrowserUserEducationInterface::MaybeGetForWebContentsInTab(
-          web_contents());
-  if (user_education_interface) {
-    user_education_interface->MaybeShowFeaturePromo(
-        feature_engagement::kIPHAutofillAtMemoryFeature);
-  }
-}
-#endif
 
 base::WeakPtr<AutofillClient> ChromeAutofillClient::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
@@ -1404,8 +1380,7 @@ ChromeAutofillClient::ChromeAutofillClient(content::WebContents* web_contents)
     autofill_ai_save_update_entity_flow_manager_ =
         std::make_unique<AutofillAiSaveUpdateEntityFlowManager>(
             web_contents, GetAutofillMessageController(),
-            GetAutofillDialogController(),
-            std::string(GetAppLocale().tag_string()));
+            GetAutofillDialogController(), GetAppLocale());
   }
   save_update_address_profile_flow_manager_ =
       std::make_unique<SaveUpdateAddressProfileFlowManager>(
@@ -1710,7 +1685,7 @@ void ChromeAutofillClient::ShowEntityImportBubble(
   }
 #else
   if (auto* controller = AutofillAiImportDataController::GetOrCreate(
-          web_contents(), std::string(GetAppLocale().tag_string()))) {
+          web_contents(), GetAppLocale())) {
     // TODO(crbug.com/556588522): Rename `ShowPrompt()`'s `legal_message_lines`
     // to `public_passes_notice`.
     controller->ShowPrompt(std::move(new_entity), std::move(old_entity),
@@ -1738,7 +1713,7 @@ void ChromeAutofillClient::ShowAutofillAiLocalSaveNotification() {
   }
 #else
   if (auto* controller = AutofillAiImportDataController::GetOrCreate(
-          web_contents(), std::string(GetAppLocale().tag_string()))) {
+          web_contents(), GetAppLocale())) {
     controller->ShowLocalSaveNotification();
   }
 #endif  // BUILDFLAG(IS_ANDROID)
@@ -1934,6 +1909,7 @@ void ChromeAutofillClient::OnActorTaskStateChange(actor::ActorTask& task) {
           .critical_action_logger_supports_task_source =
               actor::ActorCriticalActionLogger::IsTaskSourceSupported(
                   task.source_info().type),
+          .skip_history_recording = task.skip_history_recording(),
       });
 
   // If the task was just created, known forms should be reparsed to ensure that

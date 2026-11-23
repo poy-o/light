@@ -26,6 +26,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
+#include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
 #include "components/pdf/renderer/pdf_accessibility_metrics.h"
 #include "components/strings/grit/components_strings.h"
@@ -259,6 +260,18 @@ void CheckParagraph(const ui::AXNode* node, std::string_view expected_text) {
             static_text->GetStringAttribute(ax::mojom::StringAttribute::kName));
 }
 
+void CheckListMarker(const ui::AXNode* marker,
+                     std::string_view expected_marker_name) {
+  ASSERT_NE(nullptr, marker);
+  EXPECT_EQ(ax::mojom::Role::kListMarker, marker->GetRole());
+  EXPECT_EQ("::marker",
+            marker->GetStringAttribute(ax::mojom::StringAttribute::kHtmlTag));
+  EXPECT_EQ(expected_marker_name,
+            marker->GetStringAttribute(ax::mojom::StringAttribute::kName));
+  EXPECT_EQ(0u, marker->GetChildCount());
+  EXPECT_FALSE(marker->data().relative_bounds.bounds.IsEmpty());
+}
+
 void CheckListItem(const ui::AXNode* item,
                    std::string_view expected_text,
                    std::string_view expected_marker_name = "• ") {
@@ -270,15 +283,7 @@ void CheckListItem(const ui::AXNode* item,
       item->GetBoolAttribute(ax::mojom::BoolAttribute::kIsLineBreakingObject));
   ASSERT_EQ(2u, item->GetChildCount());
 
-  const ui::AXNode* marker = item->GetChildAtIndex(0u);
-  ASSERT_NE(nullptr, marker);
-  EXPECT_EQ(ax::mojom::Role::kListMarker, marker->GetRole());
-  EXPECT_EQ("::marker",
-            marker->GetStringAttribute(ax::mojom::StringAttribute::kHtmlTag));
-  EXPECT_EQ(expected_marker_name,
-            marker->GetStringAttribute(ax::mojom::StringAttribute::kName));
-  EXPECT_EQ(0u, marker->GetChildCount());
-  EXPECT_FALSE(marker->data().relative_bounds.bounds.IsEmpty());
+  CheckListMarker(item->GetChildAtIndex(0u), expected_marker_name);
 
   const ui::AXNode* item_static_text = item->GetChildAtIndex(1u);
   ASSERT_NE(nullptr, item_static_text);
@@ -310,14 +315,7 @@ const ui::AXNode* CheckListItemWithNestedList(
   }
 
   // The child count check above guarantees non-null children.
-  const ui::AXNode* marker = item->GetChildAtIndex(0u);
-  EXPECT_EQ(ax::mojom::Role::kListMarker, marker->GetRole());
-  EXPECT_EQ("::marker",
-            marker->GetStringAttribute(ax::mojom::StringAttribute::kHtmlTag));
-  EXPECT_EQ(expected_marker_name,
-            marker->GetStringAttribute(ax::mojom::StringAttribute::kName));
-  EXPECT_EQ(0u, marker->GetChildCount());
-  EXPECT_FALSE(marker->data().relative_bounds.bounds.IsEmpty());
+  CheckListMarker(item->GetChildAtIndex(0u), expected_marker_name);
 
   const ui::AXNode* item_static_text = item->GetChildAtIndex(1u);
   EXPECT_EQ(ax::mojom::Role::kStaticText, item_static_text->GetRole());
@@ -1911,6 +1909,46 @@ TEST_F(PdfAccessibilityTreeTest, HeadingToBodySizeRatioMetrics) {
       "Accessibility.PdfHeuristics.HeadingToBodySizeRatioMax", 240, 1);
   histogram_tester.ExpectUniqueSample(
       "Accessibility.PdfHeuristics.HeadingToBodySizeRatioMin", 180, 1);
+}
+
+TEST_F(PdfAccessibilityTreeTest, HeuristicPageRecordsBuildPageTreeTime2) {
+  base::HistogramTester histogram_tester;
+  base::ScopedMockElapsedTimersForTest mock_elapsed_timers;
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {::features::kPdfAccessibilityHeuristicEnhancements},
+      {chrome_pdf::features::kPdfTags});
+
+  SetUpHeuristicAccessibilityTree(/*font_sizes=*/{12.0f, 12.0f});
+
+  // Microsecond timing histograms drop samples on low-resolution clocks.
+  if (base::TimeTicks::IsHighResolution()) {
+    histogram_tester.ExpectUniqueSample(
+        "Accessibility.PDF.Heuristic.BuildPageTreeTime2",
+        base::ScopedMockElapsedTimersForTest::kMockElapsedTime.InMicroseconds(),
+        1);
+  } else {
+    histogram_tester.ExpectTotalCount(
+        "Accessibility.PDF.Heuristic.BuildPageTreeTime2", 0);
+  }
+  histogram_tester.ExpectTotalCount(
+      "Accessibility.PDF.Heuristic.BuildPageTreeTime", 0);
+}
+
+TEST_F(PdfAccessibilityTreeTest, StructureTreePageSkipsBuildPageTreeTime2) {
+  base::HistogramTester histogram_tester;
+  SetUpStyleSplittingTestRunsAndChars();
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {chrome_pdf::features::kPdfTags,
+       ::features::kPdfAccessibilityHeuristicEnhancements},
+      {});
+
+  CreatePdfAccessibilityTree();
+  ASSERT_NE(nullptr, SetUpAccessibilityTreeForStyleSplitting());
+
+  histogram_tester.ExpectTotalCount(
+      "Accessibility.PDF.Heuristic.BuildPageTreeTime2", 0);
 }
 
 TEST_F(PdfAccessibilityTreeTest, HeaderFooterNormalizedLocationMetrics) {
@@ -9744,6 +9782,93 @@ TEST_F(PdfAccessibilityTreeTest, HeuristicGridTableEmptyCellAndSameLineRuns) {
                 ax::mojom::IntAttribute::kPreviousOnLineId));
 }
 
+TEST_F(PdfAccessibilityTreeTest, HeuristicGridTableShapeMetrics) {
+  base::HistogramTester histogram_tester;
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {::features::kPdfAccessibilityHeuristicEnhancements},
+      {chrome_pdf::features::kPdfTags});
+
+  // Table grid ruling lines: 3 rows x 2 cols, so swapping rows and columns
+  // fails. The top-left cell holds two runs, and the bottom-right cell is
+  // empty.
+  constexpr float kRowBoundaries[] = {50.0f, 80.0f, 110.0f, 140.0f};
+  page_objects_.line_segments =
+      CreateGridLineSegments(kGridTableColumnBoundaries, kRowBoundaries);
+
+  const ui::AXNode* page = SetUpUniformHeuristicPage(
+      {"A1", "x", "B1", "A2", "B2", "A3"},
+      {
+          gfx::RectF(55.0f, 55.0f, 20.0f, 12.0f),   // "A1"
+          gfx::RectF(78.0f, 55.0f, 15.0f, 12.0f),   // "x"
+          gfx::RectF(105.0f, 55.0f, 40.0f, 12.0f),  // "B1"
+          gfx::RectF(55.0f, 85.0f, 40.0f, 12.0f),   // "A2"
+          gfx::RectF(105.0f, 85.0f, 40.0f, 12.0f),  // "B2"
+          gfx::RectF(55.0f, 115.0f, 40.0f, 12.0f),  // "A3"
+      });
+  ASSERT_NE(nullptr, page);
+  ASSERT_EQ(1u, page->GetChildCount());
+  CheckGridTable(page->GetChildAtIndex(0u),
+                 {{"A1x", "B1"}, {"A2", "B2"}, {"A3", ""}});
+
+  // 5 of 6 cells have text, and the longest cell is "A1x".
+  histogram_tester.ExpectUniqueSample(
+      "Accessibility.PdfHeuristics.TableCountPerPage", 1, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Accessibility.PdfHeuristics.TableRowCount", 3, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Accessibility.PdfHeuristics.TableColumnCount", 2, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Accessibility.PdfHeuristics.TablePopulatedCellPercentage", 83, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Accessibility.PdfHeuristics.TableMaxCellLength", 3, 1);
+}
+
+TEST_F(PdfAccessibilityTreeTest, HeuristicGridTableNoTablesOnPage) {
+  base::HistogramTester histogram_tester;
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {::features::kPdfAccessibilityHeuristicEnhancements},
+      {chrome_pdf::features::kPdfTags});
+
+  const ui::AXNode* page = SetUpUniformHeuristicPage(
+      {"First", "Second"}, {
+                               gfx::RectF(50.0f, 10.0f, 100.0f, 12.0f),
+                               gfx::RectF(50.0f, 30.0f, 100.0f, 12.0f),
+                           });
+  ASSERT_NE(nullptr, page);
+
+  histogram_tester.ExpectUniqueSample(
+      "Accessibility.PdfHeuristics.TableCountPerPage", 0, 1);
+  histogram_tester.ExpectTotalCount("Accessibility.PdfHeuristics.TableRowCount",
+                                    0);
+  histogram_tester.ExpectTotalCount(
+      "Accessibility.PdfHeuristics.TableColumnCount", 0);
+  histogram_tester.ExpectTotalCount(
+      "Accessibility.PdfHeuristics.TablePopulatedCellPercentage", 0);
+  histogram_tester.ExpectTotalCount(
+      "Accessibility.PdfHeuristics.TableMaxCellLength", 0);
+}
+
+// Pages with no text, such as scanned pages without OCR, don't record a table
+// count.
+TEST_F(PdfAccessibilityTreeTest, HeuristicGridTableNoTextOnPage) {
+  base::HistogramTester histogram_tester;
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {::features::kPdfAccessibilityHeuristicEnhancements},
+      {chrome_pdf::features::kPdfTags});
+
+  page_objects_.line_segments = CreateGridLineSegments(
+      kGridTableColumnBoundaries, kGridTableRowBoundaries);
+
+  const ui::AXNode* page = SetUpUniformHeuristicPage({}, {});
+  ASSERT_NE(nullptr, page);
+
+  histogram_tester.ExpectTotalCount(
+      "Accessibility.PdfHeuristics.TableCountPerPage", 0);
+}
+
 TEST_F(PdfAccessibilityTreeTest, HeuristicGridTableParagraphTableAtEndOfPage) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
@@ -10065,6 +10190,7 @@ TEST_F(PdfAccessibilityTreeTest,
 }
 
 TEST_F(PdfAccessibilityTreeTest, HeuristicGridTableFeatureDisabled) {
+  base::HistogramTester histogram_tester;
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
       {}, {::features::kPdfAccessibilityHeuristicEnhancements,
@@ -10088,9 +10214,12 @@ TEST_F(PdfAccessibilityTreeTest, HeuristicGridTableFeatureDisabled) {
   for (size_t i = 0; i < page->GetChildCount(); ++i) {
     EXPECT_NE(ax::mojom::Role::kTable, page->GetChildAtIndex(i)->GetRole());
   }
+  histogram_tester.ExpectTotalCount(
+      "Accessibility.PdfHeuristics.TableCountPerPage", 0);
 }
 
 TEST_F(PdfAccessibilityTreeTest, HeuristicGridTableBackToBackTables) {
+  base::HistogramTester histogram_tester;
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
       {::features::kPdfAccessibilityHeuristicEnhancements},
@@ -10126,6 +10255,11 @@ TEST_F(PdfAccessibilityTreeTest, HeuristicGridTableBackToBackTables) {
   CheckGridTable(page->GetChildAtIndex(1u), {{"A1", "B1"}, {"A2", "B2"}});
   CheckGridTable(page->GetChildAtIndex(2u), {{"C1", "D1"}, {"C2", "D2"}});
   CheckParagraph(page->GetChildAtIndex(3u), "Outro");
+
+  histogram_tester.ExpectUniqueSample(
+      "Accessibility.PdfHeuristics.TableCountPerPage", 2, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Accessibility.PdfHeuristics.TableRowCount", 2, 2);
 }
 
 // Images in a table aren't added to its cells yet. The image goes in the
@@ -11922,7 +12056,7 @@ TEST_F(PdfAccessibilityTreeTest, TestOverlappingAnnots) {
   ui::AXNode* paragraph_node = page_node->GetChildAtIndex(0);
   ASSERT_TRUE(paragraph_node);
   EXPECT_EQ(ax::mojom::Role::kParagraph, paragraph_node->GetRole());
-  const std::vector<raw_ptr<ui::AXNode, VectorExperimental>>& child_nodes =
+  const std::vector<raw_ptr<ui::AXNode, DanglingUntriaged>>& child_nodes =
       paragraph_node->GetAllChildren();
   ASSERT_EQ(3u, child_nodes.size());
 
@@ -12708,10 +12842,10 @@ TEST_F(PdfAccessibilityTreeTest, TestClickActionDataConversion) {
   ASSERT_NE(nullptr, page_node);
   ASSERT_EQ(ax::mojom::Role::kRegion, page_node->GetRole());
 
-  const std::vector<raw_ptr<ui::AXNode, VectorExperimental>>& para_nodes =
+  const std::vector<raw_ptr<ui::AXNode, DanglingUntriaged>>& para_nodes =
       page_node->GetAllChildren();
   ASSERT_EQ(2u, para_nodes.size());
-  const std::vector<raw_ptr<ui::AXNode, VectorExperimental>>& link_nodes =
+  const std::vector<raw_ptr<ui::AXNode, DanglingUntriaged>>& link_nodes =
       para_nodes[1]->GetAllChildren();
   ASSERT_EQ(1u, link_nodes.size());
 
@@ -12854,24 +12988,24 @@ TEST_F(PdfAccessibilityTreeTest, TestSelectionActionDataConversion) {
   ui::AXNode* page_node = root_node->GetChildAtIndex(1);
   ASSERT_NE(nullptr, page_node);
   ASSERT_EQ(ax::mojom::Role::kRegion, page_node->GetRole());
-  const std::vector<raw_ptr<ui::AXNode, VectorExperimental>>& para_nodes =
+  const std::vector<raw_ptr<ui::AXNode, DanglingUntriaged>>& para_nodes =
       page_node->GetAllChildren();
   ASSERT_EQ(2u, para_nodes.size());
   ASSERT_TRUE(para_nodes[0]);
-  const std::vector<raw_ptr<ui::AXNode, VectorExperimental>>&
+  const std::vector<raw_ptr<ui::AXNode, DanglingUntriaged>>&
       static_text_nodes1 = para_nodes[0]->GetAllChildren();
   ASSERT_EQ(1u, static_text_nodes1.size());
   ASSERT_TRUE(static_text_nodes1[0]);
-  const std::vector<raw_ptr<ui::AXNode, VectorExperimental>>&
+  const std::vector<raw_ptr<ui::AXNode, DanglingUntriaged>>&
       inline_text_nodes1 = static_text_nodes1[0]->GetAllChildren();
   ASSERT_TRUE(inline_text_nodes1[0]);
   ASSERT_EQ(1u, inline_text_nodes1.size());
   ASSERT_TRUE(para_nodes[1]);
-  const std::vector<raw_ptr<ui::AXNode, VectorExperimental>>&
+  const std::vector<raw_ptr<ui::AXNode, DanglingUntriaged>>&
       static_text_nodes2 = para_nodes[1]->GetAllChildren();
   ASSERT_EQ(1u, static_text_nodes2.size());
   ASSERT_TRUE(static_text_nodes2[0]);
-  const std::vector<raw_ptr<ui::AXNode, VectorExperimental>>&
+  const std::vector<raw_ptr<ui::AXNode, DanglingUntriaged>>&
       inline_text_nodes2 = static_text_nodes2[0]->GetAllChildren();
   ASSERT_TRUE(inline_text_nodes2[0]);
   ASSERT_EQ(1u, inline_text_nodes2.size());

@@ -4,6 +4,7 @@
 
 #include "components/autofill/core/browser/form_import/addresses/autofill_profile_import_process.h"
 
+#include "base/i18n/language_tag.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -94,8 +95,9 @@ class AutofillProfileImportProcessTest : public testing::Test {
       const AutofillProfile& profile,
       bool allow_only_silent_updates,
       ProfileImportMetadata metadata = {}) {
-    return ProfileImportProcess(profile, "en_US", url_, ukm_source_id(),
-                                &address_data_manager(),
+    return ProfileImportProcess(profile,
+                                base::i18n::GetKnownLanguageTag("en-US"), url_,
+                                ukm_source_id(), &address_data_manager(),
                                 allow_only_silent_updates, metadata);
   }
 
@@ -251,7 +253,8 @@ TEST_F(AutofillProfileImportProcessTest, IncorrectlyComplementedCountry) {
   metadata.country_source =
       ProfileCountrySource::kDefaultCountryCodeForNewAddress;
   ProfileImportProcess import_data(
-      profile, "en_US", url_, ukm_source_id(), &address_data_manager(),
+      profile, base::i18n::GetKnownLanguageTag("en-US"), url_, ukm_source_id(),
+      &address_data_manager(),
       /*allow_only_silent_updates=*/false, metadata);
   EXPECT_EQ(import_data.import_type(),
             AutofillProfileImportType::kDuplicateImport);
@@ -301,9 +304,10 @@ TEST_F(AutofillProfileImportProcessTest, ImportDuplicateProfile_kAccount) {
       .set_record_type(AutofillProfile::RecordType::kAccount);
   address_data_manager().AddProfile(account_profile);
 
-  ProfileImportProcess import_data(test::StandardProfile(), "en_US", url_,
-                                   ukm_source_id(), &address_data_manager(),
-                                   /*allow_only_silent_updates=*/false);
+  ProfileImportProcess import_data(
+      test::StandardProfile(), base::i18n::GetKnownLanguageTag("en-US"), url_,
+      ukm_source_id(), &address_data_manager(),
+      /*allow_only_silent_updates=*/false);
 
   EXPECT_EQ(import_data.import_type(),
             AutofillProfileImportType::kDuplicateImport);
@@ -322,8 +326,9 @@ TEST_F(AutofillProfileImportProcessTest, ImportSubsetProfile_kAccount) {
   address_data_manager().AddProfile(account_profile);
 
   ProfileImportProcess import_data(
-      test::SubsetOfStandardProfile(), "en_US", url_, ukm_source_id(),
-      &address_data_manager(), /*allow_only_silent_updates=*/false);
+      test::SubsetOfStandardProfile(), base::i18n::GetKnownLanguageTag("en-US"),
+      url_, ukm_source_id(), &address_data_manager(),
+      /*allow_only_silent_updates=*/false);
 
   EXPECT_EQ(import_data.import_type(),
             AutofillProfileImportType::kDuplicateImport);
@@ -343,10 +348,10 @@ TEST_F(AutofillProfileImportProcessTest,
       .set_record_type(AutofillProfile::RecordType::kAccount);
   address_data_manager().AddProfile(account_profile);
 
-  ProfileImportProcess import_data(test::ExtendedHiraganaProfile(), "ja_JP",
-                                   url_, ukm_source_id(),
-                                   &address_data_manager(),
-                                   /*allow_only_silent_updates=*/false);
+  ProfileImportProcess import_data(
+      test::ExtendedHiraganaProfile(), base::i18n::GetKnownLanguageTag("ja-JP"),
+      url_, ukm_source_id(), &address_data_manager(),
+      /*allow_only_silent_updates=*/false);
   EXPECT_EQ(import_data.import_type(),
             AutofillProfileImportType::kConfirmableMerge);
   import_data.AcceptWithoutPrompt();
@@ -369,9 +374,10 @@ TEST_F(AutofillProfileImportProcessTest,
   address_data_manager().AddProfile(account_profile);
 
   // Import a profile with equivalent data but saved in a different alphabet.
-  ProfileImportProcess import_data(test::KatakanaProfile1(), "ja_JP", url_,
-                                   ukm_source_id(), &address_data_manager(),
-                                   /*allow_only_silent_updates=*/false);
+  ProfileImportProcess import_data(
+      test::KatakanaProfile1(), base::i18n::GetKnownLanguageTag("ja-JP"), url_,
+      ukm_source_id(), &address_data_manager(),
+      /*allow_only_silent_updates=*/false);
   // The import is rejected as a duplicate.
   EXPECT_EQ(import_data.import_type(),
             AutofillProfileImportType::kDuplicateImport);
@@ -422,9 +428,10 @@ TEST_F(AutofillProfileImportProcessTest,
       .set_record_type(AutofillProfile::RecordType::kAccount);
   address_data_manager().AddProfile(account_profile);
 
-  ProfileImportProcess import_data(test::StandardProfile(), "en_US", url_,
-                                   ukm_source_id(), &address_data_manager(),
-                                   /*allow_only_silent_updates=*/false);
+  ProfileImportProcess import_data(
+      test::StandardProfile(), base::i18n::GetKnownLanguageTag("en-US"), url_,
+      ukm_source_id(), &address_data_manager(),
+      /*allow_only_silent_updates=*/false);
 
   EXPECT_EQ(import_data.import_type(),
             AutofillProfileImportType::kConfirmableMerge);
@@ -447,9 +454,10 @@ TEST_F(AutofillProfileImportProcessTest, ImportSilentUpdate_kAccount) {
 
   // The `observed_profile` is of type `kLocalOrSyncable`. This should not
   // prevent silent-updating a `kAccount` profile.
-  ProfileImportProcess import_data(test::StandardProfile(), "en_US", url_,
-                                   ukm_source_id(), &address_data_manager(),
-                                   /*allow_only_silent_updates=*/true);
+  ProfileImportProcess import_data(
+      test::StandardProfile(), base::i18n::GetKnownLanguageTag("en-US"), url_,
+      ukm_source_id(), &address_data_manager(),
+      /*allow_only_silent_updates=*/true);
 
   EXPECT_EQ(import_data.import_type(),
             AutofillProfileImportType::kSilentUpdate);
@@ -864,9 +872,10 @@ TEST_F(AutofillProfileImportProcessTest, NewProfileRecordType) {
   // Ineligible user.
   {
     address_data_manager().SetIsEligibleForAddressAccountStorage(false);
-    ProfileImportProcess import_data(test::StandardProfile(), "en_US", url_,
-                                     ukm_source_id(), &address_data_manager(),
-                                     /*allow_only_silent_updates=*/false);
+    ProfileImportProcess import_data(
+        test::StandardProfile(), base::i18n::GetKnownLanguageTag("en-US"), url_,
+        ukm_source_id(), &address_data_manager(),
+        /*allow_only_silent_updates=*/false);
     EXPECT_EQ(import_data.import_candidate()->record_type(),
               AutofillProfile::RecordType::kLocalOrSyncable);
   }
@@ -874,9 +883,10 @@ TEST_F(AutofillProfileImportProcessTest, NewProfileRecordType) {
   // Eligible user.
   {
     address_data_manager().SetIsEligibleForAddressAccountStorage(true);
-    ProfileImportProcess import_data(test::StandardProfile(), "en_US", url_,
-                                     ukm_source_id(), &address_data_manager(),
-                                     /*allow_only_silent_updates=*/false);
+    ProfileImportProcess import_data(
+        test::StandardProfile(), base::i18n::GetKnownLanguageTag("en-US"), url_,
+        ukm_source_id(), &address_data_manager(),
+        /*allow_only_silent_updates=*/false);
     EXPECT_EQ(import_data.import_candidate()->record_type(),
               AutofillProfile::RecordType::kAccount);
   }
@@ -1179,7 +1189,7 @@ TEST_F(AutofillProfileImportProcessTest, NameEmail_Work_SupersetImport) {
       test::OnlyAddressProfile(AutofillProfile::RecordType::kAccountWork);
   const AutofillProfile observed_profile =
       test::SupersetProfileOf({account_name_email_profile, work_profile},
-                              address_data_manager().app_locale(),
+                              address_data_manager().app_locale().tag_string(),
                               AutofillProfile::RecordType::kLocalOrSyncable);
 
   address_data_manager().AddProfile(account_name_email_profile);
@@ -1229,7 +1239,7 @@ TEST_F(AutofillProfileImportProcessTest, NameEmail_Home_SupersetImport) {
       test::OnlyAddressProfile(AutofillProfile::RecordType::kAccountHome);
   const AutofillProfile observed_profile =
       test::SupersetProfileOf({account_name_email_profile, home_profile},
-                              address_data_manager().app_locale(),
+                              address_data_manager().app_locale().tag_string(),
                               AutofillProfile::RecordType::kLocalOrSyncable);
 
   address_data_manager().AddProfile(home_profile);
@@ -1283,7 +1293,7 @@ TEST_F(AutofillProfileImportProcessTest,
       test::OnlyAddressProfile(AutofillProfile::RecordType::kAccountHome);
   const AutofillProfile observed_profile =
       test::SupersetProfileOf({account_name_email_profile, home_profile},
-                              address_data_manager().app_locale(),
+                              address_data_manager().app_locale().tag_string(),
                               AutofillProfile::RecordType::kLocalOrSyncable);
 
   address_data_manager().AddProfile(home_profile);
@@ -1318,7 +1328,7 @@ TEST_F(AutofillProfileImportProcessTest,
       test::OnlyAddressProfile(AutofillProfile::RecordType::kAccountHome);
   const AutofillProfile observed_profile =
       test::SupersetProfileOf({account_name_email_profile, home_profile},
-                              address_data_manager().app_locale(),
+                              address_data_manager().app_locale().tag_string(),
                               AutofillProfile::RecordType::kLocalOrSyncable);
 
   address_data_manager().AddProfile(home_profile);

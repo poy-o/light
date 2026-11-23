@@ -183,7 +183,8 @@ public class NtpThemeDailyRefreshManager {
         }
 
         long dailyRefreshHoursMs =
-                ChromeFeatureList.sNewTabPageCustomizationV2DailyRefreshThresholdMs.getValue();
+                ChromeFeatureList.sNewTabPageCustomizationThemeDebugDailyRefreshThresholdMs
+                        .getValue();
 
         if (mLastDailyUpdateTimestamp == null) {
             mLastDailyUpdateTimestamp =
@@ -244,7 +245,7 @@ public class NtpThemeDailyRefreshManager {
     public void maybeSaveDailyRefreshAndReset(
             Context context, Runnable onDailyRefreshThemeCollectionApplied) {
         if ((!mIsDailyUpdateApplied && !mShouldSkipDailyRefreshForThemeCollection)
-                || !NtpCustomizationUtils.isNtpThemeCustomizationEnabled()) {
+                || !NtpCustomizationUtils.isNtpThemeCustomizationEnabledByPolicy()) {
             return;
         }
 

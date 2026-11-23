@@ -57,7 +57,6 @@ import java.io.File;
 
 /** Unit tests for {@link NtpThemeDailyRefreshManager}. */
 @RunWith(BaseRobolectricTestRunner.class)
-@Features.EnableFeatures({ChromeFeatureList.NEW_TAB_PAGE_CUSTOMIZATION_V2})
 public class NtpThemeDailyRefreshManagerUnitTest {
     private static final String COLLECTION_ID = "id";
     private static final String DAILY_REFRESH_COLLECTION_ID = "id_daily";
@@ -129,7 +128,7 @@ public class NtpThemeDailyRefreshManagerUnitTest {
 
     @Test
     @Features.EnableFeatures({
-        ChromeFeatureList.NEW_TAB_PAGE_CUSTOMIZATION_V2 + ":daily_refresh_threshold_ms/0"
+        ChromeFeatureList.NEW_TAB_PAGE_CUSTOMIZATION_THEME_DEBUG + ":daily_refresh_threshold_ms/0"
     })
     public void testIsDailyRefreshEnabled_Within24Hours_ForceUpdate() {
         NtpCustomizationUtils.setIsChromeColorDailyRefreshEnabledToSharedPreference(true);

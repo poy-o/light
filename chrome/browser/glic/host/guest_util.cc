@@ -39,6 +39,7 @@
 #include "chrome/browser/glic/gemini_enterprise/geic_url_allowlist.h"
 #include "chrome/browser/glic/glic_hotkey.h"
 #include "chrome/browser/glic/glic_pref_names.h"
+#include "chrome/browser/glic/host/glic_assistant_switcher.h"
 #include "chrome/browser/glic/host/glic_client_data_storage.h"
 #include "chrome/browser/glic/host/glic_features.mojom.h"
 #include "chrome/browser/glic/host/glic_guest_observer.h"
@@ -1178,6 +1179,10 @@ void PopulateGlobalClientInitialState(mojom::WebClientInitialState* state,
     state->host_capabilities.push_back(mojom::HostCapability::kInvoke);
   }
 
+  if (GetGlicProviderSpec(profile).SupportsFeature(GlicFeature::kDrivePicker)) {
+    state->host_capabilities.push_back(mojom::HostCapability::kDrivePicker);
+  }
+
   if (GetOnboardingArm(profile) == "2") {
     state->host_capabilities.push_back(
         mojom::HostCapability::kTrustFirstOnboardingArm2);
@@ -1217,6 +1222,9 @@ void PopulateGlobalClientInitialState(mojom::WebClientInitialState* state,
           glic::mojom::features::kGlicAppendModelQualityClientId)) {
     state->host_capabilities.push_back(
         mojom::HostCapability::kGetModelQualityClientId);
+  }
+  if (CanSwitchToAnyAssistant(*profile)) {
+    state->host_capabilities.push_back(mojom::HostCapability::kSwitchAssistant);
   }
   state->enable_capture_region =
       GetGlicProviderSpec(profile).SupportsFeature(GlicFeature::kCaptureRegion);

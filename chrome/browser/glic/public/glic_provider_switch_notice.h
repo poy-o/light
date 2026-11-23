@@ -22,9 +22,10 @@ namespace glic {
 // user last onboarded to. The notice is due when the latched provider differs
 // from it.
 //
-// A switch the user makes themselves from the Glic relaunch prompt or Settings
-// isn't reported: those call `RecordUserInitiatedProviderSwitch()` first,
-// directly or through `SwitchAssistantSelection()`.
+// A switch the user makes themselves from the Glic relaunch prompt, Settings,
+// or the in-panel switch API isn't reported: those call
+// `RecordUserInitiatedProviderSwitch()` first, directly or through
+// `SwitchAssistantSelection()`.
 
 class GlicProviderLatchFactory;
 
@@ -57,6 +58,10 @@ void SwitchAssistantSelection(Profile& profile,
 // `kNone` while `features::kGeicProviderSwitchNotice` or `features::kGeic` is
 // disabled.
 GlicProviderChange GetProviderSwitchNotice(Profile& profile);
+
+// Records the latched provider as known, so that the notice isn't shown again.
+// Call when the user acknowledges the notice.
+void AcknowledgeProviderSwitchNotice(Profile& profile);
 
 }  // namespace glic
 

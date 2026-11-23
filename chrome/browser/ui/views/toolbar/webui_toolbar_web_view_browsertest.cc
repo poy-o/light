@@ -180,6 +180,7 @@
 #include "net/base/filename_util.h"
 #include "net/dns/mock_host_resolver.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/common/page/drag_operation.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
@@ -198,8 +199,6 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/compositor/compositor.h"
-#include "ui/compositor/layer.h"
-#include "ui/compositor/layer_animator.h"
 #include "ui/gfx/animation/animation.h"
 #include "ui/gfx/animation/animation_test_api.h"
 #include "ui/gfx/geometry/point_f.h"
@@ -210,6 +209,7 @@
 #include "ui/snapshot/snapshot.h"
 #include "ui/views/accessibility/ax_update_notifier.h"
 #include "ui/views/accessibility/ax_update_observer.h"
+#include "ui/views/animation/widget_fade_animator.h"
 #include "ui/views/bubble/bubble_anchor.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/bubble/bubble_dialog_model_host.h"
@@ -3224,6 +3224,104 @@ IN_PROC_BROWSER_TEST_F(WebUIToolbarWebViewBrowserTest, ContextMenuPositionE2E) {
   EXPECT_EQ(captured_bounds, expected_screen_bounds);
 }
 
+class WebUIToolbarMouseBackForwardButtonsBrowserTest
+    : public WebUIToolbarWebViewBrowserTest {
+ public:
+  WebUIToolbarMouseBackForwardButtonsBrowserTest() {
+    back_forward_feature_list_.InitAndEnableFeature(
+        features::kWebUIBackForwardButton);
+  }
+
+ protected:
+  // Returns the center of the toolbar-app element matching `selector`, in the
+  // coordinates of `web_contents`' widget.
+  gfx::Point GetButtonCenter(content::WebContents* web_contents,
+                             const std::string& selector) {
+    content::EvalJsResult result = content::EvalJs(
+        web_contents, base::StrCat({GetButtonAppJS(selector),
+                                    ".getBoundingClientRect().toJSON()"}));
+    EXPECT_TRUE(result.is_ok());
+    if (!result.is_ok()) {
+      return gfx::Point();
+    }
+    const base::DictValue& rect = result.ExtractDict();
+    const double zoom = blink::ZoomLevelToZoomFactor(
+        zoom::ZoomController::GetZoomLevelForWebContents(web_contents));
+    return gfx::Point(
+        base::ClampFloor(
+            (*rect.FindDouble("left") + *rect.FindDouble("width") / 2) * zoom),
+        base::ClampFloor(
+            (*rect.FindDouble("top") + *rect.FindDouble("height") / 2) * zoom));
+  }
+
+ private:
+  base::test::ScopedFeatureList back_forward_feature_list_;
+};
+
+// Toolbar buttons don't act on the back/forward mouse buttons (e.g. the reload
+// button reloading, or the back button navigating back when the forward mouse
+// button is pressed). This matches Views toolbar buttons, which only respond to
+// left and middle clicks. On Windows, as with the Views toolbar, they instead
+// navigate the active tab in the mouse button's direction.
+IN_PROC_BROWSER_TEST_F(WebUIToolbarMouseBackForwardButtonsBrowserTest,
+                       MouseBackForwardButtons) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  content::WebContents* const tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  const GURL url1 = embedded_test_server()->GetURL("/title1.html");
+  const GURL url2 = embedded_test_server()->GetURL("/title2.html");
+  const GURL url3 = embedded_test_server()->GetURL("/title3.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url1));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url2));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url3));
+  // Go back to `url2`, so that both back and forward navigations are possible.
+  tab->GetController().GoBack();
+  ASSERT_TRUE(content::WaitForLoadStop(tab));
+  ASSERT_EQ(url2, tab->GetLastCommittedURL());
+
+  content::WebContents* const webui = GetWebUIWebContents();
+  ASSERT_TRUE(webui);
+  ASSERT_TRUE(WaitForButtonVisible(webui, kReloadButtonSelector));
+  ASSERT_TRUE(WaitForButtonVisible(webui, kBackSelector));
+  ASSERT_TRUE(WaitForButtonVisible(webui, kForwardSelector));
+
+  // Clicks `button` over the toolbar element matching `selector`.
+  auto click = [&](const std::string& selector,
+                   blink::WebMouseEvent::Button button) {
+    content::SimulateMouseClickAt(webui, 0, button,
+                                  GetButtonCenter(webui, selector));
+  };
+
+  // Forward mouse button over the back button.
+  click(kBackSelector, blink::WebMouseEvent::Button::kForward);
+#if BUILDFLAG(IS_WIN)
+  ASSERT_TRUE(content::WaitForLoadStop(tab));
+  EXPECT_EQ(url3, tab->GetLastCommittedURL());
+#else
+  EXPECT_FALSE(tab->IsLoading());
+  EXPECT_EQ(url2, tab->GetLastCommittedURL());
+#endif
+
+  // Back mouse button over the reload button.
+  click(kReloadButtonSelector, blink::WebMouseEvent::Button::kBack);
+#if BUILDFLAG(IS_WIN)
+  ASSERT_TRUE(content::WaitForLoadStop(tab));
+#else
+  EXPECT_FALSE(tab->IsLoading());
+#endif
+  EXPECT_EQ(url2, tab->GetLastCommittedURL());
+
+  // Back mouse button over the forward button.
+  click(kForwardSelector, blink::WebMouseEvent::Button::kBack);
+#if BUILDFLAG(IS_WIN)
+  ASSERT_TRUE(content::WaitForLoadStop(tab));
+  EXPECT_EQ(url1, tab->GetLastCommittedURL());
+#else
+  EXPECT_FALSE(tab->IsLoading());
+  EXPECT_EQ(url2, tab->GetLastCommittedURL());
+#endif
+}
+
 // Verifies that, when the vertical tab strip is shown, the space between WebUI
 // toolbar controls is treated as window caption (so it supports window dragging
 // and the system context menu), while the controls themselves are not.
@@ -5739,9 +5837,11 @@ IN_PROC_BROWSER_TEST_F(WebUIPageActionBrowserTest,
   ASSERT_TRUE(bubble->GetAnchor().GetIfElement());
   EXPECT_EQ(bubble->GetAnchor().GetIfElement()->identifier(),
             kTranslatePageActionElementId);
-  views::View* frame = bubble->GetBubbleFrameView();
-  ASSERT_TRUE(frame->layer());
-  EXPECT_EQ(frame->layer()->GetTargetOpacity(), 1.0f);
+  EXPECT_FALSE(bubble->GetBubbleFrameView()->layer());
+  EXPECT_TRUE(bubble->GetWidget()->IsVisible());
+  views::WidgetFadeAnimator* fade_animator =
+      bubble->fade_animator_for_testing();
+  ASSERT_TRUE(fade_animator);
 
   views::test::WidgetDestroyedWaiter destroyed_waiter(bubble->GetWidget());
   controller->HideAnchoredMessage(target_action_id);
@@ -5750,9 +5850,10 @@ IN_PROC_BROWSER_TEST_F(WebUIPageActionBrowserTest,
   ASSERT_EQ(control.GetAnchoredMessageForTesting(target_action_id), bubble);
   EXPECT_TRUE(bubble->is_closing());
   EXPECT_FALSE(bubble->GetWidget()->IsClosed());
-  EXPECT_EQ(frame->layer()->GetTargetOpacity(), 0.0f);
+  EXPECT_TRUE(fade_animator->IsFadingOut());
 
-  frame->layer()->GetAnimator()->StopAnimating();
+  gfx::AnimationContainerTestApi(fade_animator->container())
+      .IncrementTime(base::Milliseconds(150));
   destroyed_waiter.Wait();
   EXPECT_EQ(control.GetAnchoredMessageForTesting(target_action_id), nullptr);
 }

@@ -927,6 +927,22 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Media.Android.MediaCodec.OutputFrame.Status.{VideoCodec}"
+    enum="MediaCodecOutputFrameStatus" expires_after="2027-09-01">
+  <owner>philyan@chromium.org</owner>
+  <owner>media-dev-uma@chromium.org</owner>
+  <summary>
+    Android: result of each MediaCodec.getOutputFrame() probe call made in the
+    GPU process for a decoded video buffer of a {VideoCodec} block model
+    decoder. Recorded on probed output buffers only when
+    Media.Android.MediaCodec.OutputFrame.Eligibility is Eligible (see
+    MediaCodecVideoDecoder::GetOutputFrameEligibility()). Covers both
+    getOutputFrame() failures and post-call AHardwareBuffer validation
+    rejections (recording the first failing check).
+  </summary>
+  <token key="VideoCodec" variants="VideoCodec"/>
+</histogram>
+
 <histogram name="Media.Android.MediaCodec.VideoInputExceedsMaxCapacity"
     enum="Boolean" expires_after="2027-03-24">
   <owner>sobek@google.com</owner>
@@ -3737,6 +3753,61 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
+<histogram name="Media.CodecOutputBuffer.ReleaseInterval.{SurfaceMode}"
+    units="ms" expires_after="2027-06-30">
+  <owner>sanfin@chromium.org</owner>
+  <owner>media-dev-uma@chromium.org</owner>
+  <summary>
+    Records the elapsed time in milliseconds between consecutive rendered
+    MediaCodec output buffer releases on the same CodecWrapperImpl instance when
+    rendering to {SurfaceMode}. Recorded on every rendered output buffer release
+    after the first rendered frame following codec creation, flush, output
+    buffer discard, or surface change.
+  </summary>
+  <token key="SurfaceMode">
+    <variant name="Overlay" summary="an AndroidOverlay SurfaceView"/>
+    <variant name="TextureOwner"
+        summary="a TextureOwner (AImageReader / SurfaceControl)"/>
+  </token>
+</histogram>
+
+<histogram name="Media.CodecOutputBuffer.SubVsyncRelease.{SurfaceMode}"
+    enum="Boolean" expires_after="2027-06-30">
+  <owner>sanfin@chromium.org</owner>
+  <owner>media-dev-uma@chromium.org</owner>
+  <summary>
+    Records whether two consecutive rendered MediaCodec output buffers on the
+    same CodecWrapperImpl instance were released within less than 8 ms of each
+    other (true) when rendering to {SurfaceMode}. The fixed 8 ms threshold
+    targets the standard 60 Hz display cadence (16.67 ms VSync period), where
+    releasing two buffers to an unthrottled SurfaceView BufferQueue within the
+    same VSync interval causes the second buffer to overwrite the unlatched
+    first buffer without a present fence; for other display refresh rates (such
+    as 50, 90, or 120 Hz), inspect Media.CodecOutputBuffer.ReleaseInterval.*
+    directly. Recorded on every rendered output buffer release after the first
+    rendered frame following codec creation, flush, output buffer discard, or
+    surface change.
+  </summary>
+  <token key="SurfaceMode">
+    <variant name="Overlay" summary="an AndroidOverlay SurfaceView"/>
+    <variant name="TextureOwner"
+        summary="a TextureOwner (AImageReader / SurfaceControl)"/>
+  </token>
+</histogram>
+
+<histogram name="Media.CodecWrapper.IsOverlayBacked" enum="Boolean"
+    expires_after="2027-06-30">
+  <owner>sanfin@chromium.org</owner>
+  <owner>media-dev-uma@chromium.org</owner>
+  <summary>
+    Records whether a CodecWrapperImpl's configured CodecSurfaceBundle is backed
+    by a direct AndroidOverlay (true) or a TextureOwner/AImageReader (false).
+    Recorded once per configured surface when it renders its first output buffer
+    in CodecWrapperImpl::ReleaseCodecOutputBuffer() (following codec creation or
+    SetSurface()).
+  </summary>
+</histogram>
+
 <histogram name="Media.CodedSizeGuessing" enum="CodedSizeGuessStatus"
     expires_after="2027-05-02">
   <owner>vasilyt@chromium.org</owner>
@@ -5269,17 +5340,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Media.GetDisplayMedia.Constraints.SuppressLocalAudioPlayback"
-    enum="GetDisplayMediaBooleanConstraint" expires_after="2023-05-07">
-  <owner>eladalon@chromium.org</owner>
-  <owner>fbeaufort@chromium.org</owner>
-  <owner>webrtc-audio-uma@google.com</owner>
-  <summary>
-    Records whether getDisplayMedia was called with the
-    suppressLocalAudioPlayback constraint.
-  </summary>
-</histogram>
-
 <histogram name="Media.GetDisplayMedia.Constraints.SystemAudio"
     enum="GetDisplayMediaIncludeExcludeConstraint" expires_after="2027-03-21">
   <owner>eladalon@chromium.org</owner>
@@ -6400,18 +6460,6 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
-<histogram name="Media.MediaRecorder.HasCorrectAV1CodecString"
-    enum="BooleanCorrect" expires_after="2024-06-30">
-  <owner>hiroh@chromium.org</owner>
-  <owner>handellm@google.com</owner>
-  <summary>
-    Record the correctness of the AV1 codecs string configured in MediaRecorder
-    and queried in MediaCapabilities. It is recorded when Initialize() in
-    MediaRecorder API is called and the capability is queried in
-    MediaCapabilities API.
-  </summary>
-</histogram>
-
 <histogram name="Media.MediaRecorder.TrackTransformationChangeCount"
     units="count" expires_after="2025-06-08">
   <owner>handellm@google.com</owner>
@@ -6729,28 +6777,6 @@ chromium-metrics-reviews@google.com.
     Delay between a DecodeBuffer (and encoded chunk) input and a decoded
     VideoFrame being produced by the remote MojoVideoDecoder. Output once per
     successful decode.
-  </summary>
-</histogram>
-
-<histogram name="Media.MojoVideoDecoder.InitialPlaybackErrorCodecCounter"
-    units="instances" expires_after="2021-10-25">
-  <owner>eugene@chromium.org</owner>
-  <owner>liberato@chromium.org</owner>
-  <summary>
-    Total number of instances of MojoVideoDecoder used by a page (i.e. render
-    frame) when an instance of MojoVideoDecoder encountered a decoding error or
-    a crash during the first 150 frames of a video stream.
-  </summary>
-</histogram>
-
-<histogram name="Media.MojoVideoDecoder.InitialPlaybackSuccessCodecCounter"
-    units="instances" expires_after="2021-10-25">
-  <owner>eugene@chromium.org</owner>
-  <owner>liberato@chromium.org</owner>
-  <summary>
-    Total number of instances of MojoVideoDecoder used by a page (i.e. render
-    frame) when an instance of MojoVideoDecoder successfuly decode the first 150
-    frames of a video stream.
   </summary>
 </histogram>
 
@@ -10037,17 +10063,6 @@ chromium-metrics-reviews@google.com.
     Records when the GPU context for the MirroringGpuFactoriesFactory instance
     is lost. This should prompt a renegotiation without that hardware encoder
     configuration being offered.
-  </summary>
-</histogram>
-
-<histogram name="MediaRouter.MirroringService.LoweredHardwareFrameRate"
-    enum="VideoCodec" expires_after="2027-08-01">
-  <owner>jophba@chromium.org</owner>
-  <owner>openscreen-eng@google.com</owner>
-  <summary>
-    Records the video codec when a hardware encoder fails above 30 FPS during a
-    mirroring session, prompting an in-place fallback to 30 FPS hardware
-    encoding before denylisting the codec.
   </summary>
 </histogram>
 

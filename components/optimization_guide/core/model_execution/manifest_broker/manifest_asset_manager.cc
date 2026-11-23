@@ -276,9 +276,14 @@ bool ManifestAssetManager::ComponentContext::SetUninstallComplete() {
   }
   install_dir_ = std::nullopt;
   version_ = std::nullopt;
+  const Manifest::UninstallReason reason =
+      std::exchange(uninstall_reason_, Manifest::UninstallReason::kUnknown);
   // Keep `kNeverInstalled` when cleaning up incomplete registrations.
   if (install_state_ == OnDeviceModelControl::ModelInstallState::kInstalled) {
-    install_state_ = OnDeviceModelControl::ModelInstallState::kUninstalled;
+    install_state_ =
+        reason == Manifest::UninstallReason::kObsolete
+            ? OnDeviceModelControl::ModelInstallState::kUninstalledObsolete
+            : OnDeviceModelControl::ModelInstallState::kUninstalled;
     return true;
   }
   return false;
@@ -298,6 +303,7 @@ void ManifestAssetManager::ComponentContext::SetRegistered() {
   CHECK(state_ == ComponentState::kRegistering ||
         state_ == ComponentState::kReady);
   state_ = ComponentState::kRegistered;
+  passive_registration_logged_ = false;
 }
 
 void ManifestAssetManager::ComponentContext::SetOnDemandDownloading() {
@@ -326,13 +332,15 @@ ManifestAssetManager::ComponentContext::SetReady(
                        OnDeviceModelControl::ModelInstallState::kInstalled);
 }
 
-void ManifestAssetManager::ComponentContext::SetUninstalling() {
+void ManifestAssetManager::ComponentContext::SetUninstalling(
+    Manifest::UninstallReason reason) {
   CHECK(state_ != ComponentState::kRegistering &&
         state_ != ComponentState::kUninstalling);
   state_ = ComponentState::kUninstalling;
   requested_version_ = kUninstallingVersion;
   install_dir_ = std::nullopt;
   version_ = std::nullopt;
+  uninstall_reason_ = reason;
 }
 
 void ManifestAssetManager::ComponentContext::SetOrphaned(
@@ -470,7 +478,10 @@ ManifestAssetManager::AssetLedger::GetModelInstallState(
     if (context.install_state() == ModelInstallState::kInstalled) {
       return ModelInstallState::kInstalled;
     }
-    if (context.install_state() == ModelInstallState::kUninstalled) {
+    if (context.install_state() == ModelInstallState::kUninstalledObsolete) {
+      result = ModelInstallState::kUninstalledObsolete;
+    } else if (context.install_state() == ModelInstallState::kUninstalled &&
+               result == ModelInstallState::kNeverInstalled) {
       result = ModelInstallState::kUninstalled;
     }
   }
@@ -522,6 +533,22 @@ ManifestAssetManager::~ManifestAssetManager() {
   TRACE_EVENT("optimization_guide",
               "ManifestAssetManager::~ManifestAssetManager",
               perfetto::TerminatingFlow::FromPointer(this));
+  delegate_->SetDiskSpaceCheckPriority(
+      ManifestMonitorDelegate::DiskSpaceCheckReason::kAssetRegistration,
+      /*user_visible=*/false);
+}
+
+void ManifestAssetManager::RecordRegistrationMode(const std::string& asset_id,
+                                                  RegistrationMode mode) const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (!IsBaseModelAsset(factory_->manifest(), asset_id)) {
+    return;
+  }
+  base::UmaHistogramEnumeration(
+      base::StrCat({"OptimizationGuide.ModelExecution."
+                    "OnDeviceModelRegistrationMode.",
+                    ConvertComponentKeyToUmaModelName(asset_id)}),
+      mode);
 }
 
 void ManifestAssetManager::OnAssetUpdateEvent(
@@ -904,7 +931,7 @@ void ManifestAssetManager::RecordEvictableAssetsCount() const {
       evictable_assets_count);
 }
 
-void ManifestAssetManager::RecordUninstallReason(
+Manifest::UninstallReason ManifestAssetManager::RecordUninstallReason(
     const ComponentContext& context,
     const proto::OnDemandComponent* component) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -920,13 +947,34 @@ void ManifestAssetManager::RecordUninstallReason(
       "OptimizationGuide.ModelExecution.OnDeviceModelUninstallReason." +
           ConvertComponentKeyToUmaModelName(context.asset_id()),
       log_reason);
+  return log_reason;
 }
 
 void ManifestAssetManager::UpdateRegistrations() {
   TRACE_EVENT("optimization_guide", "ManifestAssetManager::UpdateRegistrations",
               perfetto::Flow::FromPointer(this));
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (!disk_space_status_.IsFresh()) {
+  const bool needs_disk_evaluation = !disk_space_status_.IsFresh();
+  bool needs_foreground_evaluation = false;
+  if (needs_disk_evaluation) {
+    for (const auto& [asset_id, component] :
+         factory_->manifest().GetAssets().on_demand_components()) {
+      if (!asset_priorities_.IsAtLeast(AssetPriority::kUserBlocking,
+                                       asset_id)) {
+        continue;
+      }
+      const auto* context = ledger_.GetContext(component.public_key());
+      CHECK(context);
+      if (!context->IsReadyFor(component.target_version())) {
+        needs_foreground_evaluation = true;
+        break;
+      }
+    }
+  }
+  delegate_->SetDiskSpaceCheckPriority(
+      ManifestMonitorDelegate::DiskSpaceCheckReason::kAssetRegistration,
+      needs_foreground_evaluation);
+  if (needs_disk_evaluation) {
     // Don't do anything yet, just refresh the disk space status.
     if (!disk_space_status_.IsEvaluationPending()) {
       disk_space_status_.EnsureEvaluated(
@@ -950,8 +998,7 @@ void ManifestAssetManager::UpdateRegistrations() {
         factory_->manifest().GetAssetByPublicKey(public_key);
     if (!ShouldInstallOrRetain(context, component)) {
       if (context.NeedsCleanup()) {
-        RecordUninstallReason(context, component);
-        context.SetUninstalling();
+        context.SetUninstalling(RecordUninstallReason(context, component));
 
         keys_to_save.push_back(public_key);
         // Uninstall the component which will delete the model files, after a
@@ -994,9 +1041,15 @@ void ManifestAssetManager::UpdateRegistrations() {
     if (context.state() == ComponentState::kRegistered) {
       if (ShouldRequestForegroundDownload(context)) {
         context.SetOnDemandDownloading();
+        RecordRegistrationMode(context.asset_id(),
+                               RegistrationMode::kForegroundOnDemand);
         // This doesn't change a persistent state, so it's okay to not save.
         delegate_->RequestUpdate(public_key,
                                  /*is_background=*/false);
+      } else if (!context.passive_registration_logged()) {
+        context.set_passive_registration_logged();
+        RecordRegistrationMode(context.asset_id(),
+                               RegistrationMode::kPassiveBackground);
       }
       continue;
     }
@@ -1120,8 +1173,20 @@ void ManifestAssetManager::OnAssetReady(const std::string& public_key,
 }
 
 void ManifestAssetManager::OnUpdateRequestComplete(
-    const std::string& public_key) {
+    const std::string& public_key,
+    update_client::Error error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  const ComponentContext* context = ledger_.GetContext(public_key);
+  if (!context || context->state() == ComponentState::kNotRegistered ||
+      context->state() == ComponentState::kUninstalling ||
+      !IsBaseModelAsset(factory_->manifest(), context->asset_id())) {
+    return;
+  }
+  base::UmaHistogramEnumeration(
+      base::StrCat({"OptimizationGuide.ModelExecution."
+                    "OnDeviceModelOnDemandUpdateResult.",
+                    ConvertComponentKeyToUmaModelName(context->asset_id())}),
+      error);
 }
 
 void ManifestAssetManager::OnMeteredConnectionChanged() {

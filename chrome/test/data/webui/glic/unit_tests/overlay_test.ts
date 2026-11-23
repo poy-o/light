@@ -73,15 +73,27 @@ suite('GlicOverlayTest', () => {
       {type: ErrorPanelType.kSignIn, id: 'signInPanel'},
       {
         type: ErrorPanelType.kPendingProviderChangeGeminiToGeic,
-        id: 'relaunchRequiredPanel',
+        id: 'providerChangePanel',
       },
       {
         type: ErrorPanelType.kPendingProviderChangeGeicToGemini,
-        id: 'relaunchRequiredPanel',
+        id: 'providerChangePanel',
       },
       {
         type: ErrorPanelType.kPendingProviderChangeGeicToOtherGeic,
-        id: 'relaunchRequiredPanel',
+        id: 'providerChangePanel',
+      },
+      {
+        type: ErrorPanelType.kProviderSwitchNoticeGeminiToGeic,
+        id: 'providerChangePanel',
+      },
+      {
+        type: ErrorPanelType.kProviderSwitchNoticeGeicToGemini,
+        id: 'providerChangePanel',
+      },
+      {
+        type: ErrorPanelType.kProviderSwitchNoticeGeicToOtherGeic,
+        id: 'providerChangePanel',
       },
       {type: ErrorPanelType.kLocationMismatch, id: 'locationMismatchPanel'},
     ];
@@ -141,12 +153,12 @@ suite('GlicOverlayTest', () => {
       remote.setOverlayState({error: type});
       await remote.$.flushForTesting();
 
-      assertFalse(getElement('relaunchRequiredPanel').hidden);
+      assertFalse(getElement('providerChangePanel').hidden);
       assertEquals(
           loadTimeData.getString(header),
-          getElement('relaunchHeadline').textContent);
+          getElement('providerChangeHeadline').textContent);
       for (let i = 0; i < 3; i++) {
-        const paragraph = getElement(`relaunchBody${i + 1}`);
+        const paragraph = getElement(`providerChangeBody${i + 1}`);
         const key = body[i];
         if (key) {
           assertFalse(paragraph.hidden);
@@ -158,6 +170,52 @@ suite('GlicOverlayTest', () => {
     }
   });
 
+  test('ShowProviderSwitchNoticeCopy', async () => {
+    const cases: Array<{type: ErrorPanelType, header: string, body: string}> =
+        [
+          {
+            type: ErrorPanelType.kProviderSwitchNoticeGeminiToGeic,
+            header: 'providerSwitchNoticeGeminiToGeicHeader',
+            body: 'providerSwitchNoticeGeminiToGeic',
+          },
+          {
+            type: ErrorPanelType.kProviderSwitchNoticeGeicToGemini,
+            header: 'providerSwitchNoticeGeicToGeminiHeader',
+            body: 'providerSwitchNoticeGeicToGemini',
+          },
+          {
+            type: ErrorPanelType.kProviderSwitchNoticeGeicToOtherGeic,
+            header: 'providerSwitchNoticeGeicToOtherGeicHeader',
+            body: 'providerSwitchNoticeGeicToOtherGeic',
+          },
+        ];
+
+    for (const {type, header, body} of cases) {
+      remote.setOverlayState({error: type});
+      await remote.$.flushForTesting();
+
+      assertFalse(getElement('providerChangePanel').hidden);
+      assertEquals(
+          loadTimeData.getString(header),
+          getElement('providerChangeHeadline').textContent);
+      assertEquals(
+          loadTimeData.getString(body),
+          getElement('providerChangeBody1').textContent);
+      assertFalse(getElement('providerChangeBody1').hidden);
+      assertTrue(getElement('providerChangeBody2').hidden);
+      assertTrue(getElement('providerChangeBody3').hidden);
+      assertTrue(getElement('relaunchButton').hidden);
+      assertFalse(getElement('continueButton').hidden);
+    }
+
+    // The relaunch panel shows the relaunch button again.
+    remote.setOverlayState(
+        {error: ErrorPanelType.kPendingProviderChangeGeminiToGeic});
+    await remote.$.flushForTesting();
+    assertFalse(getElement('relaunchButton').hidden);
+    assertTrue(getElement('continueButton').hidden);
+  });
+
   test('ButtonClicksNotifyHandler', () => {
     const clickCases:
         Array<{id: string, method: keyof GlicOverlayPageHandlerRemote}> = [
@@ -165,6 +223,10 @@ suite('GlicOverlayTest', () => {
           {id: 'reload', method: 'onRetryClicked'},
           {id: 'signInButton', method: 'onSignInClicked'},
           {id: 'relaunchButton', method: 'onRelaunchClicked'},
+          {
+            id: 'continueButton',
+            method: 'onProviderSwitchNoticeContinueClicked',
+          },
           {id: 'profilePickerButton', method: 'onProfilePickerClicked'},
           {
             id: 'ineligibleAccountHelpButton',
@@ -202,5 +264,62 @@ suite('GlicOverlayTest', () => {
           1, handler.getCallCount('onClosePanelClicked'),
           `Expected close button ${i} to trigger onClosePanelClicked`);
     }
+  });
+
+  test('ProviderChangePanelDialogSemanticsAndFocus', async () => {
+    const panel = getElement('providerChangePanel');
+    assertEquals('dialog', panel.getAttribute('role'));
+    assertEquals('true', panel.getAttribute('aria-modal'));
+    assertEquals('-1', panel.getAttribute('tabindex'));
+
+    const labelledBy = panel.getAttribute('aria-labelledby');
+    const describedBy = panel.getAttribute('aria-describedby');
+    assertTrue(!!labelledBy, 'Expected aria-labelledby attribute');
+    assertTrue(!!describedBy, 'Expected aria-describedby attribute');
+
+    const labelEl = getElement(labelledBy);
+    const bodyEl = getElement(describedBy);
+
+    for (const type of
+             [ErrorPanelType.kProviderSwitchNoticeGeminiToGeic,
+              ErrorPanelType.kProviderSwitchNoticeGeicToGemini,
+              ErrorPanelType.kProviderSwitchNoticeGeicToOtherGeic,
+              ErrorPanelType.kPendingProviderChangeGeminiToGeic,
+              ErrorPanelType.kPendingProviderChangeGeicToGemini,
+              ErrorPanelType.kPendingProviderChangeGeicToOtherGeic,
+    ]) {
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+      assertFalse(panel.contains(document.activeElement));
+
+      remote.setOverlayState({error: type});
+      await remote.$.flushForTesting();
+
+      assertFalse(panel.hidden);
+      assertEquals(panel, document.activeElement);
+      assertTrue(
+          (labelEl.textContent?.trim().length ?? 0) > 0,
+          `Expected non-empty label text for ${type}`);
+      const visibleBodyText =
+          Array.from(bodyEl.children)
+              .filter(child => !(child as HTMLElement).hidden)
+              .map(child => child.textContent?.trim() ?? '')
+              .join(' ')
+              .trim();
+      assertTrue(
+          visibleBodyText.length > 0,
+          `Expected non-empty visible body text for ${type}`);
+    }
+
+    // Incidental state refreshes while focus is inside the dialog must not
+    // steal focus from the active control.
+    const relaunchButton = getElement('relaunchButton');
+    relaunchButton.focus();
+    assertEquals(relaunchButton, document.activeElement);
+    remote.setOverlayState(
+        {error: ErrorPanelType.kPendingProviderChangeGeicToOtherGeic});
+    await remote.$.flushForTesting();
+    assertEquals(relaunchButton, document.activeElement);
   });
 });

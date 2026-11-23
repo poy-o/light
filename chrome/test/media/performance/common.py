@@ -96,6 +96,7 @@ __all__ = [
     'verify_receiver_connectivity',
     'video_analyzer',
     # Defined here.
+    'CHROME_DISABLED_FEATURES',
     'FAIL_CODE',
     'METRICS',
     'VIDEOS',
@@ -109,6 +110,14 @@ __all__ = [
     'teardown_recording_process',
     'teardown_test_environment',
 ]
+
+# TODO(crbug.com/541310282): Remove once fresh-profile Chrome startup on
+# Windows no longer calls LogonUser with a blank password, which locks out
+# chrome-bot after 10 launches in 10 minutes on workgroup lab rigs.
+CHROME_DISABLED_FEATURES = (
+    'AutofillAiWalletPrivatePasses',
+    'AutofillAmbientAutofill',
+)
 
 # This code is used as the default failure value for recordings in the case that
 # `results.get()` throws an unexpected error. -128 is chosen as a clear fail
@@ -134,7 +143,7 @@ _CONNECT_ATTEMPTS = 20
 VIDEOS = [
     {'name': '1080p30fpsAV1_foodmarket_sync.mp4', 'fps': 30},
     {'name': '1080p30fpsH264_foodmarket_yt_sync.mp4', 'fps': 30},
-    {'name': '1080p60fpsHEVC_boat_yt_sync.mp4', 'fps': 60},
+    {'name': '1080p60fpsHEVC_boat_sync.mp4', 'fps': 60},
     {'name': '1080p60fpsVP9_boat_yt_sync.webm', 'fps': 60},
 ]
 

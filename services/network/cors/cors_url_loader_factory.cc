@@ -4,12 +4,17 @@
 
 #include "services/network/cors/cors_url_loader_factory.h"
 
+#include <stddef.h>
+
 #include <optional>
+#include <string>
 #include <utility>
 
 #include "base/debug/crash_logging.h"
+#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -52,6 +57,13 @@
 namespace network::cors {
 
 namespace {
+
+// Maximum size, in bytes, of `ResourceRequest::content_user_agent`; longer
+// values are truncated. The value is CORS-exempt, so it reaches cross-origin
+// servers without a preflight; the cap keeps legacy servers, which have only
+// seen browser-generated User-Agent values, from receiving arbitrarily large
+// ones.
+constexpr size_t kMaxContentUserAgentSize = 512;
 
 // Verifies state that should hold for Trust Tokens parameters provided by a
 // functioning renderer:
@@ -265,6 +277,8 @@ CorsURLLoaderFactory::CorsURLLoaderFactory(
       is_outermost_main_frame_(params->is_outermost_main_frame),
       renderer_accessible_http_cache_write_enabled_(
           params->renderer_accessible_http_cache_write_enabled),
+      factory_is_storage_access_potentially_allowed_(
+          params->is_storage_access_potentially_allowed),
       origin_access_list_(origin_access_list),
       owner_(owner),
       network_restrictions_id_(params->network_restrictions_id) {
@@ -389,13 +403,9 @@ void CorsURLLoaderFactory::CreateLoaderAndStart(
               perfetto::Flow::FromPointer(this));
 
   std::optional<base::ElapsedTimer> timer;
-  std::optional<base::ElapsedThreadTimer> thread_timer;
 
   if (base::ShouldRecordSubsampledMetric(0.001)) {
     timer.emplace();
-    if (base::ThreadTicks::IsSupported()) {
-      thread_timer.emplace();
-    }
   }
 
   debug::ScopedResourceRequestCrashKeys request_crash_keys(resource_request);
@@ -505,7 +515,8 @@ void CorsURLLoaderFactory::CreateLoaderAndStart(
         shared_dictionary_observer_ ? shared_dictionary_observer_.get()
                                     : nullptr,
         context_, network_restrictions_id_, factory_cookie_setting_overrides_,
-        devtools_cookie_setting_overrides_);
+        devtools_cookie_setting_overrides_,
+        factory_is_storage_access_potentially_allowed_);
     auto* raw_loader = loader.get();
     OnCorsURLLoaderCreated(std::move(loader));
     raw_loader->Start();
@@ -519,13 +530,6 @@ void CorsURLLoaderFactory::CreateLoaderAndStart(
     UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
         "NetworkService.CorsURLLoaderFactory.CreateLoaderAndStart2.Duration",
         timer->Elapsed(), base::Microseconds(1), base::Milliseconds(16), 100);
-  }
-  if (thread_timer.has_value()) {
-    UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
-        "NetworkService.CorsURLLoaderFactory.CreateLoaderAndStart2."
-        "ThreadDuration",
-        thread_timer->Elapsed(), base::Microseconds(1), base::Milliseconds(16),
-        100);
   }
 }
 
@@ -609,6 +613,15 @@ bool CorsURLLoaderFactory::IsValidRequest(
     UMA_HISTOGRAM_BOOLEAN(
         "NetworkService.CorsURLLoaderFactory.IsOutermostMainFrameClamped",
         true);
+  }
+
+  if (request.storage_access_api_status != net::StorageAccessApiStatus::kNone &&
+      !url_loader_util::IsStorageAccessPotentiallyAllowed(
+          factory_is_storage_access_potentially_allowed_, request)) {
+    mojo::ReportBadMessage(
+        "CorsURLLoaderFactory: storage_access_api_status must be kNone when "
+        "storage access is not allowed");
+    return false;
   }
 
   // Check if this is an untrusted factory being provided parameters that should
@@ -992,6 +1005,26 @@ bool CorsURLLoaderFactory::IsValidRequest(
         "CorsURLLoaderFactory: client_side_content_decoding_enabled is set "
         "unexpectedly.");
     return false;
+  }
+
+  // `content_user_agent` is set only when the AllowUserAgentHeaderFromScript
+  // feature is enabled.
+  if (request.content_user_agent) {
+    if (!base::FeatureList::IsEnabled(
+            net::features::kAllowUserAgentHeaderFromScript)) {
+      mojo::ReportBadMessage(
+          "CorsURLLoaderFactory: content_user_agent is set unexpectedly.");
+      return false;
+    }
+    const size_t size = request.content_user_agent->size();
+    base::UmaHistogramCounts10000("NetworkService.ContentUserAgentSize", size);
+    if (size > kMaxContentUserAgentSize) {
+      // The cut may leave whitespace at the end, which header values must not
+      // have.
+      request.content_user_agent->resize(kMaxContentUserAgentSize);
+      *request.content_user_agent =
+          std::string(net::HttpUtil::TrimLWS(*request.content_user_agent));
+    }
   }
 
   // TODO(yhirano): If the request mode is "no-cors", the redirect mode should

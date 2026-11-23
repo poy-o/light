@@ -331,8 +331,8 @@ std::optional<CreditCard> PaymentsFormDataImporter::ExtractCreditCard(
     // Make a local copy so that the data in `local_credit_cards_` isn't
     // modified directly by the UpdateFromImportedCard() call.
     CreditCard maybe_updated_card = *local_card;
-    if (maybe_updated_card.UpdateFromImportedCard(
-            candidate, std::string(client_->GetAppLocale().tag_string()))) {
+    if (maybe_updated_card.UpdateFromImportedCard(candidate,
+                                                  client_->GetAppLocale())) {
       payments_data_manager().UpdateCreditCard(maybe_updated_card);
       credit_card_import_type_ = CreditCardImportType::kLocalCard;
       // Update `candidate` to reflect all the details of the updated card.
@@ -442,8 +442,12 @@ bool PaymentsFormDataImporter::ProcessExtractedCreditCard(
                                       is_credit_card_upstream_enabled) &&
       credit_card_save_manager_->AttemptToOfferCardholderNameUpdate(
           *extracted_credit_card)) {
-    // TODO(crbug.com/564568880): Log that the Wallet reminder notice was not
-    // shown because the cardholder name update was offered.
+    if (is_wallet_reminder_notice_eligible) {
+      autofill_metrics::LogWalletReminderNoticeShowResult(
+          autofill_metrics::WalletReminderNoticeShowResult::
+              kNotShownDueToCardholderNameUpdate,
+          WalletReminderNoticeManager::FlowType::kChromeDownstream);
+    }
     return true;
   }
 

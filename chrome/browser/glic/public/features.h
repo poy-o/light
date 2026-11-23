@@ -12,6 +12,17 @@
 #include "base/metrics/field_trial_params.h"
 #include "build/build_config.h"
 
+// Don't add a flag here if it decides whether a feature is available for some
+// providers only. Instead:
+//   1. Declare the flag and its parameters in `provider_features.h`.
+//   2. Add a value for the feature to `glic::GlicFeature` in
+//      `glic_feature.h`.
+//   3. Handle the value in each provider's `SupportsFeature()` in
+//      `glic_provider_spec_impl.cc`, and cover it in
+//      `glic_provider_spec_impl_unittest.cc`.
+//   4. Gate production code on `GlicProviderSpec::SupportsFeature()` instead
+//      of `base::FeatureList::IsEnabled()`.
+
 namespace features {
 
 BASE_DECLARE_FEATURE(kGlicAndroidSidePanel);
@@ -284,14 +295,9 @@ BASE_DECLARE_FEATURE_PARAM(std::string, kGlicBrowserCommandFallbackUrl);
 BASE_DECLARE_FEATURE(kGlicWhatsNewQuizzes);
 
 // Enabled alongside a What's New module feature flag to invoke Glic via
-// `GlicKeyedService::Invoke` when the module's CTA is clicked.
-// `kGlicBrowserCommandInvokePrompt` pre-fills (without submitting) the prompt.
-// Because this parameter provides a single unlocalized string, any Finch study
-// setting a non-empty prompt must be locale-filtered.
-// TODO(crbug.com/586567250): Temporary stopgap for M159; replace with
-// per-module prompt support.
+// `GlicKeyedService::Invoke` (or `InvokeWithAutoSubmit` for approved modules
+// such as `kGlicWhatsNewQuizzes`) when the module's CTA is clicked.
 BASE_DECLARE_FEATURE(kGlicBrowserCommandInvoke);
-BASE_DECLARE_FEATURE_PARAM(std::string, kGlicBrowserCommandInvokePrompt);
 
 // Test only. When enabled, Android drops incoming Glic experimental triggering
 // TriggerActuationRequest messages without replying or acking, as if the FCM
@@ -329,6 +335,12 @@ extern const base::FeatureParam<base::TimeDelta>
 BASE_DECLARE_FEATURE(kGlicApiBundleResource);
 
 BASE_DECLARE_FEATURE(kGlicDrivePicker);
+
+// Enables loading the Google-internal CiC client inside the Glic guest via a
+// browser-process proxy while keeping Blink's committed origin at the Glic
+// guest origin.
+BASE_DECLARE_FEATURE(kGlicCic);
+extern const base::FeatureParam<std::string> kGlicCicUrl;
 }  // namespace features
 
 #endif  // CHROME_BROWSER_GLIC_PUBLIC_FEATURES_H_

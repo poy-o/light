@@ -417,6 +417,28 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Session.ResetFromCurrentBrowsers.{Reason}.HasPendingTabCloses"
+    enum="Boolean" expires_after="2027-11-09">
+  <owner>dljames@chromium.org</owner>
+  <owner>musalmaan@chromium.org</owner>
+  <summary>
+    Recorded each time SessionService::ResetFromCurrentBrowsers() runs an
+    immediate rebuild of the session file from open browsers due to {Reason}
+    while saving is enabled (not recorded for AppSessionService). True if the
+    last window was partway through closing and had already-closed tabs in
+    pending_tab_close_ids_ that are dropped by the synchronous rebuild.
+  </summary>
+  <token key="Reason">
+    <variant name="NavigationIndexOutOfRange"
+        summary="a navigation index outside the tab's persisted range"/>
+    <variant name="ServiceStartup"
+        summary="initial SessionService construction"/>
+    <variant name="WebAppReparenting"
+        summary="reparenting a WebContents into a non-app browser window
+                 (e.g. out of a web app)"/>
+  </token>
+</histogram>
+
 <histogram name="Session.Restore.SettingChanged.{SessionRestoreInfobarType}"
     enum="Boolean" expires_after="2027-04-11">
   <owner>musalmaan@chromium.org</owner>
@@ -1441,6 +1463,59 @@ chromium-metrics-reviews@google.com.
 
     This metric is only recorded on macOS.
   </summary>
+</histogram>
+
+<histogram name="SessionRestore.BackgroundTabLoading.TabCount{Outcome}"
+    units="tabs" expires_after="2027-05-02">
+  <owner>fdoray@chromium.org</owner>
+  <owner>joenotcharles@google.com</owner>
+  <owner>catan-team@chromium.org</owner>
+  <summary>
+    The number of restored tabs handed to BackgroundTabLoadingPolicy that
+    {Outcome}. Recorded once per restore wave when the policy finishes loading
+    all tracked restored tabs (i.e. when HasRestoredTabsToLoad() becomes false),
+    or when the policy is removed from the PerformanceManager graph during
+    shutdown if a restore wave is still in progress.
+
+    Overlapping ScheduleLoadForRestoredTabs() calls (such as multiple profiles
+    restoring concurrently at startup or TabRestoreService reopening multiple
+    tabs) are combined into a single restore wave; sequential calls after the
+    previous wave has finished each emit their own sample. Also recorded when
+    ScheduleLoadForRestoredTabs() is invoked by TabRestoreService (e.g.
+    reopening closed tabs or windows).
+
+    Every tab passed to ScheduleLoadForRestoredTabs() is counted in the base
+    histogram and in exactly one outcome variant, so the sum of all outcome
+    variants equals SessionRestore.BackgroundTabLoading.TabCount. Not recorded
+    if no tab was scheduled in the wave; otherwise, every outcome variant
+    records a sample (0 when no tab in the wave had that outcome).
+  </summary>
+  <token key="Outcome">
+    <variant name="" summary="were scheduled in the restore wave"/>
+    <variant name=".AlreadyLoading"
+        summary="were already loading when scheduled (e.g. active foreground
+                 tabs started by session restore on desktop)"/>
+    <variant name=".ClosedBeforeLoading"
+        summary="were closed before loading started (including queued tabs
+                 remaining when the browser shuts down)"/>
+    <variant name=".LoadedByPolicy"
+        summary="had their load initiated by BackgroundTabLoadingPolicy"/>
+    <variant name=".LoadedExternally"
+        summary="started loading for another reason (e.g. user activation)
+                 while queued"/>
+    <variant name=".SkippedForFreeMemory"
+        summary="were not loaded because free physical memory was below the
+                 150 MiB threshold"/>
+    <variant name=".SkippedForMaxTabs"
+        summary="were not loaded because the policy reached the maximum
+                 restored tab load cap (default 20)"/>
+    <variant name=".SkippedForTabAge"
+        summary="were not loaded because time since last visibility change
+                 exceeded the 30-day threshold"/>
+    <variant name=".StoppedForMemoryPressure"
+        summary="were dropped from the loading queue when moderate or higher
+                 memory pressure triggered StopLoadingTabs()"/>
+  </token>
 </histogram>
 
 <histogram name="SessionRestore.ErrorReason.{Type}"

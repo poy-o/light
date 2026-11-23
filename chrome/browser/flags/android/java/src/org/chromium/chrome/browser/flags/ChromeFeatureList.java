@@ -565,6 +565,7 @@ public abstract class ChromeFeatureList {
             "ContextMenuSaveVideoFrameAs";
     public static final String CONTEXT_MENU_PICTURE_IN_PICTURE_ANDROID =
             "ContextMenuPictureInPictureAndroid";
+    public static final String CONTROLS_IN_BROWSER = "ControlsInBrowser";
     public static final String CONTROLS_IN_BROWSER_TOOLBAR_SWIPE_MOCK =
             "ControlsInBrowserToolbarSwipeMock";
     public static final String COPY_LINK_TO_HIGHLIGHT = "CopyLinkToHighlight";
@@ -732,10 +733,11 @@ public abstract class ChromeFeatureList {
     public static final String MOVE_TO_FRONT_IN_LAUNCH_INTENT_DISPATCHER =
             "MoveToFrontInLaunchIntentDispatcher";
     public static final String NAVIGATION_LIST_MENU = "NavigationListMenu";
+    public static final String NEW_TAB_PAGE_CUSTOMIZATION_THEME_DEBUG =
+            "NewTabPageCustomizationThemeDebug";
     // Enabled by syncer::kNewTabPageCustomizationThemeSync on C++ side.
     public static final String NEW_TAB_PAGE_CUSTOMIZATION_THEME_SYNC =
             "NewTabPageCustomizationThemeSync";
-    public static final String NEW_TAB_PAGE_CUSTOMIZATION_V2 = "NewTabPageCustomizationV2";
     public static final String NOTIFICATION_PERMISSION_VARIANT = "NotificationPermissionVariant";
     public static final String NOTIFICATION_TRAMPOLINE = "NotificationTrampoline";
     public static final String NOTIFICATION_TRAMPOLINE_NO_NEW_TASK =
@@ -793,7 +795,6 @@ public abstract class ChromeFeatureList {
             "ReadAloudIPHMenuButtonHighlightCCT";
     public static final String READER_MODE_CPA_REENTRY = "ReaderModeCpaReentry";
     public static final String REENGAGEMENT_NOTIFICATION = "ReengagementNotification";
-    public static final String RELATED_WEBSITE_SETS_UI = "RelatedWebsiteSetsUi";
     public static final String REMOVE_EXTRA_HEADERS_ON_CROSS_ORIGIN_REDIRECT =
             "RemoveExtraHeadersOnCrossOriginRedirect";
     public static final String REPORT_NOTIFICATION_CONTENT_DETECTION_DATA =
@@ -915,6 +916,8 @@ public abstract class ChromeFeatureList {
     public static final String TOOLBAR_SCROLL_ABLATION = "AndroidToolbarScrollAblation";
     public static final String TOOLBAR_SNAPSHOT_REFACTOR = "ToolbarSnapshotRefactor";
     public static final String TOOLBAR_TABLET_RESIZE_REFACTOR = "ToolbarTabletResizeRefactor";
+    public static final String TOP_TOOLBAR_SCENE_LAYER_SKIP_UPDATE_ON_PROGRESS =
+            "TopToolbarSceneLayerSkipUpdateOnProgress";
     public static final String TOUCH_TO_SEARCH_CALLOUT = "TouchToSearchCallout";
     public static final String TRIM_MEMORY_BACKGROUND_IS_SEVERE = "TrimMemoryBackgroundIsSevere";
     public static final String TRUSTED_VAULT_REFRESH_STALE_PRE_ENROLLMENT_KEY =
@@ -1134,7 +1137,10 @@ public abstract class ChromeFeatureList {
     public static final CachedFlag sCacheIsMultiInstanceApi31Enabled =
             newCachedFlag(CACHE_IS_MULTI_INSTANCE_API_31_ENABLED, true);
     public static final CachedFlag sCctAlwaysOpenInBrowser =
-            newCachedFlag(CCT_ALWAYS_OPEN_IN_BROWSER, false);
+            newCachedFlag(
+                    CCT_ALWAYS_OPEN_IN_BROWSER,
+                    /* defaultValue= */ false,
+                    /* defaultValueInTests= */ true);
     public static final CachedFlag sCctAutoTranslate = newCachedFlag(CCT_AUTO_TRANSLATE, true);
     public static final CachedFlag sCctBlockTouchesDuringEnterAnimation =
             newCachedFlag(CCT_BLOCK_TOUCHES_DURING_ENTER_ANIMATION, true);
@@ -1208,6 +1214,7 @@ public abstract class ChromeFeatureList {
     public static final CachedFlag sContextualTasks = newCachedFlag(CONTEXTUAL_TASKS, false);
     public static final CachedFlag sContextualTasksSidePanel =
             newCachedFlag(CONTEXTUAL_TASKS_SIDE_PANEL, false);
+    public static final CachedFlag sControlsInBrowser = newCachedFlag(CONTROLS_IN_BROWSER, false);
     public static final CachedFlag sControlsInBrowserToolbarSwipeMock =
             newCachedFlag(CONTROLS_IN_BROWSER_TOOLBAR_SWIPE_MOCK, false);
     public static final CachedFlag sCpaTabGroupingButton =
@@ -1382,8 +1389,6 @@ public abstract class ChromeFeatureList {
                     /* defaultValueInTests= */ true);
     public static final CachedFlag sNewTabPageCustomizationThemeSync =
             newCachedFlag(NEW_TAB_PAGE_CUSTOMIZATION_THEME_SYNC, /* defaultValue= */ false);
-    public static final CachedFlag sNewTabPageCustomizationV2 =
-            newCachedFlag(NEW_TAB_PAGE_CUSTOMIZATION_V2, true);
     public static final CachedFlag sNotificationTrampoline =
             newCachedFlag(NOTIFICATION_TRAMPOLINE, false);
     public static final CachedFlag sNotificationTrampolineNoNewTask =
@@ -1639,6 +1644,7 @@ public abstract class ChromeFeatureList {
                     sContextualPanelCloseButton,
                     sContextualTasks,
                     sContextualTasksSidePanel,
+                    sControlsInBrowser,
                     sControlsInBrowserToolbarSwipeMock,
                     sCpaTabGroupingButton,
                     sCrossDeviceTabPaneAndroid,
@@ -1692,7 +1698,6 @@ public abstract class ChromeFeatureList {
                     sMostVisitedTilesReselect,
                     sMoveToFrontInLaunchIntentDispatcher,
                     sNewTabPageCustomizationThemeSync,
-                    sNewTabPageCustomizationV2,
                     sNotificationTrampoline,
                     sNotificationTrampolineNoNewTask,
                     sNtpVision,
@@ -1929,6 +1934,8 @@ public abstract class ChromeFeatureList {
             newMutableFlagWithSafeDefault(TIPS_SELF_SERVICE, false);
     public static final MutableFlagWithSafeDefault sToolbarScrollAblation =
             newMutableFlagWithSafeDefault(TOOLBAR_SCROLL_ABLATION, false);
+    public static final MutableFlagWithSafeDefault sTopToolbarSceneLayerSkipUpdateOnProgress =
+            newMutableFlagWithSafeDefault(TOP_TOOLBAR_SCENE_LAYER_SKIP_UPDATE_ON_PROGRESS, false);
     public static final MutableFlagWithSafeDefault sTrimMemoryBackgroundIsSevere =
             newMutableFlagWithSafeDefault(TRIM_MEMORY_BACKGROUND_IS_SEVERE, false);
     public static final MutableFlagWithSafeDefault sTrustedVaultRefreshStalePreEnrollmentKey =
@@ -2360,31 +2367,25 @@ public abstract class ChromeFeatureList {
             newBooleanCachedFeatureParam(
                     DEFAULT_BROWSER_PROMO_ENTRY_POINT, "show_app_menu_item", true);
 
-    public static final BooleanCachedFeatureParam sNewTabPageCustomizationV2ShowColorPicker =
-            newBooleanCachedFeatureParam(NEW_TAB_PAGE_CUSTOMIZATION_V2, "show_color_picker", false);
-
-    public static final BooleanCachedFeatureParam sNewTabPageCustomizationV2ShowLogoAndSearchBox =
-            newBooleanCachedFeatureParam(
-                    NEW_TAB_PAGE_CUSTOMIZATION_V2, "show_logo_and_search_box", true);
+    public static final BooleanCachedFeatureParam
+            sNewTabPageCustomizationThemeDebugShowColorPicker =
+                    newBooleanCachedFeatureParam(
+                            NEW_TAB_PAGE_CUSTOMIZATION_THEME_DEBUG, "show_color_picker", false);
 
     public static final BooleanCachedFeatureParam
-            sNewTabPageCustomizationV2ForceShowTipBottomSheet =
+            sNewTabPageCustomizationThemeDebugForceShowTipBottomSheet =
                     newBooleanCachedFeatureParam(
-                            NEW_TAB_PAGE_CUSTOMIZATION_V2, "force_show_tip_bottom_sheet", false);
-
-    public static final BooleanCachedFeatureParam sNewTabPageCustomizationV2ShowTipBottomSheet =
-            newBooleanCachedFeatureParam(
-                    NEW_TAB_PAGE_CUSTOMIZATION_V2, "show_tip_bottom_sheet", true);
+                            NEW_TAB_PAGE_CUSTOMIZATION_THEME_DEBUG,
+                            "force_show_tip_bottom_sheet",
+                            false);
 
     /** The time duration limit to refresh NTP's background. */
-    public static final IntCachedFeatureParam sNewTabPageCustomizationV2DailyRefreshThresholdMs =
-            newIntCachedFeatureParam(
-                    NEW_TAB_PAGE_CUSTOMIZATION_V2,
-                    "daily_refresh_threshold_ms",
-                    (int) TimeUtils.MILLISECONDS_PER_DAY); // 1 day in milliseconds.
-
-    public static final BooleanCachedFeatureParam sNewTabPageCustomizationV2EnableLogs =
-            newBooleanCachedFeatureParam(NEW_TAB_PAGE_CUSTOMIZATION_V2, "enable_logs", false);
+    public static final IntCachedFeatureParam
+            sNewTabPageCustomizationThemeDebugDailyRefreshThresholdMs =
+                    newIntCachedFeatureParam(
+                            NEW_TAB_PAGE_CUSTOMIZATION_THEME_DEBUG,
+                            "daily_refresh_threshold_ms",
+                            (int) TimeUtils.MILLISECONDS_PER_DAY); // 1 day in milliseconds.
 
     public static final StringCachedFeatureParam sEdgeToEdgeUseBackupNavbarInsetsOemMinVersions =
             newStringCachedFeatureParam(
@@ -2639,12 +2640,9 @@ public abstract class ChromeFeatureList {
                     sMostVisitedTilesReselectLaxQuery,
                     sMostVisitedTilesReselectLaxRef,
                     sMostVisitedTilesReselectLaxSchemeHost,
-                    sNewTabPageCustomizationV2DailyRefreshThresholdMs,
-                    sNewTabPageCustomizationV2EnableLogs,
-                    sNewTabPageCustomizationV2ForceShowTipBottomSheet,
-                    sNewTabPageCustomizationV2ShowColorPicker,
-                    sNewTabPageCustomizationV2ShowLogoAndSearchBox,
-                    sNewTabPageCustomizationV2ShowTipBottomSheet,
+                    sNewTabPageCustomizationThemeDebugDailyRefreshThresholdMs,
+                    sNewTabPageCustomizationThemeDebugForceShowTipBottomSheet,
+                    sNewTabPageCustomizationThemeDebugShowColorPicker,
                     sNotificationTrampolineImmediateJobDurationMs,
                     sNotificationTrampolineLongJobDurationMs,
                     sNotificationTrampolineNormalJobDurationMs,

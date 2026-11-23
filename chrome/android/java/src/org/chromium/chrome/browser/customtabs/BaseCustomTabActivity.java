@@ -177,6 +177,7 @@ public abstract class BaseCustomTabActivity extends ChromeActivity {
             Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU;
 
     private final CipherFactory mCipherFactory = new CipherFactory();
+    private @Nullable CustomTabIntentDataHolder mSavedDataHolder;
     private @Nullable OtrProfileId mOtrProfileId;
 
     private @MonotonicNonNull BaseCustomTabRootUiCoordinator mBaseCustomTabRootUiCoordinator;
@@ -337,6 +338,25 @@ public abstract class BaseCustomTabActivity extends ChromeActivity {
     }
 
     /**
+     * Lazily reads and caches {@link CustomTabIntentDataHolder} from {@link
+     * #getSavedInstanceState()} for early pre-inflation callers. Cleared once {@link
+     * #performPreInflationStartup()} consumes it.
+     */
+    @Nullable CustomTabIntentDataHolder getSavedDataHolder() {
+        Bundle savedInstanceState = getSavedInstanceState();
+        if (savedInstanceState == null) {
+            mSavedDataHolder = null;
+            return null;
+        }
+        if (mSavedDataHolder == null) {
+            mSavedDataHolder =
+                    IntentUtils.safeGetParcelable(
+                            savedInstanceState, KEY_CUSTOM_TAB_INTENT_DATA_HOLDER);
+        }
+        return mSavedDataHolder;
+    }
+
+    /**
      * @return Whether the activity window is initially translucent.
      */
     public static boolean isWindowInitiallyTranslucent(Activity activity) {
@@ -361,7 +381,12 @@ public abstract class BaseCustomTabActivity extends ChromeActivity {
     @Override
     protected void initializeNightModeStateProvider() {
         assumeNonNull(mNightModeStateController);
-        mNightModeStateController.initialize(getDelegate(), getIntent());
+        CustomTabIntentDataHolder dataHolder = getSavedDataHolder();
+        if (dataHolder != null) {
+            mNightModeStateController.initialize(getDelegate(), dataHolder.mColorScheme);
+        } else {
+            mNightModeStateController.initialize(getDelegate(), getIntent());
+        }
     }
 
     @Override
@@ -528,16 +553,15 @@ public abstract class BaseCustomTabActivity extends ChromeActivity {
                 assumeNonNull(mIntentDataProvider);
                 switch (mIntentDataProvider.getCustomTabMode()) {
                     case CustomTabProfileType.INCOGNITO:
-                        // If an incognito popup is being created by Chrome, this should use
-                        // the same primary OTR profile associated with the requester's profile.
-                        if (mIntentDataProvider.getUiType() == CustomTabsUiType.POPUP) {
-                            if (!mIntentDataProvider.isOpenedByChrome()) {
-                                throw new IllegalStateException(
-                                        "Incognito CCTs should have unique OTR profiles unless"
-                                                + " Chrome opened them as a popup window.");
-                            }
-                            return null;
+                        if (mIntentDataProvider.getUiType() == CustomTabsUiType.POPUP
+                                && !mIntentDataProvider.isOpenedByChrome()) {
+                            throw new IllegalStateException(
+                                    "Incognito CCTs should have unique OTR profiles unless"
+                                            + " Chrome opened them as a popup window.");
                         }
+                        // Some Activities created by Chrome (e.g. incognito popups) use the same
+                        // primary OTR profile associated with the requester's profile.
+                        if (mIntentDataProvider.usesPrimaryOtrProfile()) return null;
                         mOtrProfileId = OtrProfileId.createUniqueIncognitoCctId();
                         return mOtrProfileId;
                     case CustomTabProfileType.EPHEMERAL:
@@ -695,12 +719,10 @@ public abstract class BaseCustomTabActivity extends ChromeActivity {
         // the Activity parameters, including the background of the page.
         // Note that color scheme is fixed for the lifetime of Activity: if the system setting
         // changes, we recreate the activity.
+        CustomTabIntentDataHolder dataHolder = getSavedDataHolder();
+        mSavedDataHolder = null;
         Bundle savedInstanceState = getSavedInstanceState();
-        CustomTabIntentDataHolder dataHolder = null;
         if (savedInstanceState != null) {
-            dataHolder =
-                    IntentUtils.safeGetParcelable(
-                            savedInstanceState, KEY_CUSTOM_TAB_INTENT_DATA_HOLDER);
             mOtrProfileId =
                     OtrProfileId.deserializeWithoutVerify(
                             IntentUtils.safeGetString(savedInstanceState, KEY_OTR_PROFILE_ID));

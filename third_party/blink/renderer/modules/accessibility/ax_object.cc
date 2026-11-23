@@ -61,7 +61,6 @@
 #include "third_party/blink/renderer/core/dom/indexed_pseudo_element.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/slot_assignment_engine.h"
-#include "third_party/blink/renderer/core/dom/slot_assignment_recalc_in_progress_scope.h"
 #include "third_party/blink/renderer/core/editing/character_range_mapper.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
@@ -7248,12 +7247,6 @@ void AXObject::UpdateChildrenIfNecessary() {
     return;
   }
 
-  // A loop up the stack is walking children_. Leave them dirty, so a later call
-  // rebuilds them.
-  if (children_guarded_) {
-    return;
-  }
-
   if (AXObjectCache().IsFrozen()) {
     // TODO(crbug.com/500793607): Investigate and convert to CHECK.
     DCHECK(!AXObjectCache().IsFrozen())
@@ -7317,8 +7310,7 @@ void AXObject::SetNeedsToUpdateChildren(bool update) {
 
 // static
 bool AXObject::CanSafelyUseFlatTreeTraversalNow(Document& document) {
-  return !SlotAssignmentRecalcInProgressScope::IsFlatTreeTraversalForbidden() &&
-         !document.GetSlotAssignmentEngine().HasPendingSlotAssignmentRecalc();
+  return !document.GetSlotAssignmentEngine().HasPendingSlotAssignmentRecalc();
 }
 
 bool AXObject::ShouldDestroyWhenDetachingFromParent() const {
@@ -7439,14 +7431,10 @@ void AXObject::ClearChildren() {
       << this;
 #endif
 
-  // A loop up the stack is walking children_ to detach or remove them.
-  // Clearing them here would free the vector under that loop.
-  if (children_guarded_) {
-    return;
-  }
-
   // Detach included children from their parent (this).
-  for (const auto& child : GuardedCachedChildrenIncludingIgnored()) {
+  AXObjectVector children;
+  children.swap(children_);
+  for (const auto& child : children) {
     // Check parent first, as the child might be several levels down if there
     // are unincluded nodes in between, in which case the cached parent will
     // also be a descendant (unlike children_, parent_ does not skip levels).
@@ -7456,8 +7444,6 @@ void AXObject::ClearChildren() {
       child->DetachFromParentNoNotify();
     }
   }
-
-  children_.clear();
 
   // Detaching the children can remove |this|.
   if (IsDetached()) {
@@ -8853,37 +8839,13 @@ bool AXObject::HasARIAOwns(Element* element) {
   // from all users does not actually get to own anything, per
   // AXRelationCache::IsValidOwner().
 
-  // An aria-owns content attribute on the element takes precedence over
-  // ElementInternals, even when it is empty. This matches
-  // Element::ElementsFromAttributeOrInternals(), which is what
-  // AXRelationCache::UpdateAriaOwnsWithCleanLayout() uses to resolve the owned
-  // children. FastGetAttribute() is used rather than AriaAttribute() because
-  // the latter falls back to ElementInternals.
   const AtomicString& aria_owns =
-      element->FastGetAttribute(html_names::kAriaOwnsAttr);
-  if (!aria_owns.IsNull()) {
-    // Either IDs, or element references set via ariaOwnsElements on the
-    // element. The ariaOwnsElements setter leaves an empty aria-owns content
-    // attribute behind.
-    return !aria_owns.empty() ||
-           element->HasExplicitlySetAttrAssociatedElements(
-               html_names::kAriaOwnsAttr);
-  }
+      AriaAttribute(*element, html_names::kAriaOwnsAttr);
 
-  const ElementInternals* internals = element->GetElementInternals();
-  if (!internals) {
-    return false;
-  }
-
-  // IDs set via ElementInternals.
-  if (!GetInternalsAttribute(*element, html_names::kAriaOwnsAttr).empty()) {
-    return true;
-  }
-
-  // Element references set via ariaOwnsElements on ElementInternals.
-  const FrozenArray<Element>* internals_owns_elements =
-      internals->GetElementArrayAttribute(html_names::kAriaOwnsAttr);
-  return internals_owns_elements && !internals_owns_elements->empty();
+  // TODO(accessibility): do we need to check !AriaOwnsElements.empty() ? Is
+  // that fundamentally different from HasExplicitlySetAttrAssociatedElements()?
+  return !aria_owns.empty() || element->HasExplicitlySetAttrAssociatedElements(
+                                   html_names::kAriaOwnsAttr);
 }
 
 // static

@@ -164,15 +164,18 @@ void LargestContentfulPaintManager::OnImageRemoved(const LayoutObject& object,
 void LargestContentfulPaintManager::OnFramePresented(
     const HeapVector<Member<ImageRecord>>& image_records,
     const HeapVector<Member<TextRecord>>& text_records,
-    const DOMPaintTimingInfo&) {
+    const base::TimeTicks& presentation_timestamp,
+    const DOMPaintTimingInfo& paint_timing_info,
+    uint64_t navigation_id) {
   // `largest_contentful_paint_calculator_` can be null if input arrived between
   // paint and presentation time.
   // TODO(crbug.com/454082773): These values should count towards LCP.
   if (!largest_contentful_paint_calculator_) {
     return;
   }
-  largest_contentful_paint_calculator_->OnFramePresented(image_records,
-                                                         text_records);
+  largest_contentful_paint_calculator_->OnFramePresented(
+      image_records, text_records, presentation_timestamp, paint_timing_info,
+      navigation_id);
 }
 
 TextRecord* LargestContentfulPaintManager::TakeLargestIgnoredText() {
@@ -205,9 +208,7 @@ TextRecord* LargestContentfulPaintManager::GetLargestIgnoredTextIfNotRemoved()
 ImageRecord* LargestContentfulPaintManager::GetLargestIgnoredImageIfNotRemoved()
     const {
   ImageRecord* record = largest_ignored_image_;
-  return record && !record->WasNodeRemoved() && !!record->GetMediaTiming()
-             ? record
-             : nullptr;
+  return record && !record->WasNodeRemoved() ? record : nullptr;
 }
 
 void LargestContentfulPaintManager::MaybeUpdateLargestIgnoredText(
@@ -236,7 +237,6 @@ void LargestContentfulPaintManager::MaybeUpdateLargestIgnoredImage(
     return;
   }
 
-  CHECK(record->GetMediaTiming());
   // TODO(crbug.com/449779010): This should probably be based on first frame for
   // animated images.
   if (!record->GetMediaTiming()->IsSufficientContentLoadedForPaint()) {

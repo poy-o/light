@@ -30,6 +30,7 @@
 #include <bitset>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <utility>
 
@@ -141,6 +142,7 @@
 #include "third_party/blink/renderer/core/dom/focusable.h"
 #include "third_party/blink/renderer/core/dom/geometry_utils.h"
 #include "third_party/blink/renderer/core/dom/indexed_pseudo_element.h"
+#include "third_party/blink/renderer/core/dom/interest_button_pseudo_element.h"
 #include "third_party/blink/renderer/core/dom/interest_invoker_target_data.h"
 #include "third_party/blink/renderer/core/dom/invalidate_node_list_caches_scope.h"
 #include "third_party/blink/renderer/core/dom/invoker_data.h"
@@ -313,6 +315,7 @@
 #include "third_party/blink/renderer/platform/graphics/paint/float_clip_rect.h"
 #include "third_party/blink/renderer/platform/graphics/paint/tracked_element_data.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/stable_sort.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/thread_state.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
@@ -339,7 +342,7 @@ namespace blink {
 
 namespace {
 
-class DisplayLockStyleScope {
+class [[nodiscard]] DisplayLockStyleScope {
   STACK_ALLOCATED();
 
  public:
@@ -995,10 +998,9 @@ const HeapVector<Member<Node>> Element::ReadingFlowChildren() const {
     }
     return 0;
   };
-  std::stable_sort(children.begin(), children.end(),
-                   [&reading_order](const auto& lhs, const auto& rhs) {
-                     return reading_order(lhs) < reading_order(rhs);
-                   });
+  StableSort(children, [&reading_order](const auto& lhs, const auto& rhs) {
+    return reading_order(lhs) < reading_order(rhs);
+  });
   return children;
 }
 
@@ -2074,7 +2076,18 @@ bool Element::InterestGained(Element* target, InterestState state) {
                                 /*exception_state=*/nullptr,
                                 /*include_event_handler_text=*/true,
                                 &GetDocument())) {
+      const bool popover_was_open = popover->popoverOpen();
       popover->InvokePopover(*this, PopoverInvokedVia::kInterest);
+      // If this opened the popover, and interest was shown by hovering this
+      // element's ::interest-button, implicitly anchor the popover to the
+      // ::interest-button rather than to this element. A popover that was
+      // already open keeps its existing anchor, to avoid moving it.
+      if (auto* interest_button = DynamicTo<InterestButtonPseudoElement>(
+              GetPseudoElement(kPseudoIdInterestButton));
+          interest_button && !popover_was_open &&
+          interest_button->IsHovered()) {
+        interest_button->AnchorTargetPopoverToSelf();
+      }
     }
   }
   return true;
@@ -14729,6 +14742,28 @@ void Element::SetOverscrollContainer(Element* element) {
 void Element::ClearOverscrollContainer() {
   if (NodeRareData* data = RareData()) {
     data->ClearOverscrollContainer();
+    const bool has_area_parent =
+        GetPseudoElement(kPseudoIdOverscrollAreaParent);
+    const bool has_overscroll_backdrop =
+        !IsInTopLayer() && GetPseudoElement(kPseudoIdBackdrop);
+    if (has_area_parent || has_overscroll_backdrop) {
+      // Remove ::-internal-overscroll-area-parent (and any overscroll
+      // ::backdrop) synchronously so an area parent never outlives its
+      // overscroll container (e.g. during moveBefore(), slot reassignment, or
+      // skipped style recalc for display-locked / size-container elements).
+      StyleEngine& engine = GetDocument().GetStyleEngine();
+      std::optional<StyleEngine::DetachLayoutTreeScope> detach_scope;
+      if (GetDocument().IsActive() && !GetDocument().InStyleRecalc() &&
+          !engine.InDetachLayoutTree()) {
+        detach_scope.emplace(engine);
+      }
+      if (has_overscroll_backdrop) {
+        ClearPseudoElement(kPseudoIdBackdrop);
+      }
+      if (has_area_parent) {
+        ClearPseudoElement(kPseudoIdOverscrollAreaParent);
+      }
+    }
   }
 }
 

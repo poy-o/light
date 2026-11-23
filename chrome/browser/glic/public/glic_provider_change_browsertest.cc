@@ -8,6 +8,7 @@
 #include <string_view>
 #include <utility>
 
+#include "base/scoped_observation.h"
 #include "base/test/gmock_expected_support.h"
 #include "base/test/metrics/user_action_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -36,6 +37,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/browser_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -49,6 +51,22 @@ constexpr char kCanonicalPolicyUrl[] =
     "https://business.gemini.google/side-panel?configId=abc123";
 constexpr char kOtherPolicyUrl[] =
     "https://business.gemini.google/home/cid/xyz789";
+
+// Counts the client load errors reported by a host.
+class ClientLoadErrorCounter : public Host::Observer {
+ public:
+  explicit ClientLoadErrorCounter(Host& host) { observation_.Observe(&host); }
+
+  void ClientLoadErrorOccurred(ClientLoadErrorReason reason) override {
+    ++count_;
+  }
+
+  int count() const { return count_; }
+
+ private:
+  int count_ = 0;
+  base::ScopedObservation<Host, Host::Observer> observation_{this};
+};
 
 class GlicProviderChangeBrowserTestBase : public GlicBrowserTest {
  public:
@@ -307,6 +325,7 @@ IN_PROC_BROWSER_TEST_F(GlicProviderChangeFromGeminiBrowserTest,
   ASSERT_OK_AND_ASSIGN(GlicInstanceImpl * instance, OpenGlicForActiveTab());
   ASSERT_OK(WaitForOverlayErrorPanel(
       mojom::ErrorPanelType::kPendingProviderChangeGeminiToGeic, instance));
+  ClientLoadErrorCounter errors(instance->host());
 
   // Toggling GeminiSettings notifies ready state observers twice, ending in
   // kReady.
@@ -321,6 +340,8 @@ IN_PROC_BROWSER_TEST_F(GlicProviderChangeFromGeminiBrowserTest,
   ASSERT_EQ(mojom::ProfileReadyState::kReady, ready_state());
   EXPECT_OK(WaitForOverlayErrorPanel(
       mojom::ErrorPanelType::kPendingProviderChangeGeminiToGeic, instance));
+  // Not reported again.
+  EXPECT_EQ(errors.count(), 0);
 }
 
 // The relaunch panel takes priority over profile errors, since a relaunch
@@ -395,9 +416,28 @@ IN_PROC_BROWSER_TEST_F(GlicProviderChangeWebviewBrowserTest,
                        OpeningGlicShowsRelaunchPanel) {
   UpdateGeminiEnterpriseUrlPolicy(kPolicyUrl);
 
-  ASSERT_OK(OpenGlicForActiveTab());
+  ASSERT_OK_AND_ASSIGN(GlicInstanceImpl * instance, OpenGlicForActiveTab());
   EXPECT_OK(
       WaitForWebUiState(mojom::WebUiState::kPendingProviderChangeGeminiToGeic));
+  content::WebContents* webui = instance->host().webui_contents();
+  ASSERT_TRUE(webui);
+  EXPECT_EQ(true, content::EvalJs(webui, R"js(
+    (() => {
+      const panel = document.getElementById('providerChangePanel');
+      const label = document.getElementById(
+          panel?.getAttribute('aria-labelledby') ?? '');
+      const desc = document.getElementById(
+          panel?.getAttribute('aria-describedby') ?? '');
+      return !!panel && !panel.hidden &&
+          panel.getAttribute('role') === 'dialog' &&
+          panel.getAttribute('aria-modal') === 'true' &&
+          panel.getAttribute('tabindex') === '-1' &&
+          (label?.textContent?.trim().length ?? 0) > 0 &&
+          (desc?.textContent?.trim().length ?? 0) > 0 &&
+          document.activeElement === panel &&
+          getComputedStyle(panel).outlineStyle === 'none';
+    })()
+  )js"));
 }
 
 // Opening on warmed WebUI contents sends `IntentToShow()` right after

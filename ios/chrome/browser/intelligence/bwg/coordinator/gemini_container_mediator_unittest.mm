@@ -29,6 +29,7 @@
 #import "google_apis/gaia/gaia_id.h"
 #import "ios/chrome/browser/assistant/coordinator/assistant_container_commands.h"
 #import "ios/chrome/browser/assistant/ui/assistant_container_detent.h"
+#import "ios/chrome/browser/assistant/ui/assistant_container_view_controller.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/fullscreen/public/fullscreen_metrics.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/test/test_fullscreen_controller.h"
@@ -2430,7 +2431,8 @@ class GeminiContainerMediatorZeroStateTest
 };
 
 // Tests that detaching the active tab's page context hides zero-state
-// suggestions and resets the medium detent to its default, and that
+// suggestions and sizes the medium detent to the remaining content, but at
+// least to half of the large detent height reported by the container, and that
 // re-attaching it fetches them again and sizes the detent to the content.
 TEST_F(GeminiContainerMediatorZeroStateTest,
        TestSuggestionsHiddenWhenActiveTabDetachedAndRestoredOnAttach) {
@@ -2438,12 +2440,28 @@ TEST_F(GeminiContainerMediatorZeroStateTest,
   ASSERT_EQ(std::optional<NSInteger>(kContentHeight),
             container_handler_.mediumDetentHeight);
 
+  id container = OCMClassMock([AssistantContainerViewController class]);
+  OCMStub([container heightForDetent:AssistantContainerDetent::kLarge])
+      .andReturn(520);
+  [mediator_ assistantContainerDidUpdateDetentHeights:container];
+
+  // Without suggestions, content shorter than the minimum uses the minimum.
+  container_consumer_.contentHeight = 180.0;
   [mediator_ didDetachTabWithID:ActiveTabID()];
   EXPECT_TRUE(zero_state_consumer_.hidden);
-  EXPECT_EQ(std::nullopt, container_handler_.mediumDetentHeight);
+  EXPECT_EQ(std::optional<NSInteger>(260),
+            container_handler_.mediumDetentHeight);
 
-  // Input plate changes while suggestions are hidden size the detent to the
-  // content again.
+  // A large detent height change (e.g. rotation) re-applies the minimum.
+  id resized_container = OCMClassMock([AssistantContainerViewController class]);
+  OCMStub([resized_container heightForDetent:AssistantContainerDetent::kLarge])
+      .andReturn(400);
+  [mediator_ assistantContainerDidUpdateDetentHeights:resized_container];
+  EXPECT_EQ(std::optional<NSInteger>(200),
+            container_handler_.mediumDetentHeight);
+
+  // Without suggestions, content taller than the minimum uses the content
+  // height.
   constexpr CGFloat kNanoBananaContentHeight = 300.0;
   container_consumer_.contentHeight = kNanoBananaContentHeight;
   [mediator_ inputPlateDidChangeNanoBananaAttachment:YES];
@@ -2451,6 +2469,8 @@ TEST_F(GeminiContainerMediatorZeroStateTest,
             container_handler_.mediumDetentHeight);
   container_consumer_.contentHeight = kContentHeight;
 
+  // With suggestions, the detent is sized to the content even when shorter
+  // than the minimum.
   [mediator_ didAttachTabWithID:ActiveTabID()];
   EXPECT_FALSE(zero_state_consumer_.hidden);
   EXPECT_EQ(std::optional<NSInteger>(kContentHeight),
@@ -2893,6 +2913,153 @@ TEST_F(GeminiContainerMediatorTest, TestDisconnectCancelsPendingPresentation) {
 
   task_environment_.FastForwardBy(kAutoSubmitPageContextTimeout);
   EXPECT_EQ(0, mediator_delegate.readyForPresentationCallCount);
+}
+
+// Tests that `prepareForPresentation` exits fullscreen once ready to present
+// (deferring while waiting on auto-submit page context), and that re-invoking
+// via `updateWithStartupState:` exits fullscreen when `kFullscreenRefactoring`
+// is disabled.
+TEST_F(GeminiContainerMediatorTest,
+       TestPresentationAndReinvokeExitsFullscreenLegacy) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {kAssistantContainer, kIOSGeminiBottomSheetMigration},
+      {kFullscreenRefactoring});
+
+  TestFullscreenController* fullscreen_controller =
+      TestFullscreenController::FromBrowser(browser_.get());
+  ASSERT_TRUE(fullscreen_controller);
+
+  web::FakeWebState* web_state = AppendActiveWebState();
+  web_state->SetCurrentURL(GURL("https://example.com"));
+  web_state->SetContentsMimeType("text/html");
+  web_state->WasShown();
+
+  id mock_delegate =
+      OCMProtocolMock(@protocol(GeminiContainerMediatorDelegate));
+  mediator_.delegate = mock_delegate;
+
+  GeminiStartupState* auto_submit_state = [[GeminiStartupState alloc]
+      initWithEntryPoint:gemini::EntryPoint::ContextualCueInfobar];
+  auto_submit_state.prepopulatedPrompt = kAutoSubmitPrompt;
+  auto_submit_state.shouldAutoSubmit = YES;
+  mediator_.startupState = auto_submit_state;
+
+  fullscreen_controller->EnterFullscreen();
+  ASSERT_EQ(0.0, fullscreen_controller->GetProgress());
+
+  [mediator_ prepareForPresentation];
+  // Fullscreen remains active while waiting for auto-submit page context.
+  EXPECT_EQ(0.0, fullscreen_controller->GetProgress());
+
+  __block CGFloat progress_when_ready = 0.0;
+  OCMExpect(
+      [mock_delegate geminiContainerMediatorReadyForPresentation:mediator_])
+      .andDo(^(NSInvocation* invocation) {
+        progress_when_ready = fullscreen_controller->GetProgress();
+      });
+
+  FakePageContextWrapper* wrapper =
+      fake_page_context_wrapper_factory_.last_wrapper();
+  ASSERT_TRUE(wrapper);
+  [wrapper completeWithEmptyPageContext];
+  EXPECT_OCMOCK_VERIFY(mock_delegate);
+  EXPECT_EQ(1.0, progress_when_ready);
+
+  [mediator_ didPresentContainer];
+
+  // Minimize the container and enter fullscreen, then re-invoke via startup
+  // state.
+  [mediator_ assistantContainer:nil
+                didChangeDetent:AssistantContainerDetent::kMinimized];
+  fullscreen_controller->EnterFullscreen();
+  ASSERT_EQ(0.0, fullscreen_controller->GetProgress());
+
+  OCMExpect([mock_container_handler_
+      animateAssistantContainerToDetent:AssistantContainerDetent::kMedium]);
+  [mediator_ updateWithStartupState:startup_state_];
+  EXPECT_EQ(1.0, fullscreen_controller->GetProgress());
+  EXPECT_OCMOCK_VERIFY(mock_container_handler_);
+}
+
+// Tests that `prepareForPresentation` dispatches
+// `exitFullscreenWithTrigger:animated:` once ready to present (deferring while
+// waiting on auto-submit page context), and that re-invoking via
+// `updateWithStartupState:` also exits fullscreen when
+// `kFullscreenRefactoring` is enabled.
+TEST_F(GeminiContainerMediatorTest,
+       TestPresentationAndReinvokeExitsFullscreenRefactored) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {kAssistantContainer, kIOSGeminiBottomSheetMigration,
+       kFullscreenRefactoring},
+      {});
+
+  web::FakeWebState* web_state = AppendActiveWebState();
+  web_state->SetCurrentURL(GURL("https://example.com"));
+  web_state->SetContentsMimeType("text/html");
+  web_state->WasShown();
+
+  id strict_fullscreen_handler =
+      OCMStrictProtocolMock(@protocol(FullscreenCommands));
+  mediator_.fullscreenHandler = strict_fullscreen_handler;
+  id mock_delegate =
+      OCMProtocolMock(@protocol(GeminiContainerMediatorDelegate));
+  mediator_.delegate = mock_delegate;
+
+  GeminiStartupState* auto_submit_state = [[GeminiStartupState alloc]
+      initWithEntryPoint:gemini::EntryPoint::ContextualCueInfobar];
+  auto_submit_state.prepopulatedPrompt = kAutoSubmitPrompt;
+  auto_submit_state.shouldAutoSubmit = YES;
+  mediator_.startupState = auto_submit_state;
+
+  // Waiting on page context should not exit fullscreen prematurely.
+  [mediator_ prepareForPresentation];
+  EXPECT_OCMOCK_VERIFY(strict_fullscreen_handler);
+
+  __block BOOL fullscreen_exited = NO;
+  __block BOOL exited_before_ready = NO;
+  OCMExpect([strict_fullscreen_handler
+                exitFullscreenWithTrigger:FullscreenModeTransitionTrigger::
+                                              kForcedByCode
+                                 animated:YES])
+      .andDo(^(NSInvocation* invocation) {
+        fullscreen_exited = YES;
+      });
+  OCMExpect(
+      [mock_delegate geminiContainerMediatorReadyForPresentation:mediator_])
+      .andDo(^(NSInvocation* invocation) {
+        exited_before_ready = fullscreen_exited;
+      });
+
+  FakePageContextWrapper* wrapper =
+      fake_page_context_wrapper_factory_.last_wrapper();
+  ASSERT_TRUE(wrapper);
+  [wrapper completeWithEmptyPageContext];
+  EXPECT_OCMOCK_VERIFY(strict_fullscreen_handler);
+  EXPECT_OCMOCK_VERIFY(mock_delegate);
+  EXPECT_TRUE(exited_before_ready);
+
+  OCMExpect([strict_fullscreen_handler
+      exitFullscreenWithTrigger:FullscreenModeTransitionTrigger::kForcedByCode
+                       animated:YES]);
+  [mediator_ didPresentContainer];
+  EXPECT_OCMOCK_VERIFY(strict_fullscreen_handler);
+
+  // Minimizing should not exit fullscreen.
+  [mediator_ assistantContainer:nil
+                didChangeDetent:AssistantContainerDetent::kMinimized];
+  EXPECT_OCMOCK_VERIFY(strict_fullscreen_handler);
+
+  // Re-invoking via startup state should exit fullscreen.
+  OCMExpect([strict_fullscreen_handler
+      exitFullscreenWithTrigger:FullscreenModeTransitionTrigger::kForcedByCode
+                       animated:YES]);
+  OCMExpect([mock_container_handler_
+      animateAssistantContainerToDetent:AssistantContainerDetent::kMedium]);
+  [mediator_ updateWithStartupState:startup_state_];
+  EXPECT_OCMOCK_VERIFY(strict_fullscreen_handler);
+  EXPECT_OCMOCK_VERIFY(mock_container_handler_);
 }
 
 }  // namespace

@@ -20,18 +20,29 @@ import {getRequiredElement} from 'chrome://resources/js/util.js';
 import {browserProxyFactory, ErrorPanelType, LoadingStyle} from './glic_overlay.mojom-webui.js';
 import type {BrowserProxy, OverlayState} from './glic_overlay.mojom-webui.js';
 
-type RelaunchPanelType =
+type ProviderChangePanelType =
     ErrorPanelType.kPendingProviderChangeGeminiToGeic|
     ErrorPanelType.kPendingProviderChangeGeicToGemini|
-    ErrorPanelType.kPendingProviderChangeGeicToOtherGeic;
+    ErrorPanelType.kPendingProviderChangeGeicToOtherGeic|
+    ErrorPanelType.kProviderSwitchNoticeGeminiToGeic|
+    ErrorPanelType.kProviderSwitchNoticeGeicToGemini|
+    ErrorPanelType.kProviderSwitchNoticeGeicToOtherGeic;
 
-// Each body entry is shown as a separate paragraph. glic_overlay.html has
-// three paragraph elements (relaunchBody1-3), so a body has at most three.
-const RELAUNCH_COPY:
-    Record<RelaunchPanelType, {header: string, body: string[]}> = {
+interface ProviderChangePanel {
+  header: string;
+  // Each entry is shown as a separate paragraph. glic_overlay.html has three
+  // paragraph elements (providerChangeBody1-3), so a body has at most three.
+  body: string[];
+  // Whether to show the continue button instead of the relaunch button.
+  showContinueButton: boolean;
+}
+
+const PROVIDER_CHANGE_PANELS:
+    Record<ProviderChangePanelType, ProviderChangePanel> = {
       [ErrorPanelType.kPendingProviderChangeGeminiToGeic]: {
         header: 'relaunchRequiredGeminiToGeicNoticeHeader',
         body: ['relaunchRequiredGeminiToGeicNotice'],
+        showContinueButton: false,
       },
       [ErrorPanelType.kPendingProviderChangeGeicToGemini]: {
         header: 'relaunchRequiredGeicToGeminiNoticeHeader',
@@ -40,10 +51,27 @@ const RELAUNCH_COPY:
           'relaunchRequiredGeicToGeminiNotice2',
           'relaunchRequiredGeicToGeminiNotice3',
         ],
+        showContinueButton: false,
       },
       [ErrorPanelType.kPendingProviderChangeGeicToOtherGeic]: {
         header: 'relaunchRequiredGeicToOtherGeicNoticeHeader',
         body: ['relaunchRequiredGeicToOtherGeicNotice'],
+        showContinueButton: false,
+      },
+      [ErrorPanelType.kProviderSwitchNoticeGeminiToGeic]: {
+        header: 'providerSwitchNoticeGeminiToGeicHeader',
+        body: ['providerSwitchNoticeGeminiToGeic'],
+        showContinueButton: true,
+      },
+      [ErrorPanelType.kProviderSwitchNoticeGeicToGemini]: {
+        header: 'providerSwitchNoticeGeicToGeminiHeader',
+        body: ['providerSwitchNoticeGeicToGemini'],
+        showContinueButton: true,
+      },
+      [ErrorPanelType.kProviderSwitchNoticeGeicToOtherGeic]: {
+        header: 'providerSwitchNoticeGeicToOtherGeicHeader',
+        body: ['providerSwitchNoticeGeicToOtherGeic'],
+        showContinueButton: true,
       },
     };
 
@@ -57,11 +85,11 @@ interface PageElementTypes {
   disabledByAdminPanel: HTMLElement;
   signInPanel: HTMLElement;
   locationMismatchPanel: HTMLElement;
-  relaunchRequiredPanel: HTMLElement;
-  relaunchHeadline: HTMLElement;
-  relaunchBody1: HTMLElement;
-  relaunchBody2: HTMLElement;
-  relaunchBody3: HTMLElement;
+  providerChangePanel: HTMLElement;
+  providerChangeHeadline: HTMLElement;
+  providerChangeBody1: HTMLElement;
+  providerChangeBody2: HTMLElement;
+  providerChangeBody3: HTMLElement;
   retry: HTMLElement;
   reload: HTMLElement;
   showError: HTMLElement;
@@ -71,6 +99,7 @@ interface PageElementTypes {
   locationMismatchHelpButton: HTMLElement;
   disabledByAdminCloseButton: HTMLElement;
   relaunchButton: HTMLElement;
+  continueButton: HTMLElement;
 }
 
 const $: PageElementTypes = new Proxy({}, {
@@ -107,78 +136,96 @@ export class GlicOverlayElement extends HTMLElement {
     }
   }
 
-  private setOverlayState(state: OverlayState): void {
-    // Hide all dialog panels.
+  private showPanel(activePanel: HTMLElement): void {
     const panels = this.querySelectorAll('#localPanels .dialog.panel');
     for (const panel of panels) {
-      (panel as HTMLElement).hidden = true;
+      (panel as HTMLElement).hidden = panel !== activePanel;
     }
+  }
 
+  private setOverlayState(state: OverlayState): void {
     if (state.loading !== undefined) {
       this.showLoading(state.loading);
     } else if (state.error !== undefined) {
       this.showError(state.error);
+    } else {
+      const panels = this.querySelectorAll('#localPanels .dialog.panel');
+      for (const panel of panels) {
+        (panel as HTMLElement).hidden = true;
+      }
     }
   }
 
-  private showRelaunch(type: RelaunchPanelType): void {
-    const {header, body} = RELAUNCH_COPY[type];
-    $.relaunchHeadline.textContent = loadTimeData.getString(header);
-    const paragraphs = [$.relaunchBody1, $.relaunchBody2, $.relaunchBody3];
+  private showProviderChangePanel(type: ProviderChangePanelType): void {
+    const {header, body, showContinueButton} = PROVIDER_CHANGE_PANELS[type];
+    $.providerChangeHeadline.textContent = loadTimeData.getString(header);
+    const paragraphs = [
+      $.providerChangeBody1,
+      $.providerChangeBody2,
+      $.providerChangeBody3,
+    ];
     paragraphs.forEach((paragraph, i) => {
       const key = body[i];
       paragraph.textContent = key ? loadTimeData.getString(key) : '';
       paragraph.hidden = !key;
     });
-    $.relaunchRequiredPanel.hidden = false;
+    $.relaunchButton.hidden = showContinueButton;
+    $.continueButton.hidden = !showContinueButton;
+    this.showPanel($.providerChangePanel);
+    if (!$.providerChangePanel.contains(document.activeElement)) {
+      $.providerChangePanel.focus();
+    }
   }
 
   private showError(errorType: ErrorPanelType): void {
     switch (errorType) {
       case ErrorPanelType.kOffline:
-        $.offlinePanel.hidden = false;
+        this.showPanel($.offlinePanel);
         break;
       case ErrorPanelType.kError:
-        $.errorPanel.hidden = false;
+        this.showPanel($.errorPanel);
         break;
       case ErrorPanelType.kUnavailable:
-        $.unavailablePanel.hidden = false;
+        this.showPanel($.unavailablePanel);
         break;
       case ErrorPanelType.kIneligibleAccount:
-        $.ineligibleAccountPanel.hidden = false;
+        this.showPanel($.ineligibleAccountPanel);
         break;
       case ErrorPanelType.kDisabledByAdmin:
         $.disabledByAdminPanel.classList.toggle(
             'show-disabled-by-admin-link', false);
-        $.disabledByAdminPanel.hidden = false;
+        this.showPanel($.disabledByAdminPanel);
         break;
       case ErrorPanelType.kDisabledByAdminWithLink:
         $.disabledByAdminPanel.classList.toggle(
             'show-disabled-by-admin-link', true);
-        $.disabledByAdminPanel.hidden = false;
+        this.showPanel($.disabledByAdminPanel);
         break;
       case ErrorPanelType.kSignIn:
-        $.signInPanel.hidden = false;
+        this.showPanel($.signInPanel);
         break;
       case ErrorPanelType.kLocationMismatch:
-        $.locationMismatchPanel.hidden = false;
+        this.showPanel($.locationMismatchPanel);
         break;
       case ErrorPanelType.kPendingProviderChangeGeminiToGeic:
       case ErrorPanelType.kPendingProviderChangeGeicToGemini:
       case ErrorPanelType.kPendingProviderChangeGeicToOtherGeic:
-        this.showRelaunch(errorType);
+      case ErrorPanelType.kProviderSwitchNoticeGeminiToGeic:
+      case ErrorPanelType.kProviderSwitchNoticeGeicToGemini:
+      case ErrorPanelType.kProviderSwitchNoticeGeicToOtherGeic:
+        this.showProviderChangePanel(errorType);
         break;
       default: {
         const _exhaustiveCheck: never = errorType;
         console.error(`Unhandled error panel type: ${_exhaustiveCheck}`);
-        $.errorPanel.hidden = false;
+        this.showPanel($.errorPanel);
         break;
       }
     }
   }
 
   private showLoading(loadingStyle: LoadingStyle): void {
-    $.loadingPanel.hidden = false;
+    this.showPanel($.loadingPanel);
     const isSidePanel = loadingStyle === LoadingStyle.kSidePanel;
     document.body.classList.toggle('sidePanel', isSidePanel);
     document.body.classList.toggle('floating', !isSidePanel);
@@ -233,6 +280,10 @@ export class GlicOverlayElement extends HTMLElement {
 
     $.relaunchButton.addEventListener('click', () => {
       this.browserProxy.handler.onRelaunchClicked();
+    });
+
+    $.continueButton.addEventListener('click', () => {
+      this.browserProxy.handler.onProviderSwitchNoticeContinueClicked();
     });
   }
 }

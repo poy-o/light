@@ -16,6 +16,7 @@
 #include "base/notreached.h"
 #include "base/types/optional_util.h"
 #include "build/build_config.h"
+#include "chrome/browser/glic/gemini_enterprise/geic_enabling.h"
 #include "chrome/browser/glic/gemini_enterprise/geic_guest_url.h"
 #include "chrome/browser/glic/gemini_enterprise/geic_sign_in_controller.h"
 #include "chrome/browser/glic/gemini_enterprise/geic_url_allowlist.h"
@@ -160,7 +161,9 @@ class GeminiGlicProviderSpec final : public GlicProviderSpec {
   }
   std::string_view GetMetricsInfix() const override { return "Consumer"; }
   bool IsActuationSupported() const override { return true; }
-  bool RequiresNoWebview() const override { return false; }
+  bool RequiresNoWebview() const override {
+    return base::FeatureList::IsEnabled(features::kGlicCic);
+  }
   GURL GetUnlocalizedGuestUrl(Profile* profile) const override {
     auto* command_line = base::CommandLine::ForCurrentProcess();
     bool has_glic_guest_url =
@@ -199,6 +202,9 @@ class GeminiGlicProviderSpec final : public GlicProviderSpec {
   bool RequiresGeminiAccountEligibility() const override { return true; }
   bool UsesGeicSignIn() const override { return false; }
   bool SupportsFeature(GlicFeature feature) const override {
+    // If a new `GlicFeature` is gated by a feature flag, declare the flag in
+    // `provider_features.h` and check it here, so that any call site that
+    // requires a feature check goes through the spec.
     switch (feature) {
       case GlicFeature::kLive:
         // TODO(crbug.com/578498098): Return features::kGlicLiveMode once
@@ -247,6 +253,11 @@ class GeminiGlicProviderSpec final : public GlicProviderSpec {
       case GlicFeature::kTextSelectionContextMenu:
         return base::FeatureList::IsEnabled(
             features::kGlicTextSelectionContextMenu);
+      case GlicFeature::kSmartSuggestionContextMenu:
+        // The flag stays in features.h because it also keys the item's New
+        // Badge, but the menu only checks this spec.
+        return base::FeatureList::IsEnabled(
+            features::kGlicSuggestionContextMenu);
       case GlicFeature::kSkills:
 #if BUILDFLAG(IS_ANDROID)
         // Android only supports the WebView V2 UI, which relies on <webview>
@@ -316,9 +327,15 @@ class GeminiGlicProviderSpec final : public GlicProviderSpec {
     return base::FeatureList::IsEnabled(features::kGlicSsr);
   }
   bool SupportsApiBundleResource() const override {
-    return base::FeatureList::IsEnabled(features::kGlicApiBundleResource);
+    return base::FeatureList::IsEnabled(features::kGlicApiBundleResource) ||
+           base::FeatureList::IsEnabled(features::kGlicCic);
   }
   bool PinOnBindEnabled() const override { return true; }
+  bool CanSwitchToProvider(Profile& profile,
+                           GlicProvider target) const override {
+    return target == GlicProvider::kGeminiEnterprise &&
+           geic::CanSwitchBetweenGeminiProvidersInSettings(&profile);
+  }
 
  private:
   const bool can_switch_between_gemini_providers_;
@@ -387,6 +404,9 @@ class GeminiEnterpriseGlicProviderSpec final : public GlicProviderSpec,
   bool RequiresGeminiAccountEligibility() const override { return false; }
   bool UsesGeicSignIn() const override { return true; }
   bool SupportsFeature(GlicFeature feature) const override {
+    // If a new `GlicFeature` is gated by a feature flag, declare the flag in
+    // `provider_features.h` and check it here, so that any call site that
+    // requires a feature check goes through the spec.
     switch (feature) {
       case GlicFeature::kLive:
       case GlicFeature::kShareImage:
@@ -410,6 +430,7 @@ class GeminiEnterpriseGlicProviderSpec final : public GlicProviderSpec,
       case GlicFeature::kPersonalContext:
       case GlicFeature::kTextSelectionContextMenu:
       case GlicFeature::kDrivePicker:
+      case GlicFeature::kSmartSuggestionContextMenu:
         return false;
     }
     NOTREACHED();
@@ -442,12 +463,18 @@ class GeminiEnterpriseGlicProviderSpec final : public GlicProviderSpec,
     return base::FeatureList::IsEnabled(features::kGeicSsr);
   }
   bool SupportsApiBundleResource() const override {
-    return base::FeatureList::IsEnabled(features::kGeicApiBundleResource);
+    return base::FeatureList::IsEnabled(features::kGeicApiBundleResource) ||
+           base::FeatureList::IsEnabled(features::kGlicCic);
   }
   // GEiC uses explicit single-tab attachment; tabs created via CreateTab or
   // link clicks (e.g. Send feedback, Help, citations) should not be auto-pinned
   // as shared tab context.
   bool PinOnBindEnabled() const override { return false; }
+  bool CanSwitchToProvider(Profile& profile,
+                           GlicProvider target) const override {
+    return target == GlicProvider::kGemini &&
+           geic::CanSwitchBetweenGeminiProvidersInSettings(&profile);
+  }
 
   // GeicSpec impl.
   const geic::GeicGuestUrl* GetGeicGuestUrl() const override {

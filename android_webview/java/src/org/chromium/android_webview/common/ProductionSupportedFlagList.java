@@ -1196,6 +1196,9 @@ public final class ProductionSupportedFlagList {
                 AwFeatures.WEBVIEW_CONTENT_RESTRICTION_REQUEST_BODY_SUPPORT,
                 "Enables access to request body for content restriction in WebView."),
         Flag.baseFeature(
+                AwFeatures.WEBVIEW_BLOCK_NETWORK_LOADS_FOR_WEB_SOCKETS,
+                "Refuses WebSocket connections while the BlockNetworkLoads setting is enabled."),
+        Flag.baseFeature(
                 BaseFeatures.REBINDING_CHILD_SERVICE_CONNECTION_CONTROLLER,
                 "Use a single connection and rebindService() to manage the binding to a child"
                         + " process service."),
@@ -1277,10 +1280,6 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature(
                 AwFeatures.PRERENDER2_WARM_UP_COMPOSITOR_FOR_WEBVIEW,
                 "Requests the compositor warm-up for the WebView prerender triggers."),
-        Flag.baseFeature(
-                "UseDynamicBackingAllocations",
-                "Allows CompoundImageBacking to allocate backings during runtime if a compatible"
-                        + " backing to serve clients requested usage is not already present."),
         Flag.baseFeature(
                 "DataUrlMimeTypeParameterPreservation",
                 "Preserve parameters in the MIME type of data: URLs."),
@@ -1624,6 +1623,14 @@ public final class ProductionSupportedFlagList {
                 AwFeatures.WEBVIEW_PRESERVE_GOOGLE_ACCOUNT_MIRRORING,
                 "When enabled, preserves Google Account mirroring configuration when WebView"
                         + " adopts a new native WebContents (e.g., for popup windows)."),
+        Flag.baseFeature(
+                NetFeatures.ASSUME_QUIC_BROKEN_UNTIL_VERIFIED_ON_CURRENT_NETWORK,
+                "When enabled, assumes QUIC is broken until a QUIC handshake succeeds on"
+                        + " the current network."),
+        Flag.baseFeature(
+                BlinkFeatures.DRAG_THRESHOLD_REQUIRES_MOUSE_MOVEMENT,
+                "When enabled, the cursor needs to move past the drag start threshold in absolute"
+                        + " screen coordinates rather than window-relative coordinates."),
         // Add new commandline switches and features above. The final entry should have a
         // trailing comma for cleaner diffs.
     };

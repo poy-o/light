@@ -113,6 +113,7 @@ import org.chromium.components.image_fetcher.ImageFetcher;
 import org.chromium.components.image_fetcher.ImageFetcherConfig;
 import org.chromium.components.image_fetcher.ImageFetcherFactory;
 import org.chromium.components.search_engines.TemplateUrlService;
+import org.chromium.net.NetworkTrafficAnnotationTag;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.edge_to_edge.EdgeToEdgeStateProvider;
 import org.chromium.ui.util.ColorUtils;
@@ -132,6 +133,37 @@ import java.util.concurrent.Executor;
 @NullMarked
 @JNINamespace("ntp_customization")
 public class NtpCustomizationUtils {
+    private static final NetworkTrafficAnnotationTag TRAFFIC_ANNOTATION =
+            NetworkTrafficAnnotationTag.createComplete(
+                    "ntp_theme_android_images",
+                    """
+                    semantics {
+                        sender: "New Tab page themes"
+                        description:
+                            "Downloads previews and background images from theme collections "
+                            "for the Android New Tab page."
+                        trigger:
+                            "A theme collection is displayed, a background is selected or "
+                            "refreshed, or a theme is restored through synchronization or "
+                            "cross-device setup."
+                        data:
+                            "The selected or previewed background image URL, including any "
+                            "path and query parameters."
+                        destination: GOOGLE_OWNED_SERVICE
+                        user_data { type: NONE }
+                        internal { contacts { owners: "chrome/browser/ntp_customization/OWNERS" } }
+                        last_reviewed: "2026-11-17"
+                    }
+                    policy {
+                        cookies_allowed: NO
+                        setting:
+                            "Users can select the default New Tab page background. Browsing "
+                            "theme collections still downloads previews. The "
+                            "custom-background policy takes effect after restarting Chrome on "
+                            "Android."
+                        chrome_policy { NTPCustomBackgroundEnabled { NTPCustomBackgroundEnabled: false } }
+                    }
+                    """);
 
     // LINT.IfChange(NtpBackgroundType)
     @IntDef({
@@ -329,10 +361,9 @@ public class NtpCustomizationUtils {
         }
     }
 
-    /** Returns whether custom Ntp's background theme is enabled by flag and policy. */
-    public static boolean isNtpThemeCustomizationEnabled() {
-        return ChromeFeatureList.sNewTabPageCustomizationV2.isEnabled()
-                && NtpCustomizationPolicyManager.getInstance().isNtpCustomBackgroundEnabled();
+    /** Returns whether custom Ntp's background theme is enabled by policy. */
+    public static boolean isNtpThemeCustomizationEnabledByPolicy() {
+        return NtpCustomizationPolicyManager.getInstance().isNtpCustomBackgroundEnabled();
     }
 
     /**
@@ -343,7 +374,7 @@ public class NtpCustomizationUtils {
      */
     public static boolean isNtpThemeCustomizationEnabled(
             WindowAndroid windowAndroid, boolean isLff) {
-        if (!isNtpThemeCustomizationEnabled()) {
+        if (!isNtpThemeCustomizationEnabledByPolicy()) {
             return false;
         }
 
@@ -474,10 +505,10 @@ public class NtpCustomizationUtils {
 
     /**
      * Gets the current NTP's background type from the SharedPreference. Returns
-     * NtpBackgroundType.DEFAULT if the feature flag is disabled.
+     * NtpBackgroundType.DEFAULT if NTP theme customization is disabled by policy.
      */
     public static @NtpBackgroundType int getNtpBackgroundType() {
-        if (!isNtpThemeCustomizationEnabled()) {
+        if (!isNtpThemeCustomizationEnabledByPolicy()) {
             return NtpBackgroundType.DEFAULT;
         }
 
@@ -562,7 +593,7 @@ public class NtpCustomizationUtils {
 
     /** Returns whether a white background should be applied on the composeplate. */
     public static boolean shouldApplyWhiteBackgroundOnComposeplate() {
-        if (!NtpCustomizationUtils.isNtpThemeCustomizationEnabled()) {
+        if (!isNtpThemeCustomizationEnabledByPolicy()) {
             return false;
         }
 
@@ -1146,14 +1177,14 @@ public class NtpCustomizationUtils {
     }
 
     /**
-     * Returns whether all flags are enabled to support truly edge-to-edge for customized theme on
-     * top.
+     * Returns whether truly edge-to-edge for customized theme on top is supported for the current
+     * form factor, SDK version, enterprise policy, and window state.
      */
     public static boolean supportsEnableEdgeToEdgeOnTop(
             WindowAndroid windowAndroid, boolean isLff) {
         return !isLff
                 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-                && NtpCustomizationUtils.isNtpThemeCustomizationEnabled()
+                && isNtpThemeCustomizationEnabledByPolicy()
                 && EdgeToEdgeStateProvider.isEdgeToEdgeEnabledForWindow(windowAndroid);
     }
 
@@ -1302,7 +1333,9 @@ public class NtpCustomizationUtils {
             ImageFetcher imageFetcher, GURL imageUrl, Callback<@Nullable Bitmap> callback) {
         ImageFetcher.Params params =
                 ImageFetcher.Params.create(
-                        imageUrl, ImageFetcher.NTP_CUSTOMIZATION_THEME_COLLECTION_NAME);
+                        imageUrl,
+                        ImageFetcher.NTP_CUSTOMIZATION_THEME_COLLECTION_NAME,
+                        TRAFFIC_ANNOTATION);
         imageFetcher.fetchImage(params, callback);
     }
 
@@ -1963,8 +1996,7 @@ public class NtpCustomizationUtils {
 
     /** Returns whether NTP theme customization sync is enabled. */
     public static boolean isNTPCustomizationSyncEnabled() {
-        return ChromeFeatureList.sNewTabPageCustomizationV2.isEnabled()
-                && ChromeFeatureList.sNewTabPageCustomizationThemeSync.isEnabled();
+        return ChromeFeatureList.sNewTabPageCustomizationThemeSync.isEnabled();
     }
 
     /**

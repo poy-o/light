@@ -49,6 +49,7 @@
 #include "chrome/browser/context_hub/topics/topics_feedback_exporter.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/launchpad/features.h"
 #include "chrome/browser/launchpad/launchpad_service.h"
 #include "chrome/browser/launchpad/launchpad_service_factory.h"
 #include "chrome/browser/launchpad/launchpad_task.h"
@@ -92,7 +93,6 @@
 #include "chrome/browser/glic/public/glic_instance.h"             // nogncheck
 #include "chrome/browser/glic/public/glic_invoke_options.h"       // nogncheck
 #include "chrome/browser/glic/public/glic_keyed_service.h"        // nogncheck
-#include "chrome/browser/glic/public/glic_passkeys.h"             // nogncheck
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
@@ -416,6 +416,8 @@ ContextHubPageHandler::ContextHubPageHandler(
       page_->OnFirstPartyAutoTodosGenerationStateChanged(true);
     }
   }
+  // TODO(b/586300169): Observe `LaunchpadService` and forward task and
+  // generation state updates to `page_`.
 #if !BUILDFLAG(IS_ANDROID)
   // Proactively prune stale clipboard staging directories (>1 hour old)
   // created during prior sessions so temporary user notes do not linger in
@@ -1268,12 +1270,13 @@ void ContextHubPageHandler::OpenUrlsInTabGroup(
     const std::vector<GURL>& urls,
     OpenUrlsInTabGroupCallback callback) {
   if (!base::FeatureList::IsEnabled(browser::context_hub::mojom::kAutoTodos) &&
+      !base::FeatureList::IsEnabled(launchpad::features::kLaunchpad) &&
       !base::FeatureList::IsEnabled(browser::context_hub::mojom::kTopics) &&
       !base::FeatureList::IsEnabled(
           browser::context_hub::mojom::kSmartSearch)) {
     receiver_.ReportBadMessage(
-        "OpenUrlsInTabGroup cannot be called without AutoTodos, Topics, or "
-        "SmartSearch enabled.");
+        "OpenUrlsInTabGroup cannot be called without AutoTodos, Launchpad, "
+        "Topics, or SmartSearch enabled.");
     return;
   }
 
@@ -1790,13 +1793,7 @@ void ContextHubPageHandler::FetchTopicsFeedbackExportData(
 void ContextHubPageHandler::RunTodoTask(const std::string& prompt,
                                         RunTodoTaskCallback callback) {
 #if !BUILDFLAG(IS_ANDROID)
-  if (prompt.empty()) {
-    std::move(callback).Run(false);
-    return;
-  }
-
-  glic::GlicKeyedService* glic_service = GetGlicServiceIfEnabled(profile_);
-  if (!glic_service || !web_contents_) {
+  if (!web_contents_) {
     std::move(callback).Run(false);
     return;
   }
@@ -1808,22 +1805,15 @@ void ContextHubPageHandler::RunTodoTask(const std::string& prompt,
     return;
   }
 
-  glic::GlicInvokeOptions options(
-      glic::mojom::InvocationSource::kContextHubAutoTodos);
-  options.prompts.push_back(prompt);
-  options.target.conversation = glic::NewConversation();
-  options.feature_mode = glic::mojom::FeatureMode::kActuation;
-  options.target.actuation_target = glic::mojom::ActuationTarget::kAgentDecides;
-  options.target.surface =
-      glic::DefaultSurface{tab->GetBrowserWindowInterface()};
+  if (launchpad::LaunchpadService* service =
+          LaunchpadServiceFactory::GetForProfile(profile_)) {
+    std::move(callback).Run(
+        service->RunTask(prompt, tab->GetBrowserWindowInterface()));
+    return;
+  }
 
-  glic::GlicInvokeWithAutoSubmitOptions auto_submit_options;
-  auto_submit_options.show_panel = true;
-
-  glic_service->InvokeWithAutoSubmit(
-      glic::InvokeWithAutoSubmitPasskeyProvider::GetPassKey(),
-      std::move(options), std::move(auto_submit_options));
-  std::move(callback).Run(true);
+  std::move(callback).Run(launchpad::LaunchpadService::RunTaskForProfile(
+      profile_, prompt, tab->GetBrowserWindowInterface()));
 #else
   std::move(callback).Run(false);
 #endif

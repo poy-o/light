@@ -7,6 +7,7 @@ import './lhs_ghost_loader.js';
 
 import {COLOR_PROVIDER_CHANGED, ColorChangeUpdater} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
 import type {ThreadsRailElement} from 'chrome://resources/cr_components/composebox/threads_rail.js';
+import {LhsClientAction} from 'chrome://resources/cr_components/composebox/threads_rail.js';
 import {assert} from 'chrome://resources/js/assert.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.js';
 import type {PropertyValues} from 'chrome://resources/lit/v3_0/lit.rollup.js';
@@ -16,31 +17,10 @@ import {loadTimeData} from './i18n_setup.js';
 import type {IframeElement} from './iframe.js';
 import {getCss} from './left_hand_side.css.js';
 import {getHtml} from './left_hand_side.html.js';
-import {recordBoolean, recordDuration, recordEnumeration} from './metrics_utils.js';
+import {recordBoolean, recordDuration, recordThreadsRailExpandedAction, ThreadsRailExpandedAction} from './metrics_utils.js';
 import {WindowProxy} from './window_proxy.js';
 
 const DEFAULT_EXPANDED_LHS_WIDTH_PX = 261;
-
-// LINT.IfChange(NTPThreadsRailExpandedAction)
-/**
- * User actions within the expanded threads rail forwarded to Chrome. This enum
- * must match the numbering for NTPThreadsRailExpandedAction in enums.xml. These
- * values are persisted to logs. Entries should not be renumbered, removed or
- * reused.
- */
-export enum ThreadsRailExpandedAction {
-  CLOSE_CLICKED = 0,
-  NEW_THREAD_CLICKED = 1,
-  NAVIGATE_CLICKED = 2,
-  MAX_VALUE = NAVIGATE_CLICKED,
-}
-// LINT.ThenChange(//tools/metrics/histograms/metadata/new_tab_page/enums.xml:NTPThreadsRailExpandedAction)
-
-function recordThreadsRailExpandedAction(action: ThreadsRailExpandedAction) {
-  recordEnumeration(
-      'NewTabPage.ThreadsRail.ExpandedAction', action,
-      ThreadsRailExpandedAction.MAX_VALUE + 1);
-}
 
 type NtpLhsThemeKey = keyof NtpLhsThemePalette;
 
@@ -51,7 +31,8 @@ interface NtpLhsSetThemeMessage {
   iconSize?: number;
 }
 
-type ChromeToSearchLhsMessage = NtpLhsSetThemeMessage;
+type ChromeToSearchLhsMessage =
+    NtpLhsSetThemeMessage|{type: NtpLhsMessageType.NTP_LHS_FOCUS};
 
 // Maps each `NtpLhsThemePalette` key to its corresponding
 // `--color-new-tab-page-threads-rail-<suffix>` CSS variable from
@@ -86,6 +67,7 @@ export enum NtpLhsMessageType {
   NTP_LHS_NEW_THREAD = 'NTP_LHS_NEW_THREAD',
   NTP_LHS_NAVIGATE = 'NTP_LHS_NAVIGATE',
   NTP_LHS_SET_THEME = 'NTP_LHS_SET_THEME',
+  NTP_LHS_FOCUS = 'NTP_LHS_FOCUS',
 }
 
 export interface NtpLhsReadyMessage {
@@ -208,10 +190,9 @@ export class LeftHandSideElement extends CrLitElement {
   // The primary view, reflected as the `view_` attribute so that
   // left_hand_side.css can style each view. Derived in willUpdate().
   protected accessor view_: LhsView = LhsView.FOLDED;
-  // Accessible name of the ghost loader. Together with aria-busy, it keeps the
-  // LHS region in the a11y tree as busy while the expanded iframe loads,
-  // instead of the region silently going missing.
-  protected readonly ghostLoaderLabel_: string =
+  // Accessible name shared by the ghost loader region and the expanded LHS
+  // iframe.
+  protected readonly lhsLabel_: string =
       loadTimeData.getString('aimThreadsHistoryLabel');
   private eventTracker_: EventTracker = new EventTracker();
   // Width of the folded rail, measured once it has rendered.
@@ -228,6 +209,8 @@ export class LeftHandSideElement extends CrLitElement {
   private hasExpanded_: boolean = false;
   private ghostLoaderShownTime_: number|null = null;
   private lastHiddenTime_: number|null = null;
+  private hadFocusBeforeUpdate_: boolean = false;
+  private focusCloseOnExpand_: boolean = false;
 
   override connectedCallback() {
     super.connectedCallback();
@@ -252,6 +235,7 @@ export class LeftHandSideElement extends CrLitElement {
   override willUpdate(changedProperties: PropertyValues<this>) {
     super.willUpdate(changedProperties);
     this.view_ = this.getVisibleView_();
+    this.hadFocusBeforeUpdate_ = this.shadowRoot.activeElement !== null;
   }
 
   override firstUpdated(changedProperties: PropertyValues<this>) {
@@ -284,6 +268,11 @@ export class LeftHandSideElement extends CrLitElement {
       this.setHostWidth_(
           this.isExpanded_ ? this.expandedWidth_ : this.collapsedWidth_);
     }
+    if (changedPrivateProperties.has('view_') &&
+        (changedPrivateProperties.get('view_') === LhsView.FOLDED ||
+         this.hadFocusBeforeUpdate_)) {
+      this.focusView_();
+    }
   }
 
   // Returns the primary view to show. Every view in getHtml() is inert unless
@@ -308,6 +297,33 @@ export class LeftHandSideElement extends CrLitElement {
   // interacts with the rail.
   private getExpandedIframe_(): IframeElement|null {
     return this.shadowRoot.querySelector<IframeElement>('#expanded');
+  }
+
+  private focusView_() {
+    switch (this.view_) {
+      case LhsView.FOLDED:
+        this.$.folded.focusItemWithAction(LhsClientAction.EXPAND_RAIL);
+        break;
+      case LhsView.GHOST_LOADER: {
+        const selector =
+            this.focusCloseOnExpand_ ? 'ntp-lhs-ghost-loader' : '#ghostLoader';
+        this.shadowRoot.querySelector<HTMLElement>(selector)?.focus();
+        break;
+      }
+      case LhsView.EXPANDED: {
+        const expanded = this.getExpandedIframe_();
+        expanded?.focus();
+        if (this.focusCloseOnExpand_) {
+          const message: ChromeToSearchLhsMessage = {
+            type: NtpLhsMessageType.NTP_LHS_FOCUS,
+          };
+          expanded?.postMessage(message);
+        }
+        break;
+      }
+      default:
+        break;
+    }
   }
 
   protected onFoldedPointerenter_() {
@@ -376,11 +392,13 @@ export class LeftHandSideElement extends CrLitElement {
   }
 
   protected async onFoldedClick_() {
-    await this.expand_();
+    await this.expand_(false);
   }
 
-  protected async onExpandRail_() {
-    await this.expand_();
+  protected async onExpandRail_(e: CustomEvent<MouseEvent>) {
+    // Check `sourceCapabilities` rather than `detail === 0` since Blink sets
+    // `detail = 1` on accessibility actions (`kFromAccessibility`).
+    await this.expand_(e.detail.sourceCapabilities === null);
   }
 
   // Lets the user close the rail from the ghost loader, e.g. when the expanded
@@ -428,7 +446,7 @@ export class LeftHandSideElement extends CrLitElement {
     }
   }
 
-  private async expand_() {
+  private async expand_(focusCloseButton: boolean) {
     if (!this.hasExpanded_) {
       this.hasExpanded_ = true;
       // Record whether the expanded iframe was already preloaded and ready at
@@ -447,6 +465,7 @@ export class LeftHandSideElement extends CrLitElement {
     }
     this.cancelPreloadTimer_();
     await this.preloadExpanded_();
+    this.focusCloseOnExpand_ = focusCloseButton;
     this.isExpanded_ = true;
   }
 

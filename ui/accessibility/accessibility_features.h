@@ -246,6 +246,12 @@ AX_BASE_EXPORT bool IsAccessibilityAndroidMathEnabled();
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityAndroidBackgroundThread);
 AX_BASE_EXPORT bool IsAccessibilityAndroidBackgroundThreadEnabled();
 
+// Propagates and consumes explicit selection endpoint offset types
+// (`ax::mojom::OffsetType::kText` vs `kChild`) on Android instead of inferring
+// them from `AXNodePosition::IsTextPositionAnchor()`.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilitySelectionOffsetTypes);
+AX_BASE_EXPORT bool IsAccessibilitySelectionOffsetTypesEnabled();
+
 #endif  // BUILDFLAG(IS_ANDROID)
 
 // Controls the new native C++ implementation for Read Aloud,
@@ -261,11 +267,6 @@ using ax::mojom::features::kReadAloudServerSynthesizer;
 AX_BASE_EXPORT bool IsReadAloudServerSynthesizerEnabled();
 
 #if !BUILDFLAG(IS_ANDROID)
-// Use the AXTree fixing code, which may be an assortment of different
-// tools/methods to fix the AXTree. This is not available on Android.
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAXTreeFixing);
-AX_BASE_EXPORT bool IsAXTreeFixingEnabled();
-
 #if !BUILDFLAG(IS_CHROMEOS)
 // Shows the Page Colors control in chrome://settings/accessibility, which lets
 // users override the web theme's forced colors independently of the operating

@@ -49,7 +49,6 @@ BASE_DECLARE_FEATURE(kNtpComponentExtension);
 extern const base::FeatureParam<bool> kNtpComponentExtensionUseComponentUpdater;
 BASE_DECLARE_FEATURE(kNtpCustomizeChromeAutoOpen);
 BASE_DECLARE_FEATURE(kNtpCustomizeWebUiAndroid);
-BASE_DECLARE_FEATURE(kNtpDisableBrowserInitiatedLinks);
 BASE_DECLARE_FEATURE(kNtpDriveModule);
 BASE_DECLARE_FEATURE(kNtpDriveModuleHistorySyncRequirement);
 BASE_DECLARE_FEATURE(kNtpDriveModuleLink);
@@ -110,6 +109,7 @@ BASE_DECLARE_FEATURE(kNtpShortcutsReorder);
 BASE_DECLARE_FEATURE(kNtpLazyLoadComposebox);
 BASE_DECLARE_FEATURE(kNtpWidgetPlatform);
 BASE_DECLARE_FEATURE(kNtpLaunchpadWidget);
+BASE_DECLARE_FEATURE(kKeepNtpRendererAlive);
 
 // Parameter for controlling the luminosity difference for NTP elements on light
 // backgrounds.

@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ttc/core/get_pointer_response.h"
 
+#include <stdint.h>
+
 #include <optional>
 #include <utility>
 #include <vector>
@@ -11,13 +13,14 @@
 #include "base/containers/adapters.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "chrome/browser/actor/tools/get_pointer/pointer_crop_geometry.h"
+#include "chrome/browser/actor/tools/get_pointer/pointer_frame_redaction.h"
+#include "chrome/browser/actor/tools/get_pointer/pointer_hit_test.h"
+#include "chrome/browser/actor/tools/get_pointer/pointer_image_annotator.h"
 #include "chrome/browser/ttc/core/features.h"
 #include "chrome/browser/ttc/core/pointer_context_capturer.h"
-#include "chrome/browser/ttc/core/pointer_crop_geometry.h"
-#include "chrome/browser/ttc/core/pointer_frame_redaction.h"
-#include "chrome/browser/ttc/core/pointer_hit_test.h"
-#include "chrome/browser/ttc/core/pointer_image_annotator.h"
 #include "components/actor/public/mojom/actor_types.mojom.h"
 #include "components/optimization_guide/proto/features/common_quality_data.pb.h"
 #include "third_party/blink/public/common/dom/dom_node_id.h"
@@ -36,6 +39,11 @@ namespace ttc {
 
 namespace {
 
+using actor::AnnotatePointerImage;
+using actor::ComputePointerCropRect;
+using actor::DescribeNode;
+using actor::DescribeNodeAtPoint;
+using actor::PaintOverCrossOriginFrames;
 using optimization_guide::proto::ContentNode;
 
 // Enough to recognize what is selected; the page content has the rest.
@@ -49,23 +57,33 @@ base::DictValue RectToDict(const gfx::Rect& rect) {
       .Set("height", rect.height());
 }
 
-// Returns where the nodes from `start_node_id` to `end_node_id` of the main
-// document of the page under `root` are in the viewport, in device pixels:
-// the union of the boxes of the content from the start node to the end of the
-// end node, in document order. The ids are DOM node ids: the page content
-// gives them for the two ends of a selection, and for each of its own nodes
-// as `common_ancestor_dom_node_id`. Empty if either node is not in the page
-// content, as for a selection inside a text field, if the end node comes
-// before the start node, or if none of the content is in the viewport.
-gfx::Rect FindNodeRangeBounds(const ContentNode& root,
-                              blink::DOMNodeIdType start_node_id,
-                              blink::DOMNodeIdType end_node_id) {
+// Returns `jpeg`, the bytes of a JPEG, as the image of a response.
+VisualContent JpegContent(std::vector<uint8_t> jpeg) {
+  return VisualContent{.image_data = std::move(jpeg),
+                       .mime_type = "image/jpeg"};
+}
+
+// The most selected things described in a result; enough to tell the model
+// what is selected, and the image shows the rest.
+constexpr size_t kMaxSelectedNodes = 5;
+
+// Returns the nodes from `start_node_id` to `end_node_id` of the main document
+// of the page under `root`: the start node, everything after it up to the end
+// node, and all of the end node, in document order. The ids are DOM node ids:
+// the page content gives them for the two ends of a selection, and for each of
+// its own nodes as `common_ancestor_dom_node_id`. Empty if either node is not
+// in the page content, as for a selection inside a text field, or if the end
+// node comes before the start node.
+std::vector<const ContentNode*> FindNodeRange(
+    const ContentNode& root,
+    blink::DOMNodeIdType start_node_id,
+    blink::DOMNodeIdType end_node_id) {
   // Nodes without an id report 0, the null id, which must not pass for a
   // match.
   if (start_node_id.is_null() || end_node_id.is_null()) {
-    return gfx::Rect();
+    return {};
   }
-  gfx::Rect bounds;
+  std::vector<const ContentNode*> range;
   bool is_in_range = false;
   // The depth of the end node while in its subtree, with which the range ends.
   // The end node can be reached before the start node, which it may contain:
@@ -79,7 +97,7 @@ gfx::Rect FindNodeRangeBounds(const ContentNode& root,
     stack.pop_back();
     if (end_depth && depth <= *end_depth) {
       if (is_in_range) {
-        return bounds;
+        return range;
       }
       // The end node did not contain the start node.
       end_depth.reset();
@@ -96,21 +114,42 @@ gfx::Rect FindNodeRangeBounds(const ContentNode& root,
       // Node ids only mean something within their own document.
       continue;
     }
-    if (is_in_range && node->children_nodes().empty()) {
-      const auto& box = attributes.geometry().visible_bounding_box();
-      bounds.Union(gfx::Rect(box.x(), box.y(), box.width(), box.height()));
+    if (is_in_range) {
+      range.push_back(node);
     }
     for (const ContentNode& child : base::Reversed(node->children_nodes())) {
       stack.emplace_back(&child, depth + 1);
     }
   }
   // Without both nodes, in order, the range is not known.
-  return is_in_range && end_depth ? bounds : gfx::Rect();
+  if (!is_in_range || !end_depth) {
+    range.clear();
+  }
+  return range;
 }
 
-// Returns get_pointer's answer for a user who is not pointing but has selected
-// text in the page's main document, or nullopt if they have not, or it cannot
-// be shown. `screenshot` shows `viewport`, which is in DIPs.
+// Where `node` is in the viewport, in device pixels.
+gfx::Rect VisibleBox(const ContentNode& node) {
+  const auto& box = node.content_attributes().geometry().visible_bounding_box();
+  return gfx::Rect(box.x(), box.y(), box.width(), box.height());
+}
+
+// Whether `node` is content that shows something other than text.
+bool IsMedia(const ContentNode& node) {
+  switch (node.content_attributes().attribute_type()) {
+    case optimization_guide::proto::CONTENT_ATTRIBUTE_IMAGE:
+    case optimization_guide::proto::CONTENT_ATTRIBUTE_SVG_ROOT:
+    case optimization_guide::proto::CONTENT_ATTRIBUTE_CANVAS:
+    case optimization_guide::proto::CONTENT_ATTRIBUTE_VIDEO:
+      return true;
+    default:
+      return false;
+  }
+}
+
+// Returns get_pointer's answer for a user who is not pointing but has made a
+// selection in the page's main document, or nullopt if they have not, or it
+// cannot be shown. `screenshot` shows `viewport`, which is in DIPs.
 std::optional<ToolResponse> BuildSelectionResponse(
     const PointerContext& context,
     const SkBitmap& screenshot,
@@ -118,16 +157,59 @@ std::optional<ToolResponse> BuildSelectionResponse(
   const auto& selection = context.page_content.main_frame_data()
                               .frame_interaction_info()
                               .selection();
-  // A selection without text, such as one of only an image, does not count.
-  // TODO(crbug.com/585958593): Support selections without text.
-  if (selection.selected_text().empty()) {
-    return std::nullopt;
+  const std::vector<const ContentNode*> range =
+      FindNodeRange(context.page_content.root_node(),
+                    blink::DOMNodeIdType(selection.start_node_id()),
+                    blink::DOMNodeIdType(selection.end_node_id()));
+
+  // If the selected text is only whitespace, the media in the range are what
+  // is selected, and its text nodes are ignored. This happens when the user
+  // drags from the end of one paragraph, over an image, to the start of the
+  // next paragraph: the text is then just the line breaks between the blocks.
+  // Whitespace here is any Unicode whitespace character, not only ASCII's,
+  // since pages often put no-break spaces (U+00A0) around images and in empty
+  // paragraphs.
+  //
+  // TODO(crbug.com/585958593): Handle a selection of just an image with no
+  // text around it, e.g. <div><img></div>. Its text is empty, and Blink only
+  // adds a selection to the page content if its text is not empty, so there
+  // is no selection here and get_pointer answers no_active_pointer.
+  const bool has_text = !base::ContainsOnlyChars(
+      base::UTF8ToUTF16(selection.selected_text()), base::kWhitespaceUTF16);
+  base::DictValue description;
+  gfx::Rect bounds_in_pixels;
+  if (has_text) {
+    description.Set("text",
+                    base::TruncateUTF8ToByteSize(selection.selected_text(),
+                                                 kMaxSelectedTextBytes));
+    // Where the content from the start node to the end of the end node is.
+    for (const ContentNode* node : range) {
+      if (node->children_nodes().empty()) {
+        bounds_in_pixels.Union(VisibleBox(*node));
+      }
+    }
+  } else {
+    // Described without their identity, whatever
+    // kTtcGetPointerIncludeNodeIdentity says: the model must not be given a DOM
+    // node id that the server has not mapped to one of the node ids it knows,
+    // and the server maps those of the elements pointed at only.
+    base::ListValue nodes;
+    for (const ContentNode* node : range) {
+      const gfx::Rect box = VisibleBox(*node);
+      if (!IsMedia(*node) || box.IsEmpty()) {
+        continue;
+      }
+      bounds_in_pixels.Union(box);
+      if (nodes.size() < kMaxSelectedNodes) {
+        nodes.Append(
+            DescribeNode(*node, context.page_content, context.scale_factor));
+      }
+    }
+    description.Set("nodes", std::move(nodes));
   }
-  gfx::Rect bounds = gfx::ScaleToEnclosingRect(
-      FindNodeRangeBounds(context.page_content.root_node(),
-                          blink::DOMNodeIdType(selection.start_node_id()),
-                          blink::DOMNodeIdType(selection.end_node_id())),
-      1 / context.scale_factor);
+
+  gfx::Rect bounds =
+      gfx::ScaleToEnclosingRect(bounds_in_pixels, 1 / context.scale_factor);
   bounds.Intersect(gfx::Rect(viewport));
   if (bounds.IsEmpty()) {
     return std::nullopt;
@@ -137,24 +219,21 @@ std::optional<ToolResponse> BuildSelectionResponse(
                                  gfx::PointF(bounds.bottom_right())};
   const gfx::Rect crop = ComputePointerCropRect(corners, viewport);
   // No crosshair: the page itself shows what is selected.
-  std::optional<VisualContent> image =
+  std::optional<std::vector<uint8_t>> jpeg =
       AnnotatePointerImage(screenshot, crop, {}, context.scale_factor);
-  if (!image) {
+  if (!jpeg) {
     return std::nullopt;
   }
+  description.Set("bounds", RectToDict(bounds));
   return ToolResponse::Success(
       base::DictValue()
           .Set("status", "ok")
-          .Set("selection", base::DictValue()
-                                .Set("text", base::TruncateUTF8ToByteSize(
-                                                 selection.selected_text(),
-                                                 kMaxSelectedTextBytes))
-                                .Set("bounds", RectToDict(bounds)))
+          .Set("selection", std::move(description))
           .Set("crop_region", RectToDict(crop))
           .Set("viewport", base::DictValue()
                                .Set("width", viewport.width())
                                .Set("height", viewport.height())),
-      std::move(*image));
+      JpegContent(std::move(*jpeg)));
 }
 
 }  // namespace
@@ -206,9 +285,9 @@ ToolResponse BuildGetPointerResponse(
   }
 
   const gfx::Rect crop = ComputePointerCropRect(points, viewport);
-  std::optional<VisualContent> image =
+  std::optional<std::vector<uint8_t>> jpeg =
       AnnotatePointerImage(screenshot, crop, points, context.scale_factor);
-  if (!image) {
+  if (!jpeg) {
     return ToolResponse::Error(
         actor::mojom::ActionResultCode::kScreenshotCaptureFailed,
         "The image of the pointer could not be made");
@@ -244,7 +323,7 @@ ToolResponse BuildGetPointerResponse(
           .Set("viewport", base::DictValue()
                                .Set("width", viewport.width())
                                .Set("height", viewport.height())),
-      std::move(*image));
+      JpegContent(std::move(*jpeg)));
 }
 
 }  // namespace ttc

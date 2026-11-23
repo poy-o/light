@@ -42,7 +42,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/tab_list/tab_list_interface.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/navigator/browser_navigator.h"
@@ -288,7 +287,8 @@ bool ShouldHandleContextualTasksRequest(const std::string& path) {
     return true;
   }
 #endif
-  return base::StartsWith(path, kProfileAvatarPathPrefix);
+  return contextual_tasks::IsContextualTasksSidePanelRearchitectureEnabled() &&
+         base::StartsWith(path, kProfileAvatarPathPrefix);
 }
 
 void HandleContextualTasksRequest(
@@ -338,12 +338,13 @@ class ContextualTasksUIBase::CookieJarObserver
  public:
   CookieJarObserver(ContextualTasksUIBase& owner, Profile* profile)
       : owner_(owner), profile_(profile) {
+    if (!contextual_tasks::IsContextualTasksSidePanelRearchitectureEnabled()) {
+      return;
+    }
     if (auto* identity_manager =
             IdentityManagerFactory::GetForProfile(profile_)) {
       observation_.Observe(identity_manager);
-    } else if (profile_ && profile_->IsOffTheRecord() &&
-               contextual_tasks::
-                   IsContextualTasksSidePanelRearchitectureEnabled()) {
+    } else if (profile_ && profile_->IsOffTheRecord()) {
       if (content::StoragePartition* partition =
               profile_->GetDefaultStoragePartition()) {
         partition->GetCookieManagerForBrowserProcess()->AddCookieChangeListener(
@@ -510,7 +511,8 @@ ContextualTasksUIBase::ContextualTasksUIBase(content::WebUI* web_ui)
                               /*enable_chrome_send=*/true,
                               /*enable_chrome_histograms=*/true) {
   Profile* profile = GetProfile();
-  if (profile) {
+  if (profile &&
+      contextual_tasks::IsContextualTasksSidePanelRearchitectureEnabled()) {
     cookie_jar_observer_ = std::make_unique<CookieJarObserver>(*this, profile);
   }
   is_contextual_tasks_eligible_on_init_ =
@@ -651,7 +653,9 @@ content::WebUIDataSource* ContextualTasksUIBase::RegisterWebUIDataSource(
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
-  source->AddResourcePaths(kContextualTasksExtensionResources);
+  if (contextual_tasks::IsContextualTasksRearchitectureEnabled()) {
+    source->AddResourcePaths(kContextualTasksExtensionResources);
+  }
 #endif
 
   content::URLDataSource::Add(profile,
@@ -786,7 +790,10 @@ base::DictValue ContextualTasksUIBase::GetContextualTasksLoadTimeData(
           is_eligible &&
           contextual_tasks::GetExpandButtonOption() ==
               contextual_tasks::ExpandButtonOption::kSidePanelExpandButton);
-  dict.Set("profileAvatarUrl", GetProfileAvatarUrl(profile, GURL()).spec());
+  dict.Set("profileAvatarUrl",
+           contextual_tasks::IsContextualTasksSidePanelRearchitectureEnabled()
+               ? GetProfileAvatarUrl(profile, GURL()).spec()
+               : std::string());
 
   dict.Set("isSmallDeviceFormFactor",
            ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE);
@@ -798,6 +805,7 @@ base::DictValue ContextualTasksUIBase::GetContextualTasksLoadTimeData(
 #endif
   dict.Set("contextualTasksUnboundedMenuEnabled",
            contextual_tasks::IsContextualTasksUnboundedMenuEnabled());
+  dict.Merge(GetDogfoodFeedbackLoadTimeData());
 
   const bool use_google_com_sign_out_label = base::FeatureList::IsEnabled(
       contextual_tasks::kContextualTasksAccountMenuGoogleComSignOutLabel);
@@ -813,6 +821,28 @@ base::DictValue ContextualTasksUIBase::GetContextualTasksLoadTimeData(
               ? IDS_CONTEXTUAL_TASKS_ACCOUNT_MENU_SIGN_OUT_OF_ALL_GOOGLE_COM_ACCOUNTS
               : IDS_CONTEXTUAL_TASKS_ACCOUNT_MENU_SIGN_OUT_OF_ALL_ACCOUNTS));
 
+  return dict;
+}
+
+// static
+base::DictValue ContextualTasksUIBase::GetDogfoodFeedbackLoadTimeData() {
+  base::DictValue dict;
+  // The dogfood feedback form can only be opened on desktop.
+#if BUILDFLAG(IS_ANDROID)
+  const bool enabled = false;
+  const char* attribute = "";
+#else
+  const bool enabled =
+      contextual_tasks::IsContextualTasksDogfoodFeedbackEnabled();
+  const char* attribute = enabled ? "dogfood-feedback-enabled" : "";
+#endif
+  dict.Set("contextualTasksDogfoodFeedbackEnabled", enabled);
+  // tab_picker.html doesn't load strings.m.js, so it sets this as an attribute
+  // of <tab-picker-app> through a template replacement instead.
+  dict.Set("contextualTasksDogfoodFeedbackAttribute", attribute);
+  // Dogfood only, so not translated.
+  dict.Set("dogfoodFeedbackTooltip",
+           "Submit Contextual Tasks Dogfood Feedback");
   return dict;
 }
 
@@ -929,19 +959,22 @@ void ContextualTasksUIBase::OpenFeedbackUi() {
   if (!browser) {
     return;
   }
-  content::WebContents* web_contents = GetWebUIWebContents();
-  GURL page_url = web_contents ? web_contents->GetLastCommittedURL() : GURL();
-  if (auto* tab_list = TabListInterface::From(browser)) {
-    if (auto* active_tab = tab_list->GetActiveTab()) {
-      if (active_tab->GetContents()) {
-        page_url = active_tab->GetContents()->GetLastCommittedURL();
-      }
-    }
+
+  if (auto* ui_service = GetUiService()) {
+    ui_service->OpenFeedbackUi(
+        browser, GetFeedbackPageUrl(browser, GetWebUIWebContents()));
+  }
+}
+
+void ContextualTasksUIBase::OpenDogfoodFeedback() {
+  BrowserWindowInterface* browser = GetBrowser();
+  if (!browser) {
+    return;
   }
 
-  if (auto* ui_service =
-          ContextualTasksUiServiceFactory::GetForBrowserContext(GetProfile())) {
-    ui_service->OpenFeedbackUi(browser, page_url);
+  if (auto* ui_service = GetUiService()) {
+    ui_service->OpenDogfoodFeedbackUi(
+        browser, GetFeedbackPageUrl(browser, GetWebUIWebContents()));
   }
 }
 
@@ -1445,7 +1478,11 @@ void ContextualTasksUIBase::OnChipCollapseAnimationEnded(
 }
 
 void ContextualTasksUIBase::OnChipMousePressed(
-    toolbar_ui_api::mojom::LhsChipIdentifier identifier) {}
+    toolbar_ui_api::mojom::LhsChipIdentifier identifier) {
+  if (ContextualTasksPermissionController* controller = GetActiveController()) {
+    controller->OnChipMousePressed(identifier);
+  }
+}
 
 void ContextualTasksUIBase::OnChipPointerEntered(
     toolbar_ui_api::mojom::LhsChipIdentifier identifier) {
@@ -1478,6 +1515,9 @@ void ContextualTasksUIBase::UpdateProfileIndicator() {
 }
 
 void ContextualTasksUIBase::UpdateProfileIndicator(const GURL& url) {
+  if (!contextual_tasks::IsContextualTasksSidePanelRearchitectureEnabled()) {
+    return;
+  }
   if (auto* toolbar_page = GetToolbarPageRemote()) {
     ProfileIndicatorInfo info;
     if (cookie_jar_observer_) {

@@ -136,6 +136,9 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceRequest {
     scoped_refptr<SharedDataPipeProducerHandle> response_body_stream;
     scoped_refptr<net::HttpResponseHeaders>
         expected_response_headers_for_synthetic_response;
+    // Whether the requesting context could potentially be allowed to receive
+    // access to unpartitioned storage.
+    bool is_storage_access_potentially_allowed = true;
   };
 
   // Typemapped to network.mojom.WebBundleTokenParams, see comments there
@@ -214,6 +217,11 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE) ResourceRequest {
   net::ReferrerPolicy referrer_policy = net::ReferrerPolicy::NEVER_CLEAR;
   net::HttpRequestHeaders headers;
   net::HttpRequestHeaders cors_exempt_headers;
+
+  // The browser's own User-Agent, including DevTools and embedder overrides.
+  // See URLRequest.content_user_agent in url_request.mojom.
+  std::optional<std::string> content_user_agent;
+
   int load_flags = 0;
   // Note: kMainFrame is used only for outermost main frames, i.e. fenced
   // frames are considered a kSubframe for ResourceType.

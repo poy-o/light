@@ -231,6 +231,13 @@ NET_EXPORT BASE_DECLARE_FEATURE(kRendererAccessibleHttpCache);
 NET_EXPORT BASE_DECLARE_FEATURE_PARAM(bool,
                                       kRendererAccessibleHttpCacheWalMode);
 
+// If enabled, the browser's own User-Agent is carried separately from
+// script-supplied request headers, so that it stays CORS-exempt and is used
+// for CORS preflights. This is a prerequisite for letting scripts set the
+// User-Agent request header, which `net::HttpUtil::IsSafeHeader()` still
+// forbids. See crbug.com/40450316.
+NET_EXPORT BASE_DECLARE_FEATURE(kAllowUserAgentHeaderFromScript);
+
 // If enabled, overrides IPv6 reachability probe results based on the system's
 // IP addresses.
 NET_EXPORT BASE_DECLARE_FEATURE(kEnableIPv6ReachabilityOverride);
@@ -374,28 +381,6 @@ NET_EXPORT BASE_DECLARE_FEATURE(kShortLaxAllowUnsafeThreshold);
 // This only has an effect if the cookie defaults to SameSite=Lax.
 NET_EXPORT BASE_DECLARE_FEATURE(kSameSiteDefaultChecksMethodRigorously);
 
-// Enables a timeout on individual TCP connect attempts, based on
-// the parameter values.
-NET_EXPORT BASE_DECLARE_FEATURE(kTimeoutTcpConnectAttempt);
-
-// FeatureParams associated with kTimeoutTcpConnectAttempt.
-
-// When there is an estimated RTT available, the experimental TCP connect
-// attempt timeout is calculated as:
-//
-//  clamp(kTimeoutTcpConnectAttemptMin,
-//        kTimeoutTcpConnectAttemptMax,
-//        <Estimated RTT> * kTimeoutTcpConnectAttemptRTTMultiplier);
-//
-// Otherwise the TCP connect attempt timeout is set to
-// kTimeoutTcpConnectAttemptMax.
-NET_EXPORT extern const base::FeatureParam<double>
-    kTimeoutTcpConnectAttemptRTTMultiplier;
-NET_EXPORT extern const base::FeatureParam<base::TimeDelta>
-    kTimeoutTcpConnectAttemptMin;
-NET_EXPORT extern const base::FeatureParam<base::TimeDelta>
-    kTimeoutTcpConnectAttemptMax;
-
 // When this feature is enabled, redirected requests will be considered
 // cross-site for the purpose of SameSite cookies if any redirect hop was
 // cross-site to the target URL, even if the original initiator of the
@@ -496,6 +481,11 @@ NET_EXPORT BASE_DECLARE_FEATURE_PARAM(
 NET_EXPORT BASE_DECLARE_FEATURE_PARAM(
     bool,
     kAsyncDnsQuicJobKeepHostResolverJobAliveForCache);
+// Whether QuicSessionPool::AsyncDnsJob fails immediately without attempting
+// remaining resolved candidates when a connection attempt fails with
+// ERR_NETWORK_CHANGED or ERR_INTERNET_DISCONNECTED.
+NET_EXPORT BASE_DECLARE_FEATURE_PARAM(bool,
+                                      kAsyncDnsQuicJobAbortOnNetworkChange);
 
 // Makes the QUIC slow timer delay configurable.
 // How long to wait before starting a second connection attempt

@@ -37,6 +37,7 @@
 #include "third_party/blink/public/mojom/credentialmanagement/credential_type_flags.mojom.h"
 
 class AuthenticatorRequestDialogController;
+class GpmBrowserAuthenticatorController;
 class GPMEnclaveController;
 class PrefService;
 
@@ -52,6 +53,7 @@ class RenderFrameHost;
 
 namespace device {
 class FidoAuthenticator;
+class FidoDiscoveryBase;
 class FidoDiscoveryFactory;
 class PublicKeyCredentialDescriptor;
 class PublicKeyCredentialUserEntity;
@@ -169,6 +171,7 @@ class ChromeAuthenticatorRequestDelegate
   }
 
   GPMEnclaveController* enclave_controller_for_testing() const;
+  GpmBrowserAuthenticatorController* gpm_browser_controller_for_testing() const;
 
   // content::AuthenticatorRequestClientDelegate:
   void SetRelyingPartyId(const std::string& rp_id) override;
@@ -214,6 +217,8 @@ class ChromeAuthenticatorRequestDelegate
                                  credential_list) override;
   void SetUserEntityForMakeCredentialRequest(
       const device::PublicKeyCredentialUserEntity& user_entity) override;
+  std::vector<std::unique_ptr<device::FidoDiscoveryBase>>
+  CreatePlatformDiscoveries() override;
 
   // device::FidoRequestHandlerBase::Observer:
   void StartObserving(device::FidoRequestHandlerBase* request_handler) override;
@@ -247,8 +252,8 @@ class ChromeAuthenticatorRequestDelegate
       device::FidoRequestHandlerBase::TransportAvailabilityInfo tai,
       PasswordCredentialFetcher::PasswordCredentials passwords) override;
   bool PasswordsUsable() override;
-  bool IsEnclaveActive() override;
-  bool IsEnclaveReady() override;
+  bool IsGpmActive() override;
+  bool IsGpmReady() override;
   void GetGpmPasskeys(
       device::FidoRequestHandlerBase::TransportAvailabilityInfo tai,
       base::OnceCallback<void(
@@ -274,6 +279,12 @@ class ChromeAuthenticatorRequestDelegate
 
  private:
   void MaybeStartPasswordFetch(const url::Origin& origin, bool synthesize_tai);
+  void ConfigureGpm(
+      const std::string& rp_id,
+      device::FidoRequestType request_type,
+      device::UserVerificationRequirement user_verification_requirement,
+      bool cmtg_key_requested,
+      std::optional<std::string_view> user_name);
 
   FRIEND_TEST_ALL_PREFIXES(ChromeAuthenticatorRequestDelegatePrivateTest,
                            DaysSinceDate);
@@ -389,6 +400,8 @@ class ChromeAuthenticatorRequestDelegate
   bool cable_device_ready_ = false;
 
   std::unique_ptr<GPMEnclaveController> enclave_controller_;
+  std::unique_ptr<GpmBrowserAuthenticatorController> gpm_browser_controller_;
+  std::vector<std::unique_ptr<device::FidoDiscoveryBase>> platform_discoveries_;
 
   std::unique_ptr<PasswordCredentialUIController> password_ui_controller_;
   std::unique_ptr<PasswordCredentialFetcher> password_fetcher_;

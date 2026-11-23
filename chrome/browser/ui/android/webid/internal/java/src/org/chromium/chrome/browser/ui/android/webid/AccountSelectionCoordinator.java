@@ -38,7 +38,7 @@ import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.LaunchIntentDispatcher;
-import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.customtabs.BaseCustomTabActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.android.webid.data.Account;
@@ -279,6 +279,10 @@ public class AccountSelectionCoordinator
                 AccountSelectionProperties.ITEM_TYPE_SEPARATOR,
                 new LayoutViewBuilder<>(R.layout.account_selection_login_buttons_start_separator),
                 (_, _, _) -> {});
+        adapter.registerType(
+                AccountSelectionProperties.ITEM_TYPE_IDP,
+                new LayoutViewBuilder<>(R.layout.account_selection_active_mode_idp_item),
+                AccountSelectionViewBinder::bindIdpView);
         sheetItemListView.setAdapter(adapter);
 
         return contentView;
@@ -443,8 +447,8 @@ public class AccountSelectionCoordinator
     @Override
     public void onModalDialogClosed() {
         // When the opener is notified that the CCT is about to be closed, we call
-        // removeActivityStateObserver() so that we do not invoke onDismissed() once the
-        // activity is resumed.
+        // removeActivityStateObserver() so that we do not invoke onModalDialogClosedByUser() once
+        // the activity is resumed.
         mWindowAndroid.removeActivityStateObserver(this);
         mMediator.onModalDialogClosed();
     }
@@ -478,7 +482,7 @@ public class AccountSelectionCoordinator
         // closed such that this is resumed. This method would then be invoked on the CCT opener's
         // object.
         mWindowAndroid.removeActivityStateObserver(this);
-        mMediator.onDismissed(IdentityRequestDialogDismissReason.OTHER);
+        mMediator.onModalDialogClosedByUser();
     }
 
     @Override
@@ -574,10 +578,10 @@ public class AccountSelectionCoordinator
                 } else {
                     mDelegate.onNativeAppLoginFinished();
                 }
+                mMediator.onModalDialogClosed();
             } else {
-                mMediator.onDismissed(IdentityRequestDialogDismissReason.OTHER);
+                mMediator.onModalDialogClosedByUser();
             }
-            mMediator.onModalDialogClosed();
         }
     }
 
@@ -689,11 +693,11 @@ public class AccountSelectionCoordinator
     private int getFedCmId() {
         // This should be called on the object corresponding to the CCT.
         Activity activity = mWindowAndroid.getActivity().get();
-        if (!(activity instanceof ChromeActivity)) {
+        if (!(activity instanceof BaseCustomTabActivity customTabActivity)) {
             return -1;
         }
-        ChromeActivity chromeActivity = (ChromeActivity) activity;
-        return IntentUtils.safeGetIntExtra(
-                chromeActivity.getIntent(), IntentHandler.EXTRA_FEDCM_ID, -1);
+        var intentDataProvider = customTabActivity.getIntentDataProvider();
+        Integer fedCmId = intentDataProvider != null ? intentDataProvider.getFedCmId() : null;
+        return fedCmId != null ? fedCmId : -1;
     }
 }

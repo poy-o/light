@@ -8,14 +8,17 @@
 
 #include <memory>
 #include <set>
+#include <string_view>
 #include <utility>
 #include <vector>
 
+#include "base/check.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/to_string.h"
 #include "base/task/sequenced_task_runner.h"
@@ -154,6 +157,17 @@ class SessionServiceBaseUserData : public base::SupportsUserData::Data {
   const BrowserWindowInterface::Type type_;
 };
 
+std::string_view ResetReasonToString(SessionServiceBase::ResetReason reason) {
+  switch (reason) {
+    case SessionServiceBase::ResetReason::kServiceStartup:
+      return "ServiceStartup";
+    case SessionServiceBase::ResetReason::kNavigationIndexOutOfRange:
+      return "NavigationIndexOutOfRange";
+    case SessionServiceBase::ResetReason::kWebAppReparenting:
+      return "WebAppReparenting";
+  }
+}
+
 }  // namespace
 
 // SessionServiceBase
@@ -161,7 +175,7 @@ class SessionServiceBaseUserData : public base::SupportsUserData::Data {
 // Note: This is protected as it is only intended to be called by child classes
 SessionServiceBase::SessionServiceBase(Profile* profile,
                                        SessionServiceType type)
-    : profile_(profile) {
+    : profile_(profile), type_(type) {
   // Covert SessionServiceType to backend CSM::SessionType enum.
   sessions::CommandStorageManager::SessionType backend_type =
       type == SessionServiceType::kSessionRestore
@@ -225,7 +239,19 @@ void SessionServiceBase::SetWindowVisibleOnAllWorkspaces(
       window_id, visible_on_all_workspaces));
 }
 
-void SessionServiceBase::ResetFromCurrentBrowsers() {
+void SessionServiceBase::ResetFromCurrentBrowsers(ResetReason reason) {
+  if (is_saving_enabled_) {
+    if (type_ == SessionServiceType::kSessionRestore) {
+      base::UmaHistogramBoolean(
+          base::StrCat({"Session.ResetFromCurrentBrowsers.",
+                        ResetReasonToString(reason), ".HasPendingTabCloses"}),
+          HasPendingTabCloses());
+    }
+    ScheduleResetCommands();
+  }
+}
+
+void SessionServiceBase::ResetFromCurrentBrowsersForTesting() {
   if (is_saving_enabled_) {
     ScheduleResetCommands();
   }
@@ -249,6 +275,12 @@ void SessionServiceBase::SetWindowBounds(
 
   ScheduleCommand(
       sessions::CreateSetWindowBoundsCommand(window_id, bounds, show_state));
+}
+
+void SessionServiceBase::SaveNow(base::OnceClosure done_callback) {
+  CHECK(done_callback);
+  CHECK(command_storage_manager_);
+  command_storage_manager_->SaveNow(std::move(done_callback));
 }
 
 void SessionServiceBase::SetWindowWorkspace(SessionID window_id,
@@ -453,7 +485,7 @@ void SessionServiceBase::SetSelectedNavigationIndex(SessionID window_id,
     if (index < range.first || index > range.second + 1) {
       // The new index is outside the range of what we've archived, schedule
       // a reset.
-      ResetFromCurrentBrowsers();
+      ResetFromCurrentBrowsers(ResetReason::kNavigationIndexOutOfRange);
       return;
     }
     // The old code rewrote the file on a tab's second step past its

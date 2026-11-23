@@ -346,16 +346,30 @@ public class ToolbarPositionControllerTest {
     private int mHairlineHeight;
 
     public static class FakeKeyboardVisibilityDelegate extends KeyboardVisibilityDelegate {
-        private boolean mIsShowing;
+        private boolean mIsObscuring;
+        private boolean mIsVisible;
 
         public void setVisibilityForTests(boolean isShowing) {
-            mIsShowing = isShowing;
-            notifyListeners(isShowing);
+            setVisibilityForTests(isShowing, isShowing);
+        }
+
+        public void setVisibilityForTests(boolean isObscuring, boolean isVisible) {
+            boolean obscuringChanged = isObscuring != mIsObscuring;
+            boolean visibleChanged = isVisible != mIsVisible;
+            mIsObscuring = isObscuring;
+            mIsVisible = isVisible;
+            if (obscuringChanged) notifyListeners(isObscuring);
+            if (visibleChanged) notifyVisibilityListeners(isVisible);
         }
 
         @Override
         public boolean isKeyboardObscuring(View view) {
-            return mIsShowing;
+            return mIsObscuring;
+        }
+
+        @Override
+        public boolean isKeyboardVisible(View view) {
+            return mIsVisible;
         }
     }
 
@@ -1307,7 +1321,6 @@ public class ToolbarPositionControllerTest {
     }
 
     @Test
-    @EnableFeatures(ChromeFeatureList.NEW_TAB_PAGE_CUSTOMIZATION_V2)
     public void testMaybeForceBottomToolbarLayoutUpdateAndCapture() {
         when(mTab.getUrl()).thenReturn(JUnitTestGURLs.URL_1);
         mActivityTabSupplier.set(mTab);
@@ -1330,7 +1343,6 @@ public class ToolbarPositionControllerTest {
     }
 
     @Test
-    @EnableFeatures(ChromeFeatureList.NEW_TAB_PAGE_CUSTOMIZATION_V2)
     public void testMaybeForceCapture_StaleControlContainerHeight() {
         setUserToolbarAnchorPreference(/* showToolbarOnTop= */ false);
         assertControlsAtBottom();

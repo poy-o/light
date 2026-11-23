@@ -136,6 +136,22 @@ void ContextualTasksPermissionController::Update(
   PushStateToWebUI();
 }
 
+void ContextualTasksPermissionController::InvalidateChipTokens() {
+#if !BUILDFLAG(IS_ANDROID)
+  if (location_bar_) {
+    location_bar_->InvalidateChipTokens();
+  }
+#endif
+}
+
+void ContextualTasksPermissionController::RefreshContentSettingsIcons() {
+#if !BUILDFLAG(IS_ANDROID)
+  if (location_bar_) {
+    location_bar_->UpdateContentSettingsIcons();
+  }
+#endif
+}
+
 toolbar_ui_api::mojom::PermissionDashboardStatePtr
 ContextualTasksPermissionController::GetState() const {
 #if !BUILDFLAG(IS_ANDROID)
@@ -290,6 +306,16 @@ void ContextualTasksPermissionController::OnChipClicked(
 
   // Ignore the event if the chip does not exist (if dashboard is torn down
   // and mojo event arrives afterwards).
+#endif
+}
+
+void ContextualTasksPermissionController::OnChipMousePressed(
+    toolbar_ui_api::mojom::LhsChipIdentifier chip_identifier) {
+#if !BUILDFLAG(IS_ANDROID)
+  if (WebUIPermissionChip* chip = GetChip(chip_identifier)) {
+    chip->OnMousePressed();
+  }
+  // No state to push to webUI, so do not push state to webUI here.
 #endif
 }
 

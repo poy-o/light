@@ -34,7 +34,7 @@ export enum ThreadsRailAction {
 }
 // LINT.ThenChange(//tools/metrics/histograms/metadata/new_tab_page/enums.xml:NTPThreadsRailAction)
 
-function recordThreadsRailAction(action: ThreadsRailAction) {
+export function recordThreadsRailAction(action: ThreadsRailAction) {
   recordEnumerationValue(
       'NewTabPage.ThreadsRail.Action', action, ThreadsRailAction.MAX_VALUE + 1);
 }
@@ -135,6 +135,14 @@ export class ThreadsRailElement extends ThreadsRailElementBase {
     this.suppressPointerHover_ = false;
   }
 
+  focusItemWithAction(clientAction: LhsClientAction): void {
+    const index =
+        this.getItems_().findIndex(item => item.clientAction === clientAction);
+    this.shadowRoot
+        .querySelector<HTMLElement>(`#iconsContainer [data-index="${index}"]`)
+        ?.focus();
+  }
+
   protected getItems_(): LhsRailItem[] {
     return this.config_.items ?? [];
   }
@@ -155,7 +163,7 @@ export class ThreadsRailElement extends ThreadsRailElementBase {
     recordThreadsRailAction(ThreadsRailAction.RAIL_BACKGROUND_CLICKED);
   }
 
-  protected onItemClick_(e: Event): void {
+  protected onItemClick_(e: MouseEvent): void {
     const index = Number((e.currentTarget as HTMLElement).dataset['index']);
     const item = this.getItems_()[index];
     if (!item) {
@@ -165,7 +173,7 @@ export class ThreadsRailElement extends ThreadsRailElementBase {
     switch (item.clientAction) {
       case LhsClientAction.EXPAND_RAIL:
         recordThreadsRailAction(ThreadsRailAction.EXPAND_RAIL_ITEM_CLICKED);
-        this.fire('expand-rail');
+        this.fire('expand-rail', e);
         return;
       case LhsClientAction.FOCUS_REALBOX_AIM:
         recordThreadsRailAction(

@@ -2016,10 +2016,11 @@ source_set("libmutter") {
   foreach(t, _meta_dbus_targets) {
     sources += get_target_outputs(t)
   }
-  deps += _meta_dbus_targets + [
-            ":meta_enum_types_c",
-            ":meta_private_enum_types_c",
-          ]
+  public_deps = _meta_dbus_targets
+  deps += [
+    ":meta_enum_types_c",
+    ":meta_private_enum_types_c",
+  ]
 }
 
 # Chromium's implementation of the zcr_ui_controls_v2 protocol, used by
@@ -2048,6 +2049,17 @@ source_set("ui_controls") {
            ":libmutter",
            "//third_party/wayland-protocols:ui_controls_protocol",
          ]
+}
+
+# Installs a fatal-signal handler that prints a backtrace to stderr when
+# mutter crashes during tests.
+source_set("crash_backtrace") {
+  testonly = true
+
+  sources = [ "chromium/meta-crash-backtrace.c" ]
+
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
 }
 
 # Replacements for libmutter functions whose upstream behavior makes tests
@@ -2215,6 +2227,7 @@ executable("mutter") {
   deps = [
     ":clutter",
     ":compile_schemas",
+    ":crash_backtrace",
     ":libmutter",
     ":test_workarounds",
     ":ui_controls",

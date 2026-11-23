@@ -1129,8 +1129,6 @@ const FeatureEntry::FeatureParam kWebUIOmniboxPopupDebugSxS[] = {
 const FeatureEntry::FeatureVariation kWebUIOmniboxPopupDebugVariations[] = {
     {"Side by Side", kWebUIOmniboxPopupDebugSxS, nullptr}};
 
-const FeatureEntry::FeatureParam kWebUIOmniboxFullPopupUseBrowserView[] = {
-    {"Omnibox_UseBrowserView", "true"}};
 const FeatureEntry::FeatureParam
     kWebUIOmniboxFullPopupHostUnboundedInLocationBar[] = {
         {"Omnibox_HostUnboundedInLocationBar", "true"}};
@@ -1138,7 +1136,6 @@ const FeatureEntry::FeatureParam kWebUIOmniboxFullPopupMultiline[] = {
     {"Omnibox_Multiline", "true"}};
 
 const FeatureEntry::FeatureVariation kWebUIOmniboxFullPopupVariations[] = {
-    {"- Use BrowserView", kWebUIOmniboxFullPopupUseBrowserView, nullptr},
     {"- with Multiline", kWebUIOmniboxFullPopupMultiline, nullptr},
     {"- Host unbounded in LocationBar",
      kWebUIOmniboxFullPopupHostUnboundedInLocationBar, nullptr},
@@ -2604,38 +2601,26 @@ const FeatureEntry::FeatureVariation kAndroidAppIntegrationModuleVariations[] =
      {"Force to show opt in card",
       kAndroidAppIntegrationModule_ForceCardShown_NonPixel, nullptr}};
 
-const FeatureEntry::FeatureParam kNewTabPageCustomizationV2_ShowColorPicker[] =
-    {{"show_color_picker", "true"},
-     {"show_logo_and_search_box", "true"},
-     {"show_promo", "true"},
-     {"show_tip_bottom_sheet", "true"}};
+const FeatureEntry::FeatureParam
+    kNewTabPageCustomizationThemeDebug_ShowColorPicker[] = {
+        {"show_color_picker", "true"}};
 
 const FeatureEntry::FeatureParam
-    kNewTabPageCustomizationV2_DailyRefreshThresholdMs[] = {
-        {"daily_refresh_threshold_ms", "20000"},
-        {"show_logo_and_search_box", "true"},
-        {"show_promo", "true"},
-        {"show_tip_bottom_sheet", "true"}};
+    kNewTabPageCustomizationThemeDebug_DailyRefreshThresholdMs[] = {
+        {"daily_refresh_threshold_ms", "20000"}};
 
-const FeatureEntry::FeatureParam kNewTabPageCustomizationV2_ShowPromo[] = {
-    {"show_logo_and_search_box", "true"},
-    {"show_promo", "true"},
-    {"show_tip_bottom_sheet", "true"}};
 const FeatureEntry::FeatureParam
-    kNewTabPageCustomizationV2_ForceShowTipBottomSheet[] = {
-        {"force_show_tip_bottom_sheet", "true"},
-        {"show_logo_and_search_box", "true"},
-        {"show_promo", "true"},
-        {"show_tip_bottom_sheet", "true"}};
+    kNewTabPageCustomizationThemeDebug_ForceShowTipBottomSheet[] = {
+        {"force_show_tip_bottom_sheet", "true"}};
 
-const FeatureEntry::FeatureVariation kNewTabPageCustomizationV2Variations[] = {
-    {"Show color picker", kNewTabPageCustomizationV2_ShowColorPicker, nullptr},
-    {"Daily refresh after 20s",
-     kNewTabPageCustomizationV2_DailyRefreshThresholdMs, nullptr},
-    {"Show promo and tip bottom sheet", kNewTabPageCustomizationV2_ShowPromo,
-     nullptr},
-    {"Force to show theme tip bottom sheet",
-     kNewTabPageCustomizationV2_ForceShowTipBottomSheet, nullptr}};
+const FeatureEntry::FeatureVariation
+    kNewTabPageCustomizationThemeDebugVariations[] = {
+        {"Show color picker",
+         kNewTabPageCustomizationThemeDebug_ShowColorPicker, nullptr},
+        {"Daily refresh after 20s",
+         kNewTabPageCustomizationThemeDebug_DailyRefreshThresholdMs, nullptr},
+        {"Force to show theme tip bottom sheet",
+         kNewTabPageCustomizationThemeDebug_ForceShowTipBottomSheet, nullptr}};
 
 const FeatureEntry::FeatureParam
     kAndroidAppIntegrationMultiDataSource_SkipDeviceCheck[] = {
@@ -3063,30 +3048,6 @@ const FeatureEntry::FeatureVariation kLensOverlayAndroidVariations[] = {
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if !BUILDFLAG(IS_ANDROID)
-const FeatureEntry::FeatureParam kLensOverlayImageContextMenuActionsCopy[] = {
-    {"enable-copy-as-image", "true"},
-    {"enable-save-as-image", "false"},
-};
-
-const FeatureEntry::FeatureParam kLensOverlayImageContextMenuActionsSave[] = {
-    {"enable-copy-as-image", "false"},
-    {"enable-save-as-image", "true"},
-};
-
-const FeatureEntry::FeatureParam
-    kLensOverlayImageContextMenuActionsCopyAndSave[] = {
-        {"enable-copy-as-image", "true"},
-        {"enable-save-as-image", "true"},
-};
-
-const FeatureEntry::FeatureVariation
-    kLensOverlayImageContextMenuActionsVariations[] = {
-        {"copy as image", kLensOverlayImageContextMenuActionsCopy, nullptr},
-        {"save as image", kLensOverlayImageContextMenuActionsSave, nullptr},
-        {"copy and save as image",
-         kLensOverlayImageContextMenuActionsCopyAndSave, nullptr},
-};
-
 const FeatureEntry::FeatureParam
     kLensOverlayTextSelectionContextMenuEntrypointContextualized[] = {
         {"contextualize", "true"}};
@@ -4536,6 +4497,13 @@ const FeatureEntry::FeatureVariation kContextualTaskContextVariations[] = {
     {" - With Smart Tab Sharing", kSmartTabSharingEnabled, nullptr},
     {" - Smart Tab Sharing: Toggle Off After Submit",
      kSmartTabSharingToggleOffAfterSubmit, nullptr}};
+
+const FeatureEntry::FeatureParam kContextualTasksDogfoodFeedback[] = {
+    {"ContextualTasks_DogfoodFeedback", "true"}};
+
+const FeatureEntry::FeatureVariation kContextualTasksVariations[] = {
+    {"- with Dogfood Feedback", kContextualTasksDogfoodFeedback, nullptr},
+};
 
 const FeatureEntry::FeatureParam kEphemeralBrandedEntryPointEnabled[] = {
     {"ContextualTasksEntryPoint", "toolbar-ephemeral-branded"}};
@@ -6419,6 +6387,11 @@ const FeatureEntry kFeatureEntries[] = {
      kOsAndroid,
      FEATURE_VALUE_TYPE(
          features::kAccessibilityRequestScopedContentChangedEvents)},
+    {"enable-accessibility-selection-offset-types",
+     flag_descriptions::kAccessibilitySelectionOffsetTypesName,
+     flag_descriptions::kAccessibilitySelectionOffsetTypesDescription,
+     kOsAndroid,
+     FEATURE_VALUE_TYPE(features::kAccessibilitySelectionOffsetTypes)},
     {"enable-accessibility-sequential-focus",
      flag_descriptions::kAccessibilitySequentialFocusName,
      flag_descriptions::kAccessibilitySequentialFocusDescription, kOsAndroid,
@@ -6706,13 +6679,14 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kAndroidHistoryClusteringDescription, kOsAndroid,
      FEATURE_VALUE_TYPE(chrome::android::kAndroidHistoryClustering)},
 
-    {"new-tab-page-customization-v2",
-     flag_descriptions::kNewTabPageCustomizationV2Name,
-     flag_descriptions::kNewTabPageCustomizationV2Description, kOsAndroid,
+    {"new-tab-page-customization-theme-debug",
+     flag_descriptions::kNewTabPageCustomizationThemeDebugName,
+     flag_descriptions::kNewTabPageCustomizationThemeDebugDescription,
+     kOsAndroid,
      FEATURE_WITH_PARAMS_VALUE_TYPE(
-         segmentation_platform::features::kNewTabPageCustomizationV2,
-         kNewTabPageCustomizationV2Variations,
-         "NewTabPageCustomizationV2")},
+         chrome::android::kNewTabPageCustomizationThemeDebug,
+         kNewTabPageCustomizationThemeDebugVariations,
+         "NewTabPageCustomizationThemeDebug")},
 
     {"auxiliary-search-history-donation",
      flag_descriptions::kAuxiliarySearchHistoryDonationName,
@@ -8503,13 +8477,6 @@ const FeatureEntry kFeatureEntries[] = {
                                     kLocationProviderManagerVariations,
                                     "LocationProviderManager")},
 #endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
-
-#if !BUILDFLAG(IS_ANDROID)
-    {"mute-notification-snooze-action",
-     flag_descriptions::kMuteNotificationSnoozeActionName,
-     flag_descriptions::kMuteNotificationSnoozeActionDescription, kOsDesktop,
-     FEATURE_VALUE_TYPE(features::kMuteNotificationSnoozeAction)},
-#endif  // !BUILDFLAG(IS_ANDROID)
 
 #if !BUILDFLAG(IS_ANDROID)
     {"notification-one-tap-unsubscribe-on-desktop",
@@ -10540,22 +10507,6 @@ const FeatureEntry kFeatureEntries[] = {
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 #if !BUILDFLAG(IS_ANDROID)
-    {"enable-lens-overlay-image-context-menu-actions",
-     flag_descriptions::kLensOverlayImageContextMenuActionsName,
-     flag_descriptions::kLensOverlayImageContextMenuActionsDescription,
-     kOsDesktop,
-     FEATURE_WITH_PARAMS_VALUE_TYPE(
-         lens::features::kLensOverlayImageContextMenuActions,
-         kLensOverlayImageContextMenuActionsVariations,
-         "LensOverlayImageContextMenuActions")},
-#endif  // !BUILDFLAG(IS_ANDROID)
-
-#if !BUILDFLAG(IS_ANDROID)
-    {"enable-lens-overlay-updated-visuals",
-     flag_descriptions::kLensOverlayUpdatedVisualsName,
-     flag_descriptions::kLensOverlayUpdatedVisualsDescription, kOsDesktop,
-     FEATURE_VALUE_TYPE(lens::features::kLensOverlayVisualSelectionUpdates)},
-
     {"enable-lens-search-aim-m3", flag_descriptions::kLensSearchAimM3Name,
      flag_descriptions::kLensSearchAimM3Description, kOsDesktop,
      FEATURE_VALUE_TYPE(lens::features::kLensSearchAimM3)},
@@ -10995,6 +10946,9 @@ const FeatureEntry kFeatureEntries[] = {
                                          "GlicNoWebview,PrivilegedWebContents",
                                          switches::kDisableFeatures,
                                          "GlicNoWebview")},
+    {"glic-cic", flag_descriptions::kGlicCicName,
+     flag_descriptions::kGlicCicDescription, kOsDesktop | kOsAndroid,
+     FEATURE_VALUE_TYPE(features::kGlicCic)},
     {"glic-reuse-cookies", flag_descriptions::kGlicReuseCookiesName,
      flag_descriptions::kGlicReuseCookiesDescription, kOsDesktop | kOsAndroid,
      FEATURE_VALUE_TYPE(features::kGlicReuseCookies)},
@@ -11194,12 +11148,6 @@ const FeatureEntry kFeatureEntries[] = {
      FEATURE_VALUE_TYPE(autofill::features::kAutofillEnableAmountExtraction)},
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
-
-#if !BUILDFLAG(IS_ANDROID)
-    {"enable-ax-tree-fixing", flag_descriptions::kAXTreeFixingName,
-     flag_descriptions::kAXTreeFixingDescription, kOsDesktop,
-     FEATURE_VALUE_TYPE(features::kAXTreeFixing)},
-#endif  // !BUILDFLAG(IS_ANDROID)
 
 #if !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
     // The Page Colors control is only rendered in the non-ChromeOS
@@ -11934,7 +11882,9 @@ const FeatureEntry kFeatureEntries[] = {
      contextual_tasks::flag_descriptions::kContextualTasksName,
      contextual_tasks::flag_descriptions::kContextualTasksDescription,
      kOsDesktop | kOsAndroid,
-     FEATURE_VALUE_TYPE(contextual_tasks::kContextualTasks)},
+     FEATURE_WITH_PARAMS_VALUE_TYPE(contextual_tasks::kContextualTasks,
+                                    kContextualTasksVariations,
+                                    "ContextualTasks")},
 
     {"contextual-tasks-ephemeral-branded-entry-point",
      contextual_tasks::flag_descriptions::
@@ -13665,12 +13615,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kRemoteActorCredentialSharingName,
      flag_descriptions::kRemoteActorCredentialSharingDescription, kOsDesktop,
      MULTI_VALUE_TYPE(kRemoteActorCredentialSharingChoices)},
-
-    {"autofill-gmail-otp",
-     flag_descriptions::kAutofillGmailOtpPreLaunchMetricsName,
-     flag_descriptions::kAutofillGmailOtpPreLaunchMetricsDescription,
-     kOsDesktop,
-     FEATURE_VALUE_TYPE(autofill::features::kAutofillGmailOtpPreLaunchMetrics)},
 
     {"autofill-show-gmail-otp-suggestions",
      flag_descriptions::kAutofillShowGmailOtpSuggestionsName,

@@ -37,7 +37,6 @@
 #include "chrome/browser/ui/toasts/api/toast_id.h"
 #include "chrome/browser/ui/toasts/api/toast_registry.h"
 #include "chrome/browser/ui/toasts/api/toast_specification.h"
-#include "chrome/browser/ui/toasts/toast_controller.h"
 #include "chrome/browser/ui/toasts/toast_features.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/webui_url_constants.h"
@@ -78,9 +77,6 @@ ToastService::ToastService(BrowserWindowInterface* browser_window_interface)
           browser_window_interface->GetUnownedUserDataHost(),
           *this) {
   toast_registry_ = std::make_unique<ToastRegistry>();
-  toast_controller_ = std::make_unique<ToastController>(
-      browser_window_interface, toast_registry_.get());
-  toast_controller_->Init();
   RegisterToasts();
 }
 
@@ -844,6 +840,26 @@ void ToastService::RegisterToasts() {
                                         ? vector_icons::kErrorIcon
                                         : vector_icons::kErrorOldIcon,
                                     IDS_TTC_PERMISSION_DENIED_TOAST)
+            .AddCloseButton()
+            .AddGlobalScoped()
+            .Build());
+    toast_registry_->RegisterToast(
+        ToastId::kTtcSpeakerMuted,
+        ToastSpecification::Builder(
+            features::IsRoundedIconsEnabled()
+                ? vector_icons::kVolumeOffIcon
+                : vector_icons::kVolumeOffChromeRefreshOldIcon,
+            IDS_TTC_SPEAKER_MUTED_TOAST)
+            .AddCloseButton()
+            .AddGlobalScoped()
+            .Build());
+    toast_registry_->RegisterToast(
+        ToastId::kTtcSpeakerVolumeLow,
+        ToastSpecification::Builder(
+            features::IsRoundedIconsEnabled()
+                ? vector_icons::kVolumeUpIcon
+                : vector_icons::kVolumeUpChromeRefreshOldIcon,
+            IDS_TTC_SPEAKER_VOLUME_LOW_TOAST)
             .AddCloseButton()
             .AddGlobalScoped()
             .Build());

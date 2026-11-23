@@ -110,7 +110,6 @@
 #include "chrome/grit/settings_resources_map.h"
 #include "components/account_manager_core/account_manager_facade.h"
 #include "components/autofill/content/browser/content_autofill_client.h"
-#include "components/autofill/core/browser/at_memory/at_memory_enablement_util.h"
 #include "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
 #include "components/autofill/core/browser/integrators/personal_context/personal_context_autofill_util.h"
 #include "components/autofill/core/browser/payments/bnpl_manager.h"
@@ -160,7 +159,6 @@
 #include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/public_buildflags.h"
-#include "ui/accessibility/accessibility_features.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/webui/tracked_element/tracked_element_handler_document_singleton.h"
 #include "ui/webui/webui_util.h"
@@ -268,8 +266,6 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
 #if BUILDFLAG(IS_CHROMEOS)
   AddSettingsPageUIHandler(std::make_unique<LanguagesHandler>(profile));
 #endif  // BUILDFLAG(IS_CHROMEOS)
-  html_source->AddBoolean("axTreeFixingEnabled", base::FeatureList::IsEnabled(
-                                                     features::kAXTreeFixing));
 
   AddSettingsPageUIHandler(std::make_unique<AccessibilityMainHandler>());
   AddSettingsPageUIHandler(std::make_unique<BrowserLifetimeHandler>());
@@ -724,20 +720,6 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
   html_source->AddBoolean("showSuggestionsFromGeminiSettings",
                           autofill::ShouldShowPersonalContextAutofillSetting(
                               autofill_client, eligibility_service));
-  html_source->AddBoolean(
-      "isAtMemoryEnabled",
-      autofill::MayPerformAtMemoryAction(
-          autofill::AtMemoryAction::kShowAtMemoryInSettings, autofill_client));
-
-  html_source->AddBoolean(
-      "isAtMemoryTriggerCustomizationAllowed",
-      autofill::MayPerformAtMemoryAction(
-          autofill::AtMemoryAction::kAllowCustomizeAtMemoryShortcut,
-          autofill_client));
-
-  html_source->AddBoolean("isAtMemoryDoubleCtrlEnabled",
-                          base::FeatureList::IsEnabled(
-                              autofill::features::kAutofillAtMemoryDoubleCtrl));
 
   html_source->AddString(
       "webuiRefresh2026",

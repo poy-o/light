@@ -200,6 +200,26 @@ TEST_F(WindowCacheTest, MapAndUnmapNotify) {
   EXPECT_FALSE(info.mapped);
 }
 
+TEST_F(WindowCacheTest, UnmappedLocally) {
+  connection()->MapWindow(root());
+  Window window = CreateWindow(root());
+  connection()->MapWindow(window);
+  connection()->SetStringProperty(window, Atom::WM_NAME, Atom::STRING, "a");
+  cache()->SyncForTest();
+  EXPECT_EQ(cache()->GetWindowAtPoint({100, 100}, root()), window);
+
+  // The window is no longer hit without waiting for the UnmapNotify.
+  cache()->OnWindowUnmappedLocally(window);
+  EXPECT_FALSE(cache()->windows().at(window).mapped);
+  EXPECT_EQ(cache()->GetWindowAtPoint({100, 100}, root()), Window::None);
+
+  // A later MapNotify updates the state as usual.
+  connection()->UnmapWindow(window);
+  connection()->MapWindow(window);
+  cache()->SyncForTest();
+  EXPECT_EQ(cache()->GetWindowAtPoint({100, 100}, root()), window);
+}
+
 TEST_F(WindowCacheTest, ReparentNotify) {
   Window r = root();
   Window a = CreateWindow(r);
@@ -458,6 +478,30 @@ TEST_F(WindowCacheTest, NestedWmName) {
 
   cache()->SyncForTest();
   EXPECT_EQ(cache()->GetWindowAtPoint({100, 100}, root()), a);
+}
+
+// Regression test for https://crbug.com/40285047
+// If an ignored window is reparented into a named WM frame, neither should be
+// returned and windows below them should be hit instead.
+TEST_F(WindowCacheTest, IgnoredWindowInNamedFrame) {
+  connection()->MapWindow(root());
+
+  Window below = CreateWindow(root());
+  connection()->MapWindow(below);
+  connection()->SetStringProperty(below, Atom::WM_NAME, Atom::STRING, "below");
+
+  Window frame = CreateWindow(root());
+  connection()->MapWindow(frame);
+  connection()->SetStringProperty(frame, Atom::WM_NAME, Atom::STRING, "frame");
+
+  Window client = CreateWindow(frame);
+  connection()->MapWindow(client);
+  connection()->SetStringProperty(client, Atom::WM_NAME, Atom::STRING, "c");
+
+  cache()->SyncForTest();
+  EXPECT_EQ(cache()->GetWindowAtPoint({100, 100}, root()), client);
+  base::flat_set<Window> ignore{client};
+  EXPECT_EQ(cache()->GetWindowAtPoint({100, 100}, root(), &ignore), below);
 }
 
 }  // namespace x11

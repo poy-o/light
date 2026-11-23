@@ -286,10 +286,14 @@ void DedicatedWorker::Start() {
 
   if (!CheckCanReadScriptURLForNoThrow(script_request_url_) ||
       !CheckAllowedByCSPForNoThrow(script_request_url_)) {
-    // The same as in OnScriptLoadStartFailed, reset factory_client_ and return.
-    // This leaves the worker in a state the same as if script loading failed.
-    factory_client_.reset();
-    context_proxy_->DidFailToFetchScript();
+    // Abort startup and asynchronously invoke OnScriptLoadStartFailed() so the
+    // caller has a chance to register an error event handler before the error
+    // event is dispatched and the proxy is terminated.
+    GetExecutionContext()
+        ->GetTaskRunner(TaskType::kInternalLoading)
+        ->PostTask(FROM_HERE,
+                   BindOnce(&DedicatedWorker::OnScriptLoadStartFailed,
+                            WrapPersistent(this)));
     return;
   }
 
@@ -379,9 +383,9 @@ void DedicatedWorker::OnWorkerHostCreated(
 
 void DedicatedWorker::OnScriptLoadStartFailed() {
   TRACE_EVENT("blink.worker", "DedicatedWorker::OnScriptLoadStartFailed");
-  // Specify empty source code here because scripts will be fetched on the
-  context_proxy_->DidFailToFetchScript();
   factory_client_.reset();
+  context_proxy_->DidFailToFetchScript();
+  context_proxy_->TerminateGlobalScope();
 }
 
 void DedicatedWorker::DispatchErrorEventForScriptFetchFailure() {
@@ -415,10 +419,15 @@ void DedicatedWorker::OnScriptLoadStarted(
     CrossVariantMojoReceiver<mojom::blink::ReportingObserverInterfaceBase>
         coep_reporting_observer,
     CrossVariantMojoReceiver<mojom::blink::ReportingObserverInterfaceBase>
-        dip_reporting_observer) {
+        dip_reporting_observer,
+    const std::optional<WebSecurityOrigin>& updated_origin) {
   UMA_HISTOGRAM_TIMES("Worker.TopLevelScript.LoadStartedTime",
                       base::TimeTicks::Now() - start_time_);
   TRACE_EVENT("blink.worker", "DedicatedWorker::OnScriptLoadStarted");
+  if (updated_origin) {
+    origin_ = blink::SecurityOrigin::CreateFromUrlOrigin(
+        url::Origin(*updated_origin));
+  }
   if (base::FeatureList::IsEnabled(
           features::kDedicatedWorkerAblationStudyEnabled)) {
     CHECK(GetExecutionContext());
@@ -572,7 +581,10 @@ DedicatedWorker::CreateGlobalScopeCreationParams(
       /*interface_registry=*/nullptr,
       std::move(agent_group_scheduler_compositor_task_runner),
       top_level_frame_security_origin,
-      execution_context->GetStorageAccessApiStatus(),
+      (origin_ && origin_->IsOpaque() &&
+       base::FeatureList::IsEnabled(features::kCSPSandboxedWorkerOpaqueOrigin))
+          ? net::StorageAccessApiStatus::kNone
+          : execution_context->GetStorageAccessApiStatus(),
       /*require_cross_site_request_for_cookies=*/false,
       origin_ ? origin_->IsolatedCopy() : nullptr,
       std::move(coep_reporting_observer), std::move(dip_reporting_observer));

@@ -7,18 +7,20 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/contextual_tasks/location_bar_stub.h"
+#include "chrome/browser/ui/content_settings/content_setting_bubble_model_delegate.h"
 #include "chrome/browser/ui/content_settings/content_setting_image_view_delegate.h"
 #include "chrome/browser/ui/views/location_bar/webui_content_setting_image_control.h"
 
 class BrowserWindowInterface;
 class ChipController;
-class ContentSettingBubbleModelDelegate;
 class PageInfoBubbleSpecification;
 class PermissionDashboardController;
 class WebUIPermissionDashboard;
@@ -63,6 +65,11 @@ class ContextualTasksLocationBar : public LocationBarStub,
     return permission_dashboard_.get();
   }
 
+  // Rotates chip state tokens and schedules a dashboard push without detaching
+  // `web_contents_`, dropping any click IPCs still in flight when the panel
+  // closes or is replaced by another side panel entry.
+  void InvalidateChipTokens();
+
   // LocationBar overrides:
   // Returns the `WebContents` hosting the currently active task's guest web
   // content in the side panel (i.e. the page that permissions apply to).
@@ -83,6 +90,8 @@ class ContextualTasksLocationBar : public LocationBarStub,
       override;
   ChipController* GetChipController() override;
   PermissionDashboardController* GetPermissionDashboardController() override;
+  void AnnounceAlert(const std::u16string& announcement) override;
+  bool ShouldAnnounceAddressBarHint() const override;
   void OnChanged() override;
   void UpdateContentSettingsIcons() override;
   void Update(content::WebContents* contents) override;
@@ -99,13 +108,40 @@ class ContextualTasksLocationBar : public LocationBarStub,
   content::WebContents* GetToolbarWebContents() const;
 
  private:
+  // Wraps `BrowserContentSettingBubbleModelDelegate` so `ShowLearnMorePage()`
+  // opens help tabs via `ContextualTasksPanelController::OpenUrlInNewTab()`
+  // rather than `chrome::AddSelectedTabWithURL(..., PAGE_TRANSITION_LINK)`,
+  // preventing `OnTabAdded()` from associating the new help tab with the active
+  // tab's Contextual Task.
+  class BubbleModelDelegate : public ContentSettingBubbleModelDelegate {
+   public:
+    explicit BubbleModelDelegate(ContextualTasksLocationBar& owner);
+    BubbleModelDelegate(const BubbleModelDelegate&) = delete;
+    BubbleModelDelegate& operator=(const BubbleModelDelegate&) = delete;
+    ~BubbleModelDelegate() override;
+
+    // ContentSettingBubbleModelDelegate:
+    void ShowCollectedCookiesDialog(
+        content::WebContents* web_contents) override;
+    void ShowContentSettingsPage(ContentSettingsType type) override;
+    void ShowMediaSettingsPage() override;
+    void ShowLearnMorePage(ContentSettingsType type) override;
+
+   private:
+    const raw_ref<ContextualTasksLocationBar> owner_;
+  };
+
   // Resolves the controller that owns both the toolbar and the per-task
   // `WebContents`. Looked up on demand because the controller lives
   // the longest.
   ContextualTasksPanelController* GetCoordinator() const;
 
+  // Returns whether the Contextual Tasks side panel is currently open.
+  bool IsPanelOpen() const;
+
   raw_ptr<BrowserWindowInterface> browser_window_;
   base::RepeatingClosure state_changed_callback_;
+  BubbleModelDelegate bubble_model_delegate_{*this};
 
   // The web contents of the currently active task in the side panel, updated
   // via `Update()` when switching tasks.

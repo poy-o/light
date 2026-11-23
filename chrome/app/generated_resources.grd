@@ -1737,7 +1737,7 @@ are declared in tools/grit/grit_args.gni.
         Review
       </message>
       <message name="IDS_TOS_NOTIFICATION_LINK" desc="The URL for the new TOS change link." translateable="false">
-        https://www.google.com/chrome/privacy/eula_text.html
+        https://www.google.com/chrome/terms/
       </message>
 
       <message name="IDS_HELP_MENU" desc="The text label of the Help sub-menu item in the wrench menu">
@@ -7044,7 +7044,7 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_OMNIBOX_EVERYWHERE_LENS_PROMO_BODY" desc="Body text for the promo highlighting screen sharing and Google Lens search in Omnibox Everywhere.">
         Ask about anything on your screen
       </message>
-      <message name="IDS_OMNIBOX_EVERYWHERE_LENS_PROMO_ACCESSIBLE_TEXT" desc="Accessible text for the promo highlighting screen sharing and Google Lens search in Omnibox Everywhere." translateable="false">
+      <message name="IDS_OMNIBOX_EVERYWHERE_LENS_PROMO_ACCESSIBLE_TEXT" desc="Spoken by screen readers when the promo highlighting screen sharing and Google Lens search in Omnibox Everywhere is shown, but not visually rendered.">
         Ask anything about what's on your screen by sharing your screen.
       </message>
       <message name="IDS_OMNIBOX_EVERYWHERE_CONTEXT_MENU_CLOSE" desc="Label for the close option in the Loomnibox (Omnibox Everywhere) right-click context menu. Closes Loomnibox and removes the taskbar icon while keeping it invokable via hotkeys and notification area.">
@@ -7134,7 +7134,7 @@ Keep your key file in a safe place. You will need it to create new versions of y
         Search
       </message>
       <message name="IDS_LOOMNIBOX_FRE_LENS_PRIMARY" desc="Primary text explaining how to use Google Lens in the Loomnibox.">
-        Share what’s on your screen with Google Lens
+        Ask about what’s on your screen with Google Lens
       </message>
       <if expr="is_macosx">
         <message name="IDS_LOOMNIBOX_FRE_WHERE_TO_FIND_PRIMARY" desc="Primary text telling macOS users where to find Search with Chrome in their menu bar.">
@@ -14338,6 +14338,12 @@ Please help our engineers fix this problem. Tell us what happened right before y
       <message name="IDS_TTC_PERMISSION_DENIED_TOAST" translateable="false" desc="Text shown in a toast notification when the user's Google Account does not have access to use TTC.">
         Permission denied
       </message>
+      <message name="IDS_TTC_SPEAKER_MUTED_TOAST" translateable="false" desc="Text shown in a toast notification when the system's audio output is muted during a TTC session, so the user can't hear the spoken replies.">
+        Your speaker is muted
+      </message>
+      <message name="IDS_TTC_SPEAKER_VOLUME_LOW_TOAST" translateable="false" desc="Text shown in a toast notification when the system's audio output volume is very low while TTC speaks a reply, so the user may not hear it.">
+        Your speaker volume is low
+      </message>
       <message name="IDS_TTC_VOICE_PLATE_INITIALIZING_ACCNAME" translateable="false" desc="Accessible status name for the TTC voice plate waveform while initializing.">
         Initializing
       </message>
@@ -14388,9 +14394,6 @@ Please help our engineers fix this problem. Tell us what happened right before y
             =1 {Show}
             other {Show all}}
         </message>
-        <message name="IDS_NOTIFICATION_MUTED_ACTION_SNOOZE" desc="Action button text to snooze future notifications during the current screen capture session." translateable="false">
-          Snooze
-        </message>
       </if>
       <if expr="use_titlecase">
         <message name="IDS_NOTIFICATION_MUTED_TITLE" desc="In Title Case: Title of a notification showing how many new notifications are currently hidden. The number is always greater than zero.">
@@ -14402,9 +14405,6 @@ Please help our engineers fix this problem. Tell us what happened right before y
           {MUTED_NOTIFICATIONS_COUNT, plural,
             =1 {Show}
             other {Show All}}
-        </message>
-        <message name="IDS_NOTIFICATION_MUTED_ACTION_SNOOZE" desc="In Title Case: Action button text to snooze future notifications during the current screen capture session." translateable="false">
-          Snooze
         </message>
       </if>
       <if expr="is_android">
@@ -15959,6 +15959,12 @@ Please help our engineers fix this problem. Tell us what happened right before y
     </message>
     <message name="IDS_SERIAL_PORT_CHOOSER_NAME_WITH_PATH" desc="User option displaying a human-readable name for a serial port with the device path in parenthesis">
       <ph name="FRIENDLY_NAME">$1<ex>Virtual COM Port</ex></ph> (<ph name="DEVICE_PATH">$2<ex>COM1</ex></ph>)
+    </message>
+    <message name="IDS_SERIAL_PORT_CHOOSER_NAME_WITH_SERVICE" desc="User option displaying a human-readable name for a serial port with the service name or UUID in parenthesis">
+      <ph name="PORT_NAME">$1<ex>Bluetooth Device</ex></ph> (<ph name="SERVICE_NAME">$2<ex>Serial Port</ex></ph>)
+    </message>
+    <message name="IDS_SERIAL_PORT_PROFILE_NAME" desc="The name of the Bluetooth Serial Port Profile (SPP) service.">
+      Serial Port
     </message>
     <message name="IDS_SERIAL_POLICY_DESCRIPTION_FOR_USB_PRODUCT_ID_AND_VENDOR_ID" desc="String describing a USB device permission granted by enterprise policy to a site when only the numeric product ID and vendor ID are available.">
       USB device (<ph name="VENDOR_ID">$2<ex>12AB</ex></ph>:<ph name="PRODUCT_ID">$1<ex>12AB</ex></ph>)
@@ -17682,6 +17688,9 @@ Please help our engineers fix this problem. Tell us what happened right before y
     <message name="IDS_GLIC_ACTIVITY_ERROR" desc="Status text shown in the Glic Activity Hub when a Gemini activity encountered an error.">
       Something went wrong
     </message>
+    <message name="IDS_GLIC_ACTIVITY_INDICATOR_TOOLTIP" desc="Tooltip text and accessible name for the secondary split button next to the Gemini button in the tab strip or toolbar when no alert text label is shown. Clicking the button opens a bubble listing the user's active and recent Gemini chats and tasks. [CHAR_LIMIT=60]">
+      Check your activity
+    </message>
 
     <!-- Toast Strings-->
     <if expr="not is_android">
@@ -18616,54 +18625,53 @@ Please help our engineers fix this problem. Tell us what happened right before y
     </message>
 
     <!-- On-device AI model categories -->
-    <!-- TODO(crbug.com/573643364): Make these translatable when finalized. -->
-    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_GENERAL_PURPOSE_TITLE" translateable="false" desc="Title for the general purpose on-device AI capability shown in Settings and download notifications.">
-      General purpose
+    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_GENERAL_PURPOSE_TITLE" desc="Title for the general-purpose writing on-device AI capability shown in Settings and download notifications.">
+      General-purpose writing
     </message>
-    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_GENERAL_PURPOSE_DESCRIPTION" translateable="false" desc="Short description for the general purpose on-device AI capability in Settings.">
-      Helps to write, summarize, and more
+    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_GENERAL_PURPOSE_DESCRIPTION" desc="Short description for the general-purpose writing on-device AI capability in Settings.">
+      Helps write, rewrite, and summarize text
     </message>
-    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_GENERAL_PURPOSE_DETAIL_1" translateable="false" desc="First detail bullet for the general purpose on-device AI capability in Settings.">
-      Helps you draft, rephrase, and organize text on sites that use it
+    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_GENERAL_PURPOSE_DETAIL_1" desc="First detail bullet shown when the general-purpose writing on-device AI capability is expanded in Settings.">
+      Helps draft, rephrase, and organize text on sites that use it
     </message>
-    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_GENERAL_PURPOSE_DETAIL_2" translateable="false" desc="Second detail bullet for the general purpose on-device AI capability in Settings.">
+    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_GENERAL_PURPOSE_DETAIL_2" desc="Second detail bullet shown when the general-purpose writing on-device AI capability is expanded in Settings.">
       Handles many tasks, so one download covers multiple features
     </message>
-    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_PROOFREADING_TITLE" translateable="false" desc="Title for the proofreading on-device AI capability shown in Settings and download notifications.">
+    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_PROOFREADING_TITLE" desc="Title for the proofreading on-device AI capability shown in Settings and download notifications.">
       Proofreading
     </message>
-    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_PROOFREADING_DESCRIPTION" translateable="false" desc="Short description for the proofreading on-device AI capability in Settings.">
-      High-speed syntax and typographical checking without content alteration
+    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_PROOFREADING_DESCRIPTION" desc="Short description for the proofreading on-device AI capability in Settings.">
+      Checks spelling and grammar
     </message>
-    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_PROOFREADING_DETAIL_1" translateable="false" desc="First detail bullet for the proofreading on-device AI capability in Settings.">
+    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_PROOFREADING_DETAIL_1" desc="First detail bullet shown when the proofreading on-device AI capability is expanded in Settings.">
       Suggests fixes for spelling, grammar, and punctuation as you type
     </message>
-    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_PROOFREADING_DETAIL_2" translateable="false" desc="Second detail bullet for the proofreading on-device AI capability in Settings.">
+    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_PROOFREADING_DETAIL_2" desc="Second detail bullet shown when the proofreading on-device AI capability is expanded in Settings.">
       Only suggests fixes without rewriting your text
     </message>
-    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_SUMMARIZING_TITLE" translateable="false" desc="Title for the summarizing on-device AI capability shown in Settings and download notifications.">
+    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_SUMMARIZING_TITLE" desc="Title for the summarizing on-device AI capability shown in Settings and download notifications.">
       Summarizing
     </message>
-    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_SUMMARIZING_DESCRIPTION" translateable="false" desc="Short description for the summarizing on-device AI capability in Settings.">
-      Condensing long-form web content into concise takeaways
+    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_SUMMARIZING_DESCRIPTION" desc="Short description for the summarizing on-device AI capability in Settings.">
+      Turns long pages of text into key points
     </message>
-    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_SUMMARIZING_DETAIL_1" translateable="false" desc="First detail bullet for the summarizing on-device AI capability in Settings.">
+    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_SUMMARIZING_DETAIL_1" desc="First detail bullet shown when the summarizing on-device AI capability is expanded in Settings.">
       Gives you key points, a short summary, or a headline
     </message>
-    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_SUMMARIZING_DETAIL_2" translateable="false" desc="Second detail bullet for the summarizing on-device AI capability in Settings.">
+    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_SUMMARIZING_DETAIL_2" desc="Second detail bullet shown when the summarizing on-device AI capability is expanded in Settings. 'General-purpose writing' refers to the capability titled by IDS_ON_DEVICE_MODEL_CATEGORY_GENERAL_PURPOSE_TITLE and should be translated consistently with it.">
       Faster and more compact than general-purpose writing
     </message>
-    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_LIVE_TRANSCRIPTION_TITLE" translateable="false" desc="Title for the live transcription on-device AI capability shown in Settings and download notifications.">
-      Live transcription
+    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_LIVE_TRANSCRIPTION_TITLE" desc="Title for the speech recognition (live transcription) on-device AI capability shown in Settings and download notifications.">
+      Speech recognition
     </message>
-    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_LIVE_TRANSCRIPTION_DESCRIPTION" translateable="false" desc="Short description for the live transcription on-device AI capability in Settings.">
-      Transcribes speech to text in real time
+    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_LIVE_TRANSCRIPTION_DESCRIPTION" desc="Short description for the speech recognition (live transcription) on-device AI capability in Settings.">
+      Turns speech into text, like captions
     </message>
-    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_LIVE_TRANSCRIPTION_DETAIL_1" translateable="false" desc="First detail bullet for the live transcription on-device AI capability in Settings.">
+    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_LIVE_TRANSCRIPTION_DETAIL_1" desc="First detail bullet shown when the speech recognition (live transcription) on-device AI capability is expanded in Settings.">
       Works on sites that support live audio transcription
     </message>
-    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_LIVE_TRANSCRIPTION_DETAIL_2" translateable="false" desc="Second detail bullet for the live transcription on-device AI capability in Settings.">
-      Downloads separately for each language you use
+    <message name="IDS_ON_DEVICE_MODEL_CATEGORY_LIVE_TRANSCRIPTION_DETAIL_2" desc="Second detail bullet shown when the speech recognition (live transcription) on-device AI capability is expanded in Settings.">
+      Downloads once for all languages you use
     </message>
 
     <!-- ChromeOS-specific strings -->

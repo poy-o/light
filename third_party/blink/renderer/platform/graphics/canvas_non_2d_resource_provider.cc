@@ -14,7 +14,6 @@
 #include "base/memory/safety_checks.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
@@ -274,9 +273,6 @@ CanvasNon2DResourceProvider::~CanvasNon2DResourceProvider() {
   if (!is_software_) {
     FlushForImageListener::Get()->RemoveObserver(this);
   }
-
-  UMA_HISTOGRAM_EXACT_LINEAR("Blink.Canvas.MaximumInflightResources",
-                             max_inflight_resources_, 20);
 }
 
 scoped_refptr<CanvasResource>
@@ -292,14 +288,9 @@ CanvasNon2DResourceProvider::NewOrRecycledResource() {
 
   if (!resource->IsInitialized()) {
     if (image_pool_->GetImageInfo().is_software) {
-      resource->InitializeSoftware(CreateWeakPtr(),
-                                   shared_image_interface_provider_);
+      resource->InitializeSoftware(shared_image_interface_provider_);
     } else {
-      resource->Initialize(CreateWeakPtr());
-    }
-    ++num_inflight_resources_;
-    if (num_inflight_resources_ > max_inflight_resources_) {
-      max_inflight_resources_ = num_inflight_resources_;
+      resource->Initialize();
     }
   }
   DCHECK(resource->HasOneRef());
@@ -369,13 +360,6 @@ void CanvasNon2DResourceProvider::OnFlushForImage(
     // This handles the case where the cached snapshot is referenced by an
     // ImageBitmap that is being transferred to a worker.
     cached_snapshot_.reset();
-  }
-}
-
-void CanvasNon2DResourceProvider::OnResourceRefReturned(
-    scoped_refptr<CanvasResource> resource) {
-  if (!resource->IsLost() && resource->HasOneRef() && image_pool_) {
-    image_pool_->ReleaseImage(std::move(resource));
   }
 }
 
@@ -521,14 +505,19 @@ CanvasNon2DResourceProvider::CreateExportedResource(
       resource);
 
   auto release_callback = base::BindOnce(
-      [](scoped_refptr<CanvasResource> resource,
+      [](base::WeakPtr<gpu::SharedImagePool<CanvasResource>> pool,
+         scoped_refptr<CanvasResource> resource,
          const gpu::SyncToken& sync_token, bool is_lost) {
+        CHECK(resource);
+        DCHECK(!resource->is_cross_thread());
         if (is_lost) {
           resource->NotifyResourceLost();
         }
-        CanvasResource::DropRefOnOwningThread(std::move(resource));
+        if (pool && !resource->IsLost() && resource->HasOneRef()) {
+          pool->ReleaseImage(std::move(resource));
+        }
       },
-      resource);
+      image_pool_->GetWeakPtr(), resource);
 
   return base::MakeRefCounted<ExportedCanvasResource>(
       resource->GetSharedImage(), resource->sync_token(),
@@ -601,15 +590,19 @@ scoped_refptr<StaticBitmapImage> CanvasNon2DResourceProvider::Snapshot() {
     // the ref-count on the resource as a proxy for a read lock to allow
     // recycling the resource once all refs have been released.
     auto release_callback = base::BindOnce(
-        [](scoped_refptr<CanvasResource> resource,
+        [](base::WeakPtr<gpu::SharedImagePool<CanvasResource>> pool,
+           scoped_refptr<CanvasResource> resource,
            const gpu::SyncToken& sync_token, bool lost_resource) {
           CHECK(resource);
+          DCHECK(!resource->is_cross_thread());
           CHECK(!lost_resource);
 
           resource->WaitSyncToken(sync_token);
-          CanvasResource::DropRefOnOwningThread(std::move(resource));
+          if (pool && !resource->IsLost() && resource->HasOneRef()) {
+            pool->ReleaseImage(std::move(resource));
+          }
         },
-        resource_);
+        image_pool_->GetWeakPtr(), resource_);
 
     cached_snapshot_ =
         AcceleratedStaticBitmapImage::CreateFromCanvasSharedImage(
@@ -738,9 +731,11 @@ void CanvasNon2DResourceProvider::FlushRecording(
 
 base::ByteSize CanvasNon2DResourceProvider::EstimatedSizeInBytes() const {
   base::ByteSize result;
+  if (image_pool_) {
+    result += image_pool_->EstimatedSizeInBytes();
+  }
   if (resource_) {
-    result += resource_->GetSharedImage()->EstimatedSizeInBytes() *
-              num_inflight_resources_;
+    result += resource_->GetSharedImage()->EstimatedSizeInBytes();
   }
   return result;
 }

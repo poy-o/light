@@ -29,6 +29,7 @@
 #include "chrome/updater/registration_data.h"
 #include "chrome/updater/test/integration_test_commands.h"
 #include "chrome/updater/test/integration_tests_impl.h"
+#include "chrome/updater/test/json_matchers.h"
 #include "chrome/updater/update_service.h"
 #include "chrome/updater/updater_scope.h"
 #include "chrome/updater/util/util.h"
@@ -203,15 +204,17 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
   }
 
   void ExpectPing(ScopedServer& test_server,
+                  const std::string& app_id,
                   int event_type,
                   std::optional<GURL> target_url) const override {
-    updater::test::ExpectPing(updater_scope_, test_server, event_type,
+    updater::test::ExpectPing(updater_scope_, test_server, app_id, event_type,
                               target_url);
   }
 
   void ExpectInstallSource(ScopedServer& test_server,
+                           const std::string& app_id,
                            const std::string& install_source) const override {
-    updater::test::ExpectInstallSource(updater_scope_, test_server,
+    updater::test::ExpectInstallSource(updater_scope_, test_server, app_id,
                                        install_source);
   }
 
@@ -254,12 +257,12 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
                             bool do_fault_injection,
                             bool skip_download,
                             const base::Version& updater_version,
-                            const std::string& event_regex,
+                            std::optional<json::ValueMatcher> ping_app_matcher,
                             bool use_xz) const override {
     updater::test::ExpectUpdateSequence(
         updater_scope_, test_server, app_id, install_data_index, priority,
         from_version, to_version, do_fault_injection, skip_download,
-        updater_version, event_regex, use_xz);
+        updater_version, std::move(ping_app_matcher), use_xz);
   }
 
   void ExpectUpdateSequenceBadHash(
@@ -274,20 +277,21 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
         from_version, to_version);
   }
 
-  void ExpectInstallSequence(ScopedServer& test_server,
-                             const std::string& app_id,
-                             const std::string& install_data_index,
-                             UpdateService::Priority priority,
-                             const base::Version& from_version,
-                             const base::Version& to_version,
-                             bool do_fault_injection,
-                             bool skip_download,
-                             const base::Version& updater_version,
-                             const std::string& event_regex) const override {
+  void ExpectInstallSequence(
+      ScopedServer& test_server,
+      const std::string& app_id,
+      const std::string& install_data_index,
+      UpdateService::Priority priority,
+      const base::Version& from_version,
+      const base::Version& to_version,
+      bool do_fault_injection,
+      bool skip_download,
+      const base::Version& updater_version,
+      std::optional<json::ValueMatcher> ping_app_matcher) const override {
     updater::test::ExpectInstallSequence(
         updater_scope_, test_server, app_id, install_data_index, priority,
         from_version, to_version, do_fault_injection, skip_download,
-        updater_version, event_regex);
+        updater_version, std::move(ping_app_matcher));
   }
 
   void ExpectEnterpriseCompanionAppOTAInstallSequence(

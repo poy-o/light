@@ -51,6 +51,8 @@ import org.chromium.chrome.browser.policy.PolicyAuditor;
 import org.chromium.chrome.browser.policy.PolicyAuditor.AuditEvent;
 import org.chromium.chrome.browser.tab.InterceptNavigationDelegateTabHelper;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabAttributeKeys;
+import org.chromium.chrome.browser.tab.TabAttributes;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tab.TabUtils;
@@ -185,14 +187,16 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
     }
 
     @Override
-    public void showRepostFormWarningDialog() {
+    public boolean showRepostFormWarningDialog() {
         // When the dialog is visible, keeping the refresh animation active
         // in the background is distracting and unnecessary (and likely to
         // jank when the dialog is shown).
         SwipeRefreshHandler handler = SwipeRefreshHandler.get(mTab);
         if (handler != null) handler.reset();
 
+        // If the dialog cannot show, this cancels the pending reload.
         showRepostFormWarningTabModalDialog();
+        return true;
     }
 
     @Override
@@ -216,13 +220,14 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
 
     @Override
     public long getFullscreenTargetDisplay() {
-        if (ChromeFeatureList.isEnabled(
+        if (!ChromeFeatureList.isEnabled(
                 ChromeFeatureList.ENABLE_FULLSCREEN_TO_ANY_SCREEN_ANDROID)) {
-            if (mFullscreenManager != null) {
-                return mFullscreenManager.getFullscreenTargetDisplay();
-            }
+            return INVALID_DISPLAY;
         }
-        return INVALID_DISPLAY;
+        if (mTab.isDestroyed()) return INVALID_DISPLAY;
+        FullscreenOptions options =
+                TabAttributes.from(mTab).get(TabAttributeKeys.FULLSCREEN_OPTIONS);
+        return options != null ? options.displayId : INVALID_DISPLAY;
     }
 
     @Override

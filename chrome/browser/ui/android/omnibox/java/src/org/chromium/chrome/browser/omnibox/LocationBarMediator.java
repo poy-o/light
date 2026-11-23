@@ -19,6 +19,7 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
 import android.text.TextUtils;
 import android.util.FloatProperty;
 import android.view.KeyEvent;
@@ -297,6 +298,9 @@ public class LocationBarMediator
     private int mIndexInToolbar;
     private @Nullable View mDropdown;
     private boolean mIsReparenting;
+    // Whether a navigation started from the current input session is under way and that session
+    // has not been ended yet.
+    private boolean mIsLoadingUrlFromCurrentInput;
     private boolean mDeferredFocusCurrentTab;
     private VoiceRecognitionHandler mVoiceRecognitionHandler;
     private StatusCoordinator mStatusCoordinator;
@@ -340,6 +344,8 @@ public class LocationBarMediator
     // is aim-eligible, but not every AIM-eligible client is Fusebox-eligible. AIM-but-not-Fusebox
     // clients get AIM UI affordances, e.g. the activation chip, but not Fusebox ones.
     private boolean mIsFuseboxEligible;
+    private @Nullable Drawable mAiModeButtonIcon;
+    private boolean mTintAiModeButtonIcon;
     private @BrandedColorScheme int mBrandedColorScheme = BrandedColorScheme.APP_DEFAULT;
     // TODO(https://crbug.com/481357849): Remove this.
     private boolean mHasEverUpdatedBrandedColorScheme;
@@ -760,17 +766,19 @@ public class LocationBarMediator
 
         if (!mUrlFocusedWithoutAnimations) handleUrlFocusAnimation(hasFocus);
 
-        if (hasFocus
-                && mCurrentInput != null
-                && displayStateEquals(DisplayState.DRAFTING_NO_FOCUS)) {
-            mCurrentInput.setSelection(TextSelection.SELECT_ALL);
-            pushUrlBarDataFromCurrentInput();
-        }
-
-        // DisplayState transition. Upgrade to at least DRAFTING because we have focus now.
         if (mCurrentInput != null && hasFocus) {
+            boolean wasDraftingNoFocus = displayStateEquals(DisplayState.DRAFTING_NO_FOCUS);
+            if (wasDraftingNoFocus) {
+                mCurrentInput.setSelection(TextSelection.SELECT_ALL);
+            }
+            // DisplayState transition. Upgrade to at least DRAFTING because we have focus now.
             if (mCurrentInput.getDisplayState() != DisplayState.SUGGESTIONS) {
                 mCurrentInput.setDisplayState(DisplayState.DRAFTING);
+            }
+            // Push after the transition: what the UrlBar shows and reports to Autofill services
+            // depends on the display state.
+            if (wasDraftingNoFocus) {
+                pushUrlBarDataFromCurrentInput();
             }
         }
 
@@ -1152,7 +1160,12 @@ public class LocationBarMediator
             // side is initialized
             assert mNativeInitialized : "Loading URL before native side initialized";
 
-            if (mNavigator.loadUrl(omniboxLoadUrlParams)) {
+            // The navigation may be reported through onUrlChanged() before the input session is
+            // ended by the task posted below.
+            mIsLoadingUrlFromCurrentInput = mCurrentInput != null;
+            if (!mNavigator.loadUrl(omniboxLoadUrlParams)) {
+                mIsLoadingUrlFromCurrentInput = false;
+            } else {
                 // Without the following postDelayedTask, focusCurrentTab runs on the critical path
                 // of navigation. The following code postpones running focusCurrentTab and
                 // prioritizes running navigation code.
@@ -2118,6 +2131,7 @@ public class LocationBarMediator
     private void endInputAndFocusCurrentTab() {
         try (TraceEvent traceEvent =
                 TraceEvent.scoped("LocationBarMediator.endInputAndFocusCurrentTab")) {
+            mIsLoadingUrlFromCurrentInput = false;
             assert mLocationBarDataProvider != null;
             if (!mLocationBarDataProvider.hasTab()) return;
 
@@ -2168,6 +2182,8 @@ public class LocationBarMediator
         mLocationBarLayout.setDeleteButtonTint(
                 ThemeUtils.getThemedToolbarIconTint(mContext, mBrandedColorScheme));
         mLocationBarLayout.updateVisualsForState();
+        // The button's icons take on the text color only when set, so re-apply them.
+        updateAiModeButtonIcons(computeAiModeButtonState());
         mUrlCoordinator.setBrandedColorScheme(mBrandedColorScheme);
         // This sets spans inside the data object that override the color.
         updateUrl();
@@ -3010,11 +3026,6 @@ public class LocationBarMediator
     }
 
     @Override
-    public void onNtpStartedLoading() {
-        mLocationBarLayout.onNtpStartedLoading();
-    }
-
-    @Override
     public void onPrimaryColorChanged() {
         // Compute |mBrandedColorScheme| first.
         updateBrandedColorScheme();
@@ -3077,6 +3088,7 @@ public class LocationBarMediator
             if (displayStateEquals(DisplayState.DRAFTING_NO_FOCUS)) {
                 endInput();
             }
+            refreshPageMetadataOfCurrentInput();
             updateUrl();
         }
 
@@ -3087,6 +3099,19 @@ public class LocationBarMediator
 
         updateOmniboxPrerender();
         updateButtonVisibility();
+    }
+
+    /**
+     * Makes the current input session describe the page the tab shows now.
+     *
+     * <p>A session outlives navigations of its tab, and its page classification, URL and title are
+     * read for as long as it lasts, so they have to follow the tab. The one exception is a
+     * navigation started from the session itself: that session is about to end, and what it records
+     * when it ends belongs to the page it was used on, not to its destination.
+     */
+    private void refreshPageMetadataOfCurrentInput() {
+        if (mCurrentInput == null || mIsLoadingUrlFromCurrentInput) return;
+        FuseboxSessionState.applyPageMetadata(mCurrentInput, mLocationBarDataProvider);
     }
 
     @Override
@@ -3258,6 +3283,7 @@ public class LocationBarMediator
     @Override
     public void endInput() {
         mUrlFocusedWithoutAnimations = false;
+        mIsLoadingUrlFromCurrentInput = false;
         if (mAutocompleteCoordinator == null || mCurrentInput == null || mIsReparenting) return;
 
         FuseboxSessionState state = FuseboxSessionState.from(mLocationBarDataProvider);
@@ -3677,6 +3703,7 @@ public class LocationBarMediator
                         || mIsTextWrapping;
         if (shouldBeCompact == mLocationBarLayout.isActivationChipCompact()) return;
         mLocationBarLayout.setActivationChipCompact(shouldBeCompact);
+        updateAiModeButtonIcons(computeAiModeButtonState());
     }
 
     private void onTextWrappingChanged(boolean isTextWrapping) {
@@ -3810,14 +3837,23 @@ public class LocationBarMediator
         updateAlwaysShowAiModeCallback();
     }
 
+    /** Caches the AI Mode button's icon whenever the search engine supplies a new one. */
     private void onAiModeButtonIconChanged(StatusIconResource icon) {
-        mLocationBarLayout.setAiModeButtonIcon(
-                icon.getDrawable(mContext), /* tintWithTextColor= */ icon.getIconRes() != 0);
+        mAiModeButtonIcon = icon.getDrawable(mContext);
+        mTintAiModeButtonIcon = icon.getIconRes() != 0;
+        updateAiModeButtonIcons(computeAiModeButtonState());
+    }
+
+    private void updateAiModeButtonIcons(@AiModeButtonState int state) {
+        if (mAiModeButtonIcon == null) return;
+        mLocationBarLayout.setAiModeButtonIcons(
+                mAiModeButtonIcon, mTintAiModeButtonIcon, state == AiModeButtonState.VISIBLE_SEND);
     }
 
     /* package */ void updateActivationChip() {
         @AiModeButtonState int state = computeAiModeButtonState();
         mLocationBarLayout.setAiModeButtonState(state);
+        updateAiModeButtonIcons(state);
         updateAiModeButtonLabels(state);
         mActivationChipVisibilitySupplier.set(state != AiModeButtonState.HIDDEN);
         updateUrlBarAccessibilityOrder(state != AiModeButtonState.HIDDEN);

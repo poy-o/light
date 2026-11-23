@@ -1546,6 +1546,31 @@ Called by update_autofill_enums.py. This is a manual comment.-->
   </summary>
 </histogram>
 
+<histogram
+    name="Autofill.AddressProfileImportCountryMatchesExplicitlyObserved.{CountryFallbackSource}"
+    enum="BooleanMatched" expires_after="2027-12-12">
+  <owner>taminob@chromium.org</owner>
+  <owner>jihadghanna@google.com</owner>
+  <owner>chrome-autofill-alerts@google.com</owner>
+  <summary>
+    Upon extraction of a valid address profile candidate where both a valid
+    country was explicitly observed in the form and a region code could be
+    inferred from a submitted international phone number, logs whether the
+    country from {CountryFallbackSource} matches the explicitly observed
+    country.
+
+    This metric is temporary and can be removed when the rollout of feature
+    `AutofillComplementCountryUsingPhoneNumber` is complete.
+  </summary>
+  <token key="CountryFallbackSource">
+    <variant name="PhoneNumberRegionCode"
+        summary="the submitted international phone number's region code"/>
+    <variant name="VariationsServiceCountry"
+        summary="the VariationsService latest country (only emitted when
+                 non-empty)"/>
+  </token>
+</histogram>
+
 <histogram name="Autofill.AddressProfileImportCountrySource"
     enum="AutofillAddressProfileImportCountrySource" expires_after="2027-12-12">
   <owner>taminob@chromium.org</owner>
@@ -2686,21 +2711,6 @@ Called by update_autofill_enums.py. This is a manual comment.-->
     {RecordType}
   </summary>
   <token key="RecordType" variants="Autofill.Ai.EntityRecordType"/>
-</histogram>
-
-<histogram name="Autofill.Ai.ValuableSync.ManagementUrlStatus{EntityType}"
-    enum="AutofillAiWalletManagementUrlSyncStatus" expires_after="2027-05-02">
-  <owner>schickin@google.com</owner>
-  <owner>chrome-autofill-alerts@google.com</owner>
-  <summary>
-    Records the validation status of the management URL (`pass_view_url`) on an
-    Autofill AI Wallet entity when it is received via sync.
-
-    {EntityType}
-  </summary>
-  <token key="EntityType" variants="Autofill.Ai.EntityType">
-    <variant name="" summary="Emitted for all entity types (aggregate)."/>
-  </token>
 </histogram>
 
 <histogram name="Autofill.Ai.WalletContextualSurfacingEnabled" enum="Boolean"
@@ -9657,6 +9667,17 @@ Called by update_autofill_enums.py. This is a manual comment.-->
   <token key="IbanRecordType" variants="IbanRecordType"/>
 </histogram>
 
+<histogram name="Autofill.StoredProfile.CharacterScriptType"
+    enum="AutofillProfileCharacterScriptType" expires_after="2027-11-01">
+  <owner>perkowski@google.com</owner>
+  <owner>chrome-autofill-alerts@google.com</owner>
+  <summary>
+    Logged once per stored Autofill address profile at Chrome profile launch
+    time. Categorizes the character script(s) used in the profile's name and
+    address fields.
+  </summary>
+</histogram>
+
 <histogram name="Autofill.StoredProfileCount.{Suffix}" units="Profiles"
     expires_after="2027-12-12">
   <owner>piotrkotynia@google.com</owner>
@@ -9691,6 +9712,30 @@ Called by update_autofill_enums.py. This is a manual comment.-->
     The number of Autofill addresses a user has stored, measured when an
     autofillable form is submitted.
   </summary>
+</histogram>
+
+<histogram name="Autofill.StoredProfileCountByScriptType.{ScriptType}"
+    units="Profiles" expires_after="2027-11-01">
+  <owner>perkowski@google.com</owner>
+  <owner>chrome-autofill-alerts@google.com</owner>
+  <summary>
+    The number of Autofill addresses a user has stored with {ScriptType},
+    measured at Chrome profile launch time for users with at least one stored
+    profile. Only Latin script variants are tracked here because non-ASCII Latin
+    characters are the primary focus of this project.
+  </summary>
+  <token key="ScriptType">
+    <variant name="AsciiOnly"
+        summary="evaluated name and address fields using only ASCII Latin
+                 characters"/>
+    <variant name="Latin1Supplement"
+        summary="non-ASCII Latin characters entirely within the Latin-1
+                 Supplement block ([a-zA-ZÀ-ÿ])"/>
+    <variant name="LatinExtended"
+        summary="Latin script with at least one character outside the Basic
+                 Latin and Latin-1 Supplement blocks (including profiles that
+                 combine Latin-1 Supplement and Latin Extended characters)"/>
+  </token>
 </histogram>
 
 <histogram name="Autofill.StoredProfileDisusedCount.{Category}"
@@ -10910,6 +10955,23 @@ Called by update_autofill_enums.py. This is a manual comment.-->
     Records the number of orphan valuable metadata entries that were removed
     during cleanup. Recorded on startup.
   </summary>
+</histogram>
+
+<histogram name="Autofill.ValuableSync.ManagementUrlStatus{ValuableType}"
+    enum="AutofillAiWalletManagementUrlSyncStatus" expires_after="2027-05-02">
+  <owner>schickin@google.com</owner>
+  <owner>chrome-autofill-alerts@google.com</owner>
+  <summary>
+    Records the validation status of the management URL (`pass_view_url`) on a
+    Google Wallet valuable (an Autofill AI entity or a loyalty card) when it is
+    received via sync.
+
+    {ValuableType}
+  </summary>
+  <token key="ValuableType" variants="Autofill.Ai.EntityType">
+    <variant name="" summary="Emitted for all valuable types (aggregate)."/>
+    <variant name=".LoyaltyCard" summary="Emitted for loyalty cards only."/>
+  </token>
 </histogram>
 
 <histogram name="Autofill.Vcn3ds.FlowEvents" enum="Vcn3dsFlowEvents"

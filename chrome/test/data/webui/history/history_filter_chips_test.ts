@@ -692,7 +692,6 @@ suite('HistoryFilterChipsTest', function() {
       const domainChip =
           element.shadowRoot.querySelector<HTMLElement>('#domainFilterChip');
       assertTrue(!!domainChip);
-      assertTrue(domainChip.hasAttribute('selected'));
       assertEquals('example.com', domainChip.textContent.trim());
       const icon = domainChip.querySelector('cr-icon');
       assertTrue(!!icon);
@@ -702,30 +701,6 @@ suite('HistoryFilterChipsTest', function() {
       await microtasksFinished();
       assertFalse(!!element.shadowRoot.querySelector('#domainFilterChip'));
       // A hidden domain filter does not count as an active filter.
-      assertFalse(!!element.shadowRoot.querySelector('#clearAllButton'));
-    });
-
-    test('ClickingChipClearsDomain', async () => {
-      element.domain = 'example.com';
-      element.showDomainFilter = true;
-      await microtasksFinished();
-
-      const domainChip =
-          element.shadowRoot.querySelector<HTMLElement>('#domainFilterChip');
-      assertTrue(!!domainChip);
-
-      let eventDetail: {domain: string}|undefined;
-      element.addEventListener('filter-changed', ((e: CustomEvent) => {
-                                                   eventDetail = e.detail;
-                                                 }) as EventListener);
-
-      domainChip.click();
-      await microtasksFinished();
-
-      assertTrue(!!eventDetail);
-      assertEquals('', eventDetail.domain);
-      assertEquals('', element.domain);
-      assertFalse(!!element.shadowRoot.querySelector('#domainFilterChip'));
       assertFalse(!!element.shadowRoot.querySelector('#clearAllButton'));
     });
 

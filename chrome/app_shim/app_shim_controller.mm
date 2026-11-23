@@ -6,7 +6,11 @@
 
 #import <Cocoa/Cocoa.h>
 #include <mach/message.h>
+#include <sys/proc.h>
+#include <sys/sysctl.h>
+#include <sys/types.h>
 
+#include <iterator>
 #include <utility>
 
 #include "base/allocator/partition_alloc_support.h"
@@ -140,11 +144,6 @@ constexpr base::TimeDelta kPollTimeoutSeconds = base::Seconds(60);
 // ready.
 constexpr base::TimeDelta kPollPeriodMsec = base::Milliseconds(100);
 
-// The maximum amount of time to wait for launch files or URLs to be delivered
-// before connecting to Chrome, if the OS indicated this was not a default
-// launch.
-constexpr base::TimeDelta kLaunchFilesOrUrlsTimeout = base::Seconds(2);
-
 // Helper that keeps stops another sequence from executing any code while this
 // object is alive. The constructor waits for the other thread to be blocked,
 // while the destructor signals the other thread to continue running again.
@@ -183,6 +182,33 @@ class ScopedSynchronizeThreads {
 
 AppShimController::TestDelegate* g_test_delegate = nullptr;
 bool g_disable_notification_service_for_testing = false;
+
+// Returns true if the process with `pid` is known to have exited (no longer in
+// the process table, a zombie, or currently exiting). Returns false if the
+// process is still alive or its state cannot be determined.
+bool IsProcessDeadOrExiting(pid_t pid) {
+  if (pid <= 0) {
+    return false;
+  }
+  struct kinfo_proc info = {};
+  size_t length = sizeof(info);
+  int mib[] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, pid};
+  if (sysctl(mib, std::size(mib), &info, &length, nullptr, 0) < 0) {
+    static bool logged_failure = false;
+    if (!logged_failure) {
+      logged_failure = true;
+      PLOG(WARNING) << "sysctl(KERN_PROC_PID) failed for PID " << pid;
+    }
+    return false;
+  }
+  if (length == 0) {
+    return true;
+  }
+  if (length < sizeof(info)) {
+    return false;
+  }
+  return info.kp_proc.p_stat == SZOMB || (info.kp_proc.p_flag & P_WEXIT);
+}
 
 }  // namespace
 
@@ -313,7 +339,7 @@ void AppShimController::PreInitFeatureState(
        "MojoFixGeometricBufferGrowth", "MojoFixGeometricBufferGrowth2",
        "UseNSURLDataForGURLConversion",
        "SonomaAccessibilityActivationRefinements", "FeatureParamWithCache",
-       "UseMachVouchers"});
+       "UseMachVouchers", "MacPumpTasksBeforeFinishLaunching"});
 }
 
 // static
@@ -351,34 +377,11 @@ void AppShimController::FinalizeFeatureState(
 }
 
 void AppShimController::OnAppFinishedLaunching(
-    bool launched_by_notification_action,
-    bool is_default_launch) {
+    bool launched_by_notification_action) {
   DCHECK_EQ(init_state_, InitState::kWaitingForAppToFinishLaunch);
+  init_state_ = InitState::kWaitingForChromeReady;
   launched_by_notification_action_ = launched_by_notification_action;
 
-  // If this launch was not a default launch (e.g. the app was launched by the
-  // OS to open files or URLs), but neither OpenFiles nor OpenUrls has been
-  // called yet, wait briefly for those events to be delivered via AppleEvents
-  // before connecting to Chrome.
-  if (!is_default_launch && launch_files_.empty() && launch_urls_.empty()) {
-    init_state_ = InitState::kWaitingForLaunchFilesOrUrls;
-    launch_files_or_urls_timeout_.Reset(base::BindOnce(
-        &AppShimController::StartChromeConnection, base::Unretained(this)));
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
-        FROM_HERE, launch_files_or_urls_timeout_.callback(),
-        kLaunchFilesOrUrlsTimeout);
-    return;
-  }
-
-  StartChromeConnection();
-}
-
-void AppShimController::StartChromeConnection() {
-  DCHECK(init_state_ == InitState::kWaitingForAppToFinishLaunch ||
-         init_state_ == InitState::kWaitingForLaunchFilesOrUrls ||
-         init_state_ == InitState::kWaitingForChromeReady);
-  launch_files_or_urls_timeout_.Cancel();
-  init_state_ = InitState::kWaitingForChromeReady;
   if (FindOrLaunchChrome()) {
     // Start polling to see if Chrome is ready to connect.
     PollForChromeReady(kPollTimeoutSeconds);
@@ -401,9 +404,10 @@ bool AppShimController::FindOrLaunchChrome() {
         app_mode::kLaunchedByChromeProcessId);
 
     int chrome_pid;
-    if (!base::StringToInt(chrome_pid_string, &chrome_pid)) {
+    if (!base::StringToInt(chrome_pid_string, &chrome_pid) || chrome_pid <= 0) {
       LOG(FATAL) << "Invalid PID: " << chrome_pid_string;
     }
+    launched_by_chrome_pid_ = chrome_pid;
 
     chrome_to_connect_to_ = [NSRunningApplication
         runningApplicationWithProcessIdentifier:chrome_pid];
@@ -420,12 +424,25 @@ bool AppShimController::FindOrLaunchChrome() {
         }
       }
       if (!chrome_to_connect_to_) {
+        // If the launching Chrome process has already exited (or is exiting),
+        // exit cleanly rather than crashing. Keep LOG(FATAL) if the process
+        // still exists so AppKit lookup failures (crbug.com/40261534) are not
+        // masked.
+        if (IsProcessDeadOrExiting(chrome_pid)) {
+          LOG(WARNING) << "Chrome instance with PID " << chrome_pid
+                       << " exited before connecting.";
+          [NSApp terminate:nil];
+          return false;
+        }
         LOG(FATAL) << "Failed to open process with PID: " << chrome_pid;
       }
     }
-    if (chrome_to_connect_to_.terminated) {
-      LOG(FATAL) << "Process with PID " << chrome_pid
-                 << " has already terminated.";
+    if (chrome_to_connect_to_.terminated ||
+        IsProcessDeadOrExiting(chrome_pid)) {
+      LOG(WARNING) << "Process with PID " << chrome_pid
+                   << " has already terminated.";
+      [NSApp terminate:nil];
+      return false;
     }
 
     return true;
@@ -540,18 +557,20 @@ void AppShimController::PollForChromeReady(
     const base::TimeDelta& time_until_timeout) {
   // If the Chrome process we planned to connect to is not running anymore,
   // quit.
-  if (chrome_to_connect_to_ && chrome_to_connect_to_.terminated) {
+  if (chrome_to_connect_to_ &&
+      (chrome_to_connect_to_.terminated ||
+       (launched_by_chrome_pid_ &&
+        IsProcessDeadOrExiting(*launched_by_chrome_pid_)))) {
     if (chrome_launched_by_app_) {
       LOG(FATAL) << "Running chrome instance launched by shim terminated "
                     "before connecting.";
-    } else if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-                   app_mode::kLaunchedByChromeProcessId)) {
+    } else if (launched_by_chrome_pid_) {
       // This shim was launched by Chrome, and that Chrome terminated before
       // the shim could connect to it (e.g. because Chrome was shutting down).
-      // Kept separate from the case below so the two can be told apart in
-      // crash reports.
-      LOG(FATAL) << "Chrome instance that launched this shim terminated "
-                    "before connecting.";
+      LOG(WARNING) << "Chrome instance that launched this shim terminated "
+                      "before connecting.";
+      [NSApp terminate:nil];
+      return;
     } else {
       LOG(FATAL) << "Running chrome instance terminated before connecting.";
     }
@@ -597,6 +616,9 @@ void AppShimController::PollForChromeReady(
   // Otherwise, try again after a brief delay.
   if (time_until_timeout < kPollPeriodMsec)
     LOG(FATAL) << "Timed out waiting for running chrome instance to be ready.";
+  if (g_test_delegate) {
+    g_test_delegate->OnPollForChromeReady();
+  }
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&AppShimController::PollForChromeReady,
@@ -931,7 +953,25 @@ void AppShimController::RequestNotificationPermission(
         mac_notifications::mojom::RequestPermissionResult::kRequestFailed);
     return;
   }
-  notification_service_un()->RequestPermission(std::move(callback));
+  notification_service_un()->RequestPermission(base::BindOnce(
+      [](AppShimController* controller,
+         RequestNotificationPermissionCallback callback,
+         mac_notifications::mojom::RequestPermissionResult result) {
+        // Ensure any NotificationPermissionStatusChanged() IPC sent on `host_`
+        // is dispatched in the browser before the browser handles this reply
+        // and potentially tears down AppShimHost.
+        // TODO(crbug.com/587998896): Make AppShim and AppShimHost associated
+        // interfaces so cross-pipe ordering barriers like this are not needed.
+        if (controller->shim_receiver_.is_bound() &&
+            controller->host_.is_bound()) {
+          controller->shim_receiver_.PauseRemoteCallbacksUntilFlushCompletes(
+              controller->host_.FlushAsync());
+        }
+        std::move(callback).Run(result);
+      },
+      // Unretained is safe: `this` owns `notification_service_`, which owns
+      // this callback.
+      base::Unretained(this), std::move(callback)));
 }
 
 void AppShimController::SynchronizeNotificationPermissionStatus() {
@@ -1002,15 +1042,8 @@ void AppShimController::SetUserAttention(
 }
 
 void AppShimController::OpenFiles(const std::vector<base::FilePath>& files) {
-  if (init_state_ < InitState::kHasSentOnShimConnected) {
-    launch_files_.insert(launch_files_.end(), files.begin(), files.end());
-    if (init_state_ == InitState::kWaitingForLaunchFilesOrUrls) {
-      launch_files_or_urls_timeout_.Cancel();
-      init_state_ = InitState::kWaitingForChromeReady;
-      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-          FROM_HERE, base::BindOnce(&AppShimController::StartChromeConnection,
-                                    base::Unretained(this)));
-    }
+  if (init_state_ == InitState::kWaitingForAppToFinishLaunch) {
+    launch_files_ = files;
   } else {
     host_->FilesOpened(files);
   }
@@ -1026,15 +1059,8 @@ void AppShimController::ProfileMenuItemSelected(uint32_t index) {
 }
 
 void AppShimController::OpenUrls(const std::vector<GURL>& urls) {
-  if (init_state_ < InitState::kHasSentOnShimConnected) {
-    launch_urls_.insert(launch_urls_.end(), urls.begin(), urls.end());
-    if (init_state_ == InitState::kWaitingForLaunchFilesOrUrls) {
-      launch_files_or_urls_timeout_.Cancel();
-      init_state_ = InitState::kWaitingForChromeReady;
-      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-          FROM_HERE, base::BindOnce(&AppShimController::StartChromeConnection,
-                                    base::Unretained(this)));
-    }
+  if (init_state_ == InitState::kWaitingForAppToFinishLaunch) {
+    launch_urls_ = urls;
   } else {
     host_->UrlsOpened(urls);
   }
@@ -1042,8 +1068,7 @@ void AppShimController::OpenUrls(const std::vector<GURL>& urls) {
 
 void AppShimController::CommandFromDock(uint32_t index) {
   DCHECK(0 <= index && index < dock_menu_items_.size());
-  DCHECK(init_state_ != InitState::kWaitingForAppToFinishLaunch &&
-         init_state_ != InitState::kWaitingForLaunchFilesOrUrls);
+  DCHECK(init_state_ != InitState::kWaitingForAppToFinishLaunch);
 
   [NSApp activateIgnoringOtherApps:YES];
   host_->OpenAppWithOverrideUrl(dock_menu_items_[index]->url);
@@ -1062,10 +1087,8 @@ void AppShimController::CommandDispatch(int command_id) {
 
 NSMenu* AppShimController::GetApplicationDockMenu() {
   if (init_state_ == InitState::kWaitingForAppToFinishLaunch ||
-      init_state_ == InitState::kWaitingForLaunchFilesOrUrls ||
-      dock_menu_items_.size() == 0) {
+      dock_menu_items_.size() == 0)
     return nullptr;
-  }
 
   NSMenu* dockMenu = [[NSMenu alloc] initWithTitle:@""];
 

@@ -6,16 +6,22 @@
 
 #include <ranges>
 
+#include "base/files/file_enumerator.h"
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/test_future.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
 #include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/sessions/app_session_service.h"
+#include "chrome/browser/sessions/app_session_service_factory.h"
 #include "chrome/browser/sessions/session_service_factory.h"
 #include "chrome/browser/sessions/session_service_log.h"
 #include "chrome/browser/sessions/session_service_test_helper.h"
@@ -30,10 +36,14 @@
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/sessions/core/command_storage_manager.h"
+#include "components/sessions/core/command_storage_manager_test_helper.h"
 #include "components/sessions/core/session_command.h"
+#include "components/sessions/core/session_constants.h"
 #include "components/sessions/core/session_id.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/test/browser_test.h"
+#include "ui/base/mojom/window_show_state.mojom.h"
+#include "ui/gfx/geometry/rect.h"
 #include "url/url_constants.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -61,7 +71,7 @@ class SessionServiceBrowserTest : public InProcessBrowserTest {
 // Tests that the workspace is saved in the browser session during
 // SetWindowWorkspace.
 IN_PROC_BROWSER_TEST_F(SessionServiceBrowserTest, Workspace) {
-  service()->ResetFromCurrentBrowsers();
+  service()->ResetFromCurrentBrowsersForTesting();
 
   sessions::CommandStorageManager* command_storage_manager =
       SessionServiceTestHelper(service()).command_storage_manager();
@@ -115,7 +125,7 @@ IN_PROC_BROWSER_TEST_F(SessionServiceBrowserTest, WorkspaceSavedOnOpened) {
 // Tests that the visible on all workspaces state is saved during
 // SessionService::BuildCommandsForBrowser.
 IN_PROC_BROWSER_TEST_F(SessionServiceBrowserTest, VisibleOnAllWorkspaces) {
-  service()->ResetFromCurrentBrowsers();
+  service()->ResetFromCurrentBrowsersForTesting();
 
   sessions::CommandStorageManager* command_storage_manager =
       SessionServiceTestHelper(service()).command_storage_manager();
@@ -141,7 +151,7 @@ IN_PROC_BROWSER_TEST_F(SessionServiceBrowserTest, PinnedAfterReset) {
   browser()->GetTabStripModel()->SetTabPinned(0, true);
   // Force a reset, to verify that SessionService::BuildCommandsForBrowser
   // handles pinned tabs correctly.
-  service()->ResetFromCurrentBrowsers();
+  service()->ResetFromCurrentBrowsersForTesting();
 
   sessions::CommandStorageManager* command_storage_manager =
       SessionServiceTestHelper(service()).command_storage_manager();
@@ -192,7 +202,7 @@ IN_PROC_BROWSER_TEST_F(SessionServiceBrowserTest,
       browser()->GetProfile(), ProfileKeepAliveOrigin::kSessionRestore);
 
   SessionServiceTestHelper helper(service());
-  service()->ResetFromCurrentBrowsers();
+  service()->ResetFromCurrentBrowsersForTesting();
 
   AddBlankTabAndShow(browser());
   AddBlankTabAndShow(browser());
@@ -263,7 +273,7 @@ IN_PROC_BROWSER_TEST_F(SessionServiceBrowserTest, EmptyWindowSaved) {
       BrowserWindowCreateParams(browser()->GetProfile(), true));
 
   ASSERT_EQ(0, empty_browser->GetTabStripModel()->count());
-  service()->ResetFromCurrentBrowsers();
+  service()->ResetFromCurrentBrowsersForTesting();
 
   // A window that already had tabs at the rebuild is not counted.
   std::ignore = chrome::AddSelectedTabWithURL(
@@ -304,7 +314,7 @@ IN_PROC_BROWSER_TEST_F(SessionServiceBrowserTest, NoRewriteOnSecondNavigation) {
   ASSERT_TRUE(
       ui_test_utils::NavigateToURL(browser(), GURL("data:text/html,first")));
 
-  service()->ResetFromCurrentBrowsers();
+  service()->ResetFromCurrentBrowsersForTesting();
   SessionServiceTestHelper helper(service());
   EXPECT_TRUE(helper.command_storage_manager()->pending_reset());
   helper.command_storage_manager()->Save();
@@ -406,4 +416,139 @@ IN_PROC_BROWSER_TEST_F(SessionServiceBrowserTest,
   histogram_tester.ExpectBucketCount(kHistogram, false, 2);
   histogram_tester.ExpectBucketCount(kHistogram, true, 1);
   histogram_tester.ExpectTotalCount(kHistogram, 3);
+}
+
+IN_PROC_BROWSER_TEST_F(SessionServiceBrowserTest,
+                       ResetFromCurrentBrowsersDuringTeardownMetrics) {
+  base::HistogramTester histogram_tester;
+
+  // AppSessionService resets must not emit into the SessionService histogram.
+  AppSessionService* app_service =
+      AppSessionServiceFactory::GetForProfile(browser()->GetProfile());
+  ASSERT_TRUE(app_service);
+  app_service->ResetFromCurrentBrowsers(
+      SessionServiceBase::ResetReason::kWebAppReparenting);
+  histogram_tester.ExpectTotalCount(
+      "Session.ResetFromCurrentBrowsers.ServiceStartup.HasPendingTabCloses", 0);
+  histogram_tester.ExpectTotalCount(
+      "Session.ResetFromCurrentBrowsers.WebAppReparenting.HasPendingTabCloses",
+      0);
+
+  ASSERT_TRUE(
+      AddTabAtIndex(0, GURL(url::kAboutBlankURL), ui::PAGE_TRANSITION_TYPED));
+  content::WebContents* active_tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  sessions::SessionTabHelper* session_tab_helper =
+      sessions::SessionTabHelper::FromWebContents(active_tab);
+
+  // Immediate resets while no window is closing record false for their caller
+  // reason.
+  service()->ResetFromCurrentBrowsers(
+      SessionServiceBase::ResetReason::kServiceStartup);
+  histogram_tester.ExpectUniqueSample(
+      "Session.ResetFromCurrentBrowsers.ServiceStartup.HasPendingTabCloses",
+      false, 1);
+
+  service()->ResetFromCurrentBrowsers(
+      SessionServiceBase::ResetReason::kWebAppReparenting);
+  histogram_tester.ExpectUniqueSample(
+      "Session.ResetFromCurrentBrowsers.WebAppReparenting.HasPendingTabCloses",
+      false, 1);
+
+  // Set an available range [2, 4] and trigger an out-of-range navigation index
+  // while no window is closing.
+  SessionServiceTestHelper helper(service());
+  helper.SetAvailableRange(session_tab_helper->session_id(), {2, 4});
+  service()->SetSelectedNavigationIndex(browser()->GetSessionID(),
+                                        session_tab_helper->session_id(), 0);
+  histogram_tester.ExpectUniqueSample(
+      "Session.ResetFromCurrentBrowsers.NavigationIndexOutOfRange."
+      "HasPendingTabCloses",
+      false, 1);
+
+  // Start closing the last window and close one of its tabs so
+  // `pending_tab_close_ids_` is non-empty.
+  const SessionID window_id = browser()->GetSessionID();
+  service()->WindowClosing(window_id);
+  browser()->GetTabStripModel()->CloseWebContentsAt(
+      0, TabCloseTypes::CLOSE_USER_GESTURE);
+
+  // Trigger an out-of-range navigation index mid-teardown.
+  content::WebContents* remaining_tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  sessions::SessionTabHelper* remaining_tab_helper =
+      sessions::SessionTabHelper::FromWebContents(remaining_tab);
+  helper.SetAvailableRange(remaining_tab_helper->session_id(), {2, 4});
+  service()->SetSelectedNavigationIndex(window_id,
+                                        remaining_tab_helper->session_id(), 0);
+
+  histogram_tester.ExpectBucketCount(
+      "Session.ResetFromCurrentBrowsers.NavigationIndexOutOfRange."
+      "HasPendingTabCloses",
+      true, 1);
+
+  // Trigger a web app reparenting reset mid-teardown as well.
+  service()->ResetFromCurrentBrowsers(
+      SessionServiceBase::ResetReason::kWebAppReparenting);
+  histogram_tester.ExpectBucketCount(
+      "Session.ResetFromCurrentBrowsers.WebAppReparenting.HasPendingTabCloses",
+      true, 1);
+
+  CloseBrowserSynchronously(browser());
+}
+
+namespace {
+
+// Returns the total size of the session files (not the tab or app ones) in
+// `dir`. Queries each file with GetFileSize() rather than
+// FileEnumerator::FileInfo::GetSize() because on Windows, FindFirstFile()
+// reads the directory entry, whose size stays 0 while the session file handle
+// is still open for writing.
+int64_t GetSessionFilesSize(const base::FilePath& dir) {
+  int64_t size = 0;
+  base::FileEnumerator files(
+      dir, /*recursive=*/false, base::FileEnumerator::FILES,
+      base::FilePath::StringType(sessions::kSessionFileNamePrefix) +
+          FILE_PATH_LITERAL("_*"));
+  for (base::FilePath path = files.Next(); !path.empty(); path = files.Next()) {
+    size += base::GetFileSize(path).value_or(0);
+  }
+  return size;
+}
+
+}  // namespace
+
+// BrowserProcessImpl::EndSession() is called before the process is terminated
+// at logout. Session commands are normally written on a timer that won't fire
+// before then, so EndSession() must write them and wait for the write.
+IN_PROC_BROWSER_TEST_F(SessionServiceBrowserTest,
+                       EndSessionWritesPendingCommands) {
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  SessionServiceTestHelper helper(service());
+  sessions::CommandStorageManagerTestHelper storage_helper(
+      helper.command_storage_manager());
+
+  // Write whatever is pending, so that the size below only grows with the
+  // commands added afterwards.
+  helper.command_storage_manager()->Save();
+  storage_helper.RunMessageLoopUntilBackendDone();
+  const base::FilePath sessions_dir = browser()->GetProfile()->GetPath().Append(
+      storage_helper.ShouldWriteCleartextFiles()
+          ? sessions::kSessionsDirectory
+          : sessions::kEncryptedSessionsDirectory);
+  const int64_t size_before = GetSessionFilesSize(sessions_dir);
+  ASSERT_GT(size_before, 0);
+
+  service()->SetWindowBounds(browser()->GetSessionID(),
+                             gfx::Rect(10, 20, 300, 400),
+                             ui::mojom::WindowShowState::kNormal);
+  ASSERT_TRUE(helper.HasPendingSave());
+
+  g_browser_process->EndSession();
+
+  // Read the files right away, without running any tasks: EndSession() must
+  // have waited for the backend to write the commands.
+  EXPECT_FALSE(helper.HasPendingSave());
+  EXPECT_TRUE(helper.command_storage_manager()->pending_commands().empty());
+  EXPECT_GT(GetSessionFilesSize(sessions_dir), size_before);
 }

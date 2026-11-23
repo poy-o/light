@@ -13,7 +13,6 @@ java_cpp_enum("autofill_generated_enums") {
     "//chrome/browser/autofill/android/save_update_address_profile_prompt_mode.h",
     "//chrome/browser/ui/android/autofill/autofill_snackbar_type.h",
     "//chrome/browser/ui/autofill/autofill_ai/autofill_ai_verification_view.h",
-    "//components/autofill/core/browser/ui/payments/payments_churned_users_ui_delegate.h",
   ]
 }
 
@@ -171,6 +170,7 @@ android_library("java") {
     "//components/sync/android:sync_java",
     "//components/user_prefs/android:java",
     "//content/public/android:content_full_java",
+    "//net/android:net_java",
     "//third_party/android_deps:guava_android_java",
     "//third_party/android_deps:material_design_java",
     "//third_party/androidx:androidx_annotation_annotation_java",

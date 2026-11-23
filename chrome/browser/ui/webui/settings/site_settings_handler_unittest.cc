@@ -19,6 +19,7 @@
 #include "base/check_deref.h"
 #include "base/command_line.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
@@ -2111,6 +2112,21 @@ TEST_F(SiteSettingsHandlerTest, IncognitoExceptions) {
 TEST_F(SiteSettingsHandlerTest, ResetCategoryPermissionForEmbargoedOrigins) {
   constexpr char kOriginToBlock[] = "https://www.blocked.com:443";
   constexpr char kOriginToEmbargo[] = "https://embargoed.co.uk";
+  const std::string embargoed_origin_pattern =
+      ContentSettingsPattern::FromURLNoWildcard(GURL(kOriginToEmbargo))
+          .ToString();
+
+  // Checks that at least one WebUI call was made since `previous_calls` and
+  // that the last one notified a site permission change for `origin`.
+  auto expect_site_permission_changed = [&](size_t previous_calls,
+                                            const std::string& origin) {
+    ASSERT_GT(web_ui()->call_data().size(), previous_calls);
+    const content::TestWebUI::CallData& data = *web_ui()->call_data().back();
+    EXPECT_EQ("cr.webUIListenerCallback", data.function_name());
+    EXPECT_EQ("contentSettingSitePermissionChanged", data.arg1()->GetString());
+    EXPECT_EQ(kNotifications, data.arg2()->GetString());
+    EXPECT_EQ(origin, data.arg3()->GetString());
+  };
 
   // Add and test 1 blocked origin
   {
@@ -2131,16 +2147,18 @@ TEST_F(SiteSettingsHandlerTest, ResetCategoryPermissionForEmbargoedOrigins) {
   {
     auto* auto_blocker =
         PermissionDecisionAutoBlockerFactory::GetForProfile(profile());
+    const size_t previous_calls = web_ui()->call_data().size();
     for (size_t i = 0; i < 3; ++i) {
       auto_blocker->RecordDismissAndEmbargo(GURL(kOriginToEmbargo),
                                             kPermissionNotifications, false);
     }
-    // Check that origin is under embargo.
+    // Check that origin is under embargo and notified the WebUI.
     EXPECT_EQ(
         PermissionStatus::DENIED,
         auto_blocker
             ->GetEmbargoResult(GURL(kOriginToEmbargo), kPermissionNotifications)
             ->status);
+    expect_site_permission_changed(previous_calls, embargoed_origin_pattern);
   }
 
   // Check there are 2 blocked origins.
@@ -2161,7 +2179,9 @@ TEST_F(SiteSettingsHandlerTest, ResetCategoryPermissionForEmbargoedOrigins) {
     reset_args.Append(std::string());
     reset_args.Append(kNotifications);
     reset_args.Append(false);  // Incognito.
+    const size_t previous_calls = web_ui()->call_data().size();
     handler()->HandleResetCategoryPermissionForPattern(reset_args);
+    expect_site_permission_changed(previous_calls, kOriginToBlock);
 
     // Check there is 1 blocked origin.
     base::ListValue exceptions;
@@ -2178,7 +2198,10 @@ TEST_F(SiteSettingsHandlerTest, ResetCategoryPermissionForEmbargoedOrigins) {
     reset_args.Append(std::string());
     reset_args.Append(kNotifications);
     reset_args.Append(false);  // Incognito.
+    const size_t previous_calls = web_ui()->call_data().size();
     handler()->HandleResetCategoryPermissionForPattern(reset_args);
+    // Lifting the embargo notifies the WebUI.
+    expect_site_permission_changed(previous_calls, embargoed_origin_pattern);
 
     // Check that there are no blocked or embargoed origins.
     base::ListValue exceptions;
@@ -2186,6 +2209,88 @@ TEST_F(SiteSettingsHandlerTest, ResetCategoryPermissionForEmbargoedOrigins) {
         kPermissionNotifications, profile(), web_ui(),
         /*incognito=*/false, &exceptions);
     ASSERT_TRUE(exceptions.empty());
+  }
+
+  // Embargo the origin again and reset it via HandleSetOriginPermissions
+  // (used by chrome://settings/content/siteDetails).
+  {
+    auto* auto_blocker =
+        PermissionDecisionAutoBlockerFactory::GetForProfile(profile());
+    size_t previous_calls = web_ui()->call_data().size();
+    for (size_t i = 0; i < 3; ++i) {
+      auto_blocker->RecordDismissAndEmbargo(GURL(kOriginToEmbargo),
+                                            kPermissionNotifications, false);
+    }
+    ASSERT_TRUE(auto_blocker->IsEmbargoed(GURL(kOriginToEmbargo),
+                                          kPermissionNotifications));
+    expect_site_permission_changed(previous_calls, embargoed_origin_pattern);
+
+    base::ListValue reset_args;
+    reset_args.Append(kOriginToEmbargo);
+    reset_args.Append(kNotifications);
+    reset_args.Append(
+        content_settings::ContentSettingToString(CONTENT_SETTING_DEFAULT));
+    previous_calls = web_ui()->call_data().size();
+    handler()->HandleSetOriginPermissions(reset_args);
+
+    EXPECT_FALSE(auto_blocker->IsEmbargoed(GURL(kOriginToEmbargo),
+                                           kPermissionNotifications));
+    expect_site_permission_changed(previous_calls, embargoed_origin_pattern);
+  }
+}
+
+TEST_F(SiteSettingsHandlerTest,
+       ExceptionListHidesEmbargoForMediaCapturePolicyAllowedUrl) {
+  // GetExceptionsForContentType() reads the mic policy allowlist via
+  // Profile::FromWebUI(), so it needs a WebUI backed by a WebContents.
+  content::RenderViewHostTestEnabler rvh_test_enabler;
+  std::unique_ptr<content::WebContents> web_contents =
+      content::WebContentsTester::CreateTestWebContents(profile(), nullptr);
+  content::TestWebUI test_web_ui;
+  test_web_ui.set_web_contents(web_contents.get());
+
+  constexpr char kOrigin[] = "https://embargoed.example.com:443";
+  auto* auto_blocker =
+      PermissionDecisionAutoBlockerFactory::GetForProfile(profile());
+  for (size_t i = 0; i < 3; ++i) {
+    auto_blocker->RecordDismissAndEmbargo(
+        GURL(kOrigin), ContentSettingsType::MEDIASTREAM_MIC, false);
+  }
+  ASSERT_TRUE(auto_blocker->IsEmbargoed(GURL(kOrigin),
+                                        ContentSettingsType::MEDIASTREAM_MIC));
+
+  // Without the policy, the embargoed origin is listed as blocked.
+  {
+    base::ListValue exceptions;
+    site_settings::GetExceptionsForContentType(
+        ContentSettingsType::MEDIASTREAM_MIC, profile(), &test_web_ui,
+        /*incognito=*/false, &exceptions);
+    ASSERT_EQ(1U, exceptions.size());
+    EXPECT_TRUE(exceptions[0]
+                    .GetDict()
+                    .FindBool(site_settings::kIsEmbargoed)
+                    .value_or(false));
+  }
+
+  // AudioCaptureAllowedUrls allows the origin regardless of the embargo, so
+  // only the policy exception is listed.
+  base::ListValue allowed_urls;
+  allowed_urls.Append(kOrigin);
+  profile()->GetTestingPrefService()->SetManagedPref(
+      prefs::kAudioCaptureAllowedUrls,
+      std::make_unique<base::Value>(std::move(allowed_urls)));
+  {
+    base::ListValue exceptions;
+    site_settings::GetExceptionsForContentType(
+        ContentSettingsType::MEDIASTREAM_MIC, profile(), &test_web_ui,
+        /*incognito=*/false, &exceptions);
+    ASSERT_EQ(1U, exceptions.size());
+    const base::DictValue& exception = exceptions[0].GetDict();
+    EXPECT_EQ(kOrigin, *exception.FindString(site_settings::kOrigin));
+    EXPECT_EQ(content_settings::ContentSettingToString(CONTENT_SETTING_ALLOW),
+              *exception.FindString(site_settings::kSetting));
+    EXPECT_FALSE(
+        exception.FindBool(site_settings::kIsEmbargoed).value_or(false));
   }
 }
 
@@ -3991,7 +4096,7 @@ TEST_F(SiteSettingsHandlerTest, StorageAccessExceptions_Description_Embargoed) {
   handler()->HandleGetStorageAccessExceptionList(get_exception_list_args);
 
   // Verify that group exception with an embargoed is correct.
-  ValidateStorageAccessList(/*expected_total_calls=*/1U,
+  ValidateStorageAccessList(/*expected_total_calls=*/2U,
                             /*expected_num_groups=*/1U);
   ValidateStaticStorageAccessException(kOrigin, kDisplayName,
                                        CONTENT_SETTING_BLOCK,
@@ -4039,8 +4144,12 @@ TEST_F(SiteSettingsHandlerTest,
   handler()->HandleGetStorageAccessExceptionList(get_exception_list_args);
 
   // Verify that group exception with an embargoed origin in two profiles is
-  // correct.
-  ValidateStorageAccessList(/*expected_total_calls=*/2U,
+  // correct. Expected calls: 1 for the regular profile embargo, 1 for the
+  // incognito profile creation, 3 for the incognito dismissals (incognito
+  // inherits PERMISSION_AUTOBLOCKER_DATA, so the dismiss count is already at
+  // the embargo threshold and each dismissal re-embargoes), and 1 for the
+  // exception list response.
+  ValidateStorageAccessList(/*expected_total_calls=*/6U,
                             /*expected_num_groups=*/1U);
   ValidateStorageAccessException(kOrigin, kDisplayName, CONTENT_SETTING_BLOCK,
                                  {{std::string(), "*", /*incognito=*/false,
@@ -4049,7 +4158,7 @@ TEST_F(SiteSettingsHandlerTest,
                                    /*embargoed=*/true, 0}});
 }
 
-typedef std::pair<std::string_view, std::string_view> OriginStringParams;
+using OriginStringParams = std::pair<std::string_view, std::string_view>;
 class StorageAccessSiteSettingsHandlerTest
     : public SiteSettingsHandlerBaseTest,
       public testing::WithParamInterface<
@@ -7256,6 +7365,167 @@ TEST_F(SiteSettingsHandlerNotificationRevocationHistogramTest,
                                 safe_browsing::NotificationRevocationSource::
                                     kUserManuallyChangedSiteSetting,
                                 1);
+}
+
+namespace {
+
+// Counts the embargo notifications sent by a PermissionDecisionAutoBlocker.
+class EmbargoRemovedCounter
+    : public permissions::PermissionDecisionAutoBlocker::Observer {
+ public:
+  void OnEmbargoStarted(const GURL& origin,
+                        ContentSettingsType content_type) override {}
+  void OnEmbargoRemoved(const GURL& origin,
+                        ContentSettingsType content_type) override {
+    ++removed_count;
+  }
+
+  int removed_count = 0;
+};
+
+}  // namespace
+
+// The origin is embargoed in the regular profile, and the embargo is then
+// reset through the incognito profile's auto blocker. The reset should lift
+// the embargo for the incognito profile only.
+TEST_F(SiteSettingsHandlerTest, IncognitoResetLiftsInheritedEmbargo) {
+  const GURL url("https://embargoed.co.uk");
+  auto* regular_auto_blocker =
+      PermissionDecisionAutoBlockerFactory::GetForProfile(profile());
+  for (int i = 0; i < 3; ++i) {
+    regular_auto_blocker->RecordDismissAndEmbargo(url, kPermissionNotifications,
+                                                  false);
+  }
+  ASSERT_TRUE(regular_auto_blocker->IsEmbargoed(url, kPermissionNotifications));
+
+  CreateIncognitoProfile();
+  auto* incognito_auto_blocker =
+      PermissionDecisionAutoBlockerFactory::GetForProfile(incognito_profile());
+  ASSERT_NE(regular_auto_blocker, incognito_auto_blocker);
+  // The incognito profile inherits the embargo from the regular profile.
+  ASSERT_TRUE(
+      incognito_auto_blocker->IsEmbargoed(url, kPermissionNotifications));
+
+  EmbargoRemovedCounter counter;
+  incognito_auto_blocker->AddObserver(&counter);
+  incognito_auto_blocker->RemoveEmbargoAndResetCounts(url,
+                                                      kPermissionNotifications);
+  incognito_auto_blocker->RemoveObserver(&counter);
+
+  EXPECT_FALSE(
+      incognito_auto_blocker->IsEmbargoed(url, kPermissionNotifications));
+  EXPECT_EQ(0, incognito_auto_blocker->GetDismissCount(
+                   url, kPermissionNotifications));
+  EXPECT_EQ(1, counter.removed_count);
+  // Resetting in incognito does not change the regular profile.
+  EXPECT_TRUE(regular_auto_blocker->IsEmbargoed(url, kPermissionNotifications));
+}
+
+// The regular profile is one dismissal short of an embargo. The incognito
+// profile reaches the threshold and is then reset. The reset should lift the
+// embargo and clear the inherited dismiss count for the incognito profile.
+TEST_F(SiteSettingsHandlerTest, IncognitoResetClearsInheritedDismissCount) {
+  const GURL url("https://embargoed.co.uk");
+  auto* regular_auto_blocker =
+      PermissionDecisionAutoBlockerFactory::GetForProfile(profile());
+  for (int i = 0; i < 2; ++i) {
+    regular_auto_blocker->RecordDismissAndEmbargo(url, kPermissionNotifications,
+                                                  false);
+  }
+  ASSERT_FALSE(
+      regular_auto_blocker->IsEmbargoed(url, kPermissionNotifications));
+
+  CreateIncognitoProfile();
+  auto* incognito_auto_blocker =
+      PermissionDecisionAutoBlockerFactory::GetForProfile(incognito_profile());
+  incognito_auto_blocker->RecordDismissAndEmbargo(url, kPermissionNotifications,
+                                                  false);
+  ASSERT_TRUE(
+      incognito_auto_blocker->IsEmbargoed(url, kPermissionNotifications));
+
+  incognito_auto_blocker->RemoveEmbargoAndResetCounts(url,
+                                                      kPermissionNotifications);
+
+  EXPECT_FALSE(
+      incognito_auto_blocker->IsEmbargoed(url, kPermissionNotifications));
+  EXPECT_EQ(0, incognito_auto_blocker->GetDismissCount(
+                   url, kPermissionNotifications));
+}
+
+// Same scenario as IncognitoResetLiftsInheritedEmbargo, driven through the
+// handler the way the incognito exception list resets an entry.
+TEST_F(SiteSettingsHandlerTest, IncognitoResetViaHandlerLiftsInheritedEmbargo) {
+  constexpr char kOrigin[] = "https://embargoed.co.uk";
+  const GURL url(kOrigin);
+  auto* regular_auto_blocker =
+      PermissionDecisionAutoBlockerFactory::GetForProfile(profile());
+  for (int i = 0; i < 3; ++i) {
+    regular_auto_blocker->RecordDismissAndEmbargo(url, kPermissionNotifications,
+                                                  false);
+  }
+  ASSERT_TRUE(regular_auto_blocker->IsEmbargoed(url, kPermissionNotifications));
+
+  CreateIncognitoProfile();
+  auto* incognito_auto_blocker =
+      PermissionDecisionAutoBlockerFactory::GetForProfile(incognito_profile());
+  // One more dismissal in incognito gives the incognito profile its own
+  // record, so the origin is listed as an incognito exception.
+  incognito_auto_blocker->RecordDismissAndEmbargo(url, kPermissionNotifications,
+                                                  false);
+  ASSERT_TRUE(
+      incognito_auto_blocker->IsEmbargoed(url, kPermissionNotifications));
+
+  base::ListValue exceptions_before_reset;
+  site_settings::GetExceptionsForContentType(
+      kPermissionNotifications, incognito_profile(), web_ui(),
+      /*incognito=*/true, &exceptions_before_reset);
+  ASSERT_EQ(1U, exceptions_before_reset.size());
+
+  base::ListValue reset_args;
+  reset_args.Append(kOrigin);
+  reset_args.Append(std::string());
+  reset_args.Append(kNotifications);
+  reset_args.Append(true);  // Incognito.
+  handler()->HandleResetCategoryPermissionForPattern(reset_args);
+
+  EXPECT_FALSE(
+      incognito_auto_blocker->IsEmbargoed(url, kPermissionNotifications));
+  base::ListValue exceptions_after_reset;
+  site_settings::GetExceptionsForContentType(
+      kPermissionNotifications, incognito_profile(), web_ui(),
+      /*incognito=*/true, &exceptions_after_reset);
+  EXPECT_TRUE(exceptions_after_reset.empty());
+}
+
+// The origin is embargoed in the regular profile, and the filter overload
+// (used when clearing browsing data) runs on the incognito profile's auto
+// blocker. A removal should only be announced if the embargo is gone.
+TEST_F(SiteSettingsHandlerTest,
+       IncognitoFilterRemovalOnlyNotifiesWhenEmbargoIsLifted) {
+  const GURL url("https://embargoed.co.uk");
+  auto* regular_auto_blocker =
+      PermissionDecisionAutoBlockerFactory::GetForProfile(profile());
+  for (int i = 0; i < 3; ++i) {
+    regular_auto_blocker->RecordDismissAndEmbargo(url, kPermissionNotifications,
+                                                  false);
+  }
+  ASSERT_TRUE(regular_auto_blocker->IsEmbargoed(url, kPermissionNotifications));
+
+  CreateIncognitoProfile();
+  auto* incognito_auto_blocker =
+      PermissionDecisionAutoBlockerFactory::GetForProfile(incognito_profile());
+  ASSERT_TRUE(
+      incognito_auto_blocker->IsEmbargoed(url, kPermissionNotifications));
+
+  EmbargoRemovedCounter counter;
+  incognito_auto_blocker->AddObserver(&counter);
+  incognito_auto_blocker->RemoveEmbargoAndResetCounts(
+      base::BindRepeating([](const GURL& url) { return true; }));
+  incognito_auto_blocker->RemoveObserver(&counter);
+
+  EXPECT_TRUE(
+      incognito_auto_blocker->IsEmbargoed(url, kPermissionNotifications));
+  EXPECT_EQ(0, counter.removed_count);
 }
 
 }  // namespace settings

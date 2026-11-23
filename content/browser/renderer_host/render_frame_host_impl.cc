@@ -138,7 +138,6 @@
 #include "content/browser/renderer_host/local_network_access_util.h"
 #include "content/browser/renderer_host/media/peer_connection_tracker_host.h"
 #include "content/browser/renderer_host/mixed_content_checker.h"
-#include "content/browser/renderer_host/model_context_user_data.h"
 #include "content/browser/renderer_host/navigation_controller_impl.h"
 #include "content/browser/renderer_host/navigation_entry_impl.h"
 #include "content/browser/renderer_host/navigation_metrics_utils.h"
@@ -159,6 +158,7 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
+#include "content/browser/renderer_host/script_tools/script_tool_user_data.h"
 #include "content/browser/renderer_host/text_input_manager.h"
 #include "content/browser/renderer_host/unbounded_surface_host_impl.h"
 #include "content/browser/renderer_host/unbounded_surface_window.h"
@@ -14735,8 +14735,22 @@ void RenderFrameHostImpl::UpdatePermissionsForNavigation(
   // Note that GetOriginToCommit() internally CHECKs that the origin to commit
   // is valid for this process, using CanCommitNewOrigin() to perform jail and
   // citadel process lock checks, so this origin should to be safe to add.
+  url::Origin origin_to_commit = request->GetOriginToCommit().value();
+
+  // Navigations that leave the SiteInstance unassigned (e.g., about:blank with
+  // no initiator, or other empty document schemes) commit in a process that
+  // isn't locked to a site. Such navigations must commit an opaque origin with
+  // no precursor (i.e., not inherited from the initiator), so that adding it
+  // below doesn't let the unlocked process claim to host origins derived from
+  // another site.
+  CHECK(GetSiteInstance()->HasSite() ||
+            !origin_to_commit.GetTupleOrPrecursorTupleIfOpaque().IsValid(),
+        base::NotFatalUntil::M162)
+      << "Unexpected origin with precursor in an unassigned SiteInstance: "
+      << origin_to_commit;
+
   ChildProcessSecurityPolicyImpl::GetInstance()->AddCommittedOrigin(
-      GetProcess()->GetDeprecatedID(), request->GetOriginToCommit().value());
+      GetProcess()->GetDeprecatedID(), origin_to_commit);
 }
 
 mojo::AssociatedRemote<mojom::NavigationClient>
@@ -17077,6 +17091,18 @@ bool RenderFrameHostImpl::DidCommitNavigationInternal(
     // Note that `params.origin` is safe to add since it's already been
     // validated in ValidateDidCommitParams() above prior to getting here.
     if (is_synchronous_about_blank_commit) {
+      // Navigations that leave the SiteInstance unassigned (e.g., about:blank
+      // with no initiator, or other empty document schemes) commit in a process
+      // that isn't locked to a site. Such navigations must commit an opaque
+      // origin with no precursor (i.e., not inherited from the initiator), so
+      // that adding it below doesn't let the unlocked process claim to host
+      // origins derived from another site.
+      CHECK(GetSiteInstance()->HasSite() ||
+                !params->origin.GetTupleOrPrecursorTupleIfOpaque().IsValid(),
+            base::NotFatalUntil::M162)
+          << "Unexpected origin with precursor in an unassigned SiteInstance: "
+          << params->origin;
+
       ChildProcessSecurityPolicyImpl::GetInstance()->AddCommittedOrigin(
           GetProcess()->GetDeprecatedID(), params->origin);
     }
@@ -17394,13 +17420,13 @@ bool RenderFrameHostImpl::ShouldResetDocumentAssociatedDataAtCommit() const {
 }
 
 void RenderFrameHostImpl::ResetStateForReplacedRendererDocument() {
-  // Drop the replaced Document's ModelContextUserData. `ModelContextHost` is
+  // Drop the replaced Document's ScriptToolUserData. `ModelContextHost` is
   // navigation-associated, so the binds from the replaced and the new Document
   // are processed in order with the IPC that reports the replacement.
   // TODO(crbug.com/576419973): Do this for all Document scoped user data.
-  if (ModelContextUserData::GetForCurrentDocument(this)) {
+  if (ScriptToolUserData::GetForCurrentDocument(this)) {
     const auto previous_state = GetScriptToolsReadyState();
-    ModelContextUserData::DeleteForCurrentDocument(this);
+    ScriptToolUserData::DeleteForCurrentDocument(this);
     if (previous_state != GetScriptToolsReadyState()) {
       delegate_->ScriptToolsReadyStateChanged(this);
     }
@@ -17659,7 +17685,6 @@ void RenderFrameHostImpl::TakeNewDocumentPropertiesFromNavigation(
   local_network_access_request_policy_ =
       navigation_request->local_network_access_request_policy();
 
-  reporting_endpoints_.clear();
   CHECK(navigation_request);
 
   // Reporting API: If a Reporting-Endpoints header was received with this
@@ -19754,7 +19779,7 @@ RenderFrameHostImpl::GetScriptToolsReadyState() {
   if (!IsDOMContentLoaded()) {
     return ScriptToolsReadyState::kLoading;
   }
-  auto* user_data = ModelContextUserData::GetForCurrentDocument(this);
+  auto* user_data = ScriptToolUserData::GetForCurrentDocument(this);
   if (user_data && user_data->script_tools_waiting()) {
     return ScriptToolsReadyState::kWaiting;
   }

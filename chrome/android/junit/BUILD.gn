@@ -158,7 +158,6 @@ if (is_android) {
       "//chrome/browser/ntp_customization:java",
       "//chrome/browser/omaha/android:java",
       "//chrome/browser/omaha/android:ui_java",
-      "//chrome/browser/omaha/android:update_proto_java",
       "//chrome/browser/open_in_app/android:java",
       "//chrome/browser/optimization_guide/android:java",
       "//chrome/browser/page_image_service/android:java",
@@ -175,7 +174,6 @@ if (is_android) {
       "//chrome/browser/preloading/android:java",
       "//chrome/browser/printing/android:java",
       "//chrome/browser/privacy_guide/android:java",
-      "//chrome/browser/privacy_sandbox/android:java",
       "//chrome/browser/profiles/android:java",
       "//chrome/browser/profiles/android:test_support_java",
       "//chrome/browser/quick_delete:java",
@@ -293,7 +291,6 @@ if (is_android) {
       "//components/content_relationship_verification/android:junit_test_support",
       "//components/content_settings/android:content_settings_enums_java",
       "//components/content_settings/android:java",
-      "//components/critical_actions/core/browser:critical_actions_enums_java",
       "//components/data_sharing:test_support_java",
       "//components/data_sharing/public:public_java",
       "//components/data_sharing/public/protocol:proto_java",
@@ -443,7 +440,6 @@ if (is_android) {
     sources = [
       "//chrome/android/java/src/org/chromium/chrome/browser/bottombar/BottomBarAppMenuUpdateBadgeControllerUnitTest.java",
       "//chrome/android/java/src/org/chromium/chrome/browser/bottombar/BottomBarContainerCoordinatorUnitTest.java",
-      "//chrome/android/java/src/org/chromium/chrome/browser/bottombar/BottomBarEnabledChangeObserverUnitTest.java",
       "src/org/chromium/chrome/browser/BrowserExitReasonTrackerUnitTest.java",
       "src/org/chromium/chrome/browser/ChromeActionModeHandlerUnitTest.java",
       "src/org/chromium/chrome/browser/ChromeActivityUnitTest.java",
@@ -461,6 +457,7 @@ if (is_android) {
       "src/org/chromium/chrome/browser/KeyboardShortcutsUnitTest.java",
       "src/org/chromium/chrome/browser/LaunchIntentDispatcherTest.java",
       "src/org/chromium/chrome/browser/OmahaServiceStartDelayerTest.java",
+      "src/org/chromium/chrome/browser/PointerDownProvenanceRecorderUnitTest.java",
       "src/org/chromium/chrome/browser/ShortcutHelperTest.java",
       "src/org/chromium/chrome/browser/SwipeRefreshHandlerUnitTest.java",
       "src/org/chromium/chrome/browser/TabGroupUsageTrackerUnitTest.java",
@@ -850,18 +847,6 @@ if (is_android) {
   }
 
   robolectric_library(
-      "chrome_junit_tests_org.chromium.chrome.browser.data_sharing") {
-    sources = [
-      "//chrome/browser/data_sharing/android/java/src/org/chromium/chrome/browser/data_sharing/BulkFaviconUtilUnitTest.java",
-      "//chrome/browser/data_sharing/android/java/src/org/chromium/chrome/browser/data_sharing/DataSharingFaviconProviderUnitTest.java",
-      "//chrome/browser/data_sharing/android/java/src/org/chromium/chrome/browser/data_sharing/DataSharingTabManagerUnitTest.java",
-      "//chrome/browser/data_sharing/android/java/src/org/chromium/chrome/browser/data_sharing/RecentActivityActionHandlerUnitTest.java",
-    ]
-
-    deps = [ ":chrome_junit_tests_helper" ]
-  }
-
-  robolectric_library(
       "chrome_junit_tests_org.chromium.chrome.browser.download") {
     sources = [
       "src/org/chromium/chrome/browser/download/DownloadControllerUnitTest.java",
@@ -919,6 +904,7 @@ if (is_android) {
       "src/org/chromium/chrome/browser/firstrun/FirstRunFlowSequencerTest.java",
       "src/org/chromium/chrome/browser/firstrun/FirstRunIntegrationUnitTest.java",
       "src/org/chromium/chrome/browser/firstrun/FirstRunUtilsUnitTest.java",
+      "src/org/chromium/chrome/browser/firstrun/LightweightFirstRunFilterTouchUnitTest.java",
       "src/org/chromium/chrome/browser/firstrun/SafetyPromoFirstRunStateTest.java",
       "src/org/chromium/chrome/browser/firstrun/SkipTosDialogPolicyListenerUnitTest.java",
       "src/org/chromium/chrome/browser/firstrun/TosDialogBehaviorSharedPrefInvalidatorUnitTest.java",
@@ -951,13 +937,12 @@ if (is_android) {
       "chrome_junit_tests_org.chromium.chrome.browser.history") {
     sources = [
       "src/org/chromium/chrome/browser/history/AppSpecificHistoryIphControllerUnitTest.java",
-      "src/org/chromium/chrome/browser/history/BrowsingHistoryBridgeTest.java",
       "src/org/chromium/chrome/browser/history/HistoryAdapterAccessibilityTest.java",
       "src/org/chromium/chrome/browser/history/HistoryAdapterTest.java",
       "src/org/chromium/chrome/browser/history/HistoryContentManagerUnitTest.java",
-      "src/org/chromium/chrome/browser/history/HistoryDeletionBridgeTest.java",
       "src/org/chromium/chrome/browser/history/HistoryDesktopNavigationMediatorUnitTest.java",
       "src/org/chromium/chrome/browser/history/HistoryFilterChipUnitTest.java",
+      "src/org/chromium/chrome/browser/history/HistoryItemViewUnitTest.java",
       "src/org/chromium/chrome/browser/history/HistoryManagerUtilsUnitTest.java",
       "src/org/chromium/chrome/browser/history/HistoryPaneUnitTest.java",
       "src/org/chromium/chrome/browser/history/HistoryUiTest.java",
@@ -1098,33 +1083,6 @@ if (is_android) {
     ]
 
     deps = [ ":chrome_junit_tests_helper" ]
-  }
-
-  robolectric_library("chrome_junit_tests_org.chromium.chrome.browser.omaha") {
-    sources = [
-      "src/org/chromium/chrome/browser/omaha/AttributeFinder.java",
-      "src/org/chromium/chrome/browser/omaha/ExponentialBackoffSchedulerTest.java",
-      "src/org/chromium/chrome/browser/omaha/MockRequestGenerator.java",
-      "src/org/chromium/chrome/browser/omaha/OmahaBaseTest.java",
-      "src/org/chromium/chrome/browser/omaha/RequestGeneratorTest.java",
-      "src/org/chromium/chrome/browser/omaha/ResponseParserTest.java",
-      "src/org/chromium/chrome/browser/omaha/StringSanitizerTest.java",
-      "src/org/chromium/chrome/browser/omaha/UpdateMenuItemHelperTest.java",
-      "src/org/chromium/chrome/browser/omaha/VersionNumberTest.java",
-      "src/org/chromium/chrome/browser/omaha/inline/InAppUpdateControllerTest.java",
-      "src/org/chromium/chrome/browser/omaha/inline/InAppUpdateInstallerTest.java",
-      "src/org/chromium/chrome/browser/omaha/inline/InAppUpdatePolicyTest.java",
-      "src/org/chromium/chrome/browser/omaha/inline/InAppUpdateRestartSchedulerTest.java",
-      "src/org/chromium/chrome/browser/omaha/inline/InAppUpdateRestartTaskTest.java",
-      "src/org/chromium/chrome/browser/omaha/metrics/UpdateSuccessMetricsTest.java",
-    ]
-
-    deps = [
-      ":chrome_junit_tests_helper",
-      "$google_play_services_package:google_play_services_tasks_java",
-      "//third_party/android_deps:chromium_play_services_availability_java",
-      "//third_party/android_deps:playcore_app_update_java",
-    ]
   }
 
   robolectric_library(
@@ -1399,6 +1357,7 @@ if (is_android) {
       "//chrome/browser/glic/android:jni_headers_java",
       "//chrome/browser/tab_group_suggestion:toolbar_java",
       "//chrome/browser/tips/android:java",
+      "//chrome/browser/ttc/android:entry_point_java",
       "//chrome/browser/ttc/android:java",
       "//chrome/browser/ui/android/extensions:java",
       "//chrome/browser/ui/android/lens:java",
@@ -1538,9 +1497,6 @@ if (is_android) {
       "//chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/pinned_tabs/PinnedTabStripItemViewBinderUnitTest.java",
       "//chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/pinned_tabs/PinnedTabStripMediatorTest.java",
       "//chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/pinned_tabs/PinnedTabStripViewBinderTest.java",
-      "//chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/tab_group_share_notice/TabGroupShareNoticeBottomSheetCoordinatorUnitTest.java",
-      "//chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/tab_group_share_notice/TabGroupShareNoticeBottomSheetMediatorUnitTest.java",
-      "//chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/tab_group_share_notice/TabGroupShareNoticeBottomSheetViewUnitTest.java",
       "//chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/vertical_tabs/BaseVerticalTabDropIndicatorDecorationUnitTest.java",
       "//chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/vertical_tabs/TabVerticalViewBinderUnitTest.java",
       "//chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/vertical_tabs/VerticalExternalViewDragDropReorderStrategyUnitTest.java",

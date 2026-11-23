@@ -2582,6 +2582,7 @@ data/accessibility/aria/aria-term-expected-auralinux.txt
 data/accessibility/aria/aria-term-expected-blink.txt
 data/accessibility/aria/aria-term-expected-mac.txt
 data/accessibility/aria/aria-term-expected-win.txt
+data/accessibility/aria/aria-term-new-class-feature-expected-android-external.txt
 data/accessibility/aria/aria-term.html
 data/accessibility/aria/aria-textbox-expected-android-assist-data.txt
 data/accessibility/aria/aria-textbox-expected-android-external.txt
@@ -2750,10 +2751,6 @@ data/accessibility/aria/ariaControlsElements-expected-blink.txt
 data/accessibility/aria/ariaControlsElements-internals-expected-blink.txt
 data/accessibility/aria/ariaControlsElements-internals.html
 data/accessibility/aria/ariaControlsElements.html
-data/accessibility/aria/ariaOwnsElements-expected-blink.txt
-data/accessibility/aria/ariaOwnsElements-internals-expected-blink.txt
-data/accessibility/aria/ariaOwnsElements-internals.html
-data/accessibility/aria/ariaOwnsElements.html
 data/accessibility/aria/disabled-aria-combobox-has-value-expected-blink.txt
 data/accessibility/aria/disabled-aria-combobox-has-value.html
 data/accessibility/aria/dpub-roles-computed-expected-blink.txt
@@ -4734,8 +4731,6 @@ data/accessibility/html/custom-element-with-aria-owns-inside-slot.html
 data/accessibility/html/custom-element-with-aria-owns-inside.html
 data/accessibility/html/custom-element-with-aria-owns-outside-expected-blink.txt
 data/accessibility/html/custom-element-with-aria-owns-outside.html
-data/accessibility/html/custom-element-with-ariaOwnsElements-cross-shadow-expected-blink.txt
-data/accessibility/html/custom-element-with-ariaOwnsElements-cross-shadow.html
 data/accessibility/html/custom-element.html
 data/accessibility/html/custom-select-button-value-expected-auralinux.txt
 data/accessibility/html/custom-select-button-value-expected-blink.txt
@@ -4815,6 +4810,7 @@ data/accessibility/html/dd-expected-fuchsia.txt
 data/accessibility/html/dd-expected-mac.txt
 data/accessibility/html/dd-expected-uia-win.txt
 data/accessibility/html/dd-expected-win.txt
+data/accessibility/html/dd-new-class-feature-expected-android-external.txt
 data/accessibility/html/dd.html
 data/accessibility/html/del-expected-android-assist-data.txt
 data/accessibility/html/del-expected-android-external.txt
@@ -4859,6 +4855,7 @@ data/accessibility/html/dfn-expected-fuchsia.txt
 data/accessibility/html/dfn-expected-mac.txt
 data/accessibility/html/dfn-expected-uia-win.txt
 data/accessibility/html/dfn-expected-win.txt
+data/accessibility/html/dfn-new-class-feature-expected-android-external.txt
 data/accessibility/html/dfn.html
 data/accessibility/html/dialog-expected-android-assist-data.txt
 data/accessibility/html/dialog-expected-android-external.txt
@@ -4896,6 +4893,7 @@ data/accessibility/html/dl-expected-fuchsia.txt
 data/accessibility/html/dl-expected-mac.txt
 data/accessibility/html/dl-expected-uia-win.txt
 data/accessibility/html/dl-expected-win.txt
+data/accessibility/html/dl-new-class-feature-expected-android-external.txt
 data/accessibility/html/dl.html
 data/accessibility/html/dt-expected-android-assist-data.txt
 data/accessibility/html/dt-expected-android-external.txt
@@ -8583,6 +8581,8 @@ data/indexeddb/key_path_test.html
 data/indexeddb/key_path_test.js
 data/indexeddb/key_types_test.html
 data/indexeddb/key_types_test.js
+data/indexeddb/legacy_fsa_handle.html
+data/indexeddb/legacy_fsa_handle.js
 data/indexeddb/migration_database_generator.html
 data/indexeddb/missing_sst/file__0.indexeddb.leveldb/000008.sst
 data/indexeddb/missing_sst/file__0.indexeddb.leveldb/000009.log

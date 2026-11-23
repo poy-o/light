@@ -96,7 +96,6 @@
 #include "chrome/browser/ui/prefs/prefs_tab_helper.h"
 #include "chrome/browser/ui/safety_hub/safety_hub_prefs.h"
 #include "chrome/browser/ui/side_panel/side_panel_prefs.h"
-#include "chrome/browser/ui/tabs/organizer/organizer_prefs.h"
 #include "chrome/browser/ui/tabs/tab_strip_prefs.h"
 #include "chrome/browser/ui/toolbar/chrome_labs/chrome_labs_prefs.h"
 #include "chrome/browser/ui/toolbar/chrome_location_bar_model_delegate.h"
@@ -330,6 +329,7 @@
 #include "chrome/browser/ui/omnibox/omnibox_everywhere/omnibox_everywhere_prefs.h"
 #include "chrome/browser/ui/read_anything/read_anything_prefs.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
+#include "chrome/browser/ui/tabs/organizer/organizer_prefs.h"
 #include "chrome/browser/ui/tabs/pinned_tab_codec.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_pref_names.h"
 #include "chrome/browser/ui/tabs/tab_strip_prefs.h"
@@ -456,7 +456,6 @@
 #include "chrome/browser/chromeos/extensions/echo_private/echo_private_api_util.h"
 #include "chrome/browser/chromeos/extensions/login_screen/login/login_api_prefs.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager_impl.h"
-#include "chrome/browser/chromeos/reporting/metric_reporting_prefs.h"
 #include "chrome/browser/component_updater/metadata_table_chromeos.h"
 #include "chrome/browser/device_identity/chromeos/device_oauth2_token_store_chromeos.h"
 #include "chrome/browser/extensions/api/document_scan/profile_prefs_registry_util.h"
@@ -483,6 +482,7 @@
 #include "chromeos/ash/components/carrier_lock/carrier_lock_manager.h"
 #include "chromeos/ash/components/demo_mode/utils/demo_session_utils.h"
 #include "chromeos/ash/components/local_search_service/search_metrics_reporter.h"
+#include "chromeos/ash/components/metrics_reporting/metric_reporting_prefs.h"
 #include "chromeos/ash/components/network/cellular_esim_profile_handler_impl.h"
 #include "chromeos/ash/components/network/cellular_metrics_logger.h"
 #include "chromeos/ash/components/network/fast_transition_observer.h"
@@ -1223,6 +1223,17 @@ inline constexpr char kSuggestedContentEnabled[] =
 
 // Deprecated 11/2026.
 inline constexpr char kPumaRcClientId[] = "private_metrics.puma.client_id.rc";
+inline constexpr char
+    kPrivacySandboxRelatedWebsiteSetsDataAccessAllowedInitialized[] =
+        "privacy_sandbox.first_party_sets_data_access_allowed_initialized";
+inline constexpr char kPrivacySandboxRelatedWebsiteSetsEnabled[] =
+    "privacy_sandbox.first_party_sets_enabled";
+
+#if !BUILDFLAG(IS_ANDROID)
+// Deprecated 11/2026.
+constexpr char kObsoleteAccessibilityAXTreeFixingEnabled[] =
+    "settings.a11y.enable_ax_tree_fixing";
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 // Register local state used only for migration (clearing or moving to a new
 // key).
@@ -1767,6 +1778,16 @@ void RegisterProfilePrefsForMigration(
   // Deprecated 11/2026.
   registry->RegisterBooleanPref(kPrefsThemesSearchEnginesAccountStorageEnabled,
                                 false);
+  // Deprecated 11/2026.
+  registry->RegisterBooleanPref(
+      kPrivacySandboxRelatedWebsiteSetsDataAccessAllowedInitialized, false);
+  registry->RegisterBooleanPref(kPrivacySandboxRelatedWebsiteSetsEnabled, true);
+
+#if !BUILDFLAG(IS_ANDROID)
+  // Deprecated 11/2026.
+  registry->RegisterBooleanPref(kObsoleteAccessibilityAXTreeFixingEnabled,
+                                false);
+#endif  // !BUILDFLAG(IS_ANDROID)
 }
 
 }  // namespace
@@ -2565,7 +2586,8 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
   registry->RegisterBooleanPref(prefs::kLensDesktopNTPSearchEnabled, true);
 #endif
 
-  registry->RegisterBooleanPref(prefs::kDisableScreenshots, false);
+  registry->RegisterBooleanPref(policy::policy_prefs::kDisableScreenshots,
+                                false);
   registry->RegisterDictionaryPref(prefs::kContextMenuAnimationState);
   registry->RegisterListPref(
       webauthn::pref_names::kRemoteDesktopAllowedOrigins);
@@ -2676,7 +2698,8 @@ void RegisterUserProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
 }
 
 void RegisterScreenshotPrefs(PrefRegistrySimple* registry) {
-  registry->RegisterBooleanPref(prefs::kDisableScreenshots, false);
+  registry->RegisterBooleanPref(policy::policy_prefs::kDisableScreenshots,
+                                false);
 }
 
 void RegisterGeminiSettingsPrefs(user_prefs::PrefRegistrySyncable* registry) {
@@ -3263,6 +3286,16 @@ void MigrateObsoleteProfilePrefs(PrefService* profile_prefs,
 
   // Added 11/2026.
   profile_prefs->ClearPref(kPrefsThemesSearchEnginesAccountStorageEnabled);
+
+  // Added 11/2026.
+  profile_prefs->ClearPref(
+      kPrivacySandboxRelatedWebsiteSetsDataAccessAllowedInitialized);
+  profile_prefs->ClearPref(kPrivacySandboxRelatedWebsiteSetsEnabled);
+
+#if !BUILDFLAG(IS_ANDROID)
+  // Added 11/2026.
+  profile_prefs->ClearPref(kObsoleteAccessibilityAXTreeFixingEnabled);
+#endif  // !BUILDFLAG(IS_ANDROID)
 
   // Please don't delete the following line. It is used by PRESUBMIT.py.
   // END_MIGRATE_OBSOLETE_PROFILE_PREFS

@@ -145,6 +145,7 @@ class GlicNoWebviewContentsManager : public GlicWebContentsManager,
     void OnClosePanelClicked() override;
     void OnShowErrorClicked() override;
     void OnRelaunchClicked() override;
+    void OnProviderSwitchNoticeContinueClicked() override;
 
     void OpenUrlAndClosePanel(const GURL& url);
 
@@ -171,6 +172,7 @@ class GlicNoWebviewContentsManager : public GlicWebContentsManager,
   void AttachModalDialogManagerDelegate(
       ScopedModalDialogManagerDelegate& delegate) override;
   void SetVisibility(content::Visibility visibility) override;
+  void OnProviderSwitchNoticeCleared() override;
   content::WebContents* active_web_contents() const override;
   bool IsShowingNativeLoading() const override;
   base::CallbackListSubscription RegisterNativeLoadingChangedCallback(
@@ -371,6 +373,9 @@ class GlicNoWebviewContentsManager : public GlicWebContentsManager,
   // Shows the relaunch panel if the attached host's instance was created with
   // a pending provider change. Returns whether it did.
   bool MaybeSetPendingProviderChangeError();
+  // Shows the provider switch notice if the attached host has one. Returns
+  // whether it did.
+  bool MaybeSetProviderSwitchNotice();
   void OnHibernationTimerExpired();
   void ResolvePendingWaitForLoadCallbacks();
 

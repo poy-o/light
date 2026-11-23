@@ -496,17 +496,9 @@ OptionalPaintTimingCallback SoftNavigationHeuristics::OnPaintFinished(
       records_per_context;
   auto get_records_for_record =
       [&](const PaintTimingRecord& record) -> ContextRecords* {
-    Node* node = record.GetNode();
-    // TODO(crbug.com/454082773): `node` can be null if it's removed from the
-    // DOM and GCed between queuing `record` for processing and the end of the
-    // subsequent paint. This can happen for <video> since first video frame is
-    // queued for processing out side of paint. We should either support these
-    // records or filter them at the PaintTiming layer.
-    if (!node) {
-      return nullptr;
-    }
     SoftNavigationContext* context =
-        paint_attribution_tracker_->GetSoftNavigationContextForNode(node);
+        paint_attribution_tracker_->GetSoftNavigationContextForNode(
+            record.GetNode());
     if (!context || !context->IsRecordingLargestContentfulPaint()) {
       return nullptr;
     }
@@ -546,7 +538,9 @@ void SoftNavigationHeuristics::OnInputOrScroll() {
 void SoftNavigationHeuristics::OnFramePresented(
     const HeapVector<Member<ImageRecord>>& image_records,
     const HeapVector<Member<TextRecord>>& text_records,
-    const DOMPaintTimingInfo&) {
+    const base::TimeTicks& presentation_timestamp,
+    const DOMPaintTimingInfo& paint_timing_info,
+    uint64_t navigation_id) {
   // First, group the records by context, ignoring records that aren't needed.
   ContextToCandidatesMap candidates_per_context;
   GroupLcpCandidatesByContext(image_records, candidates_per_context);
@@ -556,7 +550,9 @@ void SoftNavigationHeuristics::OnFramePresented(
   // context, if any. We do this before unblocking entries waiting for FCP
   // below, since that also emits and updates metrics.
   for (const auto& context_and_records : candidates_per_context) {
-    context_and_records.key->OnFramePresented(context_and_records.value);
+    context_and_records.key->OnFramePresented(context_and_records.value,
+                                              presentation_timestamp,
+                                              paint_timing_info, navigation_id);
   }
 
   // If we're waiting on FCP presentation feedback to emit entries, check if we

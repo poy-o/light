@@ -311,6 +311,8 @@ class ContextualTasksWebContentsUserData
   // sends `INJECT_INPUT` (`is_active = false`) to hide the tab picker when no
   // eligible tabs exist.
   void UpdateTabPickerVisibility();
+  // Runs `on_tab_context_updated_cb` on every bound extension frame.
+  void NotifyExtensionFramesTabContextUpdated();
   // Unblocks `url` and clears `implicit_tab_` when manually attaching a tab.
   void OnManualTabContextAdded(const GURL& url, SessionID tab_session_id);
   std::optional<tabs::TabHandle> GetAutoSuggestedTabHandle() const;
@@ -381,6 +383,7 @@ class ContextualTasksWebContentsUserData
     kTabPicker,
   };
   struct PageSearchState;
+  class SubmitInteractionTracker;
 
   explicit ContextualTasksWebContentsUserData(content::WebContents* contents);
   friend class content::WebContentsUserData<ContextualTasksWebContentsUserData>;
@@ -421,8 +424,6 @@ class ContextualTasksWebContentsUserData
   void MaybeFinishPendingSubmit();
   void OnPageContextIneligible();
   void OnPageChanged(bool is_zero_state);
-  // Runs `on_tab_context_updated_cb` on every bound extension frame.
-  void NotifyExtensionFramesTabContextUpdated();
   void AppendTabContextsToOnSubmitQueryResponse(
       lens::ClientToSearchMessage* response_message,
       contextual_search::ContextualSearchSessionHandle* session_handle,
@@ -474,6 +475,7 @@ class ContextualTasksWebContentsUserData
     tabs::TabHandle handle;
   };
   std::optional<ImplicitTab> implicit_tab_;
+  bool is_adding_implicit_tab_ = false;
   base::flat_set<GURL> dismissed_implicit_urls_;
   bool preserve_prestaged_context_ = false;
   bool has_unsubmitted_query_ = false;
@@ -513,7 +515,7 @@ class ContextualTasksWebContentsUserData
   base::flat_set<base::UnguessableToken> pending_context_uploads_;
   base::flat_set<base::UnguessableToken> failed_context_uploads_;
 
-  base::TimeTicks last_handled_submit_interaction_time_;
+  std::unique_ptr<SubmitInteractionTracker> submit_interaction_tracker_;
 
   // Uploads delayed tabs and recontextualizes the active tab on submit.
   std::unique_ptr<DesktopQueryContextualizerDelegate>

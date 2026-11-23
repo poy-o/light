@@ -151,10 +151,9 @@ BASE_FEATURE(kIPHGlicTrustFirstOnboardingShortcutSnoozePromoFeature,
 BASE_FEATURE(kIPHGlicTryItFeature,
              "IPH_GlicTryIt",
              base::FEATURE_DISABLED_BY_DEFAULT);
-// TODO(b:575858329): Enable by default once the triggering details are final.
 BASE_FEATURE(kIPHIndigoContextMenuSnoozeFeature,
              "IPH_IndigoContextMenuSnooze",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kIPHIndigoContextMenuToastFeature,
              "IPH_IndigoContextMenuToast",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -627,6 +626,9 @@ BASE_FEATURE(kIPHNewTabPageThemeCustomizationMagicStackFeature,
 BASE_FEATURE(kIPHNtpFuseboxAnimationFeature,
              "IPH_NtpFuseboxAnimation",
              base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kIPHOnStartupSettingsNewLabel,
+             "IPH_OnStartupSettingsNewLabel",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kIPHPageInfoFeature,
              "IPH_PageInfo",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -1153,6 +1155,9 @@ BASE_FEATURE(kIPHiOSTabGroupsDesktopFeature,
              base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kIPHiOSPriceTrackingDesktopFeature,
              "IPH_iOSPriceTrackingDesktop",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kIPHiOSSafetyPromoDesktopFeature,
+             "IPH_iOSSafetyPromoDesktop",
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // !BUILDFLAG(IS_ANDROID)
 

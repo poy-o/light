@@ -592,6 +592,7 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="Ungrouped"/>
   <int value="3" label="Aborted (No Change)"/>
   <int value="4" label="Dragged Out"/>
+  <int value="5" label="Aborted by ESC"/>
 </enum>
 
 <!-- LINT.ThenChange(//chrome/android/features/tab_ui/java/src/org/chromium/chrome/browser/tasks/tab_management/vertical_tabs/VerticalTabListItemTouchHelperCallback.java:AndroidVerticalTabsDragDropResult) -->
@@ -1159,6 +1160,14 @@ chromium-metrics-reviews@google.com.
   <int value="246" label="WebGPU.getWGPUProcGetProcAddress"/>
   <int value="247" label="WebViewCompat.serializeState"/>
   <int value="248" label="WebViewCompat.restoreState"/>
+  <int value="249" label="WebViewCompat.setDownloadHandler"/>
+  <int value="250" label="WebViewCompat.clearDownloadHandler"/>
+  <int value="251" label="WebDownload.getUrl"/>
+  <int value="252" label="WebDownload.getMimeType"/>
+  <int value="253" label="WebDownload.getContentLength"/>
+  <int value="254" label="WebDownload.getSuggestedFilename"/>
+  <int value="255" label="WebDownload.saveTo"/>
+  <int value="256" label="WebDownload.cancel"/>
 <!-- LINT.ThenChange(/android_webview/support_library/java/src/org/chromium/support_lib_glue/SupportLibWebViewChromiumFactory.java:ApiCall) -->
 
 </enum>
@@ -1817,9 +1826,12 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Action Tapped"/>
   <int value="2" label="Dismissed No Action"/>
   <int value="3" label="Dismissed By Lifecycle"/>
-  <int value="4" label="Skipped: Startup promo shown"/>
-  <int value="5" label="Skipped: Modal dialog showing"/>
-  <int value="6" label="Skipped: Bottom sheet visible"/>
+  <int value="4"
+      label="(Obsolete) Skipped: Startup promo shown. Removed in 2026/11."/>
+  <int value="5"
+      label="(Obsolete) Skipped: Modal dialog showing. Removed in 2026/11."/>
+  <int value="6"
+      label="(Obsolete) Skipped: Bottom sheet visible. Removed in 2026/11."/>
 </enum>
 
 <!-- LINT.ThenChange(//chrome/browser/omaha/android/java/src/org/chromium/chrome/browser/omaha/inline/InAppUpdateSnackbarEvent.java:InAppUpdateSnackbarEvent) -->
@@ -2185,6 +2197,17 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="New photo"/>
   <int value="3" label="Use Android picker"/>
 </enum>
+
+<!-- LINT.IfChange(PointerDownProvenance) -->
+
+<enum name="PointerDownProvenance">
+  <int value="0" label="Input device"/>
+  <int value="1" label="No input device"/>
+  <int value="2" label="Input device, accessibility flag"/>
+  <int value="3" label="No input device, accessibility flag"/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/android/java/src/org/chromium/chrome/browser/PointerDownProvenanceRecorder.java:PointerDownProvenance) -->
 
 <enum name="PreAssignedActivityState">
   <int value="0" label="Unknown"/>

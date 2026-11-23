@@ -4,14 +4,22 @@
 
 package org.chromium.chrome.browser.history;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
 
 import static org.chromium.chrome.browser.history.HistoryTestUtils.checkAdapterContents;
 
 import android.app.Activity;
 import android.view.LayoutInflater;
+import android.view.View;
 
+import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.junit.Assert;
@@ -31,8 +39,13 @@ import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.history.HistoryContentManager.ActorFilter;
 import org.chromium.chrome.browser.history.HistoryProvider.TimePeriodOption;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.ui.signin.signin_promo.SigninPromoCoordinator;
 import org.chromium.components.browser_ui.widget.MoreProgressButton;
+import org.chromium.components.browser_ui.widget.selectable_list.SelectableItemViewHolder;
+import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
+import org.chromium.components.favicon.LargeIconBridge;
+import org.chromium.url.GURL;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -47,7 +60,10 @@ public class HistoryAdapterTest {
     private StubbedHistoryProvider mHistoryProvider;
     private HistoryAdapter mAdapter;
 
+    @Mock private BrowsingHistoryBridge.Natives mBrowsingHistoryBridgeJni;
     @Mock private HistoryContentManager mContentManager;
+    @Mock private LargeIconBridge mLargeIconBridge;
+    @Mock private Profile mProfile;
     @Mock private SigninPromoCoordinator mHistorySyncPromoCoordinator;
 
     private MoreProgressButton mButton;
@@ -1053,5 +1069,70 @@ public class HistoryAdapterTest {
                                     /* beginTimeMs= */ QueryOptions.UNBOUNDED_TIME_MS,
                                     /* endTimeMs= */ QueryOptions.UNBOUNDED_TIME_MS));
         }
+    }
+
+    @Test
+    public void testCreateViewHolder_WiresItemViewCallbacksToContentManager() {
+        SelectionDelegate<HistoryItem> selectionDelegate = new SelectionDelegate<>();
+        doAnswer(
+                        invocation ->
+                                new SelectableItemViewHolder<>(
+                                        invocation.getArgument(0), selectionDelegate))
+                .when(mContentManager)
+                .getHistoryItemViewHolder(any());
+        doReturn(mLargeIconBridge).when(mContentManager).getLargeIconBridge();
+        doReturn(View.VISIBLE).when(mContentManager).getRemoveItemButtonVisibility();
+
+        mRecyclerView.setLayoutManager(new LinearLayoutManager(mRecyclerView.getContext()));
+        RecyclerView.ViewHolder viewHolder = mAdapter.createViewHolder(mRecyclerView);
+        HistoryItemView itemView = (HistoryItemView) viewHolder.itemView;
+        HistoryItem item = StubbedHistoryProvider.createHistoryItem(0, new Date().getTime());
+
+        itemView.setItem(item);
+        verify(mContentManager).getLargeIconBridge();
+        verify(mLargeIconBridge).getLargeIconForUrl(eq(item.getUrl()), anyInt(), any());
+
+        itemView.handleNonSelectionClick();
+        verify(mContentManager).onItemClicked(item);
+
+        itemView.remove();
+        verify(mContentManager).onItemRemoved(item);
+    }
+
+    @Test
+    public void testAppIdPropagatesForDeletion() {
+        // Ensure the app ID passed from BrowsingHistoryBridge is stored in the item
+        // object, and later gets passed down when marking the item for removal.
+        BrowsingHistoryBridgeJni.setInstanceForTesting(mBrowsingHistoryBridgeJni);
+        BrowsingHistoryBridge browsingHistoryBridge = new BrowsingHistoryBridge(mProfile);
+        HistoryContentManager contentManager = Mockito.mock(HistoryContentManager.class);
+        HistoryAdapter adapter =
+                new HistoryAdapter(
+                        contentManager,
+                        browsingHistoryBridge,
+                        mHistorySyncPromoCoordinator,
+                        /* shouldClusterByDomain= */ false);
+        browsingHistoryBridge.setObserver(adapter);
+
+        List<HistoryItem> items = new ArrayList<>();
+        List<GURL> urls = List.of(GURL.emptyGURL());
+        List<long[]> timestampsList = List.of(new long[0]);
+        String appId = "org.chromium.dino.Trex";
+        BrowsingHistoryBridge.createHistoryItemAndAddToList(
+                items,
+                GURL.emptyGURL(),
+                "domain.com",
+                "title",
+                appId,
+                0,
+                urls,
+                timestampsList,
+                false,
+                false,
+                /* criticalActions= */ List.of());
+        browsingHistoryBridge.onQueryHistoryComplete(items, false);
+
+        adapter.markItemForRemoval(items.get(0));
+        verify(mBrowsingHistoryBridgeJni).markItemForRemoval(anyLong(), any(), eq(appId), any());
     }
 }

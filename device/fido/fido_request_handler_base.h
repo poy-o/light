@@ -48,9 +48,8 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoRequestHandlerBase
  public:
   using RequestCallback = base::RepeatingCallback<void(const std::string&)>;
 
-  using AuthenticatorMap = std::map<std::string,
-                                    raw_ptr<FidoAuthenticator, CtnExperimental>,
-                                    std::less<>>;
+  using AuthenticatorMap =
+      std::map<std::string, raw_ptr<FidoAuthenticator>, std::less<>>;
 
   // BLE adapter status.
   enum class BleStatus {
@@ -188,7 +187,6 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoRequestHandlerBase
     // makeCredential requests. See also `request_is_internal_only`, which isn't
     // specific to makeCredential requests.
     std::optional<AuthenticatorAttachment> make_credential_attachment;
-
   };
 
   class COMPONENT_EXPORT(DEVICE_FIDO) Observer {
@@ -363,8 +361,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoRequestHandlerBase
   void InitDiscoveries(
       FidoDiscoveryFactory* fido_discovery_factory,
       std::vector<std::unique_ptr<FidoDiscoveryBase>> additional_discoveries,
-      FidoTransportProtocolSet available_transports,
-      bool consider_enclave);
+      FidoTransportProtocolSet available_transports);
 
   void Start();
 

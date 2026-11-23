@@ -27,34 +27,23 @@ enum class AnimatedDefaultBrowserPromoInFREExperimentType {
 
 // Enum to represent variations of feature kBestFeaturesScreenInFirstRun.
 enum class BestFeaturesScreenVariationType {
-  kDisabled,
+  kDisabled = 0,
   // Show general screen to all users, after the Default Browser promo.
-  kGeneralScreenAfterDBPromo,
+  kGeneralScreenAfterDBPromo = 1,
   // Show general screen to all users, before the Default Browser promo.
-  kGeneralScreenBeforeDBPromo,
+  kGeneralScreenBeforeDBPromo = 2,
   // Show a modified version of the general screen to all users, after the
   // Default Browser promo. The "incognito tabs" item is replaced with
   // "passwords" item.
-  kGeneralScreenWithPasswordItemAfterDBPromo,
-  // For "Shopping" classified users, show the Shopping-specific screen. For all
-  // other users, show screen in kGeneralScreenWithPasswordItem arm. Appears
-  // after Default Browser promo.
-  kShoppingUsersWithFallbackAfterDBPromo,
+  kGeneralScreenWithPasswordItemAfterDBPromo = 3,
+  // kShoppingUsersWithFallbackAfterDBPromo = 4,  // Obsolete.
   // For signed-in users, show the "signed-in" specific screen. For all other
   // users, don't show screen. Appears after Default Browser promo.
-  kSignedInUsersOnlyAfterDBPromo,
+  kSignedInUsersOnlyAfterDBPromo = 5,
   // Show the address bar promo instead of the Best Features screen.
-  kAddressBarPromoInsteadOfBestFeaturesScreen,
+  kAddressBarPromoInsteadOfBestFeaturesScreen = 6,
   // Show the general screen to all users as a part of the Best of App FRE.
-  kBestOfApp,
-};
-
-// Enum to represent arms of feature kUpdatedFirstRunSequence.
-enum class UpdatedFRESequenceVariationType {
-  kDisabled,
-  kDBPromoFirst,
-  kRemoveSignInSync,
-  kDBPromoFirstAndRemoveSignInSync,
+  kBestOfApp = 7,
 };
 
 // Enum to represent variations of feature
@@ -94,9 +83,6 @@ BASE_DECLARE_FEATURE(kAnimatedDefaultBrowserPromoInFRE);
 // FRE sequence.
 BASE_DECLARE_FEATURE(kBestFeaturesScreenInFirstRun);
 
-// Feature to enable updates to the sequence of the first run screens.
-BASE_DECLARE_FEATURE(kUpdatedFirstRunSequence);
-
 // Feature flag (killswitch) to enable presenting post FRE IPH promos in
 // FirstRunProfileAgent instead of FirstRunCoordinator.
 BASE_DECLARE_FEATURE(kPostFREIphInProfileAgent);
@@ -119,10 +105,6 @@ extern const char kAnimatedDefaultBrowserPromoInFREExperimentType[];
 // Name of the parameter that indicates which variation of the
 //  kBestFeaturesScreenInFirstRun feature will be displayed.
 extern const char kBestFeaturesScreenInFirstRunParam[];
-
-// Name of the param that indicates which variation of the
-// kUpdatedFirstRunSequence is enabled.
-extern const char kUpdatedFirstRunSequenceParam[];
 
 // Name of the parameter that indicates which variation of the
 // `kAndroidSwitcherDefaultBrowserPromoInFRE` feature is enabled.
@@ -155,12 +137,7 @@ extern const char kFREAblationParamSkipAllExceptSignInAndChoice[];
 // enabled or `kDisabled` if the feature is disabled.
 BestFeaturesScreenVariationType GetBestFeaturesScreenVariationType();
 
-// Returns which variation of the kUpdatedFirstRunSequence feature is enabled or
-// `kDisabled` if the feature is disabled.
-UpdatedFRESequenceVariationType GetUpdatedFRESequenceVariation();
-
-// Whether the Default Browser Experiment in the FRE is enabled. This feature is
-// disabled when kUpdatedFirstRunSequence is enabled.
+// Whether the Default Browser Experiment in the FRE is enabled.
 bool IsAnimatedDefaultBrowserPromoInFREEnabled();
 
 // Returns the experimental arm for the Animated DBP in FRE experiment, which

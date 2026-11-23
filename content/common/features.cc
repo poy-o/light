@@ -64,6 +64,12 @@ BASE_FEATURE(kAndroidDownloadableFontsMatching,
 // was skipped while the keyboard was hidden. Kill switch for b/500230096.
 BASE_FEATURE(kAndroidRestartInputAfterHiddenStateUpdate,
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Captures microphone audio in-process via AudioRecord and pipes it to
+// Android's SpeechRecognizer via EXTRA_AUDIO_SOURCE so foreground Chrome
+// retains microphone priority when other processes record concurrently.
+BASE_FEATURE(kAndroidSpeechRecognitionInProcessAudio,
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_WIN)
@@ -413,9 +419,6 @@ BASE_FEATURE(kPrefetchDevtoolsUserAgentOverride,
 // with a user gesture.
 BASE_FEATURE(kIgnoreDuplicateNavsOnlyWithUserGesture,
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// A feature flag for the memory-backed code cache.
-BASE_FEATURE(kInMemoryCodeCache, base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables the ability to use the updateIfOlderThanMs field in the trusted
 // bidding response to trigger a post-auction update if the group has been

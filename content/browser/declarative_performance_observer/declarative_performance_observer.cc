@@ -160,10 +160,7 @@ DeclarativePerformanceObserver::DeclarativePerformanceObserver(
 }
 
 DeclarativePerformanceObserver::~DeclarativePerformanceObserver() {
-  if (render_frame_host().GetLifecycleState() !=
-      RenderFrameHost::LifecycleState::kPrerendering) {
-    EndSessionAndFlush();
-  }
+  EndSessionAndFlush();
   base::UmaHistogramMemoryKB("DeclarativePerformanceObserver.PeakBufferSize",
                              peak_buffer_bytes_ / 1024);
   base::UmaHistogramBoolean(
@@ -322,6 +319,15 @@ void DeclarativePerformanceObserver::EndSessionAndFlush() {
   if (is_session_ended_) {
     return;
   }
+  // A prerendered page discarded without activation was never presented to the
+  // user, so reporting its timeline would attribute a page view that never
+  // happened. The lifecycle state is still kPrerendering on every discard path:
+  // neither ClosePage(kPrerenderDiscard) nor FrameTree::Shutdown() transitions
+  // it before the frame is deleted.
+  if (render_frame_host().GetLifecycleState() ==
+      RenderFrameHost::LifecycleState::kPrerendering) {
+    return;
+  }
   AppendSessionEndEntry();
   FlushMetrics();
 }
@@ -380,6 +386,16 @@ void DeclarativePerformanceObserver::DidObservePerformanceEntries(
         if (!enabled_types_.Has(network::mojom::PerformanceEntryType::kMark)) {
           continue;
         }
+        // `performance.mark(name, {startTime})` accepts any non-negative
+        // finite `DOMHighResTimeStamp`, so values above `int64_t` max
+        // microseconds saturate `base::Milliseconds()` to `TimeDelta::Max()`.
+        // Skip saturated entries rather than calling `mojo::ReportBadMessage`
+        // because valid web content can produce them, and `InMillisecondsF()`
+        // would return `+/-inf` and hit `DUMP_WILL_BE_NOTREACHED` in
+        // `base::Value`.
+        if (mark.start_time.is_inf()) {
+          continue;
+        }
         if (include_user_timing_ &&
             !include_user_timing_->contains(mark.name)) {
           continue;
@@ -401,6 +417,10 @@ void DeclarativePerformanceObserver::DidObservePerformanceEntries(
         auto& lcp = entry->get_lcp();
         if (!enabled_types_.Has(network::mojom::PerformanceEntryType::
                                     kLargestContentfulPaint)) {
+          continue;
+        }
+        if (lcp->start_time.is_inf() || lcp->render_time.is_inf() ||
+            lcp->load_time.is_inf()) {
           continue;
         }
 

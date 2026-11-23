@@ -18,6 +18,7 @@ import android.os.Build.VERSION;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.view.MenuItem;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewStub;
@@ -269,7 +270,7 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
     protected void onStart() {
         super.onStart();
 
-        if (NtpCustomizationUtils.isNtpThemeCustomizationEnabled()) {
+        if (NtpCustomizationUtils.isNtpThemeCustomizationEnabledByPolicy()) {
             if (mNtpThemeStateObserver == null) {
                 mNtpThemeStateObserver = this::recreate;
                 NtpThemeStateProvider.getInstance().addObserver(mNtpThemeStateObserver);
@@ -665,6 +666,12 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
             return true;
         }
         return false;
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        PointerDownProvenanceRecorder.record(ev);
+        return super.dispatchTouchEvent(ev);
     }
 
     @Override

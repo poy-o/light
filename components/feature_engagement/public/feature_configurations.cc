@@ -10,7 +10,6 @@
 #include "components/feature_engagement/public/event_constants.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/feature_engagement/public/group_constants.h"
-#include "components/segmentation_platform/public/features.h"
 
 #if BUILDFLAG(IS_IOS)
 #include "base/metrics/field_trial_params.h"
@@ -891,6 +890,30 @@ std::optional<FeatureConfig> GetClientSideFeatureConfig(
     return config;
   }
 
+  if (kIPHOnStartupSettingsNewLabel.name == feature->name) {
+    FeatureConfig config;
+    config.valid = true;
+    config.availability = kAlwaysAvailable;
+
+    // This is a "New" label, we always want it to show and we don't want it to
+    // be blocked by or block any other IPH, or contribute to session rate.
+    config.session_rate = kNoRestrictions;
+    config.session_rate_impact.type = SessionRateImpact::Type::NONE;
+    config.blocked_by.type = BlockedBy::Type::NONE;
+    config.blocking.type = Blocking::Type::NONE;
+
+    // "New" label shows fewer than 6 times in its lifetime.
+    config.trigger = EventConfig(
+        "on_startup_settings_new_label_trigger", Comparator(LESS_THAN, 6),
+        /*window=*/k10YearsInDays, /*storage=*/k10YearsInDays);
+
+    // "New" label never shows once the On startup page has been opened.
+    config.used =
+        EventConfig("settings_on_startup_opened", Comparator(EQUAL, 0),
+                    /*window=*/k10YearsInDays, /*storage=*/k10YearsInDays);
+    return config;
+  }
+
   if (kIPH_BlueBubbleCooldownGroup.name == feature->name) {
     FeatureConfig config;
     config.valid = true;
@@ -1548,20 +1571,13 @@ std::optional<FeatureConfig> GetClientSideFeatureConfig(
 
   if (kIPHNewTabPageThemeCustomizationFeature.name == feature->name) {
     // Allows an IPH for the theme customization entry point.
-    // Once per kNewTabPageCustomizationV2IphDisplayIntervalDays days.
-    // kNewTabPageCustomizationV2IphMaxImpression times as maximum for lifetime.
+    // Once per 7 days, 3 times as maximum for lifetime.
     FeatureConfig config;
     config.valid = true;
     config.availability = kAlwaysAvailable;
     config.session_rate = Comparator(EQUAL, 0);
-    // TODO(https://crbug.com/423579377): Clean up these feature params and use
-    // the default values after the feature NewTabPageCustomizationV2 is fully
-    // launched.
     config.trigger = EventConfig(
-        "ntp_theme_customization_iph_triggered",
-        Comparator(LESS_THAN,
-                   segmentation_platform::features::
-                       kNewTabPageCustomizationV2IphMaxImpression.Get()),
+        "ntp_theme_customization_iph_triggered", Comparator(LESS_THAN, 3),
         /*window=*/k10YearsInDays, /*storage=*/k10YearsInDays);
     config.used =
         EventConfig("ntp_theme_customization_iph_used", Comparator(EQUAL, 0),
@@ -1569,10 +1585,7 @@ std::optional<FeatureConfig> GetClientSideFeatureConfig(
 
     config.event_configs.insert(EventConfig(
         "ntp_theme_customization_iph_triggered", Comparator(LESS_THAN, 1),
-        /*window=*/
-        segmentation_platform::features::
-            kNewTabPageCustomizationV2IphDisplayIntervalDays.Get(),
-        /*storage=*/k10YearsInDays));
+        /*window=*/7, /*storage=*/k10YearsInDays));
     // Enrolled in `kClankNewTabPageThemeCustomizationPromosGroup` so that
     // showing either this 3-dot menu IPH or the NTP theme customization promo
     // Magic Stack card enforces a shared 7-day cooldown across both surfaces.

@@ -720,6 +720,8 @@ should be able to be added at any place in this file.
       summary="For iOSReplaceSyncPromosWithSignInPromos feature"/>
   <variant name="_iOSSafariImportFeature"
       summary="For reminder of the Safari import workflow."/>
+  <variant name="_iOSSafetyPromoDesktop"
+      summary="For iOSSafetyPromoDesktop feature"/>
   <variant name="_iOSSavedTabGroupClosed"
       summary="For Saved Tab Group closed for the first time."/>
   <variant name="_iOSSettingsInOverflowMenuBubbleFeature"
@@ -773,6 +775,8 @@ should be able to be added at any place in this file.
   <variant name="_OmniboxEverywhereLensPromo"
       summary="In product help for the Lens search feature in Omnibox
                Everywhere."/>
+  <variant name="_OnStartupSettingsNewLabel"
+      summary="Enables the 'New' label for On startup settings."/>
   <variant name="_PageInfo" summary="In product help for opening PageInfo."/>
   <variant name="_PageInfoStoreInfo" summary="For PageInfoStoreInfo feature."/>
   <variant name="_PageSummaryPdfMenu"
@@ -1121,6 +1125,8 @@ should be able to be added at any place in this file.
   <variant name=".TtcMicrophoneMuted" summary="TTC microphone muted"/>
   <variant name=".TtcNoMicrophoneError" summary="TTC no microphone error"/>
   <variant name=".TtcPermissionDenied" summary="TTC permission denied"/>
+  <variant name=".TtcSpeakerMuted" summary="TTC speaker muted"/>
+  <variant name=".TtcSpeakerVolumeLow" summary="TTC speaker volume low"/>
 </variants>
 
 <variants name="UserEducation_WhatsNew_Module_Type">
@@ -14364,6 +14370,15 @@ should be able to be added at any place in this file.
   <description>
     The Glic instance WebUI is showing the pending Gemini to GEiC provider
     change panel.
+  </description>
+</action>
+
+<action name="Glic.Instance.WebUiStateChanged.ProviderSwitchNoticeGeicToGemini">
+  <owner>alexwchen@google.com</owner>
+  <owner>glic+metrics@google.com</owner>
+  <description>
+    The Glic instance WebUI is showing the notice that the provider was switched
+    from GEiC to Gemini.
   </description>
 </action>
 

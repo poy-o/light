@@ -26,10 +26,10 @@
 #include "chrome/browser/web_applications/isolated_web_apps/test/isolated_web_app_builder.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/embedder_support/user_agent_utils.h"
+#include "components/policy/core/common/policy_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -163,15 +163,21 @@ const content::EvalJsResult ExecuteScriptRequestFullScreen(
   )");
 }
 
-const content::EvalJsResult VerifyFullscreen(extensions::WebViewGuest* guest) {
+// requestFullscreen() resolves asynchronously, so wait for the fullscreen
+// change if it hasn't happened yet.
+const content::EvalJsResult WaitForFullscreen(extensions::WebViewGuest* guest) {
   return content::EvalJs(guest->GetGuestMainFrame(), R"(
-    (function() {
+    new Promise(resolve => {
       if (document.fullscreenElement !== null) {
-        return 'SUCCESS';
-      } else {
-        return 'FAIL';
+        resolve('SUCCESS');
+        return;
       }
-    })();
+      document.addEventListener('fullscreenchange', () => {
+        resolve(document.fullscreenElement !== null ? 'SUCCESS' : 'FAIL');
+      }, {once: true});
+      document.addEventListener('fullscreenerror', () => resolve('FAIL'),
+                                {once: true});
+    });
   )");
 }
 // TODO(odejesush): Add tests for the rest of the Promise API methods.
@@ -503,7 +509,8 @@ IN_PROC_BROWSER_TEST_F(ControlledFrameApiTest,
   ASSERT_TRUE(CreateControlledFrame(
       app_frame, embedded_https_test_server().GetURL("/index.html")));
 
-  profile()->GetPrefs()->SetBoolean(prefs::kDisableScreenshots, true);
+  profile()->GetPrefs()->SetBoolean(policy::policy_prefs::kDisableScreenshots,
+                                    true);
 
   const std::string script = R"(
     (async function() {
@@ -549,7 +556,7 @@ IN_PROC_BROWSER_TEST_F(ControlledFrameApiTest, EnterFullScreenControlledFrame) {
   auto* web_view_guest = GetWebViewGuest(app_frame);
 
   EXPECT_EQ(kEvalSuccessStr, ExecuteScriptRequestFullScreen(app_frame));
-  EXPECT_EQ(kEvalSuccessStr, VerifyFullscreen(web_view_guest));
+  EXPECT_EQ(kEvalSuccessStr, WaitForFullscreen(web_view_guest));
 }
 
 IN_PROC_BROWSER_TEST_F(ControlledFrameApiTest, DisabledInDataIframe) {

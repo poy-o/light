@@ -108,12 +108,6 @@ BASE_FEATURE(kNtpCustomizeChromeAutoOpen, base::FEATURE_ENABLED_BY_DEFAULT);
 // If enabled, shows Customize Chrome button on Android.
 BASE_FEATURE(kNtpCustomizeWebUiAndroid, base::FEATURE_DISABLED_BY_DEFAULT);
 
-// When enabled, ChromeContentBrowserClient::OverrideNavigationParams no
-// longer treats NTP-sourced renderer-initiated link clicks as browser-
-// initiated.
-BASE_FEATURE(kNtpDisableBrowserInitiatedLinks,
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 #if !defined(OFFICIAL_BUILD)
 // If enabled, dummy modules will be shown.
 // This is a development switch. Keep indefinitely.
@@ -359,6 +353,11 @@ BASE_FEATURE(kNtpWidgetPlatform, base::FEATURE_DISABLED_BY_DEFAULT);
 
 // If enabled, the Launchpad widget will be shown on the NTP.
 BASE_FEATURE(kNtpLaunchpadWidget, base::FEATURE_DISABLED_BY_DEFAULT);
+
+// If enabled, lazily pins the most recently committed desktop
+// `chrome://new-tab-page/` renderer process per profile for warm reuse,
+// releasing it under moderate or critical memory pressure.
+BASE_FEATURE(kKeepNtpRendererAlive, base::FEATURE_DISABLED_BY_DEFAULT);
 
 const char kNtpModuleIgnoredCriteriaThreshold[] =
     "NtpModuleIgnoredCriteriaThreshold";

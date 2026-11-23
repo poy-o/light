@@ -3,19 +3,25 @@
 // found in the LICENSE file.
 
 import 'chrome://resources/cr_components/history_clusters/clusters.js';
+import 'chrome://resources/cr_elements/cr_chip/cr_chip.js';
 import 'chrome://resources/cr_elements/cr_drawer/cr_drawer.js';
+import 'chrome://resources/cr_elements/cr_icon/cr_icon.js';
 import 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render_lit.js';
 import 'chrome://resources/cr_elements/cr_page_selector/cr_page_selector.js';
 import 'chrome://resources/cr_elements/cr_tabs/cr_tabs.js';
+import 'chrome://resources/cr_elements/icons.html.js';
 // <if expr="not is_chromeos">
-import './history_cross_device_signin_promo.js';
 import './history_sync_promo.js';
+// </if>
+// <if expr="not is_chromeos and not is_android">
+import './history_cross_device_signin_promo.js';
 // </if>
 import './history_list.js';
 import './history_toolbar.js';
 import './history_filter_chips.js';
 import './query_manager.js';
 import './router.js';
+import './shared_icons.html.js';
 import './side_bar.js';
 import './synced_device_manager.js';
 import '/strings.m.js';
@@ -25,14 +31,13 @@ import {HelpBubbleMixinLit} from 'chrome://resources/cr_components/help_bubble/h
 import {HistoryResultType} from 'chrome://resources/cr_components/history/constants.js';
 import type {ForeignSession, ForeignSessionPageCallbackRouter} from 'chrome://resources/cr_components/history/foreign_sessions.mojom-webui.js';
 import {browserProxyFactory as foreignSessionBrowserProxyFactory} from 'chrome://resources/cr_components/history/foreign_sessions.mojom-webui.js';
-import type {Device, PageCallbackRouter, QueryResult, QueryState, TimePeriodOption} from 'chrome://resources/cr_components/history/history.mojom-webui.js';
-import {TimePeriodOptionId} from 'chrome://resources/cr_components/history/history.mojom-webui.js';
+import type {Device, HistoryIdentityState, PageCallbackRouter, QueryResult, QueryState, TimePeriodOption} from 'chrome://resources/cr_components/history/history.mojom-webui.js';
+import {HistorySignInState, SyncState, TimePeriodOptionId} from 'chrome://resources/cr_components/history/history.mojom-webui.js';
 import {getInstance as getAnnouncerInstance} from 'chrome://resources/cr_elements/cr_a11y_announcer/cr_a11y_announcer.js';
 import type {CrDrawerElement} from 'chrome://resources/cr_elements/cr_drawer/cr_drawer.js';
 import type {CrLazyRenderLitElement} from 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render_lit.js';
 import type {CrPageSelectorElement} from 'chrome://resources/cr_elements/cr_page_selector/cr_page_selector.js';
 import {FindShortcutMixinLit} from 'chrome://resources/cr_elements/find_shortcut_mixin_lit.js';
-import {WebUiListenerMixinLit} from 'chrome://resources/cr_elements/web_ui_listener_mixin_lit.js';
 import {assert, assertNotReachedCase} from 'chrome://resources/js/assert.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
@@ -44,8 +49,7 @@ import {browserProxyFactory as userEducationProxyFactory} from 'chrome://resourc
 import {getCss} from './app.css.js';
 import {getHtml} from './app.html.js';
 import {BrowserProxyImpl} from './browser_proxy.js';
-import type {HistoryIdentityState} from './browser_proxy.js';
-import {HistoryPageViewHistogram, HistorySignInState, SyncState} from './constants.js';
+import {HistoryPageViewHistogram} from './constants.js';
 import type {HistoryListElement} from './history_list.js';
 import type {HistoryToolbarElement} from './history_toolbar.js';
 import {eventToClickModifiers} from './mouse_event_util.js';
@@ -109,8 +113,8 @@ export interface HistoryAppElement {
   };
 }
 
-const HistoryAppElementBase = HelpBubbleMixinLit(
-    FindShortcutMixinLit(WebUiListenerMixinLit(CrLitElement)));
+const HistoryAppElementBase =
+    HelpBubbleMixinLit(FindShortcutMixinLit(CrLitElement));
 
 export class HistoryAppElement extends HistoryAppElementBase {
   static get is() {
@@ -130,6 +134,8 @@ export class HistoryAppElement extends HistoryAppElementBase {
       // <if expr="not is_chromeos">
       unoPhase2FollowUpEnabled_: {type: Boolean},
       shouldShowHistorySyncPromo_: {type: Boolean},
+      // </if>
+      // <if expr="not is_chromeos and not is_android">
       shouldShowHistoryCrossDeviceSigninPromo_: {type: Boolean},
       // </if>
       contentPage_: {type: String},
@@ -138,8 +144,6 @@ export class HistoryAppElement extends HistoryAppElementBase {
       selectedPage_: {type: String},
       queryResult_: {type: Object},
       sessionList_: {type: Array},
-      // Updated on synced-device-manager attach by chrome.sending
-      // 'otherDevicesInitialized'.
       identityState_: {type: Object},
       pendingDelete_: {type: Boolean},
       queryState_: {type: Object},
@@ -170,6 +174,7 @@ export class HistoryAppElement extends HistoryAppElementBase {
       isBrowsingHistoryFilterByTimePeriodEnabled_: {type: Boolean},
       timePeriodOptions_: {type: Array},
       selectedTimePeriodOptionId_: {type: Number},
+      historyPageRefreshEnabled_: {type: Boolean},
     };
   }
 
@@ -182,6 +187,8 @@ export class HistoryAppElement extends HistoryAppElementBase {
   private accessor unoPhase2FollowUpEnabled_: boolean =
       loadTimeData.getBoolean('unoPhase2FollowUp');
   private accessor shouldShowHistorySyncPromo_: boolean = false;
+  // </if>
+  // <if expr="not is_chromeos and not is_android">
   protected accessor shouldShowHistoryCrossDeviceSigninPromo_: boolean = false;
   // </if>
   protected accessor hasDrawer_: boolean = false;
@@ -190,9 +197,9 @@ export class HistoryAppElement extends HistoryAppElementBase {
   protected accessor historyClustersVisible_: boolean =
       loadTimeData.getBoolean('isHistoryClustersVisible');
   private accessor identityState_: HistoryIdentityState = {
-    signIn: HistorySignInState.SIGNED_OUT,
-    tabsSync: SyncState.TURNED_OFF,
-    historySync: SyncState.TURNED_OFF,
+    signIn: HistorySignInState.kSignedOut,
+    tabsSync: SyncState.kTurnedOff,
+    historySync: SyncState.kTurnedOff,
   };
   protected accessor lastSelectedTab_: number =
       loadTimeData.getInteger('lastSelectedTab');
@@ -249,6 +256,8 @@ export class HistoryAppElement extends HistoryAppElementBase {
   protected accessor timePeriodOptions_: TimePeriodOption[] = [];
   protected accessor selectedTimePeriodOptionId_: TimePeriodOptionId =
       TimePeriodOptionId.kAllTime;
+  private accessor historyPageRefreshEnabled_: boolean =
+      loadTimeData.getBoolean('isHistoryPageRefreshEnabled');
 
   private callbackRouter_: PageCallbackRouter;
   private foreignSessionCallbackRouter_: ForeignSessionPageCallbackRouter;
@@ -258,6 +267,7 @@ export class HistoryAppElement extends HistoryAppElementBase {
       HistoryPageViewHistogram.END;
   private onForeignSessionsChangedListenerId_: number|null = null;
   private onHasOtherFormsChangedListenerId_: number|null = null;
+  private onIdentityStateChangedListenerId_: number|null = null;
 
   constructor() {
     super();
@@ -292,10 +302,10 @@ export class HistoryAppElement extends HistoryAppElementBase {
     this.eventTracker_.add(
         document, 'record-history-link-click',
         this.onRecordHistoryLinkClick_.bind(this));
-    this.addWebUiListener(
-        'history-identity-state-changed',
-        (identityState: HistoryIdentityState) =>
-            this.onIdentityStateChanged_(identityState));
+    this.onIdentityStateChangedListenerId_ =
+        this.callbackRouter_.onIdentityStateChanged.addListener(
+            (identityState: HistoryIdentityState) =>
+                this.onIdentityStateChanged_(identityState));
     this.onForeignSessionsChangedListenerId_ =
         this.foreignSessionCallbackRouter_.onForeignSessionsChanged.addListener(
             (sessionList: ForeignSession[]) =>
@@ -304,10 +314,9 @@ export class HistoryAppElement extends HistoryAppElementBase {
     foreignSessionBrowserProxyFactory.getInstance()
         .handler.getForeignSessions()
         .then(({sessions}) => this.setForeignSessions_(sessions));
-    BrowserProxyImpl.getInstance().getInitialIdentityState().then(
-        (identityState: HistoryIdentityState) =>
-            this.onIdentityStateChanged_(identityState));
-    BrowserProxyImpl.getInstance().getSyncedDevicesForFiltering().then(
+    BrowserProxyImpl.getInstance().handler.getInitialIdentityState().then(
+        ({identityState}) => this.onIdentityStateChanged_(identityState));
+    BrowserProxyImpl.getInstance().handler.getSyncedDevicesForFiltering().then(
         ({devices}) => {
           this.devices_ = devices;
         });
@@ -345,6 +354,12 @@ export class HistoryAppElement extends HistoryAppElementBase {
       this.onHasOtherFormsChangedListenerId_ = null;
     }
 
+    if (this.onIdentityStateChangedListenerId_ !== null) {
+      this.callbackRouter_.removeListener(
+          this.onIdentityStateChangedListenerId_);
+      this.onIdentityStateChangedListenerId_ = null;
+    }
+
     if (this.onForeignSessionsChangedListenerId_ !== null) {
       this.foreignSessionCallbackRouter_.removeListener(
           this.onForeignSessionsChangedListenerId_);
@@ -363,7 +378,8 @@ export class HistoryAppElement extends HistoryAppElementBase {
     }
 
     if (changedPrivateProperties.has('showHistoryClusters_')) {
-      this.showTabs_ = this.showHistoryClusters_;
+      this.showTabs_ =
+          this.showHistoryClusters_ && !this.historyPageRefreshEnabled_;
     }
 
     if (changedPrivateProperties.has('selectedTab_')) {
@@ -741,8 +757,8 @@ export class HistoryAppElement extends HistoryAppElementBase {
         break;
       case Page.SYNCED_TABS:
         histogramValue =
-            this.identityState_.signIn === HistorySignInState.SIGNED_IN &&
-                this.identityState_.tabsSync === SyncState.TURNED_ON ?
+            this.identityState_.signIn === HistorySignInState.kSignedIn &&
+                this.identityState_.tabsSync === SyncState.kTurnedOn ?
             HistoryPageViewHistogram.SYNCED_TABS :
             HistoryPageViewHistogram.SIGNIN_PROMO;
         break;
@@ -788,16 +804,18 @@ export class HistoryAppElement extends HistoryAppElementBase {
   // 4. User is not already signed in and syncing history.
   protected shouldShowHistoryPageHistorySyncPromo_(): boolean {
     return this.unoPhase2FollowUpEnabled_ && this.shouldShowHistorySyncPromo_ &&
-        this.identityState_.historySync !== SyncState.DISABLED &&
-        !(this.identityState_.signIn === HistorySignInState.SIGNED_IN &&
-          this.identityState_.historySync === SyncState.TURNED_ON);
+        this.identityState_.historySync !== SyncState.kDisabled &&
+        !(this.identityState_.signIn === HistorySignInState.kSignedIn &&
+          this.identityState_.historySync === SyncState.kTurnedOn);
   }
 
   private handleShouldShowHistoryPageHistorySyncPromoChanged_(
       shouldShowHistorySyncPromo: boolean) {
     this.shouldShowHistorySyncPromo_ = shouldShowHistorySyncPromo;
   }
+  // </if>
 
+  // <if expr="not is_chromeos and not is_android">
   protected onShouldShowHistoryCrossDeviceSigninPromo_(
       e: CustomEvent<{shouldShow: boolean}>) {
     this.shouldShowHistoryCrossDeviceSigninPromo_ = e.detail.shouldShow;
@@ -882,6 +900,21 @@ export class HistoryAppElement extends HistoryAppElementBase {
     return (this.showActorFilter_() || this.showDeviceFilter_() ||
             this.showDomainFilter_() || this.showTimePeriodFilter_()) &&
         !this.getShowResultsByGroup_();
+  }
+
+  protected showGroupViewButton_(): boolean {
+    return this.historyPageRefreshEnabled_ && this.showHistoryClusters_;
+  }
+
+  protected getGroupViewButtonIcon_(): string {
+    return this.getShowResultsByGroup_() ? 'cr:check' : 'history20:grid-view';
+  }
+
+  protected onGroupViewButtonClick_() {
+    this.selectedTab_ =
+        this.selectedTab_ === TABBED_PAGES.indexOf(Page.HISTORY_CLUSTERS) ?
+        TABBED_PAGES.indexOf(Page.HISTORY) :
+        TABBED_PAGES.indexOf(Page.HISTORY_CLUSTERS);
   }
 
   // TODO(crub.com/509908129): Add static stylesheet in history.html

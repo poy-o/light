@@ -6,6 +6,7 @@
 
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/functional/callback_helpers.h"
@@ -82,6 +83,10 @@ void FinishOpenPage(base::DictValue response,
       const base::DictValue& tab_dict = (*open_tabs)[0].GetDict();
       int tab_id = tab_dict.FindInt("tab_id").value_or(0);
       const std::string* title = tab_dict.FindString("title");
+      if (!tab_strip.ContainsIndex(tab_id)) {
+        std::move(callback).Run(base::unexpected("Matching tab closed"));
+        return;
+      }
 
       tab_strip.ActivateTabAt(tab_id);
       base::DictValue auto_response;
@@ -174,6 +179,16 @@ std::unique_ptr<AiOverlayTools> AiOverlayTools::Create(
                                                page_context_monitor);
 }
 
+// static
+std::unique_ptr<AiOverlayTools> AiOverlayTools::Create(
+    mojo::PendingReceiver<ai_overlay_dialog::mojom::AiOverlayTools> receiver,
+    BrowserResolver browser_resolver,
+    PageContextMonitor* page_context_monitor) {
+  return std::make_unique<AiOverlayToolsViews>(
+      base::PassKey<AiOverlayTools>(), std::move(receiver),
+      std::move(browser_resolver), page_context_monitor);
+}
+
 AiOverlayToolsViews::AiOverlayToolsViews(
     base::PassKey<AiOverlayTools>,
     mojo::PendingReceiver<ai_overlay_dialog::mojom::AiOverlayTools> receiver,
@@ -181,13 +196,24 @@ AiOverlayToolsViews::AiOverlayToolsViews(
     PageContextMonitor* page_context_monitor)
     : AiOverlayTools(std::move(receiver), browser, page_context_monitor) {}
 
+AiOverlayToolsViews::AiOverlayToolsViews(
+    base::PassKey<AiOverlayTools>,
+    mojo::PendingReceiver<ai_overlay_dialog::mojom::AiOverlayTools> receiver,
+    BrowserResolver browser_resolver,
+    PageContextMonitor* page_context_monitor)
+    : AiOverlayTools(std::move(receiver),
+                     std::move(browser_resolver),
+                     page_context_monitor) {}
+
 AiOverlayToolsViews::~AiOverlayToolsViews() = default;
 
 void AiOverlayToolsViews::SwitchTab(const std::string& query,
                                     SwitchTabCallback callback) {
   RecordToolCallInvoked("SwitchTab");
   std::string query_lower = base::ToLowerASCII(query);
-  TabStripModel* tab_strip_model = browser()->GetTabStripModel();
+  BrowserWindowInterface* current_browser = browser();
+  TabStripModel* tab_strip_model =
+      current_browser ? current_browser->GetTabStripModel() : nullptr;
   if (!tab_strip_model) {
     std::move(callback).Run(base::unexpected("No tab strip model available"));
     return;
@@ -203,7 +229,9 @@ void AiOverlayToolsViews::SwitchTab(const std::string& query,
     if (title.find(query_lower) != std::string::npos ||
         url.find(query_lower) != std::string::npos) {
       tab_strip_model->ActivateTabAt(i);
-      browser()->GetWindow()->Activate();
+      if (current_browser->GetWindow()) {
+        current_browser->GetWindow()->Activate();
+      }
 
       auto result = ai_overlay_dialog::mojom::SwitchTabResult::New();
       result->title = base::UTF16ToUTF8(contents->GetTitle());
@@ -219,7 +247,9 @@ void AiOverlayToolsViews::SwitchTab(const std::string& query,
 
 void AiOverlayToolsViews::CloseCurrentTab(CloseCurrentTabCallback callback) {
   RecordToolCallInvoked("CloseCurrentTab");
-  TabStripModel* tab_strip_model = browser()->GetTabStripModel();
+  BrowserWindowInterface* current_browser = browser();
+  TabStripModel* tab_strip_model =
+      current_browser ? current_browser->GetTabStripModel() : nullptr;
   if (tab_strip_model && tab_strip_model->count() > 0) {
     tab_strip_model->CloseSelectedTabs();
     std::move(callback).Run(std::monostate());
@@ -271,14 +301,15 @@ void AiOverlayToolsViews::Scroll(
 void AiOverlayToolsViews::OpenPage(const std::string& query,
                                    OpenPageCallback callback) {
   RecordToolCallInvoked("OpenPage");
+  BrowserWindowInterface* current_browser = browser();
   TabStripModel* tab_strip =
-      browser() ? browser()->GetTabStripModel() : nullptr;
+      current_browser ? current_browser->GetTabStripModel() : nullptr;
   if (!tab_strip) {
     std::move(callback).Run(base::unexpected("No tab strip model available"));
     return;
   }
 
-  Profile* profile = browser()->GetProfile();
+  Profile* profile = current_browser->GetProfile();
   std::string lower_query = base::ToLowerASCII(query);
 
   base::DictValue response;
@@ -350,14 +381,20 @@ void AiOverlayToolsViews::OpenPage(const std::string& query,
       base::UTF8ToUTF16(query), options,
       base::BindOnce(
           [](base::DictValue res, OpenPageCallback cb,
-             base::WeakPtr<AiOverlayToolsViews> self, int start_target_id,
-             history::QueryResults results) {
-            if (!self || !self->browser()) {
+             base::WeakPtr<AiOverlayToolsViews> self,
+             base::WeakPtr<BrowserWindowInterface> target_browser,
+             int start_target_id, history::QueryResults results) {
+            if (!self || !target_browser ||
+                target_browser->IsDeleteScheduled()) {
               std::move(cb).Run(base::unexpected("Browser closed"));
               return;
             }
-            TabStripModel* tab_strip = self->browser()->GetTabStripModel();
-            CHECK(tab_strip);
+            TabStripModel* tab_strip = target_browser->GetTabStripModel();
+            if (!tab_strip) {
+              std::move(cb).Run(
+                  base::unexpected("No tab strip model available"));
+              return;
+            }
             base::ListValue history_list;
             int current_target_id = start_target_id;
 
@@ -379,20 +416,21 @@ void AiOverlayToolsViews::OpenPage(const std::string& query,
             FinishOpenPage(std::move(res), *tab_strip, std::move(cb));
           },
           std::move(response), std::move(callback), weak_factory_.GetWeakPtr(),
-          target_id_counter),
+          current_browser->GetWeakPtr(), target_id_counter),
       &task_tracker());
 }
 
 void AiOverlayToolsViews::SetFullscreen(bool fullscreen,
                                         SetFullscreenCallback callback) {
   RecordToolCallInvoked("SetFullscreen");
-  if (!browser() || !browser()->GetWindow()) {
+  BrowserWindowInterface* current_browser = browser();
+  if (!current_browser || !current_browser->GetWindow()) {
     std::move(callback).Run(base::unexpected("No active browser window"));
     return;
   }
-  bool is_fullscreen = browser()->GetWindow()->IsFullscreen();
+  bool is_fullscreen = current_browser->GetWindow()->IsFullscreen();
   if (fullscreen != is_fullscreen) {
-    chrome::ToggleFullscreenMode(browser());
+    chrome::ToggleFullscreenMode(current_browser);
   }
   std::move(callback).Run(base::ok(std::monostate()));
 }
@@ -400,17 +438,22 @@ void AiOverlayToolsViews::SetFullscreen(bool fullscreen,
 void AiOverlayToolsViews::OpenGeminiPanel(const std::string& prompt,
                                           OpenGeminiPanelCallback callback) {
   RecordToolCallInvoked("OpenGeminiPanel");
+  BrowserWindowInterface* current_browser = browser();
+  if (!current_browser) {
+    std::move(callback).Run(base::unexpected("No browser window available"));
+    return;
+  }
   glic::GlicKeyedService* glic_service =
       glic::GlicKeyedServiceFactory::GetGlicKeyedService(
-          browser()->GetProfile());
+          current_browser->GetProfile());
 
   if (!glic_service) {
     std::move(callback).Run(base::unexpected("Glic service not available"));
     return;
   }
 
-  auto* active_tab = browser()->GetTabStripModel()
-                         ? browser()->GetTabStripModel()->GetActiveTab()
+  auto* active_tab = current_browser->GetTabStripModel()
+                         ? current_browser->GetTabStripModel()->GetActiveTab()
                          : nullptr;
   if (!active_tab) {
     std::move(callback).Run(base::unexpected("No active tab"));
@@ -439,9 +482,14 @@ void AiOverlayToolsViews::OpenGeminiPanel(const std::string& prompt,
 
 void AiOverlayToolsViews::CloseGeminiPanel(CloseGeminiPanelCallback callback) {
   RecordToolCallInvoked("CloseGeminiPanel");
+  BrowserWindowInterface* current_browser = browser();
+  if (!current_browser) {
+    std::move(callback).Run(base::unexpected("No browser window available"));
+    return;
+  }
   glic::GlicKeyedService* glic_service =
       glic::GlicKeyedServiceFactory::GetGlicKeyedService(
-          browser()->GetProfile());
+          current_browser->GetProfile());
 
   if (!glic_service) {
     std::move(callback).Run(base::unexpected("Glic service not available"));
@@ -449,11 +497,11 @@ void AiOverlayToolsViews::CloseGeminiPanel(CloseGeminiPanelCallback callback) {
   }
 
   if (glic_service->instance_coordinator().IsPanelShowingForBrowser(
-          *browser())) {
+          *current_browser)) {
     // TODO(gklassen): Use a dedicated invocation source for tool calls when
     // productionizing.
     glic_service->instance_coordinator().Toggle(
-        browser(), /*prevent_close=*/false,
+        current_browser, /*prevent_close=*/false,
         glic::mojom::InvocationSource::kOsButton);
   }
   std::move(callback).Run(std::monostate());

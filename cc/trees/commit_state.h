@@ -130,6 +130,7 @@ struct CC_EXPORT CommitState {
   bool new_local_surface_id_request = false;
   bool next_commit_forces_recalculate_raster_scales = false;
   bool next_commit_forces_redraw = false;
+  bool next_commit_forces_minimal_damage = false;
   PropertyChangeForcesCommitCriteria property_change_forces_commit_criteria =
       PropertyChangeForcesCommitCriteria::kNone;
   BeginMainFrameTraceId trace_id{0};
@@ -210,7 +211,7 @@ struct CC_EXPORT ThreadUnsafeCommitState {
   raw_ptr<MutatorHost> mutator_host;
   scoped_refptr<Layer> root_layer;
   // Layer id to Layer map.
-  absl::flat_hash_map<int, raw_ptr<Layer, CtnExperimental>> layer_id_map;
+  absl::flat_hash_map<int, raw_ptr<Layer>> layer_id_map;
 };
 
 struct CC_EXPORT CommitTimestamps {

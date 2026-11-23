@@ -44,6 +44,12 @@ inline constexpr char kAIOmniboxAskPlaceholderDescription[] =
     "Enables the placeholder text to be 'Ask...' instead of 'Search...' when "
     "AI Omnibox is available.";
 
+inline constexpr char kActorBackgroundedSceneRenderingModeName[] =
+    "Actor Backgrounded Scene Rendering Mode";
+inline constexpr char kActorBackgroundedSceneRenderingModeDescription[] =
+    "When enabled, keeps tabs controlled by an actor task rendering while "
+    "backgrounded. Requires iOS Actor Tools (kActorTools) to be enabled.";
+
 inline constexpr char kActorServiceLoggingName[] = "ActorServiceLogging";
 inline constexpr char kActorServiceLoggingDescription[] =
     "Enables Actor logging, which is for debugging only.";
@@ -889,6 +895,13 @@ inline constexpr char kForceStartupSigninPromoName[] =
 inline constexpr char kForceStartupSigninPromoDescription[] =
     "When enabled, the startup sign-in promo is always displayed when starting "
     "Chrome.";
+
+inline constexpr char kFreLiveActivityName[] =
+    "Enable First Run Experience Live Activity";
+inline constexpr char kFreLiveActivityDescription[] =
+    "When enabled, starts an iOS Live Activity on the Lock Screen and Dynamic "
+    "Island when the user backgrounds Chrome during the First Run Experience. "
+    "Requires #enable-live-activity-manager to also be enabled.";
 
 inline constexpr char kFullscreenEasedTransitionsName[] =
     "FullscreenEasedTransitions";
@@ -1998,12 +2011,6 @@ inline constexpr char kUniversalOptOutSettingsDescription[] =
 inline constexpr char kUpdateTabGroupColorsName[] = "UpdateTabGroupColors";
 inline constexpr char kUpdateTabGroupColorsDescription[] =
     "Enables the UpdateTabGroupColors feature.";
-
-inline constexpr char kUpdatedFRESequenceName[] =
-    "Update the sequence of the First Run screens";
-inline constexpr char kUpdatedFRESequenceDescription[] =
-    "Updates the sequence of the FRE screens to show the DB promo first, "
-    "remove the Sin-In & Sync screens, or both.";
 
 inline constexpr char kUseFeedEligibilityServiceName[] =
     "[iOS] Use the new feed eligibility service";

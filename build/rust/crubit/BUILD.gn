@@ -5,6 +5,7 @@
 import("//build/config/c++/c++.gni")
 import("//build/rust/rust_api_from_cpp.gni")
 import("//build/rust/rust_static_library.gni")
+import("//build/toolchain/toolchain.gni")
 import("//build_overrides/crubit.gni")
 
 # Public C++ APIs provided by Crubit.
@@ -214,6 +215,19 @@ if (enable_rust_api_from_cpp) {
           "${crubit_src_dir}/support/cc_std_impl/vector.rs",
           "${crubit_src_dir}/support/cc_std_impl/vector_partial_eq.rs",
         ]
+
+        # TODO(https://crbug.com/588019925): Unconditionally include these in
+        # the CL that rolls Crubit past the addition of `variant*.rs` (ToT
+        # Crubit is built only when `rust_force_head_revision` is true; pinned
+        # Crubit does not yet contain these files).
+        if (rust_force_head_revision) {
+          sources += [
+            "${crubit_src_dir}/support/cc_std_impl/variant.rs",
+            "${crubit_src_dir}/support/cc_std_impl/variant_coproduct.rs",
+            "${crubit_src_dir}/support/cc_std_impl/variant_enums.rs",
+            "${crubit_src_dir}/support/cc_std_impl/variant_internal.rs",
+          ]
+        }
         mod = "std"
       },
     ]
@@ -223,6 +237,16 @@ if (enable_rust_api_from_cpp) {
     # `__configuration/abi.h`).  `vector.rs` supports this layout only when the
     # `len_capacity_encoding` feature is enabled.
     crate_features = [ "len_capacity_encoding" ]
+
+    # We already **allow** `impl_trait_in_assoc_type` unstable Rust feature,
+    # but the generated `cc_std` bindings do not **enable** this feature
+    # (this is arguably a bug in Crubit - see b/588457635).  As a workaround,
+    # we use GN build rules to enable this feature.
+    #
+    # TODO(b/588457635): Remove once Crubit emits
+    # `#![feature(impl_trait_in_assoc_type)]` in `.rs` generated for `cc_std`
+    # bindings.
+    unstable_rust_features = [ "impl_trait_in_assoc_type" ]
   }
 
   source_set("cc_std_empty_target") {

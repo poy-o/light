@@ -128,6 +128,9 @@ class ContextualCueingController
   // omnibox chip).
   void HideCue();
 
+  // Like `HideCue()`, but only hides the cue if it belongs to `type`.
+  void HideCueForTarget(CueTargetType type);
+
   // Hide the anchored message for this tab if it's showing, leaving the omnibox
   // chip visible.
   void HideAnchoredMessage();
@@ -135,6 +138,12 @@ class ContextualCueingController
   // Returns the CueTarget for the given CueTargetType, or nullptr if there is
   // none.
   CueTarget* GetTarget(CueTargetType type);
+
+  // Returns the type of the target whose cue is showing on this tab, if any.
+  // It's set before the cue's page action is shown and cleared before it's
+  // hidden.
+  std::optional<CueTargetType> GetShowingCueTargetType() const;
+
   bool ShouldRecordUcbStats(CueTargetType type) const;
 
   void OnCueInteraction(

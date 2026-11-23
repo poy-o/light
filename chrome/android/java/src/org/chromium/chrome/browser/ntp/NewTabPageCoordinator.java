@@ -26,7 +26,6 @@ import org.chromium.base.ApplicationStatus;
 import org.chromium.base.Callback;
 import org.chromium.base.CallbackController;
 import org.chromium.base.DeviceInfo;
-import org.chromium.base.Log;
 import org.chromium.base.TimeUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.TriState;
@@ -50,7 +49,6 @@ import org.chromium.chrome.browser.composeplate.ComposeplateUtils;
 import org.chromium.chrome.browser.device_lock.DeviceLockActivityLauncherImpl;
 import org.chromium.chrome.browser.feed.FeedStreamViewResizerUtils;
 import org.chromium.chrome.browser.feed.FeedSurfaceScrollDelegate;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.lens.LensEntryPoint;
 import org.chromium.chrome.browser.lens.LensMetrics;
@@ -184,7 +182,6 @@ public class NewTabPageCoordinator implements ModuleDelegateHost {
     private final int mNtpSearchBoxTransitionStartOffset;
 
     private final int mNtpSearchBoxTopMarginWithoutLogo;
-    private final boolean mEnableLogs;
     private final int mSearchBoxMaxWidth;
     private final boolean mIsAim3pEntrypointEnabled;
     private final boolean mIsAiModeButtonRedirectEnabled;
@@ -352,8 +349,6 @@ public class NewTabPageCoordinator implements ModuleDelegateHost {
                 resources.getDimensionPixelSize(R.dimen.ntp_search_box_transition_start_offset);
         mSearchBoxMaxWidth = resources.getDimensionPixelSize(R.dimen.ntp_search_box_max_width);
 
-        mEnableLogs = ChromeFeatureList.sNewTabPageCustomizationV2EnableLogs.getValue();
-
         mModel = new PropertyModel(NewTabPageLayoutProperties.ALL_KEYS);
         PropertyModelChangeProcessor.create(
                 mModel, mNewTabPageLayout, NewTabPageLayoutViewBinder::bind);
@@ -407,8 +402,8 @@ public class NewTabPageCoordinator implements ModuleDelegateHost {
         // Initialize the NTP theme customization listener before setting up top inset observers so
         // that NtpCustomizationConfigManager is initialized before observers query
         // supportsEdgeToEdgeOnTop(). The listener to observe custom background changes is added in
-        // all form factors as long as the feature is enabled.
-        if (NtpCustomizationUtils.isNtpThemeCustomizationEnabled()) {
+        // all form factors as long as NTP theme customization is enabled by policy.
+        if (NtpCustomizationUtils.isNtpThemeCustomizationEnabledByPolicy()) {
             initHomepageStateListener();
         }
         if (mSupportsEnableEdgeToEdgeOnTop) {
@@ -1999,10 +1994,6 @@ public class NewTabPageCoordinator implements ModuleDelegateHost {
         // Top padding is applied to the NTP layout, ensuring all UI components remain in their
         // original positions after Status bar is hidden.
         mModel.set(NewTabPageLayoutProperties.TOP_INSET_PX, toolbarHeightNoShadow + mTopInset);
-
-        if (mEnableLogs) {
-            Log.i(TAG, "The top padding to add on the NTP is %d.", mTopInset);
-        }
     }
 
     /** Called when a customized background image is selected or deselected. */
@@ -2058,8 +2049,7 @@ public class NewTabPageCoordinator implements ModuleDelegateHost {
         return mNtpCustomizationConfigManager;
     }
 
-    // Called when ChromeFeatureList.sNewTabPageCustomizationV2 is enabled to add a
-    // HomepageStateListener.
+    // Called when NTP theme customization is enabled to add a HomepageStateListener.
     private void initHomepageStateListener() {
         mHomepageStateListener =
                 new HomepageStateListener() {

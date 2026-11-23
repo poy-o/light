@@ -8,7 +8,6 @@
 
 #include "base/containers/fixed_flat_map.h"
 #include "build/build_config.h"
-#include "chrome/browser/accessibility/tree_fixing/pref_names.h"
 #include "chrome/browser/desktop_to_mobile_promos/promos_pref_names.h"
 #include "chrome/browser/glic/glic_pref_names.h"
 #include "chrome/browser/ui/read_anything/read_anything_prefs.h"
@@ -18,7 +17,6 @@
 #include "components/language/core/browser/pref_names.h"
 #include "components/live_caption/pref_names.h"
 #include "components/performance_manager/public/user_tuning/prefs.h"
-#include "components/privacy_sandbox/privacy_sandbox_prefs.h"
 #include "components/spellcheck/browser/pref_names.h"
 #include "components/sync/base/data_type.h"
 #include "components/sync_preferences/syncable_prefs_database.h"
@@ -229,7 +227,7 @@ enum {
   kPerformanceTracingEnabled = 100163,
   kPluginsAlwaysOpenPdfExternally = 100164,
   // kPrivacySandboxApisEnabled = 100165, (deprecated)
-  kPrivacySandboxRelatedWebsiteSetsEnabled = 100166,
+  // kPrivacySandboxRelatedWebsiteSetsEnabled = 100166, (deprecated)
   // kPrivacySandboxManuallyControlled = 100167, (deprecated)
   kPromptForDownload = 100168,
   kProtectedContentDefault = 100169,
@@ -391,7 +389,7 @@ enum {
   kOfficeMoveConfirmationShownForCloudToDriveSyncable = 100321,
   kOfficeMoveConfirmationShownForCloudToOneDriveSyncable = 100322,
   kPinnedCastMigrationComplete = 100323,
-  kAccessibilityAXTreeFixingEnabled = 100324,
+  // kAccessibilityAXTreeFixingEnabled = 100324, (deprecated)
   // kTabSearchMigrationComplete = 100325, (deprecated)
   kReadAloudPlaybackMode = 100326,
   kPinSplitTabButton = 100327,
@@ -1799,11 +1797,6 @@ constexpr auto kChromeSyncablePrefsAllowlist = base::MakeFixedFlatMap<
       syncer::PREFERENCES, sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone,
       sync_preferences::WriteBehavior::kWriteToBoth}},
-    {prefs::kAccessibilityAXTreeFixingEnabled,
-     {syncable_prefs_ids::kAccessibilityAXTreeFixingEnabled,
-      syncer::PREFERENCES, sync_preferences::PrefSensitivity::kNone,
-      sync_preferences::MergeBehavior::kNone,
-      sync_preferences::WriteBehavior::kWriteToBoth}},
     {prefs::kAccessibilityMainNodeAnnotationsEnabled,
      {syncable_prefs_ids::kAccessibilityMainNodeAnnotationsEnabled,
       syncer::PREFERENCES, sync_preferences::PrefSensitivity::kNone,
@@ -1884,11 +1877,6 @@ constexpr auto kChromeSyncablePrefsAllowlist = base::MakeFixedFlatMap<
     {prefs::kPluginsAlwaysOpenPdfExternally,
      {syncable_prefs_ids::kPluginsAlwaysOpenPdfExternally, syncer::PREFERENCES,
       sync_preferences::PrefSensitivity::kNone,
-      sync_preferences::MergeBehavior::kNone,
-      sync_preferences::WriteBehavior::kWriteToBoth}},
-    {prefs::kPrivacySandboxRelatedWebsiteSetsEnabled,
-     {syncable_prefs_ids::kPrivacySandboxRelatedWebsiteSetsEnabled,
-      syncer::PREFERENCES, sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone,
       sync_preferences::WriteBehavior::kWriteToBoth}},
     {prefs::kPromptForDownload,

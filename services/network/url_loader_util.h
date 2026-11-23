@@ -13,6 +13,7 @@
 #include "base/component_export.h"
 #include "base/files/file.h"
 #include "base/time/time.h"
+#include "base/types/optional_ref.h"
 #include "net/base/isolation_info.h"
 #include "net/cookies/cookie_setting_override.h"
 #include "net/cookies/cookie_util.h"
@@ -63,12 +64,23 @@ std::unique_ptr<net::UploadDataStream> CreateUploadDataStream(
     std::vector<base::File>& opened_files,
     base::SequencedTaskRunner* file_task_runner);
 
+// Returns true if the bool (which must be provided from trusted
+// URLLoaderFactory parameters) and `request` both allow potential storage
+// access.
+COMPONENT_EXPORT(NETWORK_SERVICE)
+bool IsStorageAccessPotentiallyAllowed(
+    bool factory_is_storage_access_potentially_allowed,
+    const ResourceRequest& request);
+
 // Computes the CookieSettingOverrides to use for a given `ResourceRequest`.
+// `is_storage_access_potentially_allowed` must have been computed via
+// `IsStorageAccessPotentiallyAllowed` above, using the factory params' bool.
 COMPONENT_EXPORT(NETWORK_SERVICE)
 net::CookieSettingOverrides CalculateCookieSettingOverrides(
     net::CookieSettingOverrides factory_overrides,
     net::CookieSettingOverrides devtools_overrides,
-    const ResourceRequest& request);
+    const ResourceRequest& request,
+    bool is_storage_access_potentially_allowed);
 
 // Determines the IsolationInfo for a request, checking sources in priority:
 // 1. `factory_isolation_info` (if non-empty).
@@ -85,6 +97,17 @@ std::optional<net::IsolationInfo> GetIsolationInfo(
 std::string GetCookiesFromHeaders(
     const net::HttpRequestHeaders& headers,
     const net::HttpRequestHeaders& cors_exempt_headers);
+
+// Performs the "final merge" for headers, where `merged` (e.g. a
+// ResourceRequest's `cors_exempt_headers`) is merged onto `original` (e.g. its
+// `headers`, or redirect-modified headers), then `user_agent` (e.g. its
+// `content_user_agent`) is applied as the User-Agent header if the merge
+// didn't already set one.
+COMPONENT_EXPORT(NETWORK_SERVICE)
+net::HttpRequestHeaders MergeHeadersAndSetUserAgentIfMissing(
+    net::HttpRequestHeaders original,
+    const net::HttpRequestHeaders& merged,
+    base::optional_ref<const std::string> user_agent);
 
 // Records UMA metrics related to shared dictionary usage for non-cached
 // responses.

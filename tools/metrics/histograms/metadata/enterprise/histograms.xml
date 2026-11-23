@@ -3411,6 +3411,29 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
+<histogram name="Enterprise.ExtensibleEnterpriseSSO.Failure.Reason"
+    enum="ExtensibleEnterpriseSSOFailureReason" expires_after="2027-06-01">
+  <owner>ydago@chromium.org</owner>
+  <owner>ssolarewicz@chromium.org</owner>
+  <owner>cec-growth@google.com</owner>
+  <summary>
+    Records why Extensible Enterprise SSO on macOS failed before IdP
+    authentication. Emitted once per checked HTTP(S) navigation or redirect when
+    the OS capability check times out or cannot authorize the URL, including
+    URLs that cannot be converted to NSURL.
+
+    Without origin filtering, all HTTP(S) navigations and redirects in
+    non-off-the-record profiles are checked when Extensible Enterprise SSO is
+    enabled, so ordinary URLs without a matching SSO extension also record that
+    the OS cannot perform authorization. With origin filtering enabled, only
+    origins configured in the SSO extension's MDM payload are checked.
+
+    Not emitted for non-HTTP(S) URLs, for URLs supported by the OS (even if the
+    IdP is blocked by ExtensibleEnterpriseSSOBlocklist), or if the provider is
+    destroyed before the check finishes.
+  </summary>
+</histogram>
+
 <histogram name="Enterprise.ExtensibleEnterpriseSSO.Okta.Failure.Reason"
     enum="OktaSSOFailureReason" expires_after="2026-12-01">
   <owner>ssolarewicz@chromium.org</owner>
@@ -5101,6 +5124,22 @@ chromium-metrics-reviews@google.com.
     supports HTTP and HTTPS CONNECT proxies, e.g. not SOCKS5. A rule that also
     lists DIRECT isn't left out: it connects directly instead. Recorded with
     Enterprise.SecureGateway.Routing.RuleCount. Only recorded on iOS.
+  </summary>
+</histogram>
+
+<histogram name="Enterprise.SecureGateway.StaticErrorPageRedirectOutcome"
+    enum="EnterpriseSecureGatewayStaticErrorPageRedirectOutcome"
+    expires_after="2027-11-01">
+  <owner>xzonghan@chromium.org</owner>
+  <owner>chrome-enterprise-networking-core@google.com</owner>
+  <summary>
+    Records the outcome when a primary main-frame navigation encounters a
+    disguised-error 407 Proxy-Authenticate challenge from a managed Secure
+    Gateway proxy that includes (or fails strict parsing while inspecting) a
+    static error page `url=` parameter, while static error page redirection is
+    enabled. Recorded on Desktop and Android (`//content` platforms); not
+    recorded on iOS where static `url=` redirection is not yet implemented, nor
+    on disguised-error challenges that parse cleanly without a `url=` parameter.
   </summary>
 </histogram>
 

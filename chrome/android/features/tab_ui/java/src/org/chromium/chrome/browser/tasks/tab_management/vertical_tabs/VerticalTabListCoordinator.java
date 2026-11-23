@@ -196,7 +196,7 @@ public class VerticalTabListCoordinator {
     private final VerticalPinnedTabListRecyclerView mPinnedTabsRecyclerView;
     private final ListObservable.ListObserver<Void> mPinnedTabsListObserver;
     private final TabModelSelector mTabModelSelector;
-    private final Profile mProfile;
+    private final Profile mOriginalProfile;
     private final WindowAndroid mWindowAndroid;
     private final ActivityResultTracker mActivityResultTracker;
     private final MultiInstanceManager mMultiInstanceManager;
@@ -223,9 +223,6 @@ public class VerticalTabListCoordinator {
     private final VerticalTabItemHoverController mTabItemHoverController;
     private final RecyclerView.OnScrollListener mOnScrollListener;
     private final VerticalTabKeyboardHandler mKeyboardHandler;
-    private final BackPressManager mBackPressManager;
-    private final TabSwitcherBackPressHandlerManager mBackPressHandlerManager =
-            new TabSwitcherBackPressHandlerManager();
     private final @Nullable DesktopWindowStateManager mDesktopWindowStateManager;
     private final @Nullable AppHeaderObserver mAppHeaderObserver;
     private final @Nullable BooleanSupplier mCanActivateTabLayoutToggleMenuSupplier;
@@ -372,7 +369,8 @@ public class VerticalTabListCoordinator {
      *
      * @param activity The host activity.
      * @param tabModelSelector The selector for accessing tab models.
-     * @param profile The current user profile.
+     * @param originalProfile The regular profile that owns this window's tabs. Incognito tabs are
+     *     still shown, and their incognito state comes from the tab model.
      * @param verticalTabsActionDelegate Delegate for performing actions on tabs.
      * @param windowAndroid The window hosting the UI.
      * @param activityResultTracker Tracker for activity results.
@@ -391,13 +389,15 @@ public class VerticalTabListCoordinator {
      * @param undoBarThrottle Throttler for undo bar messages.
      * @param browserControlsStateProvider Provider for browser controls sizing and state.
      * @param backPressManager Manager for intercepting system back press and physical ESC keys.
+     * @param backPressHandlerManager The activity's shared handler for cancelling tab drags on ESC.
      * @param tabWindowManagerSupplier Supplier for the {@link TabWindowManager}.
+     * @param collapseController The controller that owns the rail collapse state.
      */
     @SuppressLint("ClickableViewAccessibility")
     public VerticalTabListCoordinator(
             Activity activity,
             TabModelSelector tabModelSelector,
-            Profile profile,
+            Profile originalProfile,
             VerticalTabsActionDelegate verticalTabsActionDelegate,
             WindowAndroid windowAndroid,
             ActivityResultTracker activityResultTracker,
@@ -415,12 +415,15 @@ public class VerticalTabListCoordinator {
             @Nullable UndoBarThrottle undoBarThrottle,
             BrowserControlsStateProvider browserControlsStateProvider,
             BackPressManager backPressManager,
-            Supplier<TabWindowManager> tabWindowManagerSupplier) {
+            TabSwitcherBackPressHandlerManager backPressHandlerManager,
+            Supplier<TabWindowManager> tabWindowManagerSupplier,
+            VerticalTabRailCollapseController collapseController) {
         mCanActivateTabLayoutToggleMenuSupplier = canActivateTabLayoutToggleMenuSupplier;
         mVerticalTabsActiveSupplier = verticalTabsActiveSupplier;
         mVerticalTabsWidthSupplier = verticalTabsWidthSupplier;
         mTabModelSelector = tabModelSelector;
-        mProfile = profile;
+        assert !originalProfile.isOffTheRecord() : "Expecting a non-incognito profile.";
+        mOriginalProfile = originalProfile;
         mWindowAndroid = windowAndroid;
         mActivityResultTracker = activityResultTracker;
         mMultiInstanceManager = multiInstanceManager;
@@ -429,10 +432,11 @@ public class VerticalTabListCoordinator {
         mDataSharingTabManager = dataSharingTabManager;
         mUndoBarThrottle = undoBarThrottle;
         mBrowserControlsStateProvider = browserControlsStateProvider;
-        mBackPressManager = backPressManager;
-        // Register the TabSwitcherBackPressHandlerManager to receive ESC / Back events.
-        mBackPressManager.addHandler(
-                mBackPressHandlerManager, BackPressHandler.Type.CANCEL_TAB_SWITCHER_DRAG);
+        // The tab switcher shares this handler and may have registered it first.
+        if (!backPressManager.has(BackPressHandler.Type.CANCEL_TAB_SWITCHER_DRAG)) {
+            backPressManager.addHandler(
+                    backPressHandlerManager, BackPressHandler.Type.CANCEL_TAB_SWITCHER_DRAG);
+        }
         mTabContentManagerSupplier = tabContentManagerSupplier;
         mTabWindowManagerSupplier = tabWindowManagerSupplier;
         if (GlicEnabling.isEnabledByFlags() || ContextualTasksUtils.isContextualTasksUiEnabled()) {
@@ -440,9 +444,7 @@ public class VerticalTabListCoordinator {
         } else {
             mTabUnderlineManager = null;
         }
-        mCollapseController =
-                new VerticalTabRailCollapseController(
-                        this::setRailCollapseState, this::setCollapseButtonEnabled, mWindowAndroid);
+        mCollapseController = collapseController;
         mModelList = new TabListModel();
 
         mContainerView =
@@ -585,7 +587,8 @@ public class VerticalTabListCoordinator {
                         R.dimen.default_favicon_corner_radius,
                         TabFavicon::getBitmap);
 
-        mTabSwitcherDragHandler = createTabSwitcherDragHandler(activity, tabModelSelector);
+        mTabSwitcherDragHandler =
+                createTabSwitcherDragHandler(activity, tabModelSelector, backPressHandlerManager);
         mNonOriginatingDragHandlerDelegate =
                 createNonOriginatingDragHandlerDelegate(mTabSwitcherDragHandler);
         mTabSwitcherDragHandler.setDragHandlerDelegate(mNonOriginatingDragHandlerDelegate);
@@ -691,7 +694,7 @@ public class VerticalTabListCoordinator {
                         TabListEditorCoordinator.UNLIMITED_SELECTION,
                         /* onDragStateChangedListener */ CallbackUtils.emptyRunnable());
 
-        mMediator.initWithNative(profile.getOriginalProfile());
+        mMediator.initWithNative(originalProfile);
         mMediator.setupAccessibilityDelegate(mRecyclerView);
         mMediator.setOnLongPressTabItemEventListener(
                 (tabId, cardView) -> {
@@ -994,9 +997,6 @@ public class VerticalTabListCoordinator {
         mSpineDecoration.destroy();
         mTabModelSelectorTabModelObserver.destroy();
         mVerticalTabsActiveSupplier.removeObserver(mActiveObserver);
-        if (mBackPressManager.has(BackPressHandler.Type.CANCEL_TAB_SWITCHER_DRAG)) {
-            mBackPressManager.removeHandler(BackPressHandler.Type.CANCEL_TAB_SWITCHER_DRAG);
-        }
         // The drag handler is destroyed without ending an in-progress drag through its listener,
         // so the drag's end would never be reported otherwise.
         notifyExternalDragEnded();
@@ -1011,7 +1011,6 @@ public class VerticalTabListCoordinator {
         mRecyclerView.removeOnScrollListener(mOnScrollListener);
 
         mRailHoverController.destroy();
-        mCollapseController.destroy();
         if (mTabUnderlineManager != null) {
             mTabUnderlineManager.destroy();
         }
@@ -1046,11 +1045,6 @@ public class VerticalTabListCoordinator {
 
     public VerticalTabPinnedDropIndicatorDecoration getPinnedDropIndicatorDecorationForTesting() {
         return mPinnedDropIndicatorDecoration;
-    }
-
-    /** Returns the {@link VerticalTabRailCollapseController} for managing rail collapse state. */
-    VerticalTabRailCollapseController getCollapseController() {
-        return mCollapseController;
     }
 
     /**
@@ -1255,12 +1249,12 @@ public class VerticalTabListCoordinator {
     }
 
     private boolean isIncognitoButtonVisible() {
-        if (mProfile.shutdownStarted() || IncognitoUtils.shouldOpenIncognitoAsWindow()) {
+        if (mOriginalProfile.shutdownStarted() || IncognitoUtils.shouldOpenIncognitoAsWindow()) {
             return false;
         }
         TabModel incognitoModel = mTabModelSelector.getModel(/* incognito= */ true);
         boolean hasIncognitoTabs = incognitoModel != null && incognitoModel.getCount() > 0;
-        return hasIncognitoTabs && IncognitoUtils.isIncognitoModeEnabled(mProfile);
+        return hasIncognitoTabs && IncognitoUtils.isIncognitoModeEnabled(mOriginalProfile);
     }
 
     private void updateIncognitoButtonVisibility() {
@@ -1470,7 +1464,7 @@ public class VerticalTabListCoordinator {
                         tabContentManager,
                         mTabModelSelector.getCurrentTabModelSupplier(),
                         TabFavicon::getBitmap);
-        mMultiThumbnailCardProvider.initWithNative(mProfile.getOriginalProfile());
+        mMultiThumbnailCardProvider.initWithNative(mOriginalProfile);
 
         mDragShadowView =
                 (StripDragShadowView)
@@ -1488,7 +1482,9 @@ public class VerticalTabListCoordinator {
     }
 
     private TabSwitcherDragHandler createTabSwitcherDragHandler(
-            Activity activity, TabModelSelector tabModelSelector) {
+            Activity activity,
+            TabModelSelector tabModelSelector,
+            TabSwitcherBackPressHandlerManager backPressHandlerManager) {
         if (sTabSwitcherDragHandlerSupplierForTesting != null) {
             return sTabSwitcherDragHandlerSupplierForTesting.get();
         }
@@ -1503,7 +1499,7 @@ public class VerticalTabListCoordinator {
                         activitySupplier,
                         mMultiInstanceManager,
                         dragDropDelegate,
-                        mBackPressHandlerManager,
+                        backPressHandlerManager,
                         /* fadeDragShadow= */ false,
                         mTabWindowManagerSupplier);
         dragHandler.setTabModelSelector(tabModelSelector);

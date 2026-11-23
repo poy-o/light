@@ -226,12 +226,12 @@
 #include "chrome/browser/ash/policy/handlers/screen_capture_location_policy_handler.h"
 #include "chrome/browser/ash/policy/reporting/metrics_reporting/metric_reporting_prefs.h"
 #include "chrome/browser/ash/wallpaper_handlers/wallpaper_prefs.h"
-#include "chrome/browser/chromeos/reporting/metric_reporting_prefs.h"
 #include "chrome/browser/nearby_sharing/common/nearby_share_prefs.h"
 #include "chrome/browser/policy/default_geolocation_policy_handler.h"
 #include "chrome/browser/policy/device_login_screen_geolocation_access_level_policy_handler.h"
 #include "chrome/browser/policy/os_color_mode_policy_handler.h"
 #include "chrome/browser/policy/system_features_disable_list_policy_handler.h"
+#include "chromeos/ash/components/metrics_reporting/metric_reporting_prefs.h"
 #include "chromeos/ash/components/quickoffice/quickoffice_prefs.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "chromeos/ash/experiences/arc/arc_prefs.h"
@@ -372,7 +372,7 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     prefs::kManagedDefaultWebHidGuardSetting,
     base::Value::Type::INTEGER },
   { key::kDisableScreenshots,
-    prefs::kDisableScreenshots,
+    policy_prefs::kDisableScreenshots,
     base::Value::Type::BOOLEAN },
   { key::kForcePermissionPolicyUnloadDefaultEnabled,
     policy_prefs::kForcePermissionPolicyUnloadDefaultEnabled,
@@ -430,6 +430,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     base::Value::Type::BOOLEAN },
   { key::kSafeBrowsingProxiedRealTimeChecksAllowed,
     prefs::kHashPrefixRealTimeChecksAllowedByPolicy,
+    base::Value::Type::BOOLEAN },
+  { key::kSafeBrowsingSurveysEnabled,
+    prefs::kSafeBrowsingSurveysEnabled,
     base::Value::Type::BOOLEAN },
   { key::kSavingBrowserHistoryDisabled,
     prefs::kSavingBrowserHistoryDisabled,
@@ -1044,9 +1047,6 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
      || BUILDFLAG(IS_MAC)
   { key::kRequireOnlineRevocationChecksForLocalAnchors,
     prefs::kCertRevocationCheckingRequiredLocalAnchors,
-    base::Value::Type::BOOLEAN },
-  { key::kSafeBrowsingSurveysEnabled,
-    prefs::kSafeBrowsingSurveysEnabled,
     base::Value::Type::BOOLEAN },
   { key::kPasswordManagerBlocklist,
     password_manager::prefs::kPasswordManagerBlocklist,
@@ -3560,6 +3560,17 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
       /*max=*/
       std::to_underlying(
           extensions::IsolatedModeUserInstalledExtensionsSetting::kMaxValue),
+      /*clamp=*/false));
+  handlers->AddHandler(std::make_unique<IntRangePolicyHandler>(
+      key::kIsolatedModeForceInstalledExtensionsSettings,
+      extensions::pref_names::kIsolatedModeForceInstalledExtensionsSettings,
+      /*min=*/
+      std::to_underlying(
+          extensions::IsolatedModeForceInstalledExtensionsSetting::
+              kAlwaysEnabled),
+      /*max=*/
+      std::to_underlying(
+          extensions::IsolatedModeForceInstalledExtensionsSetting::kMaxValue),
       /*clamp=*/false));
   handlers->AddHandler(std::make_unique<ExtensionDeveloperModePolicyHandler>());
   handlers->AddHandler(

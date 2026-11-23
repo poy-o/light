@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -16,6 +17,7 @@
 #include "base/containers/map_util.h"
 #include "base/containers/span.h"
 #include "base/feature_list.h"
+#include "base/i18n/language_tag.h"
 #include "base/notreached.h"
 #include "base/time/time.h"
 #include "base/types/optional_ref.h"
@@ -122,7 +124,7 @@ ProfileImportMetadata::~ProfileImportMetadata() = default;
 
 ProfileImportProcess::ProfileImportProcess(
     const AutofillProfile& observed_profile,
-    const std::string& app_locale,
+    const base::i18n::LanguageTag& app_locale,
     const GURL& form_source_url,
     ukm::SourceId ukm_source_id,
     AddressDataManager* address_data_manager,
@@ -173,7 +175,7 @@ void ProfileImportProcess::DetermineProfileImportType() {
           ProfileCountrySource::kExplicitlyObserved &&
       ShouldCountryApproximationBeRemoved(observed_profile_,
                                           address_data_manager_->GetProfiles(),
-                                          app_locale_)) {
+                                          app_locale_.tag_string())) {
     observed_profile_.ClearFields({ADDRESS_HOME_COUNTRY});
     import_metadata_.country_source = ProfileCountrySource::kNoCountry;
   }
@@ -356,8 +358,8 @@ ProfileImportProcess::GetImportCandidates(
   result.reserve(existing_profiles.size());
   for (const AutofillProfile* candidate : existing_profiles) {
     AutofillProfile merged_profile = *candidate;
-    const ProfileMergeResult merge_result =
-        merged_profile.MergeDataFrom(observed_profile, app_locale_);
+    const ProfileMergeResult merge_result = merged_profile.MergeDataFrom(
+        observed_profile, app_locale_.tag_string());
     switch (merge_result) {
       case ProfileMergeResult::kMergeSucceededWithModification: {
         // `ProfilesHaveDifferentSettingsVisibleValues()` compares raw field

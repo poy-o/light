@@ -93,30 +93,10 @@ public class AdaptiveUiSheetCoordinatorTest {
 
     private AdaptiveUiSheetCoordinator createContent(
             PropertyModel model, @AdaptiveUiScope int scope) {
-        return createContent(model, scope, /* isUserInitiated= */ false, UserCriticalFeature.NONE);
-    }
-
-    private AdaptiveUiSheetCoordinator createContent(
-            PropertyModel model,
-            @AdaptiveUiScope int scope,
-            boolean isUserInitiated,
-            @UserCriticalFeature int userCriticalFeature) {
-        return createContent(model, scope, isUserInitiated, userCriticalFeature, SheetState.FULL);
-    }
-
-    private AdaptiveUiSheetCoordinator createContent(
-            PropertyModel model,
-            @AdaptiveUiScope int scope,
-            boolean isUserInitiated,
-            @UserCriticalFeature int userCriticalFeature,
-            @SheetState int initialState) {
         return new AdaptiveUiSheetCoordinator(
                 mActivity,
                 model,
                 scope,
-                isUserInitiated,
-                userCriticalFeature,
-                initialState,
                 mBottomSheetController,
                 () -> mShownCount++,
                 mSheetDismissals::add);
@@ -165,14 +145,25 @@ public class AdaptiveUiSheetCoordinatorTest {
     }
 
     @Test
+    public void testExplicitFullInitialState_matchesDefault() {
+        AdaptiveUiSheetCoordinator content =
+                createContent(
+                        newModelBuilder()
+                                .with(AdaptiveUiProperties.SHEET_INITIAL_STATE, SheetState.FULL)
+                                .with(AdaptiveUiProperties.SHEET_HALF_HEIGHT_RATIO, 0.5f)
+                                .build());
+
+        assertEquals(HeightMode.DISABLED, content.getHalfHeightRatio(), 0f);
+        assertEquals(HeightMode.WRAP_CONTENT, content.getFullHeightRatio(), 0f);
+    }
+
+    @Test
     public void testHalfInitialState_enablesHalfState() {
         AdaptiveUiSheetCoordinator content =
                 createContent(
-                        newModelBuilder().build(),
-                        AdaptiveUiScope.TRANSIENT,
-                        /* isUserInitiated= */ false,
-                        UserCriticalFeature.NONE,
-                        SheetState.HALF);
+                        newModelBuilder()
+                                .with(AdaptiveUiProperties.SHEET_INITIAL_STATE, SheetState.HALF)
+                                .build());
 
         assertEquals(HeightMode.DEFAULT, content.getHalfHeightRatio(), 0f);
         assertEquals(HeightMode.RESIZE_CONTENT, content.getFullHeightRatio(), 0f);
@@ -187,11 +178,8 @@ public class AdaptiveUiSheetCoordinatorTest {
                         newModelBuilder()
                                 .with(AdaptiveUiProperties.SHEET_HALF_HEIGHT_RATIO, 0.5f)
                                 .with(AdaptiveUiProperties.SHEET_FULL_HEIGHT_RATIO, 0.9f)
-                                .build(),
-                        AdaptiveUiScope.TRANSIENT,
-                        /* isUserInitiated= */ false,
-                        UserCriticalFeature.NONE,
-                        SheetState.HALF);
+                                .with(AdaptiveUiProperties.SHEET_INITIAL_STATE, SheetState.HALF)
+                                .build());
 
         assertEquals(0.5f, content.getHalfHeightRatio(), 0f);
         assertEquals(HeightMode.RESIZE_CONTENT, content.getFullHeightRatio(), 0f);
@@ -204,11 +192,8 @@ public class AdaptiveUiSheetCoordinatorTest {
                 createContent(
                         newModelBuilder()
                                 .with(AdaptiveUiProperties.SHEET_FULL_HEIGHT_RATIO, 0.5f)
-                                .build(),
-                        AdaptiveUiScope.TRANSIENT,
-                        /* isUserInitiated= */ false,
-                        UserCriticalFeature.NONE,
-                        SheetState.HALF);
+                                .with(AdaptiveUiProperties.SHEET_INITIAL_STATE, SheetState.HALF)
+                                .build());
 
         assertThrows(AssertionError.class, content::getHalfHeightRatio);
     }
@@ -233,14 +218,20 @@ public class AdaptiveUiSheetCoordinatorTest {
     public void testNonVisualSheetKeysAreExpectedSet() {
         Set<PropertyKey> expected =
                 Set.of(
+                        AdaptiveUiProperties.ON_SHOWN,
+                        AdaptiveUiProperties.ON_DISMISSED,
                         AdaptiveUiProperties.DIALOG_CONTENT_DESCRIPTION,
                         AdaptiveUiProperties.SHEET_OPENED_ACCESSIBILITY_STRING_ID,
                         AdaptiveUiProperties.SHEET_CLOSED_ACCESSIBILITY_STRING_ID,
+                        AdaptiveUiProperties.SHEET_INITIAL_STATE,
+                        AdaptiveUiProperties.SHEET_USER_INITIATED,
+                        AdaptiveUiProperties.SHEET_USER_CRITICAL,
                         AdaptiveUiProperties.SHEET_HALF_HEIGHT_RATIO,
                         AdaptiveUiProperties.SHEET_FULL_HEIGHT_RATIO,
                         AdaptiveUiProperties.SHOW_SHEET_HANDLEBAR,
                         AdaptiveUiProperties.BACK_PRESS_HANDLER,
                         AdaptiveUiProperties.CUSTOM_VIEW_SCROLLS_ITSELF,
+                        AdaptiveUiProperties.GESTURE_DISMISSAL_DISABLED,
                         AdaptiveUiProperties.ON_PRIMARY_BUTTON_CLICKED,
                         AdaptiveUiProperties.ON_SECONDARY_BUTTON_CLICKED,
                         AdaptiveUiProperties.PRIMARY_BUTTON_KEEPS_OPEN,
@@ -749,10 +740,12 @@ public class AdaptiveUiSheetCoordinatorTest {
     public void testGetSheetTypeReflectsPrecedence() {
         AdaptiveUiSheetCoordinator content =
                 createContent(
-                        newModelBuilder().build(),
-                        AdaptiveUiScope.TRANSIENT,
-                        /* isUserInitiated= */ true,
-                        UserCriticalFeature.ACCOUNT_PICKER);
+                        newModelBuilder()
+                                .with(AdaptiveUiProperties.SHEET_USER_INITIATED, true)
+                                .with(
+                                        AdaptiveUiProperties.SHEET_USER_CRITICAL,
+                                        UserCriticalFeature.ACCOUNT_PICKER)
+                                .build());
         BottomSheetType expected =
                 new BottomSheetType.Builder()
                         .setModal(/* isModal= */ true)
@@ -877,9 +870,129 @@ public class AdaptiveUiSheetCoordinatorTest {
                 find(content, R.id.adaptive_ui_sheet_footer_message).getWidth());
     }
 
+    private static int getTopMargin(View view) {
+        return ((ViewGroup.MarginLayoutParams) view.getLayoutParams()).topMargin;
+    }
+
+    private int getVerticalMargin() {
+        return mActivity
+                .getResources()
+                .getDimensionPixelSize(R.dimen.adaptive_ui_sheet_vertical_margin);
+    }
+
+    @Test
+    public void testCustomView_NoTopMarginInRegularBody() {
+        AdaptiveUiSheetCoordinator content =
+                createContent(
+                        newModelBuilder()
+                                .with(AdaptiveUiProperties.CUSTOM_VIEW, new View(mActivity))
+                                .build());
+
+        assertEquals(0, getTopMargin(find(content, R.id.adaptive_ui_sheet_custom_view_container)));
+    }
+
+    @Test
+    public void testCustomView_NoTopMarginInSelfScrollingBody() {
+        AdaptiveUiSheetCoordinator content =
+                createContent(
+                        newModelBuilder()
+                                .with(AdaptiveUiProperties.CUSTOM_VIEW, newScrollingBody())
+                                .with(AdaptiveUiProperties.CUSTOM_VIEW_SCROLLS_ITSELF, true)
+                                .build());
+
+        assertNull(content.getContentView().findViewById(R.id.adaptive_ui_sheet_scroll_view));
+        assertEquals(0, getTopMargin(find(content, R.id.adaptive_ui_sheet_custom_view_container)));
+    }
+
+    @Test
+    public void testPrimaryButton_NoTopMarginDirectlyBelowCustomView() {
+        AdaptiveUiSheetCoordinator content =
+                createContent(
+                        newModelBuilder()
+                                .with(AdaptiveUiProperties.CUSTOM_VIEW, new View(mActivity))
+                                .with(AdaptiveUiProperties.PRIMARY_BUTTON_TEXT, "Primary")
+                                .build());
+
+        assertEquals(0, getTopMargin(find(content, R.id.adaptive_ui_sheet_primary_button)));
+    }
+
+    @Test
+    public void testPrimaryButton_KeepsTopMarginBelowDescriptionOnly() {
+        AdaptiveUiSheetCoordinator content =
+                createContent(
+                        newModelBuilder()
+                                .with(AdaptiveUiProperties.DESCRIPTION, "Description")
+                                .with(AdaptiveUiProperties.PRIMARY_BUTTON_TEXT, "Primary")
+                                .build());
+
+        assertEquals(
+                getVerticalMargin(),
+                getTopMargin(find(content, R.id.adaptive_ui_sheet_primary_button)));
+    }
+
+    @Test
+    public void testPrimaryButton_KeepsTopMarginWhenFooterFollowsCustomView() {
+        AdaptiveUiSheetCoordinator content =
+                createContent(
+                        newModelBuilder()
+                                .with(AdaptiveUiProperties.CUSTOM_VIEW, new View(mActivity))
+                                .with(AdaptiveUiProperties.FOOTER_MESSAGE, "Footer")
+                                .with(AdaptiveUiProperties.PRIMARY_BUTTON_TEXT, "Primary")
+                                .build());
+
+        assertEquals(
+                getVerticalMargin(),
+                getTopMargin(find(content, R.id.adaptive_ui_sheet_primary_button)));
+    }
+
+    @Test
+    public void testSheetRoot_KeepsBottomPaddingWithCustomView() {
+        AdaptiveUiSheetCoordinator content =
+                createContent(
+                        newModelBuilder()
+                                .with(AdaptiveUiProperties.CUSTOM_VIEW, new View(mActivity))
+                                .with(AdaptiveUiProperties.PRIMARY_BUTTON_TEXT, "Primary")
+                                .build());
+
+        assertEquals(getVerticalMargin(), content.getContentView().getPaddingBottom());
+    }
+
     // ---------------------------------------------------------------------------------------
     // Live updates.
     // ---------------------------------------------------------------------------------------
+
+    @Test
+    public void testPrimaryButton_UpdatesTopMarginWhenFooterSetAndClearedAfterShow() {
+        PropertyModel model =
+                newModelBuilder()
+                        .with(AdaptiveUiProperties.CUSTOM_VIEW, new View(mActivity))
+                        .with(AdaptiveUiProperties.PRIMARY_BUTTON_TEXT, "Primary")
+                        .build();
+        AdaptiveUiSheetCoordinator content = createContent(model);
+        View primaryButton = find(content, R.id.adaptive_ui_sheet_primary_button);
+        assertEquals(0, getTopMargin(primaryButton));
+
+        model.set(AdaptiveUiProperties.FOOTER_MESSAGE, "Footer");
+        assertEquals(getVerticalMargin(), getTopMargin(primaryButton));
+
+        model.set(AdaptiveUiProperties.FOOTER_MESSAGE, null);
+        assertEquals(0, getTopMargin(primaryButton));
+    }
+
+    @Test
+    public void testPrimaryButton_RestoresTopMarginWhenCustomViewRemovedAfterShow() {
+        PropertyModel model =
+                newModelBuilder()
+                        .with(AdaptiveUiProperties.CUSTOM_VIEW, new View(mActivity))
+                        .with(AdaptiveUiProperties.PRIMARY_BUTTON_TEXT, "Primary")
+                        .build();
+        AdaptiveUiSheetCoordinator content = createContent(model);
+        View primaryButton = find(content, R.id.adaptive_ui_sheet_primary_button);
+        assertEquals(0, getTopMargin(primaryButton));
+
+        model.set(AdaptiveUiProperties.CUSTOM_VIEW, null);
+        assertEquals(getVerticalMargin(), getTopMargin(primaryButton));
+    }
 
     @Test
     public void testLiveUpdatesOfWritableProperties() {
@@ -1569,6 +1682,29 @@ public class AdaptiveUiSheetCoordinatorTest {
         PropertyModel handlebarModel =
                 newModelBuilder().with(AdaptiveUiProperties.SHOW_SHEET_HANDLEBAR, true).build();
         assertTrue(createContent(handlebarModel).showHandlebar());
+    }
+
+    @Test
+    public void testGestureDismissalDisabled_ControlsSwipeToDismissEnabledAndUpdatesLive() {
+        PropertyModel model = newModelBuilder().build();
+        AdaptiveUiSheetCoordinator content = createContent(model);
+        assertTrue(content.swipeToDismissEnabled());
+
+        model.set(AdaptiveUiProperties.GESTURE_DISMISSAL_DISABLED, true);
+        assertFalse(content.swipeToDismissEnabled());
+
+        model.set(AdaptiveUiProperties.GESTURE_DISMISSAL_DISABLED, false);
+        assertTrue(content.swipeToDismissEnabled());
+
+        PropertyModel disabledModel =
+                newModelBuilder()
+                        .with(AdaptiveUiProperties.GESTURE_DISMISSAL_DISABLED, true)
+                        .build();
+        AdaptiveUiSheetCoordinator disabledContent = createContent(disabledModel);
+        assertFalse(disabledContent.swipeToDismissEnabled());
+
+        disabledContent.onBackPressed();
+        assertEquals(List.of(DismissReason.BACK_PRESS), mSheetDismissals);
     }
 
     @Test

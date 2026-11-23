@@ -8,7 +8,9 @@
 #include <memory>
 #include <ranges>
 
+#include "base/check_op.h"
 #include "base/containers/to_vector.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/notimplemented.h"
@@ -33,6 +35,7 @@
 #include "chrome/browser/glic/public/glic_keyed_service.h"
 #include "chrome/browser/glic/public/glic_keyed_service_factory.h"
 #include "chrome/browser/glic/public/glic_provider_spec.h"
+#include "chrome/browser/glic/public/glic_provider_switch_notice.h"
 #include "chrome/browser/glic/public/service/glic_instance_coordinator.h"
 #include "chrome/browser/glic/service/glic_instance_coordinator_impl.h"
 #include "chrome/browser/profiles/profile.h"
@@ -119,10 +122,23 @@ Host::Host(Profile* profile,
            InstanceDelegate* instance_delegate)
     : profile_(profile),
       pending_provider_change_(GlicEnabling::GetPendingProviderChange(profile)),
+      // The relaunch prompt takes priority over the notice.
+      provider_switch_notice_(pending_provider_change_ ==
+                                      GlicProviderChange::kNone
+                                  ? GetProviderSwitchNotice(*profile)
+                                  : GlicProviderChange::kNone),
       instance_delegate_(instance_delegate),
       glic_instance_(glic_instance),
       sharing_manager_provider_(sharing_manager_provider) {
   VLOG(1) << "Glic [Host] Constructor";
+  if (provider_switch_notice_ != GlicProviderChange::kNone) {
+    // Drops the notice if the user continues from it in another instance.
+    known_provider_registrar_.Init(profile_->GetPrefs());
+    known_provider_registrar_.Add(
+        prefs::kGlicProviderSwitchNoticeKnownProviderKey,
+        base::BindRepeating(&Host::OnKnownProviderChanged,
+                            base::Unretained(this)));
+  }
 }
 
 Host::~Host() {
@@ -221,6 +237,32 @@ void Host::InvokeInternal(mojom::InvokeOptionsPtr options,
     client->Invoke(std::move(options), std::move(callback));
   } else {
     std::move(callback).Run();
+  }
+}
+
+void Host::AcknowledgeProviderSwitchNotice() {
+  if (provider_switch_notice_ == GlicProviderChange::kNone) {
+    return;
+  }
+  provider_switch_notice_ = GlicProviderChange::kNone;
+  known_provider_registrar_.RemoveAll();
+  glic::AcknowledgeProviderSwitchNotice(*profile_);
+}
+
+void Host::OnKnownProviderChanged() {
+  // The registrar only observes while this instance has a notice.
+  CHECK_NE(provider_switch_notice_, GlicProviderChange::kNone);
+  // Only ever clears the notice: one is never added to an existing instance.
+  if (GetProviderSwitchNotice(*profile_) != GlicProviderChange::kNone) {
+    return;
+  }
+  provider_switch_notice_ = GlicProviderChange::kNone;
+  known_provider_registrar_.RemoveAll();
+  if (contents_) {
+    contents_->OnProviderSwitchNoticeCleared();
+  }
+  if (page_handler_) {
+    page_handler_->HideProviderSwitchNotice();
   }
 }
 
@@ -880,6 +922,7 @@ bool Host::ComputeIsShowingNativeLoading() const {
     case mojom::WebUiState::kIneligibleAccount:
     case mojom::WebUiState::kGuestLoaded:
     case mojom::WebUiState::kPendingProviderChangeGeminiToGeic:
+    case mojom::WebUiState::kProviderSwitchNoticeGeicToGemini:
       return false;
   }
 }

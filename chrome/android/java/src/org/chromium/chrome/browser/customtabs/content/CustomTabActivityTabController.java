@@ -45,7 +45,6 @@ import org.chromium.chrome.browser.cookies.CookiesFetcher;
 import org.chromium.chrome.browser.crypto.CipherFactory;
 import org.chromium.chrome.browser.customtabs.CustomTabCookiesFetcher;
 import org.chromium.chrome.browser.customtabs.CustomTabDelegateFactory;
-import org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider;
 import org.chromium.chrome.browser.customtabs.CustomTabNavigationEventObserver;
 import org.chromium.chrome.browser.customtabs.CustomTabObserver;
 import org.chromium.chrome.browser.customtabs.CustomTabResumeManager;
@@ -433,8 +432,15 @@ public class CustomTabActivityTabController implements PauseResumeWithNativeObse
     private @Nullable Tab tryRestoringTab(TabModelOrchestrator tabModelOrchestrator) {
         if (mSavedInstanceStateSupplier.get() == null) return null;
 
+        // An in-process recreation reparents the live tab through AsyncTabParamsManager without
+        // reading its encrypted TabState file, so it can be restored before CipherFactory has
+        // lazily generated a key.
         boolean hadCipherData = mCipherFactory.restoreFromBundle(mSavedInstanceStateSupplier.get());
-        if (!hadCipherData && mIntentDataProvider.isOffTheRecord()) return null;
+        if (!hadCipherData
+                && mIntentDataProvider.isOffTheRecord()
+                && !isOffTheRecordProfileUsedByTabAwaitingReparenting()) {
+            return null;
+        }
 
         tabModelOrchestrator.loadState(
                 /* ignoreIncognitoFiles= */ false, /* ignoreRegularFiles= */ false, null);
@@ -487,7 +493,7 @@ public class CustomTabActivityTabController implements PauseResumeWithNativeObse
         boolean needsShow = false;
         Tab tab;
         if (checkIfTabReparentingParamsExistForIntent(mIntent)) {
-            CustomTabResumeManager.clearResumptionExtras(mIntent);
+            CustomTabResumeManager.clearResumptionExtras(mIntentDataProvider);
             int reparentingTabIdFromIntent = IntentHandler.getTabId(mIntent);
             AsyncTabParams params =
                     AsyncTabParamsManagerSingleton.getInstance().remove(reparentingTabIdFromIntent);
@@ -687,7 +693,7 @@ public class CustomTabActivityTabController implements PauseResumeWithNativeObse
 
     /** Sets the initial background color for the Tab, shown before the page content is ready. */
     private void prepareTabBackground(final Tab tab) {
-        if (!CustomTabIntentDataProvider.isTrustedCustomTab(mIntent, mSession)) return;
+        if (!mIntentDataProvider.isTrustedIntent()) return;
 
         @ColorInt
         int backgroundColor = mIntentDataProvider.getColorProvider().getInitialBackgroundColor();

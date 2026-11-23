@@ -373,26 +373,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Blink.Canvas.MaximumInflightResources"
-    units="canvas resources" expires_after="2026-09-27">
-  <owner>aaronhk@chromium.org</owner>
-  <owner>fserb@chromium.org</owner>
-  <summary>
-    Reports the maximum number or canvas resources used at any one time by a
-    canvas resource provider. Logged in the destructor of
-    CanvasResourceProvider.
-  </summary>
-</histogram>
-
-<histogram name="Blink.Canvas.NumCanvasesPerPage" units="canvases"
-    expires_after="2025-08-10">
-  <owner>aaronhk@chromium.org</owner>
-  <owner>fserb@chromium.org</owner>
-  <summary>
-    When a Document is shutdown, reports the number of canvases on that page.
-  </summary>
-</histogram>
-
 <histogram name="Blink.Canvas.RasterDuration{BlinkCanvasRasterDurationType}"
     units="microseconds" expires_after="2027-05-09">
   <owner>aaronhk@chromium.org</owner>
@@ -432,20 +412,6 @@ chromium-metrics-reviews@google.com.
   <summary>
     Stores the square root of the number of pixels in a new or resized offscreen
     canvas. Emitted from CanvasRenderingContextHost::RecordCanvasSizeToUMA.
-  </summary>
-</histogram>
-
-<histogram name="Blink.Canvas.ToBlob.IdleTaskStatus" enum="IdleTaskStatus"
-    expires_after="2025-04-01">
-  <owner>fserb@chromium.org</owner>
-  <owner>aaronhk@chromium.org</owner>
-  <summary>
-    Records the status of the idle task when finishing a toBlob call.
-
-    In addition, metric values from OffscreenCanvas.convertToBlob API call are
-    also gathered into this histogram, because the logic flow is exactly the
-    same as canvas.toBlob. It's worth to note that the values can come from idle
-    tasks on either main or worker thread.
   </summary>
 </histogram>
 
@@ -2669,29 +2635,6 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
-<histogram name="Blink.FetchQueuedPreloadsTime.{FrameType}.{IsInitial}"
-    units="ms" expires_after="2025-10-26">
-  <owner>cduvall@chromium.org</owner>
-  <owner>jam@chromium.org</owner>
-  <owner>chrome-loading@google.com</owner>
-  <summary>
-    Measures the time it takes to fetch queued subresource preloads for a
-    document in a {FrameType}. Logged every time preloads need to be fetched
-    after the {IsInitial} preload scan.
-
-    Warning: this histogram was expired from 2023-05-29 to 2023-12-04; data may
-    be missing.
-  </summary>
-  <token key="FrameType">
-    <variant name="MainFrame"/>
-    <variant name="Subframe"/>
-  </token>
-  <token key="IsInitial">
-    <variant name="Initial"/>
-    <variant name="NonInitial"/>
-  </token>
-</histogram>
-
 <histogram name="Blink.Fonts.BackgroundDecodeTime" units="microseconds"
     expires_after="2024-08-17">
   <owner>horo@chromium.org</owner>
@@ -4124,20 +4067,6 @@ chromium-metrics-reviews@google.com.
     PreloadRequest::Start is finished.
 
     This histogram only records metrics on machines with high-resolution clocks.
-  </summary>
-</histogram>
-
-<histogram name="Blink.PreloadRequestWaitTime" units="ms"
-    expires_after="2025-07-27">
-  <owner>cduvall@chromium.org</owner>
-  <owner>swarm-team@google.com</owner>
-  <owner>chrome-loading@google.com</owner>
-  <summary>
-    Measures the time from the creation of a PreloadRequest to when
-    PreloadRequest::Start is called. Logged for each PreloadRequest::Start call.
-
-    Warning: this histogram was expired from 2023-10-22 to 2023-12-12; data may
-    be missing.
   </summary>
 </histogram>
 

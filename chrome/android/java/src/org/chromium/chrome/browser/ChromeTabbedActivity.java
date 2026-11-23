@@ -122,7 +122,6 @@ import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.bookmarks.BookmarkOpenerImpl;
 import org.chromium.chrome.browser.bookmarks.BookmarkPane;
 import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
-import org.chromium.chrome.browser.bottombar.BottomBarEnabledChangeObserver;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.browserservices.intents.WebappConstants;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
@@ -360,6 +359,7 @@ import org.chromium.chrome.browser.ui.IncognitoRestoreAppLaunchDrawBlockerFactor
 import org.chromium.chrome.browser.ui.RootUiCoordinator;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuPropertiesDelegate;
 import org.chromium.chrome.browser.ui.bottombar.BottomBarConfigUtils;
+import org.chromium.chrome.browser.ui.bottombar.BottomBarEnabledChangeObserver;
 import org.chromium.chrome.browser.ui.bottombar.BottomBarHostManager;
 import org.chromium.chrome.browser.ui.browser_instant_controller.BrowserInstantControllerBridge;
 import org.chromium.chrome.browser.ui.browser_instant_controller.BrowserInstantControllerBridgeFactory;
@@ -1695,7 +1695,8 @@ public class ChromeTabbedActivity extends ChromeActivity implements PreAttachInt
             new NavigationPredictorBridge(
                     originalProfile, getLifecycleDispatcher(), this::isWarmOnResume);
 
-            if (NtpCustomizationUtils.isNtpThemeCustomizationEnabled() && !isIncognitoWindow()) {
+            if (NtpCustomizationUtils.isNtpThemeCustomizationEnabledByPolicy()
+                    && !isIncognitoWindow()) {
                 CrossDeviceThemeTracker themeTracker =
                         CrossDeviceThemeTracker.getForProfile(originalProfile);
                 if (themeTracker != null) {
@@ -3584,6 +3585,7 @@ public class ChromeTabbedActivity extends ChromeActivity implements PreAttachInt
                 // We should make it more robust by using more signals.
                 IntentHandler.hasAnyIncognitoExtra(getIntent().getExtras()),
                 mBackPressManager,
+                mDragHandlerManager,
                 getSavedInstanceState(),
                 getPersistentInstanceState(),
                 mMultiInstanceManager,
@@ -4273,12 +4275,10 @@ public class ChromeTabbedActivity extends ChromeActivity implements PreAttachInt
         if (isColdStart()) {
             NtpCustomizationMetricsUtils.recordNtpThemeType();
             NtpCustomizationMetricsUtils.recordMvtUserEngagement();
-            if (ChromeFeatureList.sNewTabPageCustomizationV2.isEnabled()) {
-                NtpCustomizationPolicyManager.getInstance().onDeferredStartup();
-            }
+            NtpCustomizationPolicyManager.getInstance().onDeferredStartup();
         }
 
-        if (NtpCustomizationUtils.isNtpThemeCustomizationEnabled()) {
+        if (NtpCustomizationUtils.isNtpThemeCustomizationEnabledByPolicy()) {
             NtpThemeDailyRefreshManager.getInstance()
                     .maybeSaveDailyRefreshAndReset(
                             this,
@@ -4632,8 +4632,12 @@ public class ChromeTabbedActivity extends ChromeActivity implements PreAttachInt
                         .notifyEvent("menu_add_to_group_clicked");
             }
 
+            List<Tab> targetTabs =
+                    id == R.id.add_to_group_menu_id && !isInOverviewMode()
+                            ? mTabModelSelector.getCurrentModel().getOrderedMultiSelectedTabs()
+                            : List.of(currentTab);
             boolean existingGroupsPresent =
-                    createTabGroupMenuActionHandler().handleAddToGroupAction(currentTab);
+                    createTabGroupMenuActionHandler().handleAddToGroupAction(targetTabs);
             if (id == R.id.add_to_group_menu_id) {
                 RecordUserAction.record(
                         existingGroupsPresent ? "MobileMenuAddToGroup" : "MobileMenuAddToNewGroup");
@@ -4660,8 +4664,12 @@ public class ChromeTabbedActivity extends ChromeActivity implements PreAttachInt
                 return false;
             }
 
+            List<Tab> targetTabs =
+                    !isInOverviewMode()
+                            ? mTabModelSelector.getCurrentModel().getOrderedMultiSelectedTabs()
+                            : List.of(currentTab);
             return createTabGroupMenuActionHandler()
-                    .handleAddToExistingGroupAction(currentTab, groupId, syncGroupId);
+                    .handleAddToExistingGroupAction(targetTabs, groupId, syncGroupId);
         } else if (id == R.id.tab_group_open_group_menu_id
                 || id == R.id.tab_group_open_in_new_window_menu_id
                 || id == R.id.tab_group_delete_group_menu_id) {

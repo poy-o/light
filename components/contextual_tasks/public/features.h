@@ -747,14 +747,21 @@ extern bool IsContextualTasksTabBasedSuggestionsEnabled();
 extern bool IsContextualTasksUnboundedMenuEnabled();
 extern bool IsContextualTasksSingleTabMenuItemEnabled();
 
+// Returns whether the Contextual Tasks side panel toolbar and the tab picker
+// show a button that opens a form to file dogfood feedback. Controlled by the
+// `ContextualTasks_DogfoodFeedback` param of `kContextualTasks`.
+extern bool IsContextualTasksDogfoodFeedbackEnabled();
+
 inline constexpr char kContextualTasksSearchCapabilitiesHeaderName[] =
     "Chrome-Search-Capabilities-Version";
 // The default version for the `Chrome-Search-Capabilities-Version` HTTP header.
 // Version 1: Initial version/implementation.
 // Version 1.1: Adds `TAB_PICKER` `InjectChromeInput` support to show and hide
 //              the tab picker based on eligible open tabs.
+// Version 1.2: Adds `has_explicit_context` on `OnContextStateChanged` to
+//              distinguish explicit user context from auto-attached context.
 inline constexpr char kContextualTasksSearchCapabilitiesDefaultVersion[] =
-    "1.1";
+    "1.2";
 
 extern const base::FeatureParam<std::string>
     kContextualTasksSearchCapabilitiesVersion;

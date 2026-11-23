@@ -21,8 +21,8 @@ Create a simple JSON file with the policies you want to test (e.g.,
 > (for example, `alice@example.com`). Other domains will fail validation or
 > cause `fake_dmserver` to return an HTTP 400 error.
 
-Here is a minimal example, where you log into Chromium as alice@example.com and
-want both machine-level and user-level policies.
+Here is a minimal example for testing both machine-level and user-level
+policies.
 
 ```json
 {
@@ -69,12 +69,21 @@ Optional arguments:
 
 ### Step 3: Launch Chrome
 
-When launching Chromium or Chrome, tell it to use your local server. For
-Chromium builds, use `--use-fake-dmserver` to configure the default DMServer URL
-and automatically enable cloud management:
+When launching Chromium or Chrome, tell it to use your local server. Use
+`--use-fake-dmserver` to configure default DMServer and real-time reporting
+URLs, and automatically enable cloud management:
 
 ```bash
 ./out/Default/chrome --use-fake-dmserver
+```
+
+The `--use-fake-dmserver` switch is available only when the
+`allow_fake_dmserver` GN arg is true. The arg is true by default in Chromium
+builds on Linux, and false in Google Chrome builds. To use the switch in a local
+Google Chrome build, add this line to `args.gn`:
+
+```
+allow_fake_dmserver = true
 ```
 
 To enroll the browser in Chrome Browser Cloud Management (CBCM) without
@@ -87,8 +96,8 @@ configuring an OS-level `CloudManagementEnrollmentToken`, use:
 This supplies a dummy enrollment token when no token is provided by the
 operating system, allowing machine-level enrollment to proceed immediately.
 
-Alternatively, or for Google Chrome builds where `--use-fake-dmserver` is not
-available, specify the parameters manually:
+Alternatively, or for builds where `allow_fake_dmserver` is false, specify the
+parameters manually:
 
 ```bash
 # Replace the URL with the host and port from the previous step
@@ -156,8 +165,9 @@ define the actual policies to be applied.
 *   `policy_user`: (String) The user ID (e.g., email address) to embed in
     policy responses. On desktop, this must use one of the supported signature
     domains (`example.com`, `chromepolicytest.com`, or `managedchrome.com`), and
-    defaults to `username@example.com` if omitted. For user policies, it must
-    also match the signed-in profile account.
+    defaults to `username@example.com` if omitted. When using
+    `--use-fake-dmserver`, you can sign into the browser with any managed
+    account without matching `policy_user`.
 *   `managed_users`: (Array of Strings) A list of users that the server should
     treat as managed. Use `"*"` to treat all users as managed.
 *   `device_affiliation_ids`: (Array of Strings) A list of affiliation IDs for

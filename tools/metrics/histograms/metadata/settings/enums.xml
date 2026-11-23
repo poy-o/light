@@ -122,6 +122,7 @@ chromium-metrics-reviews@google.com.
   <int value="894297033" label="SingleCategorySettings"/>
   <int value="895945357" label="AutofillPersonalContextFragment"/>
   <int value="903277107" label="(Obsolete) FledgeBlockedSitesFragment"/>
+  <int value="1009121030" label="TtcSettings"/>
   <int value="1015549581" label="AlwaysTranslateListFragment"/>
   <int value="1068718433" label="RecentSearchesFragment"/>
   <int value="1118292269" label="(Obsolete) HomeModulesConfigSettings"/>
@@ -176,12 +177,6 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <!-- LINT.ThenChange(//chrome/browser/ui/safety_hub/disruptive_notification_permissions_manager.h:RevocationResult) -->
-
-<enum name="FirstPartySetsState">
-  <int value="0" label="Not Relevant"/>
-  <int value="1" label="Enabled"/>
-  <int value="2" label="Disabled"/>
-</enum>
 
 <enum name="HomeButtonStatus">
   <int value="0" label="POLICY_ON"/>
@@ -595,6 +590,8 @@ chromium-metrics-reviews@google.com.
   <int value="0" label="Match"/>
   <int value="1" label="Mismatch"/>
   <int value="2" label="Missing"/>
+  <int value="3" label="Undecryptable"/>
+  <int value="4" label="Unavailable"/>
 </enum>
 
 <!-- LINT.ThenChange(//services/preferences/tracked/pref_hash_store_impl.cc:SuperEncryptedHashResult) -->

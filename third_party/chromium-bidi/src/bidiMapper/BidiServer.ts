@@ -111,9 +111,18 @@ export class BidiServer extends EventEmitter<BidiServerEvent> {
       this.#browsingContextStorage,
       userContextStorage,
     );
+    // Shared by `EventManager` (filters events) and `CommandProcessor`
+    // (checks commands and configures the ACL), so both see the same session
+    // ACL.
+    const aclManager = new AclManager(this.#browsingContextStorage);
+    if (restrictedMode) {
+      // Restricted mode requires enabling ACL.
+      aclManager.enable();
+    }
     this.#eventManager = new EventManager(
       this.#browsingContextStorage,
       userContextStorage,
+      aclManager,
     );
     const networkStorage = new NetworkStorage(
       this.#eventManager,
@@ -133,12 +142,6 @@ export class BidiServer extends EventEmitter<BidiServerEvent> {
       this.#browsingContextStorage,
       contextConfigStorage,
     );
-    const aclManager = new AclManager(this.#browsingContextStorage);
-    if (restrictedMode === true) {
-      // In restricted mode, start with an empty ACL before `session.new`.
-      aclManager.setEnabled(true);
-      aclManager.setAcl({});
-    }
     this.#commandProcessor = new CommandProcessor(
       cdpConnection,
       browserCdpClient,

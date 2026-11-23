@@ -5,16 +5,15 @@
 // clang-format off
 import 'chrome://history/history.js';
 
-import type {HistoryAppElement, HistoryFilterChipsElement} from 'chrome://history/history.js';
-import {BrowserProxyImpl, CrRouter, TimePeriodOptionId} from 'chrome://history/history.js';
+import type {CrChipElement, HistoryAppElement, HistoryFilterChipsElement} from 'chrome://history/history.js';
+import {BrowserProxyImpl, CrRouter, historyClustersBrowserProxyFactory, PageHandlerRemote, TimePeriodOptionId} from 'chrome://history/history.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {TestMock} from 'chrome://webui-test/test_mock.js';
 import {eventToPromise, isChildVisible, microtasksFinished} from 'chrome://webui-test/test_util.js';
 import {COLORS_CSS_SELECTOR} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
 // <if expr="not is_chromeos">
-import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
 import {AccessPoint, HistorySignInState, SyncState} from 'chrome://history/history.js';
-
 // </if>
 
 import {TestHistoryBrowserProxy} from './test_browser_proxy.js';
@@ -96,11 +95,12 @@ suite('HistoryAppUnoPhase2FollowUpTest', () => {
   });
 
   test('ShowsHistorySyncPromoElementWhenDataIsTrue', async () => {
-    webUIListenerCallback('history-identity-state-changed', {
-      signIn: HistorySignInState.SIGNED_IN,
-      tabsSync: SyncState.TURNED_OFF,
-      historySync: SyncState.TURNED_OFF,
+    browserProxy.pageRemote.onIdentityStateChanged({
+      signIn: HistorySignInState.kSignedIn,
+      tabsSync: SyncState.kTurnedOff,
+      historySync: SyncState.kTurnedOff,
     });
+    await browserProxy.pageRemote.$.flushForTesting();
     await microtasksFinished();
 
     assertTrue(
@@ -123,11 +123,12 @@ suite('HistoryAppUnoPhase2FollowUpTest', () => {
   });
 
   test('HidesHistorySyncPromoElementWhenHistorySyncIsDisabled', async () => {
-    webUIListenerCallback('history-identity-state-changed', {
-      signIn: HistorySignInState.SIGNED_IN,
-      tabsSync: SyncState.TURNED_OFF,
-      historySync: SyncState.DISABLED,
+    browserProxy.pageRemote.onIdentityStateChanged({
+      signIn: HistorySignInState.kSignedIn,
+      tabsSync: SyncState.kTurnedOff,
+      historySync: SyncState.kDisabled,
     });
+    await browserProxy.pageRemote.$.flushForTesting();
     await microtasksFinished();
 
     assertFalse(
@@ -136,11 +137,12 @@ suite('HistoryAppUnoPhase2FollowUpTest', () => {
   });
 
   test('HistorySyncPromoElementSignedIn', async () => {
-    webUIListenerCallback('history-identity-state-changed', {
-      signIn: HistorySignInState.SIGNED_IN,
-      tabsSync: SyncState.TURNED_OFF,
-      historySync: SyncState.TURNED_OFF,
+    browserProxy.pageRemote.onIdentityStateChanged({
+      signIn: HistorySignInState.kSignedIn,
+      tabsSync: SyncState.kTurnedOff,
+      historySync: SyncState.kTurnedOff,
     });
+    await browserProxy.pageRemote.$.flushForTesting();
     await microtasksFinished();
     const historySyncPromo =
         element.shadowRoot.querySelector('history-sync-promo');
@@ -167,11 +169,12 @@ suite('HistoryAppUnoPhase2FollowUpTest', () => {
   });
 
   test('HistorySyncPromoElementPendingSignInWithHistorySyncOn', async () => {
-    webUIListenerCallback('history-identity-state-changed', {
-      signIn: HistorySignInState.SIGN_IN_PENDING,
-      tabsSync: SyncState.TURNED_OFF,
-      historySync: SyncState.TURNED_ON,
+    browserProxy.pageRemote.onIdentityStateChanged({
+      signIn: HistorySignInState.kSignInPending,
+      tabsSync: SyncState.kTurnedOff,
+      historySync: SyncState.kTurnedOn,
     });
+    await browserProxy.pageRemote.$.flushForTesting();
     await microtasksFinished();
     const historySyncPromo =
         element.shadowRoot.querySelector('history-sync-promo');
@@ -182,10 +185,11 @@ suite('HistoryAppUnoPhase2FollowUpTest', () => {
     assertTrue(isChildVisible(
         historySyncPromo, '#sign-in-pending-syncing-history-description'));
     assertTrue(isChildVisible(historySyncPromo, '#verify-its-you-button'));
-    assertEquals(1, browserProxy.getCallCount('recordSigninPendingOffered'));
+    assertEquals(
+        1, browserProxy.handler.getCallCount('recordSigninPendingOffered'));
     assertEquals(
         AccessPoint.kHistoryPage,
-        await browserProxy.whenCalled('recordSigninPendingOffered'));
+        await browserProxy.handler.whenCalled('recordSigninPendingOffered'));
 
     // The other states promo elements should not be visible.
     assertFalse(isChildVisible(historySyncPromo, '#signed-out-description'));
@@ -196,11 +200,12 @@ suite('HistoryAppUnoPhase2FollowUpTest', () => {
   });
 
   test('HistorySyncPromoElementPendingSignInWithHistorySyncOff', async () => {
-    webUIListenerCallback('history-identity-state-changed', {
-      signIn: HistorySignInState.SIGN_IN_PENDING,
-      tabsSync: SyncState.TURNED_OFF,
-      historySync: SyncState.TURNED_OFF,
+    browserProxy.pageRemote.onIdentityStateChanged({
+      signIn: HistorySignInState.kSignInPending,
+      tabsSync: SyncState.kTurnedOff,
+      historySync: SyncState.kTurnedOff,
     });
+    await browserProxy.pageRemote.$.flushForTesting();
     await microtasksFinished();
     const historySyncPromo =
         element.shadowRoot.querySelector('history-sync-promo');
@@ -221,11 +226,12 @@ suite('HistoryAppUnoPhase2FollowUpTest', () => {
   });
 
   test('HistorySyncPromoElementWebOnlySignIn', async () => {
-    webUIListenerCallback('history-identity-state-changed', {
-      signIn: HistorySignInState.WEB_ONLY_SIGNED_IN,
-      tabsSync: SyncState.TURNED_OFF,
-      historySync: SyncState.TURNED_OFF,
+    browserProxy.pageRemote.onIdentityStateChanged({
+      signIn: HistorySignInState.kWebOnlySignedIn,
+      tabsSync: SyncState.kTurnedOff,
+      historySync: SyncState.kTurnedOff,
     });
+    await browserProxy.pageRemote.$.flushForTesting();
     await microtasksFinished();
     const historySyncPromo =
         element.shadowRoot.querySelector('history-sync-promo');
@@ -251,11 +257,12 @@ suite('HistoryAppUnoPhase2FollowUpTest', () => {
   });
 
   test('HistorySyncPromoElementSignedOut', async () => {
-    webUIListenerCallback('history-identity-state-changed', {
-      signIn: HistorySignInState.SIGNED_OUT,
-      tabsSync: SyncState.TURNED_OFF,
-      historySync: SyncState.TURNED_OFF,
+    browserProxy.pageRemote.onIdentityStateChanged({
+      signIn: HistorySignInState.kSignedOut,
+      tabsSync: SyncState.kTurnedOff,
+      historySync: SyncState.kTurnedOff,
     });
+    await browserProxy.pageRemote.$.flushForTesting();
     await microtasksFinished();
     const historySyncPromo =
         element.shadowRoot.querySelector('history-sync-promo');
@@ -807,6 +814,127 @@ suite('WebuiRefresh2026', function() {
     assertEquals(null, document.body.querySelector(COLORS_CSS_SELECTOR));
   });
   // </if>
+});
+
+// Tests the group view button, which switches between the by-date and the
+// by-group view when HistoryPageRefresh is enabled.
+suite('GroupViewButton', function() {
+  let element: HistoryAppElement;
+  let browserProxy: TestHistoryBrowserProxy;
+
+  setup(() => {
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    loadTimeData.overrideValues({
+      isHistoryClustersEnabled: true,
+      isHistoryClustersVisible: true,
+      lastSelectedTab: 0,
+    });
+    const clustersHandler = TestMock.fromClass(PageHandlerRemote);
+    const {instance} =
+        historyClustersBrowserProxyFactory.createForTest(clustersHandler);
+    historyClustersBrowserProxyFactory.setInstance(instance);
+
+    browserProxy = new TestHistoryBrowserProxy();
+    BrowserProxyImpl.setInstance(browserProxy);
+
+    window.history.replaceState({}, '', '/');
+    CrRouter.resetForTesting();
+    element = document.createElement('history-app');
+    document.body.appendChild(element);
+    return microtasksFinished();
+  });
+
+  test('TogglesView', async () => {
+    // With HistoryPageRefresh, the views are switched with the group view
+    // button, which sits in the controls row, not with <cr-tabs>.
+    assertEquals(null, element.shadowRoot.querySelector('cr-tabs'));
+    const groupViewButton =
+        element.shadowRoot.querySelector<CrChipElement>('#groupViewButton');
+    assertTrue(!!groupViewButton);
+    assertTrue(isChildVisible(element, '#groupViewButton'));
+    assertFalse(groupViewButton.selected);
+    const icon = groupViewButton.querySelector('cr-icon');
+    assertTrue(!!icon);
+    assertEquals('history20:grid-view', icon.icon);
+
+    // Clicking the button switches to the grouped view.
+    browserProxy.handler.resetResolver('setLastSelectedTab');
+    groupViewButton.click();
+    await microtasksFinished();
+
+    assertTrue(groupViewButton.selected);
+    assertTrue(isChildVisible(element, '#groupViewButton'));
+    assertEquals('cr:check', icon.icon);
+    assertEquals('chrome://history/grouped', window.location.href);
+    assertEquals(
+        1, await browserProxy.handler.whenCalled('setLastSelectedTab'));
+
+    // Clicking the button again switches back to the by-date view.
+    browserProxy.handler.resetResolver('setLastSelectedTab');
+    groupViewButton.click();
+    await microtasksFinished();
+
+    assertFalse(groupViewButton.selected);
+    assertEquals('history20:grid-view', icon.icon);
+    assertEquals('chrome://history/', window.location.href);
+    assertEquals(
+        0, await browserProxy.handler.whenCalled('setLastSelectedTab'));
+  });
+});
+
+// Tests the pre-HistoryPageRefresh UI, where the by-date and by-group views are
+// switched with <cr-tabs> instead of the group view button. Clean-up together
+// with features::kHistoryPageRefresh.
+suite('HistoryPageRefreshDisabled', function() {
+  let element: HistoryAppElement;
+  let browserProxy: TestHistoryBrowserProxy;
+
+  setup(() => {
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    loadTimeData.overrideValues({
+      isHistoryClustersEnabled: true,
+      isHistoryClustersVisible: true,
+      lastSelectedTab: 0,
+    });
+    const clustersHandler = TestMock.fromClass(PageHandlerRemote);
+    const {instance} =
+        historyClustersBrowserProxyFactory.createForTest(clustersHandler);
+    historyClustersBrowserProxyFactory.setInstance(instance);
+
+    browserProxy = new TestHistoryBrowserProxy();
+    BrowserProxyImpl.setInstance(browserProxy);
+
+    window.history.replaceState({}, '', '/');
+    CrRouter.resetForTesting();
+    element = document.createElement('history-app');
+    document.body.appendChild(element);
+    return microtasksFinished();
+  });
+
+  test('TabsToggleView', async () => {
+    assertEquals(null, element.shadowRoot.querySelector('#groupViewButton'));
+    const tabs = element.shadowRoot.querySelector('cr-tabs');
+    assertTrue(!!tabs);
+    assertEquals(0, tabs.selected);
+
+    // Selecting the second tab switches to the grouped view.
+    browserProxy.handler.resetResolver('setLastSelectedTab');
+    tabs.selected = 1;
+    await microtasksFinished();
+    assertEquals('chrome://history/grouped', window.location.href);
+    assertEquals('grouped', element.$.contentSideBar.$.menu.selected);
+    assertEquals(
+        1, await browserProxy.handler.whenCalled('setLastSelectedTab'));
+
+    // Selecting the first tab switches back to the by-date view.
+    browserProxy.handler.resetResolver('setLastSelectedTab');
+    tabs.selected = 0;
+    await microtasksFinished();
+    assertEquals('chrome://history/', window.location.href);
+    assertEquals('history', element.$.contentSideBar.$.menu.selected);
+    assertEquals(
+        0, await browserProxy.handler.whenCalled('setLastSelectedTab'));
+  });
 });
 
 // <if expr="is_android">

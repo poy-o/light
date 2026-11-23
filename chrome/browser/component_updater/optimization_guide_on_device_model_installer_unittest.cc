@@ -11,12 +11,14 @@
 #include <utility>
 #include <vector>
 
+#include "base/byte_size.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/memory/weak_ptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/task/execution_fence.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/test/scoped_path_override.h"
 #include "base/test/test_future.h"
@@ -26,6 +28,7 @@
 #include "components/component_updater/component_updater_paths.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/component_updater/mock_component_updater_service.h"
+#include "components/optimization_guide/core/model_execution/manifest_broker/manifest_asset_manager_delegate.h"
 #include "components/update_client/crx_update_item.h"
 #include "components/update_client/update_client.h"
 #include "components/update_client/update_client_errors.h"
@@ -42,6 +45,8 @@ using AssetManager =
     optimization_guide::ManifestAssetManagerDelegate::AssetManager;
 using InstalledAsset =
     optimization_guide::ManifestAssetManagerDelegate::InstalledAsset;
+using DiskSpaceCheckReason =
+    optimization_guide::ManifestMonitorDelegate::DiskSpaceCheckReason;
 using ::testing::_;
 using ::testing::Return;
 using ::testing::ReturnRef;
@@ -72,7 +77,7 @@ class MockAssetManager : public AssetManager {
               (override));
   MOCK_METHOD(void,
               OnUpdateRequestComplete,
-              (const std::string& public_key),
+              (const std::string& public_key, update_client::Error error),
               (override));
   MOCK_METHOD(void, OnMeteredConnectionChanged, (), (override));
   MOCK_METHOD(void,
@@ -112,6 +117,40 @@ class OptimizationGuideOnDeviceModelInstallerTest : public testing::Test {
 
   content::BrowserTaskEnvironment task_environment_;
 };
+TEST_F(OptimizationGuideOnDeviceModelInstallerTest,
+       GetFreeDiskSpacePromotesQueuedAndSubsequentChecks) {
+  base::ScopedPathOverride path_override(DIR_COMPONENT_USER);
+  auto delegate = CreateManifestAssetManagerDelegate();
+  base::ScopedBestEffortExecutionFence fence;
+
+  base::test::TestFuture<std::optional<base::ByteSize>> queued;
+  delegate->GetFreeDiskSpace(queued.GetCallback());
+  delegate->SetDiskSpaceCheckPriority(DiskSpaceCheckReason::kInitialization,
+                                      /*user_visible=*/true);
+  EXPECT_TRUE(queued.Get().has_value());
+
+  base::test::TestFuture<std::optional<base::ByteSize>> subsequent;
+  delegate->GetFreeDiskSpace(subsequent.GetCallback());
+  EXPECT_TRUE(subsequent.Get().has_value());
+
+  delegate->SetDiskSpaceCheckPriority(DiskSpaceCheckReason::kAssetRegistration,
+                                      /*user_visible=*/true);
+  delegate->SetDiskSpaceCheckPriority(DiskSpaceCheckReason::kInitialization,
+                                      /*user_visible=*/false);
+  base::test::TestFuture<std::optional<base::ByteSize>> foreground;
+  delegate->GetFreeDiskSpace(foreground.GetCallback());
+  EXPECT_TRUE(foreground.Get().has_value());
+
+  delegate->SetDiskSpaceCheckPriority(DiskSpaceCheckReason::kInitialization,
+                                      /*user_visible=*/true);
+  delegate->SetDiskSpaceCheckPriority(DiskSpaceCheckReason::kAssetRegistration,
+                                      /*user_visible=*/false);
+  base::test::TestFuture<std::optional<base::ByteSize>> initializing;
+  delegate->GetFreeDiskSpace(initializing.GetCallback());
+  EXPECT_TRUE(initializing.Get().has_value());
+  delegate->SetDiskSpaceCheckPriority(DiskSpaceCheckReason::kInitialization,
+                                      /*user_visible=*/false);
+}
 
 TEST_F(OptimizationGuideOnDeviceModelInstallerTest, GetInstalledAssets) {
   base::ScopedPathOverride path_override(DIR_COMPONENT_USER);
@@ -169,8 +208,11 @@ TEST_F(OptimizationGuideOnDeviceModelInstallerTest,
   // 1. An invalid hex key completes asynchronously via `OnUpdateComplete()`.
   {
     base::RunLoop run_loop;
-    EXPECT_CALL(asset_manager, OnUpdateRequestComplete("invalid_public_key"))
-        .WillOnce([&](const std::string&) { run_loop.Quit(); });
+    EXPECT_CALL(asset_manager,
+                OnUpdateRequestComplete("invalid_public_key",
+                                        update_client::Error::INVALID_ARGUMENT))
+        .WillOnce(
+            [&](const std::string&, update_client::Error) { run_loop.Quit(); });
     delegate->RequestUpdate("invalid_public_key", /*is_background=*/false);
     run_loop.Run();
   }
@@ -179,8 +221,11 @@ TEST_F(OptimizationGuideOnDeviceModelInstallerTest,
   // completes asynchronously via `OnUpdateComplete()`.
   {
     base::RunLoop run_loop;
-    EXPECT_CALL(asset_manager, OnUpdateRequestComplete(kValidPublicKeyHex))
-        .WillOnce([&](const std::string&) { run_loop.Quit(); });
+    EXPECT_CALL(asset_manager,
+                OnUpdateRequestComplete(kValidPublicKeyHex,
+                                        update_client::Error::SERVICE_ERROR))
+        .WillOnce(
+            [&](const std::string&, update_client::Error) { run_loop.Quit(); });
     delegate->RequestUpdate(kValidPublicKeyHex, /*is_background=*/false);
     run_loop.Run();
   }
@@ -302,13 +347,17 @@ TEST_F(OptimizationGuideOnDeviceModelInstallerTest,
   const std::string crx_id =
       *optimization_guide::GetCrxIdFromPublicKeyHex(kValidPublicKeyHex);
 
-  // 1. Background `UPDATE_DISABLED` and foreground `NONE` both notify
-  // `OnUpdateRequestComplete`.
+  // 1. Background and foreground on-demand results forward the exact
+  // `update_client::Error` to `OnUpdateRequestComplete`.
   for (auto [is_background, priority, error] : {
            std::tuple{true, OnDemandUpdater::Priority::BACKGROUND,
                       update_client::Error::UPDATE_DISABLED},
            std::tuple{false, OnDemandUpdater::Priority::FOREGROUND,
                       update_client::Error::NONE},
+           std::tuple{false, OnDemandUpdater::Priority::FOREGROUND,
+                      update_client::Error::UPDATE_IN_PROGRESS},
+           std::tuple{false, OnDemandUpdater::Priority::FOREGROUND,
+                      update_client::Error::RETRY_LATER},
        }) {
     base::RunLoop run_loop;
     EXPECT_CALL(on_demand_updater, OnDemandUpdate(crx_id, priority, _))
@@ -317,8 +366,10 @@ TEST_F(OptimizationGuideOnDeviceModelInstallerTest,
           base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
               FROM_HERE, base::BindOnce(std::move(callback), error));
         });
-    EXPECT_CALL(asset_manager, OnUpdateRequestComplete(kValidPublicKeyHex))
-        .WillOnce([&](const std::string&) { run_loop.Quit(); });
+    EXPECT_CALL(asset_manager,
+                OnUpdateRequestComplete(kValidPublicKeyHex, error))
+        .WillOnce(
+            [&](const std::string&, update_client::Error) { run_loop.Quit(); });
     delegate->RequestUpdate(kValidPublicKeyHex, is_background);
     run_loop.Run();
   }
@@ -343,10 +394,12 @@ TEST_F(OptimizationGuideOnDeviceModelInstallerTest,
   delegate->RequestUpdate(kValidPublicKeyHex, /*is_background=*/false);
   delegate->RequestUpdate(kValidPublicKeyHex, /*is_background=*/false);
 
-  EXPECT_CALL(asset_manager, OnUpdateRequestComplete(_)).Times(0);
+  EXPECT_CALL(asset_manager, OnUpdateRequestComplete(_, _)).Times(0);
   std::move(first_callback).Run(update_client::Error::UPDATE_CANCELED);
 
-  EXPECT_CALL(asset_manager, OnUpdateRequestComplete(kValidPublicKeyHex))
+  EXPECT_CALL(asset_manager,
+              OnUpdateRequestComplete(kValidPublicKeyHex,
+                                      update_client::Error::UPDATE_CANCELED))
       .Times(1);
   std::move(second_callback).Run(update_client::Error::UPDATE_CANCELED);
 
@@ -354,7 +407,7 @@ TEST_F(OptimizationGuideOnDeviceModelInstallerTest,
   EXPECT_CALL(*cus_ptr, UnregisterComponent(crx_id)).WillOnce(Return(true));
   delegate->Uninstall(kValidPublicKeyHex);
 
-  EXPECT_CALL(asset_manager, OnUpdateRequestComplete(_)).Times(0);
+  EXPECT_CALL(asset_manager, OnUpdateRequestComplete(_, _)).Times(0);
   std::move(third_callback).Run(update_client::Error::NONE);
 }
 

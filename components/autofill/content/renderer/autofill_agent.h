@@ -161,13 +161,11 @@ class AutofillAgent : public content::RenderFrameObserver,
   void BindPendingReceiver(
       mojo::PendingAssociatedReceiver<mojom::AutofillAgent> pending_receiver);
 
-  // Lets the browser run custom form control scripts in this frame, in the
-  // isolated world `world_id` (Chrome passes
-  // `ISOLATED_WORLD_ID_AUTOFILL_CUSTOM_FORM_CONTROLS`), through
-  // `mojom::CustomFormControlAgent`, which this registers in `registry`.
-  // Requires `features::kAutofillCustomFormControlScripts`. Call at most once.
+  // Lets the browser run custom form control scripts in this frame's main
+  // world through `mojom::CustomFormControlAgent`, which this registers in
+  // `registry`. Requires `features::kAutofillCustomFormControlScripts`. Call at
+  // most once.
   void EnableCustomFormControlScripts(
-      int32_t world_id,
       blink::AssociatedInterfaceRegistry& registry);
 
   blink::WebDocument GetDocument() const;
@@ -374,8 +372,9 @@ class AutofillAgent : public content::RenderFrameObserver,
   void TextFieldValueChanged(
       const blink::WebFormControlElement& element) override;
   void ContentEditableDidChange(const blink::WebElement& element) override;
-  bool DidReceiveKeyDown(const blink::WebElement& element,
-                         const blink::WebKeyboardEvent& event) override;
+  void TextFieldDidReceiveKeyDown(
+      const blink::WebInputElement& input_element,
+      const blink::WebKeyboardEvent& event) override;
   void OpenTextDataListChooser(const blink::WebInputElement& element) override;
   void DataListOptionsChanged(const blink::WebInputElement& element) override;
   void UserGestureObserved() override;

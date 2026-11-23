@@ -926,12 +926,6 @@ public class LocationBarMediatorUnitTest {
     }
 
     @Test
-    public void testOnTabLoadingNtp() {
-        mMediator.onNtpStartedLoading();
-        verify(mLocationBarLayout).onNtpStartedLoading();
-    }
-
-    @Test
     public void testBeginInput_StandbyNoFocus() {
         var input = mSessionState.getAutocompleteInput();
         input.setAutocompleteState(AutocompleteState.STANDBY_NO_FOCUS);
@@ -5566,6 +5560,24 @@ public class LocationBarMediatorUnitTest {
     }
 
     @Test
+    public void testOnUrlFocusChange_gainingFocus_fromDraftingNoFocus_pushesTextInDrafting() {
+        beginInput(new AutocompleteInput().setDisplayState(DisplayState.DRAFTING_NO_FOCUS));
+        AutocompleteInput input = mSessionState.getAutocompleteInput();
+        List<Integer> displayStates = new ArrayList<>();
+        doAnswer(
+                        invocation -> {
+                            displayStates.add(input.getDisplayState());
+                            return true;
+                        })
+                .when(mUrlCoordinator)
+                .setUrlBarData(any(), anyInt(), any());
+
+        mMediator.onUrlFocusChange(/* hasFocus= */ true);
+
+        assertEquals(List.of(DisplayState.DRAFTING), displayStates);
+    }
+
+    @Test
     public void testFocusAndSelectAllText_fromDraftingNoFocus_refocusesWithoutRestarting() {
         setupSession(DisplayState.DRAFTING_NO_FOCUS);
         stubSynchronousFocusOnRequest();
@@ -5621,6 +5633,70 @@ public class LocationBarMediatorUnitTest {
         mMediator.onTabChanged(null);
 
         assertDraftingNoFocusProperties();
+    }
+
+    @Test
+    public void testOnUrlChanged_activeSession_refreshesPageMetadata() {
+        AutocompleteInput input = mSessionState.getAutocompleteInput();
+        beginInput(input);
+        assertEquals(JUnitTestGURLs.BLUE_1, input.getPageUrl());
+
+        doReturn(JUnitTestGURLs.URL_2).when(mLocationBarDataProvider).getCurrentGurl();
+        doReturn("Two").when(mLocationBarDataProvider).getTitle();
+        doReturn(PageClassification.SEARCH_RESULT_PAGE_NO_SEARCH_TERM_REPLACEMENT)
+                .when(mLocationBarDataProvider)
+                .getPageClassification(anyBoolean());
+        mMediator.onUrlChanged(/* isTabChanging= */ false);
+
+        assertTrue(mSessionState.isSessionActive());
+        assertEquals(JUnitTestGURLs.URL_2, input.getPageUrl());
+        assertEquals("Two", input.getPageTitle());
+        assertEquals(
+                PageClassification.SEARCH_RESULT_PAGE_NO_SEARCH_TERM_REPLACEMENT,
+                input.getPageClassification());
+    }
+
+    @Test
+    public void testOnUrlChanged_afterLoadUrlFromInput_retainsPageMetadataUntilInputEnds() {
+        AutocompleteInput input = mSessionState.getAutocompleteInput();
+        beginInput(input);
+        mMediator.loadUrl(new OmniboxLoadUrlParams.Builder(TEST_URL, PageTransition.TYPED).build());
+
+        // The navigation is reported before the task that ends the input session has run.
+        doReturn(JUnitTestGURLs.URL_2).when(mLocationBarDataProvider).getCurrentGurl();
+        mMediator.onUrlChanged(/* isTabChanging= */ false);
+
+        assertTrue(mSessionState.isSessionActive());
+        assertEquals(JUnitTestGURLs.BLUE_1, input.getPageUrl());
+    }
+
+    @Test
+    public void testOnUrlChanged_loadUrlFromInputNotStarted_refreshesPageMetadata() {
+        doReturn(false).when(mNavigator).loadUrl(any());
+        AutocompleteInput input = mSessionState.getAutocompleteInput();
+        beginInput(input);
+        mMediator.loadUrl(new OmniboxLoadUrlParams.Builder(TEST_URL, PageTransition.TYPED).build());
+
+        doReturn(JUnitTestGURLs.URL_2).when(mLocationBarDataProvider).getCurrentGurl();
+        mMediator.onUrlChanged(/* isTabChanging= */ false);
+
+        assertEquals(JUnitTestGURLs.URL_2, input.getPageUrl());
+    }
+
+    @Test
+    public void testOnUrlChanged_newSessionAfterLoadUrlFromInput_refreshesPageMetadata() {
+        AutocompleteInput input = mSessionState.getAutocompleteInput();
+        beginInput(input);
+        mMediator.loadUrl(new OmniboxLoadUrlParams.Builder(TEST_URL, PageTransition.TYPED).build());
+
+        // The session is ended, and another one started, before the task posted by loadUrl() runs.
+        mMediator.endInput();
+        mMediator.beginInput(input);
+
+        doReturn(JUnitTestGURLs.URL_2).when(mLocationBarDataProvider).getCurrentGurl();
+        mMediator.onUrlChanged(/* isTabChanging= */ false);
+
+        assertEquals(JUnitTestGURLs.URL_2, input.getPageUrl());
     }
 
     @Test
@@ -6194,7 +6270,10 @@ public class LocationBarMediatorUnitTest {
                         R.drawable.ic_search_24dp, R.color.default_icon_color_tint_list));
 
         verify(mLocationBarLayout)
-                .setAiModeButtonIcon(any(Drawable.class), /* tintWithTextColor= */ eq(true));
+                .setAiModeButtonIcons(
+                        any(Drawable.class),
+                        /* tintWithTextColor= */ eq(true),
+                        /* isSend= */ eq(false));
     }
 
     @Test
@@ -6207,7 +6286,10 @@ public class LocationBarMediatorUnitTest {
                 new StatusIconResource("https://3p.com/favicon.ico", bitmap, 0));
 
         verify(mLocationBarLayout)
-                .setAiModeButtonIcon(any(Drawable.class), /* tintWithTextColor= */ eq(false));
+                .setAiModeButtonIcons(
+                        any(Drawable.class),
+                        /* tintWithTextColor= */ eq(false),
+                        /* isSend= */ eq(false));
     }
 
     @Test
@@ -6276,8 +6358,91 @@ public class LocationBarMediatorUnitTest {
         clearInvocations(mLocationBarLayout);
 
         mHasAttachmentsSupplier.set(true);
-
         verify(mLocationBarLayout).setAiModeButtonState(AiModeButtonState.VISIBLE_SEND);
+        verify(mLocationBarLayout, atLeastOnce())
+                .setAiModeButtonIcons(
+                        /* icon= */ any(Drawable.class),
+                        /* tintWithTextColor= */ eq(true),
+                        /* isSend= */ eq(true));
+
+        clearInvocations(mLocationBarLayout);
+        mHasAttachmentsSupplier.set(false);
+        verify(mLocationBarLayout).setAiModeButtonState(AiModeButtonState.VISIBLE_ACTIVE);
+        verify(mLocationBarLayout, atLeastOnce())
+                .setAiModeButtonIcons(
+                        /* icon= */ any(Drawable.class),
+                        /* tintWithTextColor= */ eq(true),
+                        /* isSend= */ eq(false));
+    }
+
+    @Test
+    @EnableFeatures(OmniboxFeatureList.OMNIBOX_STATEFUL_AI_MODE_BUTTON)
+    public void testAiModeButtonState_updatedWhenTextChanges() {
+        OmniboxCapabilities.setIsDesktopPlatformForTesting(true);
+        AutocompleteInput input = beginPopoverInputForAiModeButton();
+        input.setRequestType(AutocompleteRequestType.AI_MODE);
+        input.setPreviewMatchUrl(null);
+        clearInvocations(mLocationBarLayout);
+
+        doReturn("query").when(mUrlCoordinator).getTextWithAutocomplete();
+        mMediator.onUrlTextChanged("query");
+        verify(mLocationBarLayout, atLeastOnce())
+                .setAiModeButtonState(AiModeButtonState.VISIBLE_SEND);
+        verify(mLocationBarLayout, atLeastOnce())
+                .setAiModeButtonIcons(
+                        /* icon= */ any(Drawable.class),
+                        /* tintWithTextColor= */ eq(true),
+                        /* isSend= */ eq(true));
+
+        clearInvocations(mLocationBarLayout);
+        doReturn("").when(mUrlCoordinator).getTextWithAutocomplete();
+        mMediator.onUrlTextChanged("");
+        verify(mLocationBarLayout, atLeastOnce())
+                .setAiModeButtonState(AiModeButtonState.VISIBLE_ACTIVE);
+        verify(mLocationBarLayout, atLeastOnce())
+                .setAiModeButtonIcons(
+                        /* icon= */ any(Drawable.class),
+                        /* tintWithTextColor= */ eq(true),
+                        /* isSend= */ eq(false));
+    }
+
+    @Test
+    @EnableFeatures(OmniboxFeatureList.OMNIBOX_STATEFUL_AI_MODE_BUTTON)
+    public void testAiModeButtonIcons_compactChange_reappliesIcons() {
+        OmniboxCapabilities.setIsDesktopPlatformForTesting(true);
+        AutocompleteInput input = beginPopoverInputForAiModeButton();
+        input.setRequestType(AutocompleteRequestType.AI_MODE);
+        mHasAttachmentsSupplier.set(true);
+        doReturn(true).when(mLocationBarLayout).isTooNarrowForExpandedActivationChip();
+        clearInvocations(mLocationBarLayout);
+
+        mMediator.updateActivationChipCompact();
+
+        verify(mLocationBarLayout).setActivationChipCompact(true);
+        verify(mLocationBarLayout)
+                .setAiModeButtonIcons(
+                        /* icon= */ any(Drawable.class),
+                        /* tintWithTextColor= */ eq(true),
+                        /* isSend= */ eq(true));
+    }
+
+    @Test
+    @EnableFeatures(OmniboxFeatureList.OMNIBOX_STATEFUL_AI_MODE_BUTTON)
+    public void testAiModeButtonIcons_colorSchemeChange_reappliesIcons() {
+        OmniboxCapabilities.setIsDesktopPlatformForTesting(true);
+        AutocompleteInput input = beginPopoverInputForAiModeButton();
+        input.setRequestType(AutocompleteRequestType.AI_MODE);
+        doReturn(true).when(mLocationBarDataProvider).isIncognitoBranded();
+        clearInvocations(mLocationBarLayout);
+
+        mMediator.updateBrandedColorScheme();
+
+        verify(mLocationBarLayout).updateVisualsForState();
+        verify(mLocationBarLayout, atLeastOnce())
+                .setAiModeButtonIcons(
+                        /* icon= */ any(Drawable.class),
+                        /* tintWithTextColor= */ eq(true),
+                        /* isSend= */ eq(false));
     }
 
     @Test

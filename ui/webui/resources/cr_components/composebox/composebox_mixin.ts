@@ -389,7 +389,6 @@ export const ComposeboxEmbedderMixin =
         private pendingTabSuggestionNeedsRefresh_: boolean = false;
         accessor transcript: string = '';
         private fuseboxChipHint_: string|null = null;
-        private selectAllOnStateUpdate_: boolean = false;
         showTypedSuggest: boolean =
             loadTimeData.getBoolean('composeboxShowTypedSuggest');
         // Tracks the latest query sent for autocompletion. Used to filter out
@@ -633,9 +632,6 @@ export const ComposeboxEmbedderMixin =
                  this.inputState.allowedInputTypes.length > 0);
             this.inToolMode =
                 this.inputState.activeTool !== ToolMode.kUnspecified;
-            this.dispatchEvent(new CustomEvent('input-state-changed', {
-              detail: {inputState: this.inputState},
-            }));
           }
 
           if (changedPrivateProperties.has('attachedContext') ||
@@ -714,9 +710,6 @@ export const ComposeboxEmbedderMixin =
               this.getInputElement().resetHeight();
               this.input = this.lastQueriedInput;
             }
-          }
-          if (changedPrivateProperties.has('attachedContext')) {
-            this.dispatchEvent(new CustomEvent('on-context-files-changed'));
           }
           if (changedPrivateProperties.has('smartComposeInlineHint')) {
             if (this.smartComposeAnnounceTimeout_ !== null) {
@@ -1767,8 +1760,6 @@ export const ComposeboxEmbedderMixin =
             smartTabSharingActive: false,
             // </if>
           };
-          this.selectAllOnStateUpdate_ =
-              action?.queryActionOverride === QueryActionOverride.kPaste;
           this.state = fuseboxActionState;
 
           if (action?.preselectedInputSource) {
@@ -1819,8 +1810,6 @@ export const ComposeboxEmbedderMixin =
         }
 
         async updateState(state: Partial<ComposeboxState>) {
-          const selectAll = this.selectAllOnStateUpdate_;
-          this.selectAllOnStateUpdate_ = false;
           if (!this.inputState) {
             // Block submission across the `getInputState()` await when the
             // state carries delayed tabs; their own guards start only below.
@@ -1917,14 +1906,6 @@ export const ComposeboxEmbedderMixin =
                 model, /*isSetByAim=*/ false);
           }
           this.updateInputPlaceholder();
-
-          await this.updateComplete;
-          if (selectAll && state === this.state) {
-            await this.getInputElement().updateComplete;
-            if (state === this.state) {
-              this.getInputElement().selectAll();
-            }
-          }
         }
 
         async onContextMenuClosed() {
@@ -2003,14 +1984,6 @@ export const ComposeboxEmbedderMixin =
         }
 
         onVoiceSearchButtonClick() {
-          const isSystemVoiceSearchEnabled =
-              loadTimeData.valueExists('isSystemVoiceSearchEnabled') &&
-              loadTimeData.getBoolean('isSystemVoiceSearchEnabled');
-          if (isSystemVoiceSearchEnabled) {
-            this.getPageHandler().startPlatformVoiceRecognition();
-            return;
-          }
-
           if (this.inVoiceSearchMode) {
             return;
           }

@@ -69,6 +69,16 @@ class ContextualTasksPermissionController
   // toolbar WebUI. Passing `nullptr` clears the toolbar.
   void Update(content::WebContents* web_contents);
 
+  // Rotates chip state tokens without detaching the location bar's active
+  // `WebContents`, dropping any click IPCs still in flight when the panel
+  // closes or is hidden.
+  void InvalidateChipTokens();
+
+  // Re-evaluates content setting activity indicators once the side panel
+  // becomes visible, catching up on any indicator changes suppressed while the
+  // panel was closed.
+  void RefreshContentSettingsIcons();
+
   // permissions::PermissionRequestManager::Observer:
   void OnRequestsFinalized() override;
   void OnPromptRemoved() override;
@@ -94,6 +104,8 @@ class ContextualTasksPermissionController
       toolbar_ui_api::mojom::LhsChipIdentifier chip_identifier,
       bool is_mouse_interaction,
       uint32_t state_token);
+  virtual void OnChipMousePressed(
+      toolbar_ui_api::mojom::LhsChipIdentifier chip_identifier);
   virtual void OnChipPointerEntered(
       toolbar_ui_api::mojom::LhsChipIdentifier chip_identifier);
   virtual void OnChipPointerExited(

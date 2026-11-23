@@ -168,7 +168,7 @@ public class CustomTabActivityTabControllerUnitTest {
     @Test
     public void setsBackgroundColorOnContentChanged_IfRestoredTabViewIsNull() {
         // prepareTabBackground() only runs for trusted CCTs with a non-transparent initial color.
-        when(env.connection.isFirstParty(any())).thenReturn(true);
+        when(env.intentDataProvider.isTrustedIntent()).thenReturn(true);
         when(env.colorProvider.getInitialBackgroundColor()).thenReturn(Color.RED);
 
         // A restored tab whose NativePage is still frozen has no View yet; initialization must not
@@ -195,6 +195,39 @@ public class CustomTabActivityTabControllerUnitTest {
         assertTrue(view.getBackground() instanceof ColorDrawable);
         assertEquals(Color.RED, ((ColorDrawable) view.getBackground()).getColor());
         verify(savedTab, times(2)).removeObserver(any());
+    }
+
+    @Test
+    public void setsInitialBackgroundColor_WhenIntentDataProviderIsTrusted() {
+        assertNull(env.mIntent.getExtras());
+        when(env.intentDataProvider.isTrustedIntent()).thenReturn(true);
+        when(env.colorProvider.getInitialBackgroundColor()).thenReturn(Color.BLUE);
+
+        mTabController.setUpInitialTab(null);
+        mTabController.finishNativeInitialization();
+
+        Tab tab = env.tabProvider.getTab();
+        assertNotNull(tab);
+        View tabView = tab.getView();
+        assertNotNull(tabView);
+        assertTrue(tabView.getBackground() instanceof ColorDrawable);
+        assertEquals(Color.BLUE, ((ColorDrawable) tabView.getBackground()).getColor());
+    }
+
+    @Test
+    public void doesNotSetInitialBackgroundColor_WhenIntentDataProviderIsUntrusted() {
+        when(env.connection.isFirstParty(any())).thenReturn(true);
+        when(env.intentDataProvider.isTrustedIntent()).thenReturn(false);
+        when(env.colorProvider.getInitialBackgroundColor()).thenReturn(Color.BLUE);
+
+        mTabController.setUpInitialTab(null);
+        mTabController.finishNativeInitialization();
+
+        Tab tab = env.tabProvider.getTab();
+        assertNotNull(tab);
+        View tabView = tab.getView();
+        assertNotNull(tabView);
+        assertNull(tabView.getBackground());
     }
 
     @Test
@@ -244,6 +277,24 @@ public class CustomTabActivityTabControllerUnitTest {
         mTabController.finishNativeInitialization();
         assertEquals(env.tabFromFactory, env.tabProvider.getTab());
         assertEquals(TabCreationMode.DEFAULT, env.tabProvider.getInitialTabCreationMode());
+    }
+
+    @Test
+    public void usesRestoredTab_IfOffTheRecord_NoCipherKeyButTabAwaitsReparenting() {
+        env.isOffTheRecord = true;
+        Tab savedTab = env.prepareTab();
+        env.saveTab(savedTab);
+        mTabController = env.createTabController();
+        when(env.intentDataProvider.isOffTheRecord()).thenReturn(true);
+        when(env.cipherFactory.restoreFromBundle(any())).thenReturn(false);
+        env.setOffTheRecordProfileExists(true);
+        env.addTabAwaitingReparenting(savedTab);
+
+        mTabController.setUpInitialTab(null);
+        mTabController.finishNativeInitialization();
+
+        assertEquals(savedTab, env.tabProvider.getTab());
+        assertEquals(TabCreationMode.RESTORED, env.tabProvider.getInitialTabCreationMode());
     }
 
     @Test
@@ -601,6 +652,16 @@ public class CustomTabActivityTabControllerUnitTest {
         env.mIntent.putExtra(IntentHandler.EXTRA_SKIP_LOAD_ON_REPARENTING, true);
         env.mIntent.putExtra(CustomTabResumeManager.EXTRA_EMBEDDER_TAB_ID, "session-1");
         env.mIntent.putExtra(CustomTabResumeManager.EXTRA_RESTORE_TAB, true);
+        when(env.intentDataProvider.getEmbedderTabId()).thenReturn("session-1");
+        when(env.intentDataProvider.isRestoreTabRequested()).thenReturn(true);
+        doAnswer(
+                        invocation -> {
+                            when(env.intentDataProvider.getEmbedderTabId()).thenReturn(null);
+                            when(env.intentDataProvider.isRestoreTabRequested()).thenReturn(false);
+                            return null;
+                        })
+                .when(env.intentDataProvider)
+                .clearResumptionExtras();
         when(env.connection.getClientPackageNameForSession(env.session))
                 .thenReturn("com.example.app");
 
@@ -638,8 +699,10 @@ public class CustomTabActivityTabControllerUnitTest {
                         .hasParamsForTabId(transferredTab.getId()));
         assertTrue(
                 env.mIntent.getBooleanExtra(IntentHandler.EXTRA_SKIP_LOAD_ON_REPARENTING, false));
+        assertFalse(env.mIntent.hasExtra(CustomTabResumeManager.EXTRA_EMBEDDER_TAB_ID));
+        assertFalse(env.mIntent.hasExtra(CustomTabResumeManager.EXTRA_RESTORE_TAB));
         assertFalse(CustomTabResumeManager.shouldCreateTabResumeManager(env.intentDataProvider));
-        assertFalse(CustomTabResumeManager.isTabResumptionRequested(env.mIntent));
+        assertFalse(CustomTabResumeManager.isTabResumptionRequested(env.intentDataProvider));
         verify(env.resumeManager, never())
                 .maybeRestoreTab(any(), any(), any(), anyBoolean(), any(), any(), any());
     }

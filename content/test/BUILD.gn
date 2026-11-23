@@ -1678,7 +1678,6 @@ test("content_browsertests") {
     "../browser/renderer_host/isolated_web_app_throttle_browsertest.cc",
     "../browser/renderer_host/jit_policy_browsertest.cc",
     "../browser/renderer_host/media/video_capture_browsertest.cc",
-    "../browser/renderer_host/model_context_user_data_browsertest.cc",
     "../browser/renderer_host/navigation_controller_history_intervention_browsertest.cc",
     "../browser/renderer_host/navigation_controller_impl_browsertest.cc",
     "../browser/renderer_host/navigation_handle_user_data_browsertest.cc",
@@ -1701,6 +1700,7 @@ test("content_browsertests") {
     "../browser/renderer_host/render_widget_host_browsertest.cc",
     "../browser/renderer_host/render_widget_host_view_browsertest.cc",
     "../browser/renderer_host/render_widget_host_view_child_frame_browsertest.cc",
+    "../browser/renderer_host/script_tools/script_tool_user_data_browsertest.cc",
     "../browser/renderer_host/scroll_into_view_browsertest.cc",
     "../browser/renderer_host/sec_fetch_browsertest.cc",
     "../browser/renderer_host/spare_render_process_host_manager_browsertest.cc",
@@ -1954,6 +1954,7 @@ test("content_browsertests") {
     "//content/app:for_content_tests",
     "//content/browser:for_content_tests",
     "//content/browser/background_sync:background_sync_proto",
+    "//content/browser/file_system_access:proto",
     "//content/browser/tracing/traces_internals:mojo_bindings",
     "//content/child:for_content_tests",
     "//content/gpu",
@@ -2665,7 +2666,6 @@ test("content_unittests") {
     "../browser/client_hints/client_hints_unittest.cc",
     "../browser/code_cache/dedicated_task_runner_for_resource_unittest.cc",
     "../browser/code_cache/generated_code_cache_unittest.cc",
-    "../browser/code_cache/simple_lru_cache_unittest.cc",
     "../browser/contacts/contacts_manager_impl_unittest.cc",
     "../browser/content_index/content_index_database_unittest.cc",
     "../browser/content_index/content_index_service_impl_unittest.cc",
@@ -3539,8 +3539,10 @@ test("content_unittests") {
       "//sandbox/linux:sandbox_services",
       "//sandbox/linux:sandbox_services_headers",
     ]
-    data_deps +=
-        [ "//content/utility/speech:fake_soda_presandbox_library_for_testing" ]
+    data_deps += [
+      "//content/utility/speech:fake_soda_legacy_library_for_testing",
+      "//content/utility/speech:fake_soda_presandbox_library_for_testing",
+    ]
   }
 
   if (is_linux && enable_vr) {

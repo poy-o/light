@@ -39,8 +39,6 @@ import type {Url} from 'chrome://resources/mojo/url/mojom/url.mojom-webui.js';
 import {getCss} from './ntp_searchbox.css.js';
 import {getHtml} from './ntp_searchbox.html.js';
 
-
-
 interface ClickEventDetail {
   button: number;
   ctrlKey: boolean;
@@ -207,8 +205,6 @@ export class NtpSearchboxElement extends NtpSearchboxElementBase implements
       },
       energyEffectAnimationEnabled: {type: Boolean},
       hasUserInput_: {type: Boolean},
-      ntpRealboxDynamicAiModeButtonEnabled_: {type: Boolean},
-      ntpRealboxDynamicAiModeButtonPreventEarlyPaint_: {type: Boolean},
       contextManagementInComposeboxEnabled: {type: Boolean},
       composeboxContextMenuTooltipsEnabled: {type: Boolean},
       keepMenuOpenOnTabSelectForRealbox: {type: Boolean},
@@ -272,9 +268,9 @@ export class NtpSearchboxElement extends NtpSearchboxElementBase implements
       loadTimeData.getBoolean('searchboxVoiceSearch');
   protected accessor searchboxLensSearchEnabled_: boolean =
       loadTimeData.getBoolean('searchboxLensSearch');
-  protected accessor ntpRealboxDynamicAiModeButtonEnabled_: boolean =
+  protected readonly ntpRealboxDynamicAiModeButtonEnabled_: boolean =
       loadTimeData.getBoolean('ntpRealboxDynamicAiModeButton');
-  protected accessor ntpRealboxDynamicAiModeButtonPreventEarlyPaint_: boolean =
+  protected readonly ntpRealboxDynamicAiModeButtonPreventEarlyPaint_: boolean =
       loadTimeData.getBoolean('ntpRealboxDynamicAiModeButtonPreventEarlyPaint');
   protected accessor useWebkitSearchIcons_: boolean = false;
   protected accessor hasUserInput_: boolean = false;
@@ -425,7 +421,7 @@ export class NtpSearchboxElement extends NtpSearchboxElementBase implements
         !(this.dropdownIsVisible && this.composeButtonEnabled);
   }
 
-  override handleKeyNavigation(e: KeyboardEvent) {
+  override async handleKeyNavigation(e: KeyboardEvent) {
     if (this.composeButtonEnabled && e.key === 'Tab' &&
         this.$.input === this.shadowRoot.activeElement &&
         this.acceptInlineAutocomplete(e)) {
@@ -440,7 +436,7 @@ export class NtpSearchboxElement extends NtpSearchboxElementBase implements
       return;
     }
 
-    super.handleKeyNavigation(e);
+    await super.handleKeyNavigation(e);
   }
 
   protected onInputFocusin_() {

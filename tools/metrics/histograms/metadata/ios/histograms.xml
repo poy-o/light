@@ -348,7 +348,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="IOS.Actor.Dialog.Suppressed" enum="IOSActorSuppressedDialog"
+<histogram name="IOS.Actor.Dialog.Suppressed" enum="IOSDialogDuringActuation"
     expires_after="2027-05-17">
   <owner>kaklilu@google.com</owner>
   <owner>bling-ai-foundations@google.com</owner>
@@ -1365,27 +1365,6 @@ chromium-metrics-reviews@google.com.
     cancels the request, no metric is fired.
   </summary>
   <token key="ContextualPanelItemType" variants="ContextualPanelItemType"/>
-</histogram>
-
-<histogram name="IOS.CookieCopyWorkaroundMissingCookies" units="count"
-    expires_after="2026-07-01">
-  <owner>justincohen@chromium.org</owner>
-  <owner>bling-fundamentals@google.com</owner>
-  <summary>
-    Used by the SkipCookieCaching experiment in the enabled-with-copy-workaround
-    mode. Records the count of cookies that failed a round-trip conversion from
-    NSHTTPCookie to net::CanonicalCookie and back again.
-  </summary>
-</histogram>
-
-<histogram name="IOS.CookieCopyWorkaroundTime" units="ms"
-    expires_after="2026-07-01">
-  <owner>justincohen@chromium.org</owner>
-  <owner>bling-fundamentals@google.com</owner>
-  <summary>
-    Used by the SkipCookieCaching experiment in the enabled-with-copy-workaround
-    mode. Records the performance overhead of the copy operation.
-  </summary>
 </histogram>
 
 <histogram name="IOS.CredentialExchange.CredentialExportScreenAction"
@@ -2955,7 +2934,6 @@ chromium-metrics-reviews@google.com.
     <variant name="Lens"/>
     <variant name="LockedIncognitoTabs" summary="Locked Incognito Tabs"/>
     <variant name="PasswordsInOtherApps" summary="Passwords In Other Apps"/>
-    <variant name="PriceTracking" summary="Price Tracking"/>
     <variant name="SaveAutofillPasswords"
         summary="Save and Autofill Passwords"/>
     <variant name="SharePasswords" summary="Share Passwords"/>
@@ -6433,18 +6411,6 @@ chromium-metrics-reviews@google.com.
     Measures the time from the end of user input in the omnibox to when the page
     is fully loaded. Only measures page loads initiated by user typing a URL or
     selecting a suggested entry from the URL bar.
-  </summary>
-</histogram>
-
-<histogram name="IOS.ParcelTracking.OptInStatus"
-    enum="IOSParcelTrackingOptInStatus" expires_after="2025-07-06">
-  <owner>hiramahmood@google.com</owner>
-  <owner>bling-pandamonium@google.com</owner>
-  <summary>
-    Logs the opt-in status the user has given for whether or not they allow
-    parcel tracking on the device. Logged once per app start. For users who have
-    not yet interacted with the opt-in prompt, new users on M127 will log
-    StatusNotSet, while users before M127 will log AskToTrack.
   </summary>
 </histogram>
 

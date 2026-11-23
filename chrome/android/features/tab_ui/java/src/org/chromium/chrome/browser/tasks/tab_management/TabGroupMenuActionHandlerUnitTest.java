@@ -52,6 +52,7 @@ import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncFeatures;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncFeaturesJni;
+import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncServiceFactory;
 import org.chromium.chrome.browser.tabmodel.TabGroupMergeNotificationType;
 import org.chromium.chrome.browser.tabmodel.TabGroupMetadata;
 import org.chromium.chrome.browser.tabmodel.TabGroupUtils.TabGroupCreationCallback;
@@ -79,6 +80,7 @@ import org.chromium.url.JUnitTestGURLs;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 /** Unit tests for {@link TabGroupMenuActionHandler}. */
 @RunWith(BaseRobolectricTestRunner.class)
@@ -98,6 +100,7 @@ public class TabGroupMenuActionHandlerUnitTest {
     @Mock private Profile mProfile;
     @Mock private SyncService mSyncService;
     @Mock private Tab mTab;
+    @Mock private Tab mTab2;
     @Mock private TabGroupListBottomSheetCoordinator mTabGroupListBottomSheetCoordinator;
     @Mock private TabModel mTabModel;
     @Mock private TabUngrouper mTabUngrouper;
@@ -121,6 +124,7 @@ public class TabGroupMenuActionHandlerUnitTest {
         DataSharingServiceFactory.setForTesting(mock());
         TrackerFactory.setTrackerForTests(mock());
         TabGroupSyncFeaturesJni.setInstanceForTesting(mTabGroupSyncFeaturesJniMock);
+        TabGroupSyncServiceFactory.setForTesting(mTabGroupSyncService);
         doReturn(true).when(mTabGroupSyncFeaturesJniMock).isTabGroupSyncEnabled(mProfile);
         SyncServiceFactory.setInstanceForTesting(mSyncService);
         UserPrefsJni.setInstanceForTesting(mUserPrefsJni);
@@ -151,13 +155,14 @@ public class TabGroupMenuActionHandlerUnitTest {
                         mProfile,
                         mFactory);
         when(mTab.getTabGroupId()).thenReturn(null);
+        when(mTab2.getTabGroupId()).thenReturn(null);
         when(mTabModel.getProfile()).thenReturn(mProfile);
     }
 
     @Test
     public void testHandleAddToGroupAction_noGroups() {
         when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[0]);
-        assertFalse(mHandler.handleAddToGroupAction(mTab));
+        assertFalse(mHandler.handleAddToGroupAction(List.of(mTab)));
         verify(mTabModel).createSingleTabGroup(mTab);
         verify(mTabGroupListBottomSheetCoordinator, never()).showBottomSheet(any());
     }
@@ -170,9 +175,9 @@ public class TabGroupMenuActionHandlerUnitTest {
         group.localId = new LocalTabGroupId(Token.createRandom());
         when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {"sync_id"});
         when(mTabGroupSyncService.getGroup("sync_id")).thenReturn(group);
-        assertTrue(mHandler.handleAddToGroupAction(mTab));
+        assertTrue(mHandler.handleAddToGroupAction(List.of(mTab)));
         verify(mTabModel, never()).createSingleTabGroup(mTab);
-        verify(mTabGroupListBottomSheetCoordinator).showBottomSheet(any());
+        verify(mTabGroupListBottomSheetCoordinator).showBottomSheet(List.of(mTab));
     }
 
     @Test
@@ -186,7 +191,7 @@ public class TabGroupMenuActionHandlerUnitTest {
         when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {"sync_id"});
         when(mTabGroupSyncService.getGroup("sync_id")).thenReturn(group);
 
-        assertFalse(mHandler.handleAddToGroupAction(mTab));
+        assertFalse(mHandler.handleAddToGroupAction(List.of(mTab)));
         verify(mTabUngrouper)
                 .ungroupTabs(List.of(mTab), /* trailing= */ false, /* allowDialog= */ false);
         verify(mTabModel).createSingleTabGroup(mTab);
@@ -220,10 +225,10 @@ public class TabGroupMenuActionHandlerUnitTest {
                         mProfile,
                         mFactory);
 
-        assertTrue(localHandler.handleAddToGroupAction(mTab));
+        assertTrue(localHandler.handleAddToGroupAction(List.of(mTab)));
 
         verify(mTabModel, never()).createSingleTabGroup(mTab);
-        verify(mTabGroupListBottomSheetCoordinator).showBottomSheet(any());
+        verify(mTabGroupListBottomSheetCoordinator).showBottomSheet(List.of(mTab));
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> TabWindowManagerSingleton.setTabWindowManagerForTesting(null));
@@ -238,7 +243,7 @@ public class TabGroupMenuActionHandlerUnitTest {
         group.localId = new LocalTabGroupId(Token.createRandom());
         when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {"sync_id"});
         when(mTabGroupSyncService.getGroup("sync_id")).thenReturn(group);
-        mHandler.handleAddToGroupAction(mTab);
+        mHandler.handleAddToGroupAction(List.of(mTab));
 
         assertNotNull(mTabGroupCreationCallback);
         mTabGroupCreationCallback.onTabGroupCreated(Token.createRandom());
@@ -248,9 +253,104 @@ public class TabGroupMenuActionHandlerUnitTest {
     @Test
     public void testOnTabGroupCreation_noCoordinator() {
         when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[0]);
-        mHandler.handleAddToGroupAction(mTab);
+        mHandler.handleAddToGroupAction(List.of(mTab));
 
         verify(mTabModel).createSingleTabGroup(mTab);
+    }
+
+    @Test
+    public void testHandleAddToGroupAction_emptyTabs() {
+        assertFalse(mHandler.handleAddToGroupAction(List.of()));
+        verify(mTabModel, never()).createSingleTabGroup(any());
+        verify(mTabModel, never()).mergeListOfTabsToGroup(any(), any(), anyInt());
+        verify(mTabGroupListBottomSheetCoordinator, never()).showBottomSheet(any());
+    }
+
+    @Test
+    public void testHandleAddToGroupAction_multiTab_noGroups() {
+        when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[0]);
+
+        assertFalse(mHandler.handleAddToGroupAction(List.of(mTab, mTab2)));
+
+        verify(mTabModel)
+                .mergeListOfTabsToGroup(
+                        List.of(mTab, mTab2),
+                        mTab,
+                        TabGroupMergeNotificationType.NOTIFY_IF_NOT_NEW_GROUP);
+        verify(mTabGroupListBottomSheetCoordinator, never()).showBottomSheet(any());
+    }
+
+    @Test
+    public void testHandleAddToGroupAction_multiTab_withGroups() {
+        SavedTabGroup group = new SavedTabGroup();
+        group.syncId = "sync_id";
+        group.savedTabs = List.of(new SavedTabGroupTab());
+        group.localId = new LocalTabGroupId(Token.createRandom());
+        when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {"sync_id"});
+        when(mTabGroupSyncService.getGroup("sync_id")).thenReturn(group);
+
+        assertTrue(mHandler.handleAddToGroupAction(List.of(mTab, mTab2)));
+
+        verify(mTabModel, never()).mergeListOfTabsToGroup(any(), any(), anyInt());
+        verify(mTabGroupListBottomSheetCoordinator).showBottomSheet(List.of(mTab, mTab2));
+    }
+
+    @Test
+    public void testHandleAddToGroupAction_multiTab_mixedGroupAndUngroupedOnlyOneGroup() {
+        Token currentGroupId = Token.createRandom();
+        when(mTab.getTabGroupId()).thenReturn(currentGroupId);
+        when(mTab2.getTabGroupId()).thenReturn(null);
+        SavedTabGroup group = new SavedTabGroup();
+        group.syncId = "sync_id";
+        group.savedTabs = List.of(new SavedTabGroupTab());
+        group.localId = new LocalTabGroupId(currentGroupId);
+        when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {"sync_id"});
+        when(mTabGroupSyncService.getGroup("sync_id")).thenReturn(group);
+
+        assertTrue(mHandler.handleAddToGroupAction(List.of(mTab, mTab2)));
+
+        verify(mTabGroupListBottomSheetCoordinator).showBottomSheet(List.of(mTab, mTab2));
+    }
+
+    @Test
+    public void testHandleAddToGroupAction_multiTab_onlyInCurrentGroup() {
+        Token currentGroupId = Token.createRandom();
+        when(mTab.getTabGroupId()).thenReturn(currentGroupId);
+        when(mTab2.getTabGroupId()).thenReturn(currentGroupId);
+        SavedTabGroup group = new SavedTabGroup();
+        group.syncId = "sync_id";
+        group.savedTabs = List.of(new SavedTabGroupTab());
+        group.localId = new LocalTabGroupId(currentGroupId);
+        when(mTabGroupSyncService.getAllGroupIds()).thenReturn(new String[] {"sync_id"});
+        when(mTabGroupSyncService.getGroup("sync_id")).thenReturn(group);
+
+        assertFalse(mHandler.handleAddToGroupAction(List.of(mTab, mTab2)));
+
+        verify(mTabUngrouper)
+                .ungroupTabs(List.of(mTab, mTab2), /* trailing= */ false, /* allowDialog= */ false);
+        verify(mTabModel)
+                .mergeListOfTabsToGroup(
+                        List.of(mTab, mTab2),
+                        mTab,
+                        TabGroupMergeNotificationType.NOTIFY_IF_NOT_NEW_GROUP);
+        verify(mTabGroupListBottomSheetCoordinator, never()).showBottomSheet(any());
+    }
+
+    @Test
+    public void testHandleAddToGroupAction_multiTab_multipleGroups() {
+        Token groupId1 = Token.createRandom();
+        Token groupId2 = Token.createRandom();
+        when(mTab.getTabGroupId()).thenReturn(groupId1);
+        when(mTab2.getTabGroupId()).thenReturn(groupId2);
+        when(mTabModel.getAllTabGroupIds())
+                .thenReturn(
+                        Set.of(
+                                TabGroupId.fromRawToken(groupId1),
+                                TabGroupId.fromRawToken(groupId2)));
+
+        assertTrue(mHandler.handleAddToGroupAction(List.of(mTab, mTab2)));
+
+        verify(mTabGroupListBottomSheetCoordinator).showBottomSheet(List.of(mTab, mTab2));
     }
 
     @Test
@@ -262,7 +362,9 @@ public class TabGroupMenuActionHandlerUnitTest {
                 .thenReturn(List.of(destTab));
         when(mTabModel.containsTabGroup(TabGroupId.fromOptionalToken(groupId))).thenReturn(true);
 
-        assertTrue(mHandler.handleAddToExistingGroupAction(mTab, groupId, /* syncGroupId= */ null));
+        assertTrue(
+                mHandler.handleAddToExistingGroupAction(
+                        List.of(mTab), groupId, /* syncGroupId= */ null));
 
         verify(mTabModel)
                 .mergeListOfTabsToExistingGroup(
@@ -287,7 +389,7 @@ public class TabGroupMenuActionHandlerUnitTest {
 
         assertTrue(
                 mHandler.handleAddToExistingGroupAction(
-                        mTab, /* groupId= */ null, "sync_group_id"));
+                        List.of(mTab), /* groupId= */ null, "sync_group_id"));
 
         verify(mTabGroupUiActionHandler).openTabGroup("sync_group_id");
         assertTrue(actionTester.getActions().contains("MobileMenuAddToExistingGroup"));
@@ -297,7 +399,37 @@ public class TabGroupMenuActionHandlerUnitTest {
     public void testHandleAddToExistingGroupAction_invalidDestination() {
         assertFalse(
                 mHandler.handleAddToExistingGroupAction(
-                        mTab, /* groupId= */ null, /* syncGroupId= */ null));
+                        List.of(mTab), /* groupId= */ null, /* syncGroupId= */ null));
+    }
+
+    @Test
+    public void testHandleAddToExistingGroupAction_emptyTabs() {
+        assertFalse(
+                mHandler.handleAddToExistingGroupAction(
+                        List.of(), Token.createRandom(), /* syncGroupId= */ null));
+        verify(mTabModel, never()).mergeListOfTabsToExistingGroup(any(), any(), any(), anyInt());
+    }
+
+    @Test
+    public void testHandleAddToExistingGroupAction_multiTab() {
+        UserActionTester actionTester = new UserActionTester();
+        Token groupId = Token.createRandom();
+        Tab destTab = mock(Tab.class);
+        when(mTabModel.getTabsInGroup(TabGroupId.fromOptionalToken(groupId)))
+                .thenReturn(List.of(destTab));
+        when(mTabModel.containsTabGroup(TabGroupId.fromOptionalToken(groupId))).thenReturn(true);
+
+        assertTrue(
+                mHandler.handleAddToExistingGroupAction(
+                        List.of(mTab, mTab2), groupId, /* syncGroupId= */ null));
+
+        verify(mTabModel)
+                .mergeListOfTabsToExistingGroup(
+                        eq(List.of(mTab, mTab2)),
+                        eq(TabGroupId.fromRawToken(groupId)),
+                        /* indexInGroup= */ isNull(),
+                        eq(TabGroupMergeNotificationType.NOTIFY_IF_NOT_NEW_GROUP));
+        assertTrue(actionTester.getActions().contains("MobileMenuAddToExistingGroup"));
     }
 
     @Test

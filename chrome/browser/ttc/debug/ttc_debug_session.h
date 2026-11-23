@@ -28,8 +28,14 @@
 #include "chrome/browser/ttc/debug/ttc_session_audio_recorder.h"
 #include "components/ttc/app/public/debug_sink.h"
 
+class GURL;
+
 namespace base {
 class TickClock;
+}
+
+namespace page_content_annotations {
+enum class FetchPageContextError;
 }
 
 namespace ttc {
@@ -164,7 +170,15 @@ class TtcDebugSession final : public DebugSink {
     bool active_in_window = false;
   };
 
-  enum class ToolStatus { kPending, kRunning, kOk, kError, kRejected };
+  enum class ToolStatus {
+    kPending,
+    kRunning,
+    kOk,
+    kError,
+    kRejected,
+    // The session ended before the tool call finished.
+    kInterrupted,
+  };
   enum class ToolEffect { kNotChecked, kChecking, kVerified, kNoEffect };
 
   // One tool call, traced from the server's request to the model's follow-up.
@@ -314,6 +328,9 @@ class TtcDebugSession final : public DebugSink {
   static bool IsFrequentEvent(EventKind kind);
   static std::string_view TurnStatusName(TurnStatus status);
   static std::string_view ToolStatusName(ToolStatus status);
+  // The name of the actor::mojom::ActionResultCode `code`, e.g.
+  // "kTabWentAway", or the number if it isn't a known code.
+  static std::string ActionResultCodeName(int32_t code);
   static std::string_view ToolEffectName(ToolEffect effect);
   static std::string_view IssueSeverityName(IssueSeverity severity);
   static std::string_view IssueCategoryName(IssueCategory category);
@@ -355,26 +372,33 @@ class TtcDebugSession final : public DebugSink {
   // ErrorCode, e.g. "SetupTimeout".
   void OnError(std::string_view error);
 
-  // Tool calls rejected before they reached the browser, and tool responses.
-  void OnToolCallRejected(std::string_view call_id, std::string_view reason);
+  // The response to a tool call. A call that never ran (e.g. it was rejected
+  // as busy, cancelled after an earlier call failed, or had malformed
+  // arguments) is recorded as rejected, with the error in the response.
   void OnToolResponseSent(std::string_view call_id,
                           bool sent,
                           std::string_view response_json);
 
-  // Browser-side tool execution (from ToolController via the forwarder).
-  // `verifying` is true if the effect of the tool will be checked.
+  // Browser-side tool execution (from ToolController via TtcToolCallTracer),
+  // in this order. Only a tool that acts on a tab reports a target:
+  // browser-level tools (e.g. switch_tab) have none.
   void OnToolDispatched(std::string_view call_id,
                         std::string_view name,
-                        std::string_view arguments_json,
-                        const std::optional<TabSnapshot>& target,
-                        bool verifying);
-  void OnToolNoTarget(std::string_view call_id, std::string_view name);
-  // `result_code` is only displayed; `ok` says whether the tool succeeded.
-  void OnToolFinished(std::string_view call_id,
-                      bool ok,
-                      std::string_view result_code,
-                      std::string_view message,
-                      const std::optional<TabSnapshot>& target_after);
+                        std::string_view arguments_json);
+  // `verifying` is true if the effect of the tool on `target` will be checked.
+  void OnToolTarget(std::string_view call_id,
+                    const TabSnapshot& target,
+                    bool verifying);
+  // The tool call finished. `target_after` is the tab it acted on, as it was
+  // then, if it reported one.
+  void OnToolSucceeded(std::string_view call_id,
+                       const std::optional<TabSnapshot>& target_after);
+  // `error_code` names the actor error, e.g. "kTabWentAway"; `message` may be
+  // empty.
+  void OnToolFailed(std::string_view call_id,
+                    std::string_view error_code,
+                    std::string_view message,
+                    const std::optional<TabSnapshot>& target_after);
   void OnToolEffect(std::string_view call_id,
                     bool verified,
                     std::string_view detail);
@@ -386,9 +410,12 @@ class TtcDebugSession final : public DebugSink {
                            std::string_view details,
                            bool has_error);
 
-  // Page context.
-  void OnPageContextFailed(std::string_view url, std::string_view error);
-  void OnPageContextBlocked(std::string_view url);
+  // Fetching the page context of the voice-focused tab, which shows `url`,
+  // failed with `error`. Recorded as blocked if the page may not share its
+  // context, and as a failure otherwise.
+  void OnPageContextFetchFailed(
+      const GURL& url,
+      page_content_annotations::FetchPageContextError error);
 
  private:
   // Returns `text` cut to at most `max_length` bytes, ending in an ellipsis
@@ -469,6 +496,13 @@ class TtcDebugSession final : public DebugSink {
   ToolCall* FindOrCreateToolCall(std::string_view call_id,
                                  std::string_view name);
   void MarkToolCallChanged(const ToolCall& tool_call);
+  // Records that `call_id` finished with `status`. Null if it can't be
+  // recorded.
+  ToolCall* FinishToolCall(std::string_view call_id,
+                           ToolStatus status,
+                           std::string_view result_code,
+                           std::string_view message,
+                           const std::optional<TabSnapshot>& target_after);
   ToolCall* RunningToolCall();
   Evidence ToolEvidence(const ToolCall& tool_call) const;
   // Whether audio arrived after the last playback and wasn't dropped by an

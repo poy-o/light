@@ -113,6 +113,7 @@ chromium-metrics-reviews@google.com.
   <variant name="SetSyntheticExperimentState"/>
   <variant name="SetTabContextPermissionState"/>
   <variant name="ShowBrowseSkillsUi"/>
+  <variant name="ShowDrivePicker"/>
   <variant name="ShowManageSkillsUi"/>
   <variant name="ShowProfilePicker"/>
   <variant name="StopActorTask"/>
@@ -122,6 +123,7 @@ chromium-metrics-reviews@google.com.
   <variant name="SubscribeToTabData"/>
   <variant name="SubscribeToTabFavicon"/>
   <variant name="SubscribeToZoomLevel"/>
+  <variant name="SwitchAssistant"/>
   <variant name="SwitchConversation"/>
   <variant name="UninterruptActorTask"/>
   <variant name="UnpinAllTabs"/>
@@ -170,6 +172,17 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <!-- LINT.ThenChange(//chrome/browser/glic/gemini_enterprise/gemini_enterprise.mojom:AuthTabPurpose, //chrome/browser/glic/gemini_enterprise/glic_gemini_enterprise_manager.cc:GeicAuthTabPurposeSuffix) -->
+
+<!-- LINT.IfChange(GlicAssistantTarget) -->
+
+<variants name="GlicAssistantTarget">
+  <variant name="GeminiConsumer" summary="consumer Gemini in Chrome (GiC)"/>
+  <variant name="GeminiEnterprise"
+      summary="Gemini Enterprise in Chrome (GEiC)"/>
+  <variant name="Unknown" summary="an unknown or unsupported assistant target"/>
+</variants>
+
+<!-- LINT.ThenChange(//chrome/browser/glic/host/glic.mojom:AssistantTarget, //chrome/browser/glic/host/glic_assistant_switcher.cc:GlicAssistantTargetSuffix) -->
 
 <!-- LINT.IfChange(GlicInvocationSource) -->
 
@@ -3546,6 +3559,8 @@ ApiRequestType variants; see go/geic-metrics-split. -->
     <variant name="Offline" summary="offline error panel"/>
     <variant name="PendingProviderChange"
         summary="pending provider change (relaunch prompt) error panel"/>
+    <variant name="ProviderSwitchNotice"
+        summary="provider switch notice panel"/>
     <variant name="SignIn" summary="sign-in error panel"/>
     <variant name="Unavailable" summary="unavailable error panel"/>
   </token>
@@ -3886,6 +3901,19 @@ ApiRequestType variants; see go/geic-metrics-split. -->
     {GlicProvider}.
   </summary>
   <token key="GlicProvider" variants="GlicProvider"/>
+</histogram>
+
+<histogram name="Glic{GlicProvider}.SwitchAssistant.Result.{Target}"
+    enum="GlicSwitchAssistantResult" expires_after="2027-07-04">
+  <owner>ssalbiz@google.com</owner>
+  <owner>glic-dev@google.com</owner>
+  <summary>
+    Records the result of a Glic web client request to switch the active
+    assistant provider to {Target} and relaunch the browser. Recorded each time
+    the web client calls switchAssistant. Scope: {GlicProvider}.
+  </summary>
+  <token key="GlicProvider" variants="GlicProvider"/>
+  <token key="Target" variants="GlicAssistantTarget"/>
 </histogram>
 
 <histogram name="Glic{GlicProvider}.Tab.DaisyChainDepth" units="count"
@@ -4381,12 +4409,12 @@ ApiRequestType variants; see go/geic-metrics-split. -->
   <owner>andreaxg@google.com</owner>
   <summary>
     Recorded on desktop when the user leaves a Glic side panel (via the panel's
-    close button or Esc, or by switching to a tab where Glic is not showing)
-    while kGlicAskGeminiWayfinding is enabled. Records whether the profile would
-    get the Ask Gemini Wayfinding cue, or why not. Toggling Glic closed via the
-    Ask Gemini button, closing the browser window, and programmatic closes (e.g.
-    a conversation switch or side panel replacement) are not recorded. Scope:
-    {GlicProvider}.
+    close button or Esc, by switching to a tab where Glic is not showing, or by
+    closing its tab) while kGlicAskGeminiWayfinding is enabled. Records whether
+    the profile would get the Ask Gemini Wayfinding cue, or why not. Toggling
+    Glic closed via the Ask Gemini button, closing the browser window, and
+    programmatic closes (e.g. a conversation switch or side panel replacement)
+    are not recorded. Scope: {GlicProvider}.
   </summary>
   <token key="GlicProvider" variants="GlicProvider"/>
 </histogram>

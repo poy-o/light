@@ -597,7 +597,6 @@ void AutofillAgent::BindPendingReceiver(
 }
 
 void AutofillAgent::EnableCustomFormControlScripts(
-    int32_t world_id,
     blink::AssociatedInterfaceRegistry& registry) {
   CHECK(base::FeatureList::IsEnabled(
       features::kAutofillCustomFormControlScripts));
@@ -605,7 +604,7 @@ void AutofillAgent::EnableCustomFormControlScripts(
     return;
   }
   custom_form_control_agent_ =
-      std::make_unique<CustomFormControlAgent>(this, world_id, registry);
+      std::make_unique<CustomFormControlAgent>(this, registry);
 }
 
 CustomFormControlScriptExecutor*
@@ -629,6 +628,7 @@ void AutofillAgent::Reset() {
   last_queried_element_id_ = {};
   is_popup_possibly_visible_ = false;
   form_cache_.Reset();
+  button_titles_cache_.clear();
   is_dom_content_loaded_ = false;
   select_option_change_batch_timer_.clear();
   datalist_option_change_batch_timer_.Stop();
@@ -1124,14 +1124,13 @@ void AutofillAgent::OnSelectControlSelectionChanged(
   }
 }
 
-bool AutofillAgent::DidReceiveKeyDown(const WebElement& element,
-                                      const WebKeyboardEvent& event) {
-  DCHECK(form_util::MaybeWasOwnedByFrame(element, unsafe_render_frame()));
+void AutofillAgent::TextFieldDidReceiveKeyDown(
+    const WebInputElement& input_element,
+    const WebKeyboardEvent& event) {
+  DCHECK(form_util::MaybeWasOwnedByFrame(input_element, unsafe_render_frame()));
 
-  if (auto input_element = element.DynamicTo<WebInputElement>();
-      input_element && input_element.IsTextField() &&
-      (event.windows_key_code == ui::VKEY_DOWN ||
-       event.windows_key_code == ui::VKEY_UP)) {
+  if (event.windows_key_code == ui::VKEY_DOWN ||
+      event.windows_key_code == ui::VKEY_UP) {
     // Arrow Down/Up on text-type <input> opens the classical Autofill popup.
     std::optional<PasswordSuggestionRequest> password_request =
         password_autofill_agent_
@@ -1144,10 +1143,7 @@ bool AutofillAgent::DidReceiveKeyDown(const WebElement& element,
         input_element,
         AutofillSuggestionTriggerSource::kTextFieldDidReceiveKeyDown,
         /*form_cache=*/{}, password_request);
-    return false;  // Do not prevent default.
   }
-
-  return false;
 }
 
 void AutofillAgent::OpenTextDataListChooser(const WebInputElement& element) {

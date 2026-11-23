@@ -7,7 +7,7 @@
 
 #include <memory>
 #include <optional>
-#include <string>
+#include <string_view>
 
 #include "base/callback_list.h"
 #include "base/cancelable_callback.h"
@@ -22,12 +22,15 @@
 #include "ui/events/event_observer.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/point.h"
-#include "ui/gfx/range/range.h"
 #include "ui/views/event_monitor.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/view_observer.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
+
+#if BUILDFLAG(IS_MAC)
+#include "chrome/browser/ui/immersive/immersive_mode_controller.h"
+#endif
 
 class AppMenuControl;
 class LocationBar;
@@ -47,6 +50,9 @@ class OmniboxPopupFullPresenter : public OmniboxPopupPresenterBase,
                                   public views::WidgetObserver,
                                   public views::FocusChangeListener,
                                   public ui::EventObserver,
+#if BUILDFLAG(IS_MAC)
+                                  public ImmersiveModeController::Observer,
+#endif
                                   public AppMenuButtonObserver,
                                   public views::ViewObserver {
  public:
@@ -91,6 +97,7 @@ class OmniboxPopupFullPresenter : public OmniboxPopupPresenterBase,
   std::string_view GetPopupMetricPrefix() const override;
   // Calls `DeactivatePopupAndKillFocus(FocusAfterBlur::kNone)`.
   void DeactivateAndKillFocus() override;
+  OmniboxPopupState GetSharedPopupKind() const override;
 
   bool ShouldReceiveFocus() const override;
 
@@ -109,10 +116,14 @@ class OmniboxPopupFullPresenter : public OmniboxPopupPresenterBase,
   void OnFileDialogOpened() override;
   void OnFileDialogClosed(bool file_selected) override;
 
-  using FocusStateToRestore = OmniboxPopupHost::FocusStateToRestore;
-  std::optional<FocusStateToRestore> TakeFocusStateToRestoreAfterModalDialog()
-      override;
   void OnTabChanged() override;
+
+  // On macOS, defers while the browser window isn't on screen, e.g. while it's
+  // on another Space, and starts observing it so that
+  // `OnWidgetVisibilityOnScreenChanged()` can call `ReshowPopup()` once it's
+  // back. A popup shown before then may not be attached to the browser window,
+  // and then appears on the active Space, over another window.
+  bool DeferReshowPopup() override;
 
  protected:
   // OmniboxPopupPresenterBase:
@@ -128,6 +139,9 @@ class OmniboxPopupFullPresenter : public OmniboxPopupPresenterBase,
   void OnWidgetPresentedChanged(bool presented) override;
   std::unique_ptr<OmniboxPopupWebUIBaseContent> CreateWebUIContent(
       std::unique_ptr<WebUIContentsWrapperT<OmniboxPopupUI>> contents) override;
+  // The popup shows only once its page is ready (see
+  // `OmniboxPopupViewFullWebUI::OnFocus()`), so `Show()` never creates it.
+  bool NeedsWebUIContentBeforeShow() const override;
   void OnWebUIContentsAdopted() override;
   void OnWebUIContentsReleased() override;
 
@@ -164,8 +178,18 @@ class OmniboxPopupFullPresenter : public OmniboxPopupPresenterBase,
   // focused. On macOS, a popup opened in a window that isn't on the active
   // Space only appears once that Space becomes active, which is too late for
   // the focus request made when the popup opened.
+  // Also, on macOS, reopens a draft's popup that `DeferReshowPopup()` deferred
+  // once the browser window is back on screen.
   void OnWidgetVisibilityOnScreenChanged(views::Widget* widget,
                                          bool visible) override;
+
+#if BUILDFLAG(IS_MAC)
+  // Calls `ReshowPopup()` once the browser window is back on screen, unless a
+  // modal dialog closed the popup, as `RestoreFocusAfterModalDialog()` reopens
+  // it then. Stops observing the browser window if the popup stays closed,
+  // e.g. because the draft is gone.
+  void ReshowDeferredPopup();
+#endif  // BUILDFLAG(IS_MAC)
 
   void StopForwardingEvents();
 
@@ -185,6 +209,17 @@ class OmniboxPopupFullPresenter : public OmniboxPopupPresenterBase,
 
   // AppMenuButtonObserver:
   void AppMenuClosed() override;
+
+#if BUILDFLAG(IS_MAC)
+  // ImmersiveModeController::Observer:
+  // Closes an unfocused kFull popup, keeping its draft, when the immersive
+  // toolbar hides. Refocusing the omnibox reopens it.
+  void OnImmersiveRevealEnded() override;
+  void OnImmersiveModeControllerDestroyed() override;
+
+  // Returns whether immersive fullscreen has hidden the toolbar.
+  bool IsImmersiveToolbarHidden() const;
+#endif  // BUILDFLAG(IS_MAC)
 
   // views::ViewObserver:
   void OnViewVisibilityChanged(views::View* observed_view,
@@ -260,14 +295,10 @@ class OmniboxPopupFullPresenter : public OmniboxPopupPresenterBase,
   // and the browser window is active again. See `OnModalDialogShown()`.
   void RestoreFocusAfterModalDialog();
 
-  // Clears `focus_state_before_modal_dialog_`. If the popup is hidden, also
+  // Clears `had_focus_before_modal_dialog_`. If the popup is hidden, also
   // stops observing the browser window, which `Hide()` keeps observing while
   // that state is set.
-  void ClearFocusStateBeforeModalDialog();
-
-  // Returns the text shown in the omnibox: the user's text while editing, and
-  // otherwise the full URL if `show_full_url`, or the permanent display text.
-  std::u16string GetOmniboxText(bool show_full_url);
+  void ClearModalDialogState();
 
   // Returns whether a focus request may activate the popup. This is
   // `IsBrowserOrPopupActive()`, plus, on Mac, a child widget such as a bubble
@@ -300,6 +331,13 @@ class OmniboxPopupFullPresenter : public OmniboxPopupPresenterBase,
   // shown. See `UpdatePopupOcclusion()`.
   base::ScopedMultiSourceObservation<views::View, views::ViewObserver>
       occluding_view_observations_{this};
+#if BUILDFLAG(IS_MAC)
+  // Observed from the first `Show()`. See `OnImmersiveRevealEnded()`.
+  base::ScopedObservation<ImmersiveModeController,
+                          ImmersiveModeController::Observer>
+      immersive_mode_observation_{this};
+#endif  // BUILDFLAG(IS_MAC)
+
 #if BUILDFLAG(IS_CHROMEOS)
   // Observed while shown: the immersive reveal moves the top container
   // without resizing the location bar, and immersive fullscreen reparents it.
@@ -338,22 +376,16 @@ class OmniboxPopupFullPresenter : public OmniboxPopupPresenterBase,
   // Whether the "first shown" metrics have been logged at least once.
   bool logged_first_shown_metric_ = false;
 
-  // Set when a modal dialog is shown while the popup is open. If the omnibox
-  // was focused, holds its text and selection, and whether it showed the full
-  // URL. Cleared once the omnibox is refocused, or the popup reopened, after
-  // the dialog closes. Also cleared if the omnibox is still focused when the
-  // dialog closes. That happens if the dialog never took activation. For
-  // example, when policy blocks a file dialog, it reports that it closed
-  // without ever being shown.
-  struct FocusStateBeforeModalDialog {
-    // False if the popup was open with a draft while the omnibox wasn't
-    // focused. The popup is then reopened, unfocused, once the dialog closes.
-    bool had_focus = false;
-    std::u16string text;
-    gfx::Range selection;
-    bool show_full_url = false;
-  };
-  std::optional<FocusStateBeforeModalDialog> focus_state_before_modal_dialog_;
+  // Set when a modal dialog is shown while the popup is open: true if the
+  // omnibox had focus, false if the popup was open with a draft while the
+  // omnibox wasn't focused, in which case it's reopened, unfocused, once the
+  // dialog closes. The popup view restores the selection, which it saved when
+  // the dialog blurred the omnibox. Cleared once the omnibox is refocused, or
+  // the popup reopened, after the dialog closes. Also cleared if the omnibox is
+  // still focused when the dialog closes. That happens if the dialog never took
+  // activation. For example, when policy blocks a file dialog, it reports that
+  // it closed without ever being shown.
+  std::optional<bool> had_focus_before_modal_dialog_;
   // Whether a native file dialog opened from the popup's "+" menu is open. See
   // `OnFileDialogOpened()`.
   bool file_dialog_open_ = false;

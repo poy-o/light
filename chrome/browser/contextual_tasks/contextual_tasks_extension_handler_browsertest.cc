@@ -21,6 +21,7 @@
 #include "base/test/test_future.h"
 #include "base/values.h"
 #include "chrome/browser/contextual_search/contextual_search_web_contents_helper.h"
+#include "chrome/browser/contextual_tasks/contextual_tasks_eligibility_manager.h"
 #include "chrome/browser/contextual_tasks/contextual_tasks_extension_bridge.h"
 #include "chrome/browser/contextual_tasks/contextual_tasks_panel_controller.h"
 #include "chrome/browser/contextual_tasks/contextual_tasks_service_factory.h"
@@ -28,6 +29,7 @@
 #include "chrome/browser/contextual_tasks/contextual_tasks_ui_service_factory.h"
 #include "chrome/browser/contextual_tasks/contextual_tasks_web_contents_user_data.h"
 #include "chrome/browser/contextual_tasks/mock_contextual_tasks_page.h"
+#include "chrome/browser/contextual_tasks/mock_contextual_tasks_ui_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/tab_list/tab_list_interface.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
@@ -8689,6 +8691,56 @@ IN_PROC_BROWSER_TEST_F(
 
 IN_PROC_BROWSER_TEST_F(
     ContextualTasksExtensionHandlerPageEligibilityBrowserTest,
+    UpdatesTabPickerAndTabContextOnDynamicMetaTagChange) {
+  const GURL public_url = embedded_test_server()->GetURL("/conditional-public");
+
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      browser(), public_url,
+      ui::mojom::WindowOpenDisposition::kNewForegroundTab,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  tabs::TabInterface* conditional_tab =
+      TabListInterface::From(browser())->GetActiveTab();
+  WaitForTabEligibility(
+      conditional_tab,
+      optimization_guide::PageContextEligibilityStatus::kEligible);
+  ASSERT_EQ(FetchRecentTabs().size(), 1u);
+
+  // Dynamically flip `<meta name="sensitivity">` to `"restricted"` on the
+  // active tab and verify `OnTabContextUpdated()` and `TAB_PICKER` (`false`)
+  // are dispatched as soon as the `<meta>` tag observer reports the change.
+  bool saw_tab_picker_hidden = false;
+  EXPECT_CALL(mock_page_, PostSearchMessage(_))
+      .WillRepeatedly([&](mojo_base::ProtoWrapper wrapper) {
+        auto msg = wrapper.As<lens::ClientToSearchMessage>();
+        if (msg.has_value() && msg->has_inject_chrome_input() &&
+            msg->inject_chrome_input().input_type() ==
+                lens::ClientToSearchMessage::InjectChromeInput::TAB_PICKER &&
+            !msg->inject_chrome_input().is_active()) {
+          saw_tab_picker_hidden = true;
+        }
+      });
+  base::RunLoop context_updated_loop;
+  EXPECT_CALL(mock_page_, OnTabContextUpdated(_, _, _))
+      .WillOnce([&context_updated_loop](
+                    std::vector<searchbox::mojom::TabInfoPtr> /*tabs*/,
+                    const std::vector<int32_t>& /*submitted_tab_ids*/,
+                    mojom::SmartTabSharingStatePtr /*sts*/) {
+        context_updated_loop.Quit();
+      });
+
+  ASSERT_TRUE(content::ExecJs(
+      conditional_tab->GetContents(),
+      "document.querySelector('meta[name=\"sensitivity\"]').content = "
+      "'restricted';"));
+  context_updated_loop.Run();
+  mock_page_.FlushForTesting();
+  EXPECT_TRUE(saw_tab_picker_hidden);
+  EXPECT_TRUE(FetchRecentTabs().empty());
+  testing::Mock::VerifyAndClearExpectations(&mock_page_);
+}
+
+IN_PROC_BROWSER_TEST_F(
+    ContextualTasksExtensionHandlerPageEligibilityBrowserTest,
     GetRecentTabs_IncludesAttachedIneligibleTabUntilDeselected) {
   const GURL ineligible_url = embedded_test_server()->GetURL("/ineligible-doc");
   ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
@@ -8786,8 +8838,8 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_EQ(unfiltered_tabs.size(), 1u);
   EXPECT_EQ(unfiltered_tabs[0]->url, ineligible_url);
 
-  // 2. When `exclude_page_context_ineligible_tabs` is `true`, a tab whose
-  // eligibility is still `kUnknown` remains included.
+  // 2. When `exclude_page_context_ineligible_tabs` is `true`, a tab that
+  // resolved to `kEligible` stays included while a new page is `kUnknown`.
   const GURL unknown_url = embedded_test_server()->GetURL("/eligible-unknown");
   ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
       browser(), unknown_url,
@@ -8813,6 +8865,93 @@ IN_PROC_BROWSER_TEST_F(
   std::vector<searchbox::mojom::TabInfoPtr> tabs = FetchRecentTabs();
   ASSERT_EQ(tabs.size(), 1u);
   EXPECT_EQ(tabs[0]->url, unknown_url);
+}
+
+class ContextualTasksExtensionHandlerDogfoodFeedbackBrowserTest
+    : public ContextualTasksExtensionHandlerBrowserTest {
+ public:
+  void SetUpBrowserContextKeyedServices(
+      content::BrowserContext* context) override {
+    ContextualTasksExtensionHandlerBrowserTest::
+        SetUpBrowserContextKeyedServices(context);
+    ContextualTasksUiServiceFactory::GetInstance()->SetTestingFactory(
+        context, base::BindRepeating([](content::BrowserContext* context)
+                                         -> std::unique_ptr<KeyedService> {
+          Profile* profile = Profile::FromBrowserContext(context);
+          return std::make_unique<
+              testing::NiceMock<MockContextualTasksUiService>>(
+              profile, ContextualTasksServiceFactory::GetForProfile(profile),
+              /*identity_manager=*/nullptr,
+              /*aim_eligibility_service=*/nullptr,
+              /*eligibility_manager=*/nullptr,
+              /*cookie_synchronizer=*/nullptr);
+        }));
+  }
+
+ protected:
+  testing::NiceMock<MockContextualTasksUiService>* mock_ui_service() {
+    return static_cast<testing::NiceMock<MockContextualTasksUiService>*>(
+        ContextualTasksUiServiceFactory::GetForBrowserContext(
+            browser()->GetProfile()));
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(
+    ContextualTasksExtensionHandlerDogfoodFeedbackBrowserTest,
+    OpenDogfoodFeedback_PassesActiveTabUrl) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL(chrome::kChromeUIChromeURLsURL),
+      ui::mojom::WindowOpenDisposition::kNewForegroundTab,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+
+  ASSERT_NE(mock_ui_service(), nullptr);
+  EXPECT_CALL(
+      *mock_ui_service(),
+      OpenDogfoodFeedbackUi(browser(), GURL(chrome::kChromeUIChromeURLsURL)))
+      .Times(1);
+
+  handler_->OpenDogfoodFeedback();
+}
+
+IN_PROC_BROWSER_TEST_F(
+    ContextualTasksExtensionHandlerDogfoodFeedbackBrowserTest,
+    OpenDogfoodFeedback_UncommittedActiveTabPreservesFallbackUrl) {
+  auto uncommitted_contents = content::WebContents::Create(
+      content::WebContents::CreateParams(browser()->GetProfile()));
+  ASSERT_TRUE(uncommitted_contents->GetLastCommittedURL().is_empty());
+  browser()->tab_strip_model()->AppendWebContents(
+      std::move(uncommitted_contents), /*foreground=*/true);
+  ASSERT_TRUE(TabListInterface::From(browser())
+                  ->GetActiveTab()
+                  ->GetContents()
+                  ->GetLastCommittedURL()
+                  .is_empty());
+
+  ASSERT_NE(mock_ui_service(), nullptr);
+  EXPECT_CALL(
+      *mock_ui_service(),
+      OpenDogfoodFeedbackUi(browser(), GURL(chrome::kChromeUIVersionURL)))
+      .Times(1);
+
+  handler_->OpenDogfoodFeedback();
+}
+
+IN_PROC_BROWSER_TEST_F(
+    ContextualTasksExtensionHandlerDogfoodFeedbackBrowserTest,
+    OpenDogfoodFeedback_UnattachedFromBrowser_SafeNoOp) {
+  auto unattached_contents = content::WebContents::Create(
+      content::WebContents::CreateParams(browser()->GetProfile()));
+  content::RenderFrameHost* rfh = unattached_contents->GetPrimaryMainFrame();
+  ASSERT_NE(rfh, nullptr);
+  ContextualTasksExtensionHandler::CreateForCurrentDocument(rfh);
+  auto* unattached_handler =
+      ContextualTasksExtensionHandler::GetForCurrentDocument(rfh);
+  ASSERT_NE(unattached_handler, nullptr);
+
+  ASSERT_NE(mock_ui_service(), nullptr);
+  EXPECT_CALL(*mock_ui_service(), OpenDogfoodFeedbackUi(_, _)).Times(0);
+
+  unattached_handler->OpenDogfoodFeedback();
 }
 
 }  // namespace contextual_tasks

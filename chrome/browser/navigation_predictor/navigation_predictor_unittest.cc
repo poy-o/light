@@ -16,6 +16,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
+#include "build/build_config.h"
 #include "chrome/browser/page_load_metrics/observers/page_anchors_metrics_observer.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "components/ukm/test_ukm_recorder.h"
@@ -309,7 +310,7 @@ class MetricsBuilder {
   ukm::TestAutoSetUkmRecorder ukm_recorder_;
   std::vector<blink::mojom::AnchorElementMetricsPtr> metrics_;
   std::vector<blink::mojom::AnchorElementEnteredViewportPtr> entered_viewport_;
-  std::vector<raw_ptr<const ukm::mojom::UkmEntry, VectorExperimental>>
+  std::vector<raw_ptr<const ukm::mojom::UkmEntry, DanglingUntriaged>>
       ukm_entries_;
 };
 
@@ -1163,9 +1164,17 @@ TEST_F(NavigationPredictorUserInteractionsTest,
   ASSERT_EQ(0u, entries.size());
 }
 
-// TODO(crbug.com/40266872): Flaky on Android.
+#if BUILDFLAG(IS_ANDROID)
+#define MAYBE_UserInteractionMetricsIgnoresUpdatesForInvalidUkmSourceId \
+  DISABLED_UserInteractionMetricsIgnoresUpdatesForInvalidUkmSourceId
+#else
+#define MAYBE_UserInteractionMetricsIgnoresUpdatesForInvalidUkmSourceId \
+  UserInteractionMetricsIgnoresUpdatesForInvalidUkmSourceId
+#endif
+// Tests that attempting to record user interaction metrics with a mismatched
+// document UKM source ID triggers a crash and records no UKM metrics.
 TEST_F(NavigationPredictorUserInteractionsTest,
-       DISABLED_UserInteractionMetricsIgnoresUpdatesForInvalidUkmSourceId) {
+       MAYBE_UserInteractionMetricsIgnoresUpdatesForInvalidUkmSourceId) {
   mojo::Remote<blink::mojom::AnchorElementMetricsHost> predictor_service;
   auto* predictor_service_host = MockNavigationPredictorForTesting::Create(
       main_rfh(), predictor_service.BindNewPipeAndPassReceiver());

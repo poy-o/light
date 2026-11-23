@@ -804,6 +804,7 @@ if (use_aura) {
       "//chrome/browser/ui/views/frame:browser_view_header",
       "//ui/aura",
       "//ui/events",
+      "//ui/views",
       "//ui/wm",
     ]
   }
@@ -1281,6 +1282,7 @@ source_set("chrome_views_delegate") {
       "//chromeos/ash/experiences/arc/touch_selection_menu",
       "//chromeos/ui/base",
       "//chromeos/ui/frame",
+      "//components/live_caption",
     ]
   }
   if (use_aura) {

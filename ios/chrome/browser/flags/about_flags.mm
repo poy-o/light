@@ -110,6 +110,7 @@
 #import "ios/chrome/browser/download/ui/features.h"
 #import "ios/chrome/browser/enterprise/connectors/device_trust/features.h"
 #import "ios/chrome/browser/enterprise/data_protection/public/features.h"
+#import "ios/chrome/browser/first_run/live_activity/public/features.h"
 #import "ios/chrome/browser/first_run/public/features.h"
 #import "ios/chrome/browser/flags/chrome_switches.h"
 #import "ios/chrome/browser/flags/ios_chrome_flag_descriptions.h"
@@ -173,6 +174,52 @@ constexpr FeatureEntry::FeatureParam kActorToolsPageStabilityEnabled[] = {
 constexpr FeatureEntry::FeatureVariation kActorToolsPageStabilityVariations[] =
     {
         {"PageStabilityEnabled", kActorToolsPageStabilityEnabled, nullptr},
+};
+
+constexpr FeatureEntry::FeatureParam kFreLiveActivityNoDynamicIslandParams[] = {
+    {kFreLiveActivityDynamicIslandModeParam, kFreLiveActivityNoDynamicIsland},
+};
+constexpr FeatureEntry::FeatureParam
+    kFreLiveActivityShortDynamicIslandParams[] = {
+        {kFreLiveActivityDynamicIslandModeParam,
+         kFreLiveActivityShortDynamicIsland},
+        {kFreLiveActivityShortDynamicIslandGraceSecondsParam, "20"},
+};
+constexpr FeatureEntry::FeatureParam kFreLiveActivityLongDynamicIslandParams[] =
+    {
+        {kFreLiveActivityDynamicIslandModeParam,
+         kFreLiveActivityLongDynamicIsland},
+};
+constexpr FeatureEntry::FeatureParam
+    kFreLiveActivityNoDynamicIslandShortStaleParams[] = {
+        {kFreLiveActivityDynamicIslandModeParam,
+         kFreLiveActivityNoDynamicIsland},
+        {kFreLiveActivityStaleDurationSecondsParam, "60"},
+};
+constexpr FeatureEntry::FeatureParam
+    kFreLiveActivityShortDynamicIslandShortStaleParams[] = {
+        {kFreLiveActivityDynamicIslandModeParam,
+         kFreLiveActivityShortDynamicIsland},
+        {kFreLiveActivityStaleDurationSecondsParam, "60"},
+        {kFreLiveActivityShortDynamicIslandGraceSecondsParam, "20"},
+};
+constexpr FeatureEntry::FeatureParam
+    kFreLiveActivityLongDynamicIslandShortStaleParams[] = {
+        {kFreLiveActivityDynamicIslandModeParam,
+         kFreLiveActivityLongDynamicIsland},
+        {kFreLiveActivityStaleDurationSecondsParam, "60"},
+};
+
+constexpr FeatureEntry::FeatureVariation kFreLiveActivityVariations[] = {
+    {"No Dynamic Island", kFreLiveActivityNoDynamicIslandParams, nullptr},
+    {"Short Dynamic Island", kFreLiveActivityShortDynamicIslandParams, nullptr},
+    {"Long Dynamic Island", kFreLiveActivityLongDynamicIslandParams, nullptr},
+    {"No Dynamic Island - 1m Stale",
+     kFreLiveActivityNoDynamicIslandShortStaleParams, nullptr},
+    {"Short Dynamic Island - 1m Stale",
+     kFreLiveActivityShortDynamicIslandShortStaleParams, nullptr},
+    {"Long Dynamic Island - 1m Stale",
+     kFreLiveActivityLongDynamicIslandShortStaleParams, nullptr},
 };
 
 constexpr FeatureEntry::FeatureParam
@@ -629,20 +676,6 @@ constexpr flags_ui::FeatureEntry::FeatureVariation
         {"Long period", kAutofillThrottleFilteredDocFormScanLongPeriodParam,
          nullptr}};
 
-constexpr FeatureEntry::FeatureParam kUpdatedFirstRunSequenceArm1[] = {
-    {first_run::kUpdatedFirstRunSequenceParam, "1"}};
-constexpr FeatureEntry::FeatureParam kUpdatedFirstRunSequenceArm2[] = {
-    {first_run::kUpdatedFirstRunSequenceParam, "2"}};
-constexpr FeatureEntry::FeatureParam kUpdatedFirstRunSequenceArm3[] = {
-    {first_run::kUpdatedFirstRunSequenceParam, "3"}};
-
-constexpr FeatureEntry::FeatureVariation kUpdatedFirstRunSequenceVariations[] =
-    {{" - Default browser promo first", kUpdatedFirstRunSequenceArm1, nullptr},
-     {" - Remove sign in & sync conditionally", kUpdatedFirstRunSequenceArm2,
-      nullptr},
-     {" - DB promo first and remove sign in & sync",
-      kUpdatedFirstRunSequenceArm3, nullptr}};
-
 constexpr FeatureEntry::FeatureParam kSlowFullscreenTransitionSpeed[] = {
     {kFullscreenTransitionSpeedParam, "0"}};
 constexpr FeatureEntry::FeatureParam kDefaultFullscreenTransitionSpeed[] = {
@@ -738,12 +771,12 @@ constexpr FeatureEntry::FeatureVariation kFREAblationVariations[] = {
     {" - Skip All Except Sign-in and Choice",
      kFREAblationSkipAllExceptSignInAndChoice, nullptr}};
 
+constexpr FeatureEntry::FeatureParam kBestFeaturesScreenInFirstRunArm1[] = {
+    {first_run::kBestFeaturesScreenInFirstRunParam, "1"}};
 constexpr FeatureEntry::FeatureParam kBestFeaturesScreenInFirstRunArm2[] = {
     {first_run::kBestFeaturesScreenInFirstRunParam, "2"}};
 constexpr FeatureEntry::FeatureParam kBestFeaturesScreenInFirstRunArm3[] = {
     {first_run::kBestFeaturesScreenInFirstRunParam, "3"}};
-constexpr FeatureEntry::FeatureParam kBestFeaturesScreenInFirstRunArm4[] = {
-    {first_run::kBestFeaturesScreenInFirstRunParam, "4"}};
 constexpr FeatureEntry::FeatureParam kBestFeaturesScreenInFirstRunArm5[] = {
     {first_run::kBestFeaturesScreenInFirstRunParam, "5"}};
 constexpr FeatureEntry::FeatureParam kBestFeaturesScreenInFirstRunArm6[] = {
@@ -752,13 +785,11 @@ constexpr FeatureEntry::FeatureParam kBestFeaturesScreenInFirstRunArm6[] = {
 constexpr FeatureEntry::FeatureVariation
     kBestFeaturesScreenInFirstRunVariations[] = {
         {" - Variant A: General screen, after DB promo",
-         kUpdatedFirstRunSequenceArm1, nullptr},
+         kBestFeaturesScreenInFirstRunArm1, nullptr},
         {" - Variant B: General screen, before DB promo",
          kBestFeaturesScreenInFirstRunArm2, nullptr},
         {" - Variant C: General screen with passwords item",
          kBestFeaturesScreenInFirstRunArm3, nullptr},
-        {" - Variant D: Shopping users screen, variant C as fallback",
-         kBestFeaturesScreenInFirstRunArm4, nullptr},
         {" - Variant E: Show screen to signed-in users only",
          kBestFeaturesScreenInFirstRunArm5, nullptr},
         {" - Variant F: Show address bar promo",
@@ -1231,6 +1262,9 @@ constexpr FeatureEntry::FeatureParam kAimButtonRefactorAimAsMvt[] = {
     {kAimButtonRefactorArmParam, "5"}};
 constexpr FeatureEntry::FeatureParam kAimButtonRefactorNoChips[] = {
     {kAimButtonRefactorArmParam, "6"}};
+constexpr FeatureEntry::FeatureParam
+    kAimButtonRefactorGenerateAndAttachQuickActions[] = {
+        {kAimButtonRefactorArmParam, "7"}};
 
 constexpr FeatureEntry::FeatureVariation kAimButtonRefactorVariations[] = {
     {" - Focus Composebox AIM Quick Action",
@@ -1242,6 +1276,8 @@ constexpr FeatureEntry::FeatureVariation kAimButtonRefactorVariations[] = {
     {" - AIM as Module", kAimButtonRefactorAimAsModule, nullptr},
     {" - AIM as MVT", kAimButtonRefactorAimAsMvt, nullptr},
     {" - No Chips", kAimButtonRefactorNoChips, nullptr},
+    {" - Generate and Attach Quick Actions",
+     kAimButtonRefactorGenerateAndAttachQuickActions, nullptr},
 };
 
 constexpr FeatureEntry::FeatureParam
@@ -1969,11 +2005,6 @@ constexpr auto kFeatureEntries = std::to_array<flags_ui::FeatureEntry>({
     {"update-tab-group-colors", flag_descriptions::kUpdateTabGroupColorsName,
      flag_descriptions::kUpdateTabGroupColorsDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(tab_groups::kUpdateTabGroupColors)},
-    {"updated-fre-screens-sequence", flag_descriptions::kUpdatedFRESequenceName,
-     flag_descriptions::kUpdatedFRESequenceDescription, flags_ui::kOsIos,
-     FEATURE_WITH_PARAMS_VALUE_TYPE(first_run::kUpdatedFirstRunSequence,
-                                    kUpdatedFirstRunSequenceVariations,
-                                    "UpdatedFirstRunSequence")},
     {"download-auto-deletion", flag_descriptions::kDownloadAutoDeletionName,
      flag_descriptions::kDownloadAutoDeletionDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kDownloadAutoDeletionFeatureEnabled)},
@@ -3115,6 +3146,16 @@ constexpr auto kFeatureEntries = std::to_array<flags_ui::FeatureEntry>({
      flag_descriptions::kEnableIosLiveActivityManagerName,
      flag_descriptions::kEnableIosLiveActivityManagerDescription,
      flags_ui::kOsIos, FEATURE_VALUE_TYPE(kIOSLiveActivityManager)},
+    {"actor-backgrounded-scene-rendering-mode",
+     flag_descriptions::kActorBackgroundedSceneRenderingModeName,
+     flag_descriptions::kActorBackgroundedSceneRenderingModeDescription,
+     flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kActorBackgroundedSceneRenderingMode)},
+    {"enable-fre-live-activity", flag_descriptions::kFreLiveActivityName,
+     flag_descriptions::kFreLiveActivityDescription, flags_ui::kOsIos,
+     FEATURE_WITH_PARAMS_VALUE_TYPE(kFreLiveActivity,
+                                    kFreLiveActivityVariations,
+                                    "FreLiveActivity")},
 });
 
 bool SkipConditionalFeatureEntry(const flags_ui::FeatureEntry& entry) {

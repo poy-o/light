@@ -55,6 +55,7 @@
 #include "components/omnibox/common/composebox_features.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/search_engines/ai_mode_button_service.h"
+#include "components/strings/grit/components_strings.h"
 #include "components/user_education/webui/help_bubble_handler.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "net/base/url_util.h"
@@ -150,6 +151,10 @@ OmniboxPopupUI::OmniboxPopupUI(content::WebUI* web_ui)
                              IDS_OMNIBOX_PLACEHOLDER_TEXT);
   source->AddLocalizedString("omniboxAskOrTypeUrlPlaceholder",
                              IDS_WEBUI_OMNIBOX_PLACEHOLDER_TEXT);
+  // The Views omnibox's accessible name and placeholder.
+  source->AddLocalizedString("omniboxAccessibleName", IDS_ACCNAME_LOCATION);
+  source->AddLocalizedString("omniboxAccessiblePlaceholder",
+                             IDS_ACC_OMNIBOX_AUTOCOMPLETE_PLACEHOLDER);
 
   source->AddBoolean("isTopChromeSearchbox", true);
   FullWebUIOmniboxLayoutHelper::PopulateLoadTimeData(source);
@@ -566,11 +571,18 @@ OmniboxPopupUI::GetComposeboxInputStateModel() {
     return composebox_handler_->input_state_model();
   }
   auto* session_handle = GetOrCreateContextualSessionHandle();
-  return session_handle
-             ? ContextualSearchboxHandler::GetOrCreateInputStateModelForSession(
-                   web_ui()->GetWebContents(), *session_handle)
-                   .get()
-             : nullptr;
+  if (!session_handle) {
+    return nullptr;
+  }
+  auto* input_state_model =
+      ContextualSearchboxHandler::GetOrCreateInputStateModelForSession(
+          web_ui()->GetWebContents(), *session_handle)
+          .get();
+  if (input_state_model &&
+      omnibox::IsDynamicAimFulfillmentEnabledForOmnibox()) {
+    input_state_model->EnableDynamicAimFulfillment();
+  }
+  return input_state_model;
 }
 
 ContextualSearchboxHandler* OmniboxPopupUI::GetContextualSearchboxHandler() {

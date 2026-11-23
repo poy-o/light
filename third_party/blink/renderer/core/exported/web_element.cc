@@ -505,13 +505,6 @@ bool WebElement::IsAutonomousCustomElement() const {
   return false;
 }
 
-WebNode WebElement::ShadowRoot() const {
-  auto* root = ConstUnwrap<Element>()->GetShadowRoot();
-  if (!root || root->IsUserAgent())
-    return WebNode();
-  return WebNode(root);
-}
-
 WebElement WebElement::OwnerShadowHost() const {
   if (auto* host = ConstUnwrap<Element>()->OwnerShadowHost()) {
     return WebElement(host);
@@ -519,12 +512,18 @@ WebElement WebElement::OwnerShadowHost() const {
   return WebElement();
 }
 
-WebNode WebElement::OpenOrClosedShadowRoot() {
-  if (IsNull())
+WebNode WebElement::OpenOrClosedShadowRoot() const {
+  if (IsNull()) {
     return WebNode();
+  }
+  return WebNode(ConstUnwrap<Element>()->AuthorShadowRoot());
+}
 
-  auto* root = ConstUnwrap<Element>()->AuthorShadowRoot();
-  return WebNode(root);
+WebNode WebElement::OpenShadowRoot() const {
+  if (IsNull()) {
+    return WebNode();
+  }
+  return WebNode(ConstUnwrap<Element>()->OpenShadowRoot());
 }
 
 gfx::Rect WebElement::BoundsInWidget() const {

@@ -85,7 +85,12 @@ import org.mockito.quality.Strictness;
 
 import org.chromium.base.Callback;
 import org.chromium.base.DeviceInfo;
+import org.chromium.base.FeatureOverrides;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.params.ParameterAnnotations.ClassParameter;
+import org.chromium.base.test.params.ParameterAnnotations.UseRunnerDelegate;
+import org.chromium.base.test.params.ParameterSet;
+import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.transit.ViewPresence;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.Criteria;
@@ -104,7 +109,7 @@ import org.chromium.chrome.browser.signin.services.SigninFlowTimestampsLogger.Fl
 import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.chrome.browser.signin.services.SigninPreferencesManager;
 import org.chromium.chrome.browser.ui.signin.R;
-import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.OverrideContextWrapperTestRule;
 import org.chromium.chrome.test.transit.AutoResetCtaTransitTestRule;
 import org.chromium.chrome.test.transit.ChromeTransitTestRules;
@@ -119,6 +124,7 @@ import org.chromium.components.signin.SigninFeatures;
 import org.chromium.components.signin.base.AccountInfo;
 import org.chromium.components.signin.metrics.AccountConsistencyPromoAction;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
+import org.chromium.components.signin.metrics.SigninFunnelEvent;
 import org.chromium.components.signin.metrics.SignoutReason;
 import org.chromium.components.signin.test.util.FakeAccountManagerFacade;
 import org.chromium.components.signin.test.util.FakeIdentityManager;
@@ -129,15 +135,28 @@ import org.chromium.components.sync.protocol.SyncEnums;
 import org.chromium.google_apis.gaia.CoreAccountId;
 import org.chromium.ui.base.DeviceFormFactor;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-/** Tests account picker bottom sheet of the web signin flow. */
-@RunWith(ChromeJUnit4ClassRunner.class)
+/**
+ * Tests account picker bottom sheet of the web signin flow.
+ *
+ * <p>TODO(crbug.com/493130564): Revert to regular runner after
+ * MAKE_IDENTITY_MANAGER_SOURCE_OF_ACCOUNTS_PART2 launch.
+ */
+@RunWith(ParameterizedRunner.class)
+@UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
 @EnableFeatures(SigninFeatures.MAKE_IDENTITY_MANAGER_SOURCE_OF_ACCOUNTS)
 @Batch(Batch.PER_CLASS)
 @Restriction(DeviceFormFactor.PHONE)
 public class AccountPickerBottomSheetTest {
+    @ClassParameter
+    private static final List<ParameterSet> sClassParameters =
+            Arrays.asList(
+                    new ParameterSet().value(false).name("withAccountManagerFacadeSource"),
+                    new ParameterSet().value(true).name("withIdentityManagerSource"));
 
     private static final String DOMAIN1 = "Domain1";
 
@@ -189,6 +208,7 @@ public class AccountPickerBottomSheetTest {
 
     @Captor private ArgumentCaptor<Callback<Boolean>> mUpdateCredentialsSuccessCallbackCaptor;
 
+    private final boolean mIsIdentityManagerSourceOfAccounts;
     private final AtomicReference<Boolean> mIsNextSigninSuccessful = new AtomicReference<>(true);
     private WebPageStation mPage;
     private AccountPickerBottomSheetCoordinator mCoordinator;
@@ -196,8 +216,15 @@ public class AccountPickerBottomSheetTest {
     private boolean mIsAccountManaged;
     private @SigninAccessPoint int mSigninAccessPoint;
 
+    public AccountPickerBottomSheetTest(boolean isIdentityManagerSourceOfAccounts) {
+        mIsIdentityManagerSourceOfAccounts = isIdentityManagerSourceOfAccounts;
+    }
+
     @Before
     public void setUp() {
+        FeatureOverrides.overrideFlag(
+                SigninFeatures.MAKE_IDENTITY_MANAGER_SOURCE_OF_ACCOUNTS_PART2,
+                mIsIdentityManagerSourceOfAccounts);
         mPage = mActivityTestRule.startOnBlankPage();
         mAutoTestRule.setIsAutomotive(false);
         mSigninAccessPoint = SigninAccessPoint.WEB_SIGNIN;
@@ -256,6 +283,94 @@ public class AccountPickerBottomSheetTest {
 
         checkCollapsedAccountListForWebSignin(TestAccounts.ACCOUNT1);
         accountConsistencyHistogram.assertExpected();
+    }
+
+    @Test
+    @MediumTest
+    public void testCollapsedSheetPromoShownAndContinueAsClicked() {
+        var funnelWatcher =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecords(
+                                "Signin.SigninFunnel.WebSignin",
+                                SigninFunnelEvent.BOTTOM_SHEET_SHOWN_WITH_ACCOUNT,
+                                SigninFunnelEvent.SIGNIN_BUTTON_CLICKED)
+                        .build();
+
+        buildAndShowBottomSheet(AccountPickerLaunchMode.DEFAULT);
+        clickContinueButtonAndCheckSignInInProgressSheet();
+
+        funnelWatcher.assertExpected();
+    }
+
+    @Test
+    @MediumTest
+    public void testCollapsedSheetPromoShownAndDismissClicked() {
+        var funnelWatcher =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecords(
+                                "Signin.SigninFunnel.WebSignin",
+                                SigninFunnelEvent.BOTTOM_SHEET_SHOWN_WITH_ACCOUNT,
+                                SigninFunnelEvent.SIGNIN_DECLINED_BUTTON_CLICKED)
+                        .build();
+
+        buildAndShowBottomSheet(AccountPickerLaunchMode.DEFAULT);
+        waitForView(withText(R.string.signin_account_picker_dismiss_button)).click();
+
+        funnelWatcher.assertExpected();
+    }
+
+    @Test
+    @MediumTest
+    public void testCollapsedSheetPromoShownAndChooseOtherAccountClicked() {
+        var funnelWatcher =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecords(
+                                "Signin.SigninFunnel.WebSignin",
+                                SigninFunnelEvent.BOTTOM_SHEET_SHOWN_WITH_ACCOUNT,
+                                SigninFunnelEvent.CHOOSE_OTHER_ACCOUNT_CLICKED)
+                        .build();
+
+        buildAndShowCollapsedThenExpandedBottomSheet();
+
+        funnelWatcher.assertExpected();
+    }
+
+    @Test
+    @MediumTest
+    public void testZeroAccountSheetPromoShownAndAddAccountClicked() {
+        var funnelWatcher =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecords(
+                                "Signin.SigninFunnel.WebSignin",
+                                SigninFunnelEvent.BOTTOM_SHEET_SHOWN_NO_ACCOUNT,
+                                SigninFunnelEvent.ADD_ACCOUNT_CLICKED)
+                        .build();
+
+        mAccountManagerTestRule.removeAllAccounts();
+        buildAndShowZeroAccountBottomSheet();
+        checkZeroAccountBottomSheet();
+        waitForView(withText(R.string.signin_add_account_to_device)).click();
+
+        funnelWatcher.assertExpected();
+    }
+
+    @Test
+    @MediumTest
+    public void testZeroAccountSheetThenAccountAppearsLogsBottomSheetShownOnce() {
+        var funnelWatcher =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecord(
+                                "Signin.SigninFunnel.WebSignin",
+                                SigninFunnelEvent.BOTTOM_SHEET_SHOWN_NO_ACCOUNT)
+                        .build();
+
+        mAccountManagerTestRule.removeAllAccounts();
+        buildAndShowZeroAccountBottomSheet();
+        checkZeroAccountBottomSheet();
+        mAccountManagerTestRule.addAccount(TestAccounts.ACCOUNT1);
+        checkCollapsedAccountListForWebSignin(TestAccounts.ACCOUNT1);
+
+        funnelWatcher.assertExpected();
     }
 
     @Test
@@ -770,6 +885,36 @@ public class AccountPickerBottomSheetTest {
         checkZeroAccountBottomSheet();
 
         mAccountManagerTestRule.addAccount(TestAccounts.ACCOUNT1);
+
+        checkCollapsedAccountListForWebSignin(TestAccounts.ACCOUNT1);
+    }
+
+    @Test
+    @MediumTest
+    public void testCollapsedSheetWithUnfulfilledAccountsThenLoaded() {
+        try (var blocker = mAccountManagerTestRule.blockGetAccountsUpdate()) {
+            ThreadUtils.runOnUiThreadBlocking(
+                    () -> {
+                        mCoordinator =
+                                new AccountPickerBottomSheetCoordinator(
+                                        mActivityTestRule.getActivity().getWindowAndroid(),
+                                        mFakeIdentityManager,
+                                        mSigninManagerMock,
+                                        mAccountPreviewDataServiceMock,
+                                        mActivityTestRule.getActivity().getModalDialogManager(),
+                                        getBottomSheetController(),
+                                        mAccountPickerDelegateMock,
+                                        getBottomSheetStrings(),
+                                        null,
+                                        AccountPickerLaunchMode.DEFAULT,
+                                        /* isWebSignin= */ mSigninAccessPoint
+                                                == SigninAccessPoint.WEB_SIGNIN,
+                                        mSigninAccessPoint,
+                                        /* selectedAccountId= */ null);
+                    });
+
+            checkZeroAccountBottomSheet();
+        }
 
         checkCollapsedAccountListForWebSignin(TestAccounts.ACCOUNT1);
     }
@@ -1453,6 +1598,36 @@ public class AccountPickerBottomSheetTest {
 
     @Test
     @MediumTest
+    public void testOnAccountAdded_pendingUntilAccountAvailable() {
+        when(mAccountPickerDelegateMock.canHandleAddAccount()).thenReturn(true);
+        var accountConsistencyHistogram =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecords(
+                                "Signin.AccountConsistencyPromoAction",
+                                AccountConsistencyPromoAction.SHOWN,
+                                AccountConsistencyPromoAction.ADD_ACCOUNT_COMPLETED,
+                                AccountConsistencyPromoAction.SIGNED_IN_WITH_ADDED_ACCOUNT)
+                        .build();
+        buildAndShowCollapsedThenExpandedBottomSheet();
+
+        // Notify that ACCOUNT2 was added before it is available in the account source.
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> mCoordinator.onAccountAdded(TestAccounts.ACCOUNT2.getEmail()));
+        verify(mSigninManagerMock, never()).signin(any(), anyInt(), any());
+
+        // Once ACCOUNT2 becomes available, it should be selected and signed in automatically.
+        mAccountManagerTestRule.addAccount(TestAccounts.ACCOUNT2);
+        SigninTestUtil.completeDeviceLockIfOnAutomotive(mDeviceLockActivityLauncher);
+
+        View bottomSheetView = mCoordinator.getBottomSheetViewForTesting();
+        waitForBottomSheetView(withId(R.id.account_picker_signin_spinner_view));
+        assertSignInProceeded(bottomSheetView);
+        verify(mSigninManagerMock).signin(eq(TestAccounts.ACCOUNT2), eq(mSigninAccessPoint), any());
+        accountConsistencyHistogram.assertExpected();
+    }
+
+    @Test
+    @MediumTest
     public void testSignInDefaultAccountOnCollapsedSheet_SpinnerWhileCheckingAccountManagement() {
         var accountConsistencyHistogram =
                 HistogramWatcher.newBuilder()
@@ -2083,6 +2258,29 @@ public class AccountPickerBottomSheetTest {
 
     private void buildAndShowBottomSheet(@AccountPickerLaunchMode int launchMode) {
         buildAndShowBottomSheetForAccount(launchMode, null);
+    }
+
+    /** Shows the collapsed bottom sheet when there are no accounts on the device. */
+    private void buildAndShowZeroAccountBottomSheet() {
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    mCoordinator =
+                            new AccountPickerBottomSheetCoordinator(
+                                    mActivityTestRule.getActivity().getWindowAndroid(),
+                                    mFakeIdentityManager,
+                                    mSigninManagerMock,
+                                    mAccountPreviewDataServiceMock,
+                                    mActivityTestRule.getActivity().getModalDialogManager(),
+                                    getBottomSheetController(),
+                                    mAccountPickerDelegateMock,
+                                    getBottomSheetStrings(),
+                                    new SigninTestUtil.CustomDeviceLockActivityLauncher(),
+                                    AccountPickerLaunchMode.DEFAULT,
+                                    /* isWebSignin= */ mSigninAccessPoint
+                                            == SigninAccessPoint.WEB_SIGNIN,
+                                    mSigninAccessPoint,
+                                    /* selectedAccountId= */ null);
+                });
     }
 
     private void buildAndShowCollapsedThenExandedBottomSheetForAccount(AccountInfo accountInfo) {

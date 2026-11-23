@@ -22,6 +22,7 @@
 #include "base/containers/span.h"
 #include "base/debug/crash_logging.h"
 #include "base/feature_list.h"
+#include "base/i18n/language_tag.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/types/optional_util.h"
@@ -284,9 +285,8 @@ bool AddressFormDataImporter::ProcessExtractedAddressProfiles(
   bool allow_only_silent_updates = !allow_prompt;
   for (const ExtractedAddressProfile& candidate : extracted_address_profiles) {
     address_profile_save_manager_->ImportProfileFromForm(
-        candidate.profile, std::string(client_->GetAppLocale().tag_string()),
-        candidate.url, ukm_source_id, allow_only_silent_updates,
-        candidate.import_metadata);
+        candidate.profile, client_->GetAppLocale(), candidate.url,
+        ukm_source_id, allow_only_silent_updates, candidate.import_metadata);
     // Limit the number of importable profiles to 2.
     if (!allow_only_silent_updates && ++imported_profiles >= 2) {
       return true;
@@ -592,7 +592,7 @@ AddressFormDataImporter::ExtractAddressProfileFromSection(
       "Autofill", "default_country",
       *address_data_manager().GetDefaultCountryCodeForNewAddress());
   SCOPED_CRASH_KEY_STRING32("Autofill", "app_locale",
-                            address_data_manager().app_locale());
+                            address_data_manager().app_locale().tag_string());
   SCOPED_CRASH_KEY_NUMBER("Autofill", "country_source",
                           std::to_underlying(import_metadata.country_source));
 
@@ -646,6 +646,20 @@ AddressFormDataImporter::ExtractAddressProfileFromSection(
   autofill_metrics::LogZipCodeSeparatorMetric(
       candidate_profile.GetRawInfo(ADDRESS_HOME_ZIP));
   autofill_metrics::LogAddressFormImportCountrySource(import_metadata);
+  // TODO(crbug.com/509874545): Remove temporary metric once
+  // `kAutofillComplementCountryUsingPhoneNumber` is launched.
+  if (import_metadata.country_source ==
+      ProfileCountrySource::kExplicitlyObserved) {
+    if (std::optional<std::u16string> phone_region_code =
+            PhoneNumber::PhoneCombineHelper::FromObservedValues(
+                observed_field_values)
+                .GetRegionCode()) {
+      autofill_metrics::LogAddressFormImportCountryMatchesExplicitlyObserved(
+          candidate_profile.GetAddressCountryCode(),
+          AddressCountryCode(base::UTF16ToUTF8(*phone_region_code)),
+          client_->GetVariationConfigCountryCode());
+    }
+  }
 
   // At this stage, the saving of the profile can only be omitted by the
   // incognito mode but the import is not triggered if the browser is in the

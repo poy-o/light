@@ -30,10 +30,12 @@ class TreeBuilder {
              char separator,
              bool method_count_mode,
              std::vector<FilterFunc> filters,
-             bool relocations_mode);
+             bool relocations_mode,
+             int minimum_size);
   TreeNode* Find(std::string_view path);
   Json::Value Open(const char* path);
   Json::Value GetAncestryById(uint32_t id);
+  std::string DumpCsv() const;
 
  private:
   struct SmallDiffAggregate {
@@ -93,12 +95,14 @@ class TreeBuilder {
   std::unique_ptr<BaseLens> lens_;
   bool method_count_mode_;
   bool relocations_mode_ = false;
+  int minimum_size_ = 0;
   // The current path separator: '>' if grouping by component, '/' otherwise.
   // Note that we split paths on '/' no matter the value of separator, since
   // when grouping by component, paths look like Component>path/to/file.
   char sep_;
   std::vector<FilterFunc> filters_;
   std::vector<const BaseSymbol*> symbols_;
+  std::vector<const BaseSymbol*> filtered_symbols_;
   absl::flat_hash_map<std::string_view, DiffStatus> source_to_diff_status_;
 };  // TreeBuilder
 }  // namespace caspian

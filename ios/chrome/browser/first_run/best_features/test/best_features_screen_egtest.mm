@@ -16,6 +16,7 @@
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
+#import "ios/chrome/test/earl_grey/test_switches.h"
 #import "ios/testing/earl_grey/app_launch_manager.h"
 #import "ios/testing/earl_grey/earl_grey_test.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -51,18 +52,6 @@ id<GREYMatcher> LockedIncognitoTitle() {
 id<GREYMatcher> NeverForgetPasswordsTitle() {
   return grey_text(l10n_util::GetNSString(
       IDS_IOS_BEST_FEATURES_NEVER_FORGET_PASSWORDS_TITLE));
-}
-
-// Returns a matcher for the Tab Groups title.
-id<GREYMatcher> TabGroupsTitle() {
-  return grey_text(
-      l10n_util::GetNSString(IDS_IOS_BEST_FEATURES_TAB_GROUPS_TITLE));
-}
-
-// Returns a matcher for the Price Tracking title.
-id<GREYMatcher> PriceTrackingTitle() {
-  return grey_text(
-      l10n_util::GetNSString(IDS_IOS_BEST_FEATURES_PRICE_TRACKING_TITLE));
 }
 
 // Returns a matcher for the Passwords In Other Apps title.
@@ -110,9 +99,11 @@ id<GREYMatcher> SharePasswordsTitle() {
   // Show the First Run UI at startup.
   config.additional_args.push_back("-FirstRunForceEnabled");
   config.additional_args.push_back("true");
+  // Add a fake identity at startup so the Sign-In screen is included in the FRE
+  // sequence.
+  config.additional_args.push_back(std::string("-") +
+                                   test_switches::kAddFakeIdentitiesAtStartup);
   // Disable conflicting experiments/features.
-  config.additional_args.push_back(
-      "--disable-features=UpdatedFirstRunSequence");
   config.additional_args.push_back(
       "--disable-features=AnimatedDefaultBrowserPromoInFRE");
   config.additional_args.push_back(
@@ -129,20 +120,9 @@ id<GREYMatcher> SharePasswordsTitle() {
   if ([self isRunningTest:@selector(testBestFeatures_variantC)]) {
     feature_param = "3";
   }
-  if ([self isRunningTest:@selector(testBestFeatures_variantDShopper)]) {
-    feature_param = "4";
-    config.additional_args.push_back("-ForceExperienceForShopper");
-    config.additional_args.push_back("true");
-  }
-  if ([self isRunningTest:@selector(testBestFeatures_variantDNonShopper)]) {
-    feature_param = "4";
-  }
   if ([self isRunningTest:@selector(testBestFeatures_variantE)] ||
       [self isRunningTest:@selector(testBestFeatures_variantECPEEnabled)]) {
     feature_param = "5";
-  }
-  if ([self isRunningTest:@selector(testBestFeatures_variantDShopper)]) {
-    config.additional_args.push_back("--mock-shopping-service=is-eligible");
   }
 
   config.additional_args.push_back(
@@ -178,8 +158,12 @@ id<GREYMatcher> SharePasswordsTitle() {
       waitForUIElementToAppearWithMatcher:
           grey_accessibilityID(
               first_run::kFirstRunSignInScreenAccessibilityIdentifier)];
+  // The startup identity may not have been cleared (e.g. for the first test of
+  // the suite), so only add it if needed.
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
-  [SigninEarlGrey addFakeIdentity:fakeIdentity];
+  if (![SigninEarlGrey isIdentityAdded:fakeIdentity]) {
+    [SigninEarlGrey addFakeIdentity:fakeIdentity];
+  }
   // Sign in.
   [self tapPromoButton:chrome_test_util::ButtonStackPrimaryButton()];
   // Skip history/tab sync.
@@ -279,49 +263,6 @@ id<GREYMatcher> SharePasswordsTitle() {
 // the items are correct, and that the FeatureHighlightScreenshotVC and
 // InstructionsHalfSheetVC appear correctly.
 - (void)testBestFeatures_variantC {
-  // Ensure the Default Browser Promo appears before the Best Features Screen.
-  [self skipDefaultBrowserPromo];
-
-  // Assert that the correct items are visible.
-  [[EarlGrey selectElementWithMatcher:LensTitle()]
-      assertWithMatcher:grey_sufficientlyVisible()];
-  [[EarlGrey selectElementWithMatcher:EnhancedSafeBrowsingTitle()]
-      assertWithMatcher:grey_sufficientlyVisible()];
-  [[EarlGrey selectElementWithMatcher:NeverForgetPasswordsTitle()]
-      assertWithMatcher:grey_sufficientlyVisible()];
-
-  // Check that the Best Featues Detail Screen and Instructions Half Sheet
-  // appear correctly.
-  [self checkDetailScreen:IDS_IOS_BEST_FEATURES_NEVER_FORGET_PASSWORDS_TITLE
-                 withStep:
-                     IDS_IOS_BEST_FEATURES_NEVER_FORGET_PASSWORDS_FIRST_STEP];
-}
-
-// Tests that the Best Features screens appears after the Default Browser Promo,
-// shopping users see the correct items, and that the
-// FeatureHighlightScreenshotVC and InstructionsHalfSheetVC appear correctly.
-- (void)testBestFeatures_variantDShopper {
-  // Ensure the Default Browser Promo appears before the Best Features Screen.
-  [self skipDefaultBrowserPromo];
-
-  // Assert that the correct items are visible.
-  [[EarlGrey selectElementWithMatcher:TabGroupsTitle()]
-      assertWithMatcher:grey_sufficientlyVisible()];
-  [[EarlGrey selectElementWithMatcher:LockedIncognitoTitle()]
-      assertWithMatcher:grey_sufficientlyVisible()];
-  [[EarlGrey selectElementWithMatcher:PriceTrackingTitle()]
-      assertWithMatcher:grey_sufficientlyVisible()];
-
-  // Check that the Best Featues Detail Screen and Instructions Half Sheet
-  // appear correctly.
-  [self checkDetailScreen:IDS_IOS_BEST_FEATURES_PRICE_TRACKING_TITLE
-                 withStep:IDS_IOS_BEST_FEATURES_PRICE_TRACKING_STEP_1];
-}
-
-// Tests that the Best Features screens appears after the Default Browser Promo,
-// non-shopping users see the correct items, and that the
-// FeatureHighlightScreenshotVC and InstructionsHalfSheetVC appear correctly.
-- (void)testBestFeatures_variantDNonShopper {
   // Ensure the Default Browser Promo appears before the Best Features Screen.
   [self skipDefaultBrowserPromo];
 

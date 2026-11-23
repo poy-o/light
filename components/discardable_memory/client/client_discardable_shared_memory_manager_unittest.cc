@@ -14,11 +14,11 @@
 #include "base/memory/page_size.h"
 #include "base/memory_coordinator/test_memory_consumer_registry.h"
 #include "base/memory_coordinator/utils.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/run_loop.h"
 #include "base/synchronization/lock.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
-#include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -53,6 +53,8 @@ class TestClientDiscardableSharedMemoryManager
 
   std::unique_ptr<base::DiscardableSharedMemory>
   AllocateLockedDiscardableSharedMemory(size_t size, int32_t id) override {
+    // Like the real IPC, only sizes that fit in a uint32_t can be requested.
+    EXPECT_TRUE(base::IsValueInRangeForNumericType<uint32_t>(size));
     auto shared_memory = std::make_unique<base::DiscardableSharedMemory>();
     if (!shared_memory->CreateAndMap(size)) {
       return nullptr;
@@ -364,47 +366,6 @@ TEST_F(ClientDiscardableSharedMemoryManagerTest,
   EXPECT_EQ(client->GetFreelistSize(), 0u);
 }
 
-// Tests that the UMA for Lock()-ing successes
-// ("Memory.Discardable.LockingSuccess") is recorded properly.
-TEST_F(ClientDiscardableSharedMemoryManagerTest, LockingSuccessUma) {
-  auto client =
-      base::MakeRefCounted<TestClientDiscardableSharedMemoryManager>();
-  base::HistogramTester histograms;
-
-  // number is arbitrary, we are only focused on whether the histogram is
-  // properly recorded in this test.
-  auto mem = client->AllocateLockedDiscardableMemory(base::ByteSize(200));
-
-  histograms.ExpectBucketCount("Memory.Discardable.LockingSuccess", false, 0);
-  histograms.ExpectBucketCount("Memory.Discardable.LockingSuccess", true, 0);
-
-  // Unlock then lock. This should add one sample to the success bucket.
-  mem->Unlock();
-  bool result = mem->Lock();
-
-  ASSERT_EQ(result, true);
-  histograms.ExpectBucketCount("Memory.Discardable.LockingSuccess", false, 0);
-  histograms.ExpectBucketCount("Memory.Discardable.LockingSuccess", true, 1);
-
-  // Repeat the above to verify a second sample is added.
-  mem->Unlock();
-  result = mem->Lock();
-
-  ASSERT_EQ(result, true);
-  histograms.ExpectBucketCount("Memory.Discardable.LockingSuccess", false, 0);
-  histograms.ExpectBucketCount("Memory.Discardable.LockingSuccess", true, 2);
-
-  // This should now fail because the unlocked memory was purged. This should
-  // add a sample to the failure bucket.
-  mem->Unlock();
-  client->BackgroundPurge();
-  result = mem->Lock();
-
-  ASSERT_EQ(result, false);
-  histograms.ExpectBucketCount("Memory.Discardable.LockingSuccess", false, 1);
-  histograms.ExpectBucketCount("Memory.Discardable.LockingSuccess", true, 2);
-}
-
 // Test that a repeating timer for background purging is created when we
 // allocate memory and discarded when we run out of allocated memory.
 TEST_F(ClientDiscardableSharedMemoryManagerTest, SchedulingProactivePurging) {
@@ -506,6 +467,19 @@ TEST_F(ClientDiscardableSharedMemoryManagerTest, HugeAllocationFails) {
     EXPECT_EQ(client->GetAllocatedSize(), base::ByteSize(0));
   }
 }
+
+#if defined(ARCH_CPU_64_BITS)
+// Verifies that allocations larger than the browser process can be asked for
+// fail instead of being truncated.
+TEST_F(ClientDiscardableSharedMemoryManagerTest, AllocationAboveIpcLimitFails) {
+  auto client =
+      base::MakeRefCounted<TestClientDiscardableSharedMemoryManager>();
+
+  auto mem = client->AllocateLockedDiscardableMemory(base::GiB(4) + page_size_);
+  EXPECT_FALSE(mem);
+  EXPECT_EQ(client->GetAllocatedSize(), base::ByteSize(0));
+}
+#endif  // defined(ARCH_CPU_64_BITS)
 
 TEST_F(ClientDiscardableSharedMemoryManagerTest, ByteSizeApi) {
   auto client =

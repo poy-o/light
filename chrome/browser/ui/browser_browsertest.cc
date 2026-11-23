@@ -412,7 +412,7 @@ class RenderViewSizeObserver : public content::WebContentsObserver {
     gfx::Size wcv_commit_size;   // Size of WebContentsView when committed.
   };
 
-  typedef std::map<content::RenderViewHost*, Sizes> RenderViewSizes;
+  using RenderViewSizes = std::map<content::RenderViewHost*, Sizes>;
   RenderViewSizes render_view_sizes_;
   // Enlarge WebContentsView by this size insets in
   // DidStartNavigation.
@@ -2278,9 +2278,7 @@ IN_PROC_BROWSER_TEST_F(KioskModeTest, MAYBE_EnableKioskModeTest) {
 
 #if BUILDFLAG(IS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(KioskModeTest, DoNotExitFullscreen) {
-  BrowserWindow::FromBrowser(browser())
-      ->GetExclusiveAccessContext()
-      ->ExitFullscreen();
+  ExclusiveAccessManager::From(browser())->context()->ExitFullscreen();
   ASSERT_TRUE(browser()->GetWindow()->IsFullscreen());
 }
 

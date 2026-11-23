@@ -16,9 +16,8 @@
 #include "base/memory/page_size.h"
 #include "base/memory_coordinator/traits.h"
 #include "base/memory_coordinator/utils.h"
-#include "base/metrics/histogram_functions.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/numerics/checked_math.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/process/memory.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/waitable_event.h"
@@ -127,10 +126,7 @@ bool ClientDiscardableSharedMemoryManager::DiscardableMemoryImpl::Lock() {
   if (span_ && manager_->LockSpan(span_.get()))
     last_locked_ = base::TimeTicks();
 
-  bool locked = is_locked();
-  UMA_HISTOGRAM_BOOLEAN("Memory.Discardable.LockingSuccess", locked);
-
-  return locked;
+  return is_locked();
 }
 
 void ClientDiscardableSharedMemoryManager::DiscardableMemoryImpl::Unlock() {
@@ -244,16 +240,6 @@ ClientDiscardableSharedMemoryManager::~ClientDiscardableSharedMemoryManager() {
     manager_mojo_.reset();
 }
 
-void ClientDiscardableSharedMemoryManager::OnForegrounded() {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  foregrounded_ = true;
-}
-
-void ClientDiscardableSharedMemoryManager::OnBackgrounded() {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  foregrounded_ = false;
-}
-
 void ClientDiscardableSharedMemoryManager::OnUpdateMemoryLimit() {
   // ClientDiscardableSharedMemoryManager allocates memory on demand for clients
   // and does not maintain an internal capacity limit.
@@ -298,6 +284,10 @@ ClientDiscardableSharedMemoryManager::AllocateLockedDiscardableMemory(
   const size_t pages_to_allocate = std::max(allocation_pages, pages);
   const size_t allocation_size_in_bytes =
       base::CheckMul(pages_to_allocate, base::GetPageSize()).ValueOrDie();
+  // The browser process can't be asked for more than uint32_t bytes.
+  if (!base::IsValueInRangeForNumericType<uint32_t>(allocation_size_in_bytes)) {
+    return nullptr;
+  }
 
   size_t slack = 0;
   // When searching the free lists, allow a slack between required size and
@@ -398,13 +388,6 @@ bool ClientDiscardableSharedMemoryManager::OnMemoryDump(
     base::trace_event::ProcessMemoryDump* pmd) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   base::AutoLock lock(lock_);
-  if (foregrounded_) {
-    const size_t total_size = heap_->GetSize() / 1024;                // in KiB
-
-    base::UmaHistogramCounts1M("Memory.Discardable.VirtualSize.Foreground",
-                               total_size);
-  }
-
   return heap_->OnMemoryDump(args, pmd);
 }
 
@@ -621,7 +604,7 @@ void ClientDiscardableSharedMemoryManager::AllocateOnIO(
     base::ScopedClosureRunner closure_runner) {
   (*manager_mojo_)
       ->AllocateLockedDiscardableSharedMemory(
-          static_cast<uint32_t>(size), id,
+          base::checked_cast<uint32_t>(size), id,
           base::BindOnce(
               &ClientDiscardableSharedMemoryManager::AllocateCompletedOnIO,
               base::Unretained(this), region, std::move(closure_runner)));

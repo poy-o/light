@@ -121,24 +121,6 @@
             ]
         }
     ],
-    "AXTreeFixing": [
-        {
-            "platforms": [
-                "chromeos",
-                "linux",
-                "mac",
-                "windows"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "enable_features": [
-                        "AXTreeFixing"
-                    ]
-                }
-            ]
-        }
-    ],
     "AblateSearchProviderWarmupRequests": [
         {
             "platforms": [
@@ -888,7 +870,7 @@
                 {
                     "name": "Enabled_20261110",
                     "params": {
-                        "config": "CjsKOUV2ZW50TGF0ZW5jeS5HZXN0dXJlU2Nyb2xsVXBkYXRlLlRvdWNoc2NyZWVuLlRvdGFsTGF0ZW5jeQooCiZQYWdlTG9hZC5JbnRlcmFjdGl2ZVRpbWluZy5JbnB1dERlbGF5MwqAAQo2R3JhcGhpY3MuU21vb3RobmVzcy5QZXJjZW50RHJvcHBlZEZyYW1lczMuQWxsU2VxdWVuY2VzEkZXZWJVSS5Ub3BDaHJvbWUuR3JhcGhpY3MuU21vb3RobmVzcy5QZXJjZW50RHJvcHBlZEZyYW1lczMuQWxsU2VxdWVuY2Vz"
+                        "config": "CjsKOUV2ZW50TGF0ZW5jeS5HZXN0dXJlU2Nyb2xsVXBkYXRlLlRvdWNoc2NyZWVuLlRvdGFsTGF0ZW5jeQooCiZQYWdlTG9hZC5JbnRlcmFjdGl2ZVRpbWluZy5JbnB1dERlbGF5Mwo4CjZHcmFwaGljcy5TbW9vdGhuZXNzLlBlcmNlbnREcm9wcGVkRnJhbWVzMy5BbGxTZXF1ZW5jZXM="
                     },
                     "enable_features": [
                         "AndroidNewTabButtonTabstripWebUI",
@@ -2417,6 +2399,27 @@
             ]
         }
     ],
+    "AutofillFixParseMonthFromString": [
+        {
+            "platforms": [
+                "android",
+                "android_desktop",
+                "chromeos",
+                "ios",
+                "linux",
+                "mac",
+                "windows"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "AutofillFixParseMonthFromString"
+                    ]
+                }
+            ]
+        }
+    ],
     "AutofillGmailOtpsDesktop": [
         {
             "platforms": [
@@ -3572,23 +3575,6 @@
             ]
         }
     ],
-    "AvoidPerContextColorProviders": [
-        {
-            "platforms": [
-                "android",
-                "android_desktop",
-                "android_webview"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "enable_features": [
-                        "AvoidPerContextColorProviders"
-                    ]
-                }
-            ]
-        }
-    ],
     "BFCachePerformanceManagerPolicy": [
         {
             "platforms": [
@@ -4235,6 +4221,22 @@
                     },
                     "enable_features": [
                         "CADisplayLinkInGpu"
+                    ]
+                }
+            ]
+        }
+    ],
+    "CCTAlwaysOpenInBrowser": [
+        {
+            "platforms": [
+                "android",
+                "android_desktop"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "CCTAlwaysOpenInBrowser"
                     ]
                 }
             ]
@@ -5360,24 +5362,6 @@
             ]
         }
     ],
-    "ChromnientUpdatedClientContext": [
-        {
-            "platforms": [
-                "chromeos",
-                "linux",
-                "mac",
-                "windows"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled_20250826",
-                    "enable_features": [
-                        "LensOverlayUpdatedClientContext"
-                    ]
-                }
-            ]
-        }
-    ],
     "ClampAutoScaling": [
         {
             "platforms": [
@@ -5959,6 +5943,24 @@
             ]
         }
     ],
+    "ColorIdCssStyleSheetCache": [
+        {
+            "platforms": [
+                "chromeos",
+                "linux",
+                "mac",
+                "windows"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "ColorIdCssStyleSheetCache"
+                    ]
+                }
+            ]
+        }
+    ],
     "Compare": [
         {
             "platforms": [
@@ -6430,7 +6432,7 @@
             ],
             "experiments": [
                 {
-                    "name": "Enabled_Prestable_20261105",
+                    "name": "Enabled_Prestable_20261116",
                     "enable_features": [
                         "ApiContextualTasksPrivate",
                         "BackForwardCacheForComponentExtensionFrames",
@@ -6438,7 +6440,6 @@
                         "ContextualTasksRearchitecture",
                         "ContextualTasksSidePanelRearchitecture",
                         "ContextualTasksSingleTabMenuItem",
-                        "LensComposeboxIdentityDelegation",
                         "OmitNativeFrameOnShadowlessMenus"
                     ]
                 }
@@ -7088,10 +7089,7 @@
     "DeferBackgroundTabLoadsWhileVisiblePageLoads": [
         {
             "platforms": [
-                "chromeos",
-                "linux",
-                "mac",
-                "windows"
+                "chromeos"
             ],
             "experiments": [
                 {
@@ -7170,21 +7168,6 @@
                     "name": "Enabled",
                     "enable_features": [
                         "DeliveryOptimizationDownloader"
-                    ]
-                }
-            ]
-        }
-    ],
-    "DesktopCaptureAndroidLazyFrameCopy": [
-        {
-            "platforms": [
-                "android"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "enable_features": [
-                        "DesktopCaptureAndroidLazyFrameCopy"
                     ]
                 }
             ]
@@ -7698,7 +7681,10 @@
             ],
             "experiments": [
                 {
-                    "name": "Disabled",
+                    "name": "DisablePersist_AssumeQuicBroken",
+                    "enable_features": [
+                        "AssumeQuicBrokenUntilVerifiedOnCurrentNetwork"
+                    ],
                     "disable_features": [
                         "PersistBrokenAlternativeServices"
                     ]
@@ -7808,18 +7794,21 @@
             ],
             "experiments": [
                 {
-                    "name": "EnabledDLS_20261026",
+                    "name": "EnabledDLS_20261120",
                     "enable_features": [
                         "IOSGCR_allow_unsorted_cache_index",
                         "IOSGCR_data_load_strategy_send_updates_when_no_reload",
                         "IOSGCR_disable_data_store_card_cache_expired_check",
                         "IOSGCR_disable_memory_card_cache_clear_cache_on_open_if_expired",
                         "IOSGCR_disable_open_expired_persistent_cache_check",
+                        "IOSGCR_discover_invalidate_metadata_and_guard_empty_state_on_clear",
+                        "IOSGCR_discover_preserve_in_memory_cards_on_new_tab_sync",
                         "IOSGCR_do_not_short_circuit_on_feed_operations_generator_failure",
                         "IOSGCR_dsc_enable_synchronous_feed_sourcer_observer_registration",
                         "IOSGCR_enable_data_loading_strategy",
                         "IOSGCR_enable_persisted_feed_deferred_disk_writes",
                         "IOSGCR_handle_feed_sourcer_processing_errors",
+                        "IOSGCR_populate_default_host_locale_on_bling",
                         "IOSGCR_use_live_feed_sourcer"
                     ],
                     "disable_features": [
@@ -7938,6 +7927,24 @@
                     "name": "Enabled_20261105",
                     "enable_features": [
                         "DnsTaskAllowPartialAddressResults"
+                    ]
+                }
+            ]
+        }
+    ],
+    "DocumentPipStandaloneWindow": [
+        {
+            "platforms": [
+                "chromeos",
+                "linux",
+                "mac",
+                "windows"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "DocumentPipStandaloneWindow"
                     ]
                 }
             ]
@@ -10550,10 +10557,7 @@
             "platforms": [
                 "android",
                 "android_desktop",
-                "chromeos",
-                "linux",
-                "mac",
-                "windows"
+                "chromeos"
             ],
             "experiments": [
                 {
@@ -10623,36 +10627,6 @@
                     "name": "Enabled",
                     "enable_features": [
                         "GreyImageCIFilter"
-                    ]
-                }
-            ]
-        }
-    ],
-    "GtkCacheNavButtonIconsStudy": [
-        {
-            "platforms": [
-                "linux"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "enable_features": [
-                        "GtkCacheNavButtonIcons"
-                    ]
-                }
-            ]
-        }
-    ],
-    "GtkPrefetchNavButtonIconsStudy": [
-        {
-            "platforms": [
-                "linux"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "enable_features": [
-                        "GtkPrefetchNavButtonIcons"
                     ]
                 }
             ]
@@ -12568,6 +12542,24 @@
                     "name": "Enabled",
                     "enable_features": [
                         "KeepHostResolverJobAliveForCache"
+                    ]
+                }
+            ]
+        }
+    ],
+    "KeepNtpRendererAlive": [
+        {
+            "platforms": [
+                "chromeos",
+                "linux",
+                "mac",
+                "windows"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "KeepNtpRendererAlive"
                     ]
                 }
             ]
@@ -15023,10 +15015,7 @@
                 "android",
                 "android_desktop",
                 "chromeos",
-                "ios",
-                "linux",
-                "mac",
-                "windows"
+                "ios"
             ],
             "experiments": [
                 {
@@ -16831,11 +16820,7 @@
                 {
                     "name": "Enabled",
                     "params": {
-                        "fcp_enable_privacy_id_v2": "true",
-                        "fcp_population_name_contextual_cues": "chrome/private_insights/contextual_cues",
-                        "fcp_population_name_storage_access": "chrome/private_insights/storage_access",
-                        "fcp_use_attestation_transparency_verifier": "true",
-                        "upload_interval": "10m"
+                        "fcp_population_name_storage_access": "chrome/private_insights/storage_access"
                     },
                     "enable_features": [
                         "PrivateInsightsFeature",
@@ -17116,7 +17101,6 @@
     "RateLimitProxyConfigPolls": [
         {
             "platforms": [
-                "ios",
                 "windows"
             ],
             "experiments": [
@@ -17742,6 +17726,28 @@
                     "name": "RustyIcoExperiment",
                     "enable_features": [
                         "RustyIcoFeature"
+                    ]
+                }
+            ]
+        }
+    ],
+    "RustyJpegFeature": [
+        {
+            "platforms": [
+                "android",
+                "android_desktop",
+                "android_webview",
+                "chromeos",
+                "ios",
+                "linux",
+                "mac",
+                "windows"
+            ],
+            "experiments": [
+                {
+                    "name": "RustyJpegExperiment",
+                    "enable_features": [
+                        "RustyJpegFeature"
                     ]
                 }
             ]
@@ -19462,6 +19468,24 @@
             ]
         }
     ],
+    "TabCopyLinks": [
+        {
+            "platforms": [
+                "chromeos",
+                "linux",
+                "mac",
+                "windows"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "TabCopyLinks"
+                    ]
+                }
+            ]
+        }
+    ],
     "TabGroupSuggestions": [
         {
             "platforms": [
@@ -19606,25 +19630,6 @@
                     "name": "Enabled",
                     "enable_features": [
                         "TabStorageSqlitePrototype"
-                    ]
-                }
-            ]
-        }
-    ],
-    "TabStripUnification": [
-        {
-            "platforms": [
-                "chromeos",
-                "linux",
-                "mac",
-                "windows"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "enable_features": [
-                        "IPH_TabScrollButtonFeature",
-                        "TabStripUnification"
                     ]
                 }
             ]
@@ -21617,6 +21622,19 @@
             ]
         }
     ],
+    "WebRTC-RustOpenH264Encoding": [
+        {
+            "platforms": [
+                "linux",
+                "mac"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled"
+                }
+            ]
+        }
+    ],
     "WebRTC-SendBufferSizeBytes": [
         {
             "platforms": [
@@ -21894,96 +21912,58 @@
     "WebUIReloadButtonStudy": [
         {
             "platforms": [
+                "linux",
+                "mac",
                 "windows"
             ],
             "experiments": [
                 {
-                    "name": "EnabledWithSurfaceSync_20260902",
+                    "name": "Enabled_160_20261120",
                     "params": {
+                        "TopChromeWebUIPrerenderingAtStartup": "false",
+                        "TopChromeWebUIPrerenderingUnbound": "true",
                         "WebUIReloadButtonBypassLoaderThrottles": "true",
                         "WebUIReloadButtonDeferBrowserViewShow": "false",
                         "WebUIReloadButtonKeepVisibleUntilPaint": "true",
+                        "WebUIReloadButtonPrewarmWebUI": "true",
+                        "WebUIReloadButtonPrewarmWebUIPreNavigate": "true",
+                        "WebUIReloadButtonProfilePrewarming": "true",
                         "WebUIReloadButtonRestartUnresponsive": "true",
                         "WebUIReloadButtonRestartUnresponsiveRenderersTimeout": "5s",
-                        "config": "CjsKOUV2ZW50TGF0ZW5jeS5HZXN0dXJlU2Nyb2xsVXBkYXRlLlRvdWNoc2NyZWVuLlRvdGFsTGF0ZW5jeQooCiZQYWdlTG9hZC5JbnRlcmFjdGl2ZVRpbWluZy5JbnB1dERlbGF5MwqAAQo2R3JhcGhpY3MuU21vb3RobmVzcy5QZXJjZW50RHJvcHBlZEZyYW1lczMuQWxsU2VxdWVuY2VzEkZXZWJVSS5Ub3BDaHJvbWUuR3JhcGhpY3MuU21vb3RobmVzcy5QZXJjZW50RHJvcHBlZEZyYW1lczMuQWxsU2VxdWVuY2Vz",
+                        "config": "CjsKOUV2ZW50TGF0ZW5jeS5HZXN0dXJlU2Nyb2xsVXBkYXRlLlRvdWNoc2NyZWVuLlRvdGFsTGF0ZW5jeQooCiZQYWdlTG9hZC5JbnRlcmFjdGl2ZVRpbWluZy5JbnB1dERlbGF5Mwo4CjZHcmFwaGljcy5TbW9vdGhuZXNzLlBlcmNlbnREcm9wcGVkRnJhbWVzMy5BbGxTZXF1ZW5jZXM=",
                         "deadline_in_frames": "12000",
                         "high_stream_priority": "true",
                         "renderer_commit_delay_ms": "100000"
                     },
                     "enable_features": [
                         "BypassOutdatedSurfaceActivation",
+                        "DeferBackgroundTabLoadsWhileVisiblePageLoads",
                         "DeferHistoryBackendInit",
                         "DeferLayoutDuringBrowserStartup",
                         "DeferSessionStorageScavengingOnStartup",
                         "DeferSpellcheckInitialization",
+                        "GpuPersistentCacheAsyncInitialize",
+                        "GtkCacheNavButtonIcons",
+                        "GtkPrefetchNavButtonIcons",
                         "InitialWebUI",
+                        "InitialWebUIChromeOptimizations",
                         "InitialWebUISurfaceSync",
                         "InitialWebUIWithoutExtensions",
                         "InitialWebUIWithoutSpellCheckForNtp",
                         "InitialWebUIWithoutTranslateForNtp",
                         "LazyKeyedServiceInstantiation",
+                        "MacDeferInputContextUntilFirstPaint",
+                        "MacPumpTasksBeforeFinishLaunching",
                         "OmniboxAimPopupDeferCreation",
                         "OmniboxWebUIPopupDeferCreation",
+                        "OptimizeVariationsIpc",
                         "PerDependencyDeadlines",
                         "PrioritizeCompositorTaskRunnerOnStartup",
                         "PrioritizeResizeTaskRunnerOnStartup",
                         "PrioritizeWebUINavigationURLLoader",
                         "SendGPUChannelEarly",
                         "SkipIPCChannelPausingForNonGuests",
-                        "TopChromeWebUISharedRenderer",
-                        "WebUIBackForwardButton",
-                        "WebUIBundledCodeCache",
-                        "WebUIBypassMojoConnections",
-                        "WebUIHomeButton",
-                        "WebUIInProcessResourceLoadingV2",
-                        "WebUILocationBar",
-                        "WebUIReloadButton",
-                        "WebUISplitTabsButton",
-                        "WebUIToolbarFrameEvictionOptOut",
-                        "WebiumMetricsMapping"
-                    ]
-                }
-            ]
-        },
-        {
-            "platforms": [
-                "linux",
-                "mac"
-            ],
-            "experiments": [
-                {
-                    "name": "EnabledWithSurfaceSync_20260902",
-                    "params": {
-                        "WebUIReloadButtonBypassLoaderThrottles": "true",
-                        "WebUIReloadButtonDeferBrowserViewShow": "false",
-                        "WebUIReloadButtonKeepVisibleUntilPaint": "true",
-                        "WebUIReloadButtonRestartUnresponsive": "true",
-                        "WebUIReloadButtonRestartUnresponsiveRenderersTimeout": "5s",
-                        "config": "CjsKOUV2ZW50TGF0ZW5jeS5HZXN0dXJlU2Nyb2xsVXBkYXRlLlRvdWNoc2NyZWVuLlRvdGFsTGF0ZW5jeQooCiZQYWdlTG9hZC5JbnRlcmFjdGl2ZVRpbWluZy5JbnB1dERlbGF5MwqAAQo2R3JhcGhpY3MuU21vb3RobmVzcy5QZXJjZW50RHJvcHBlZEZyYW1lczMuQWxsU2VxdWVuY2VzEkZXZWJVSS5Ub3BDaHJvbWUuR3JhcGhpY3MuU21vb3RobmVzcy5QZXJjZW50RHJvcHBlZEZyYW1lczMuQWxsU2VxdWVuY2Vz",
-                        "deadline_in_frames": "12000",
-                        "high_stream_priority": "true",
-                        "renderer_commit_delay_ms": "100000"
-                    },
-                    "enable_features": [
-                        "BypassOutdatedSurfaceActivation",
-                        "DeferHistoryBackendInit",
-                        "DeferLayoutDuringBrowserStartup",
-                        "DeferSessionStorageScavengingOnStartup",
-                        "DeferSpellcheckInitialization",
-                        "InitialWebUI",
-                        "InitialWebUISurfaceSync",
-                        "InitialWebUIWithoutExtensions",
-                        "InitialWebUIWithoutSpellCheckForNtp",
-                        "InitialWebUIWithoutTranslateForNtp",
-                        "LazyKeyedServiceInstantiation",
-                        "OmniboxAimPopupDeferCreation",
-                        "OmniboxWebUIPopupDeferCreation",
-                        "PerDependencyDeadlines",
-                        "PrioritizeCompositorTaskRunnerOnStartup",
-                        "PrioritizeResizeTaskRunnerOnStartup",
-                        "PrioritizeWebUINavigationURLLoader",
-                        "SendGPUChannelEarly",
-                        "SkipIPCChannelPausingForNonGuests",
+                        "TopChromeWebUIPrerendering",
                         "TopChromeWebUISharedRenderer",
                         "WebUIBackForwardButton",
                         "WebUIBundledCodeCache",
@@ -21992,6 +21972,7 @@
                         "WebUIInProcessResourceLoadingV2",
                         "WebUIReloadButton",
                         "WebUISplitTabsButton",
+                        "WebUISyncDataPipeWrite",
                         "WebUIToolbarFrameEvictionOptOut",
                         "WebiumMetricsMapping"
                     ]
@@ -22002,10 +21983,7 @@
     "WebUISyncDataPipeWrite": [
         {
             "platforms": [
-                "chromeos",
-                "linux",
-                "mac",
-                "windows"
+                "chromeos"
             ],
             "experiments": [
                 {

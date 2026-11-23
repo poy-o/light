@@ -4,16 +4,15 @@
 
 #include "content/utility/speech/speech_recognition_sandbox_hook_linux.h"
 
-#include <dlfcn.h>
 #include <fcntl.h>
-#include <gnu/libc-version.h>
 
 #include <algorithm>
+#include <string_view>
 #include <vector>
 
+#include "base/check.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
-#include "base/files/file_util.h"
 #include "base/native_library.h"
 #include "base/path_service.h"
 #include "base/scoped_native_library.h"
@@ -33,6 +32,14 @@ DISABLE_CFI_DLSYM void CallSetResult(void* fn, bool result) {
 
 DISABLE_CFI_DLSYM int CallGetCallCount(void* fn) {
   return reinterpret_cast<GetCallCountFn>(fn)();
+}
+
+// Loads a test shared library built next to the test executable.
+base::ScopedNativeLibrary LoadTestLibrary(std::string_view name) {
+  base::FilePath exe_dir;
+  CHECK(base::PathService::Get(base::DIR_EXE, &exe_dir));
+  return base::ScopedNativeLibrary(
+      exe_dir.AppendASCII(base::GetNativeLibraryName(name)));
 }
 
 bool AllowsOpen(const std::vector<
@@ -70,21 +77,15 @@ TEST(SpeechRecognitionSandboxHookLinuxTest, TryPreSandboxInitNullLibrary) {
 }
 
 TEST(SpeechRecognitionSandboxHookLinuxTest, TryPreSandboxInitMissingSymbol) {
-  Dl_info info;
-  ASSERT_TRUE(dladdr(reinterpret_cast<void*>(&gnu_get_libc_version), &info));
-  base::ScopedNativeLibrary libc_lib(base::FilePath(info.dli_fname));
-  ASSERT_TRUE(libc_lib.is_valid());
-  EXPECT_FALSE(TrySodaPreSandboxInit(libc_lib.get()));
+  base::ScopedNativeLibrary lib =
+      LoadTestLibrary("fake_soda_legacy_library_for_testing");
+  ASSERT_TRUE(lib.is_valid()) << lib.GetError()->ToString();
+  EXPECT_FALSE(TrySodaPreSandboxInit(lib.get()));
 }
 
 TEST(SpeechRecognitionSandboxHookLinuxTest, TryPreSandboxInitCallsExport) {
-  base::FilePath exe_dir;
-  ASSERT_TRUE(base::PathService::Get(base::DIR_EXE, &exe_dir));
-  base::FilePath fake_lib_path = exe_dir.AppendASCII(
-      base::GetNativeLibraryName("fake_soda_presandbox_library_for_testing"));
-  ASSERT_TRUE(base::PathExists(fake_lib_path)) << fake_lib_path;
-
-  base::ScopedNativeLibrary lib(fake_lib_path);
+  base::ScopedNativeLibrary lib =
+      LoadTestLibrary("fake_soda_presandbox_library_for_testing");
   ASSERT_TRUE(lib.is_valid()) << lib.GetError()->ToString();
 
   void* set_result = lib.GetFunctionPointer("SetFakeSodaPreSandboxInitResult");

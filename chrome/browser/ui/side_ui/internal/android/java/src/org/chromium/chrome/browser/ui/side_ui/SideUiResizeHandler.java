@@ -15,6 +15,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.Px;
@@ -107,7 +108,7 @@ import java.util.Arrays;
     private final SideUiContainer mContainer;
     private final @AnchorSide int mAnchorSide;
     private final ViewGroup mAnchorContainer;
-    private final ViewGroup mAnchorContainerParent;
+    private final FrameLayout mResizeHandleContainer;
     private final SideUiCoordinator mSideUiCoordinator;
 
     private @Nullable SideUiResizeHandleView mHandleView;
@@ -132,22 +133,30 @@ import java.util.Arrays;
     private boolean mIsResizing;
 
     /**
+     * Whether an in-progress drag was interrupted externally (e.g. because UI updates paused or the
+     * container detached), so trailing events from that gesture are ignored without recording
+     * {@code *_WITHOUT_DRAG}.
+     */
+    private boolean mIsDragInterrupted;
+
+    /**
      * @param context The {@link Context} used to create the handle {@link View}.
      * @param anchorContainer The anchor container that hosts the handle.
-     * @param anchorContainerParent The parent of the anchor containers. It covers the web contents,
-     *     and shows the resize pointer icon while a drag moves the pointer off the handle.
+     * @param resizeHandleContainer The container above the anchor containers. It covers the Side UI
+     *     and web contents, and shows the resize pointer icon while a drag moves the pointer off
+     *     the handle.
      * @param container The {@link SideUiContainer} this handler serves.
      * @param sideUiCoordinator The {@link SideUiCoordinator} notified after each drag event.
      */
     /* package */ SideUiResizeHandler(
             Context context,
             ViewGroup anchorContainer,
-            ViewGroup anchorContainerParent,
+            FrameLayout resizeHandleContainer,
             SideUiContainer container,
             SideUiCoordinator sideUiCoordinator) {
         mContext = context;
         mAnchorContainer = anchorContainer;
-        mAnchorContainerParent = anchorContainerParent;
+        mResizeHandleContainer = resizeHandleContainer;
         mContainer = container;
         mAnchorSide = container.getAnchorSide();
         mSideUiCoordinator = sideUiCoordinator;
@@ -197,9 +206,9 @@ import java.util.Arrays;
 
     /** Removes the handle when the bound container's {@link View} is detached. */
     /* package */ void destroyHandleView() {
+        interruptDrag();
         if (mHandleView == null) return;
 
-        clearDragState();
         mAnchorContainer.removeView(mHandleView);
         mHandleView = null;
     }
@@ -215,13 +224,18 @@ import java.util.Arrays;
     // View.OnTouchListener implementation:
     @Override
     public boolean onTouch(View view, MotionEvent event) {
+        int action = event.getActionMasked();
         if (mSideUiCoordinator.areSideUiUpdatesPaused(mContainer.getSideUiId())) {
-            clearDragState();
+            interruptDrag();
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                mIsDragInterrupted = false;
+            }
             return false;
         }
 
-        switch (event.getActionMasked()) {
+        switch (action) {
             case MotionEvent.ACTION_DOWN:
+                mIsDragInterrupted = false;
                 // A stale drag means the previous gesture never delivered its ACTION_UP or
                 // ACTION_CANCEL. startDrag() replaces it, so the new drag is unaffected.
                 if (isDragging()) {
@@ -234,6 +248,7 @@ import java.util.Arrays;
                 }
                 return true;
             case MotionEvent.ACTION_MOVE:
+                if (mIsDragInterrupted) return false;
                 if (!isDragging()) {
                     recordThrottledTouchState(TouchState.MOVE_WITHOUT_DRAG);
                     return false;
@@ -256,7 +271,11 @@ import java.util.Arrays;
                 return true;
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
-                boolean isUp = event.getActionMasked() == MotionEvent.ACTION_UP;
+                if (mIsDragInterrupted) {
+                    mIsDragInterrupted = false;
+                    return false;
+                }
+                boolean isUp = action == MotionEvent.ACTION_UP;
                 if (!isDragging()) {
                     recordTouchState(
                             isUp ? TouchState.UP_WITHOUT_DRAG : TouchState.CANCEL_WITHOUT_DRAG);
@@ -319,18 +338,25 @@ import java.util.Arrays;
         mDragStartRawX = event.getRawX();
         mDragStartWidthPx = mContainer.getView().getWidth();
         mIsResizing = false;
-        // Pointer icons are resolved from the view under the pointer. The anchor container parent
-        // covers the web contents and falls back to its own icon when no child provides one, so it
-        // keeps the resize icon while the drag moves off the handle.
-        mAnchorContainerParent.setPointerIcon(
+        // Pointer icons are resolved from the view under the pointer. The resize handle container
+        // covers the Side UI and web contents and falls back to its own icon when no child provides
+        // one, so it keeps the resize icon while the drag moves off the handle.
+        mResizeHandleContainer.setPointerIcon(
                 SideUiResizeHandleView.getResizePointerIcon(mContext));
     }
 
+    private void interruptDrag() {
+        if (!isDragging()) return;
+        mIsDragInterrupted = true;
+        clearDragState();
+    }
+
     private void clearDragState() {
+        if (!isDragging()) return;
         mDragStartRawX = null;
         mDragStartWidthPx = null;
         mIsResizing = false;
-        mAnchorContainerParent.setPointerIcon(null);
+        mResizeHandleContainer.setPointerIcon(null);
     }
 
     /** Returns the width implied by the pointer position of {@code event}, without clamping. */

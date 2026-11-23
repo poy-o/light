@@ -10,19 +10,24 @@
 #include <vector>
 
 #include "base/containers/span.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
+#include "components/actor/public/mojom/actor_types.mojom-shared.h"
+#include "components/page_content_annotations/content/page_context_fetcher.h"
 #include "components/ttc/app/public/debug_sink.h"
 #include "components/ttc/app/public/server_journal_event.h"
 #include "components/ttc/app/public/session_journal.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
 
 namespace ttc {
 namespace {
 
+using page_content_annotations::FetchPageContextError;
 using EventKind = TtcDebugSession::EventKind;
 using Health = TtcDebugSession::Health;
 using IssueSeverity = TtcDebugSession::IssueSeverity;
@@ -169,10 +174,10 @@ class TtcDebugSessionTest : public testing::Test {
         .name = "navigate",
         .arguments_json = R"({"url":"https://google.com"})"});
     session_->OnToolDispatched(call_id, "navigate",
-                               R"({"url":"https://google.com"})", target,
-                               /*verifying=*/true);
+                               R"({"url":"https://google.com"})");
+    session_->OnToolTarget(call_id, target, /*verifying=*/true);
     task_environment_.FastForwardBy(base::Milliseconds(300));
-    session_->OnToolFinished(call_id, /*ok=*/true, "kOk", "", target);
+    session_->OnToolSucceeded(call_id, target);
   }
 
   base::test::TaskEnvironment task_environment_{
@@ -425,6 +430,26 @@ TEST_F(TtcDebugSessionTest, EndClosesOpenTurnAndDetachesJournal) {
   EXPECT_EQ(journal_.names.size(), journal_entries);
 }
 
+// Tool calls cut off by the end of the session are marked as such rather than
+// left running, and so are effects that were still being checked.
+TEST_F(TtcDebugSessionTest, EndInterruptsToolCallsInFlight) {
+  RunNavigate("c1", ForegroundTab());
+  ASSERT_EQ(session_->tool_calls()[0].effect,
+            TtcDebugSession::ToolEffect::kChecking);
+  session_->OnServerFrame(DebugSink::ToolCall{
+      .call_id = "c2", .name = "navigate", .arguments_json = "{}"});
+  session_->OnToolDispatched("c2", "navigate", "{}");
+
+  session_->End();
+  ASSERT_EQ(session_->tool_calls().size(), 2u);
+  EXPECT_EQ(session_->tool_calls()[0].status, ToolStatus::kOk);
+  EXPECT_EQ(session_->tool_calls()[0].effect,
+            TtcDebugSession::ToolEffect::kNotChecked);
+  EXPECT_EQ(session_->tool_calls()[1].status, ToolStatus::kInterrupted);
+  EXPECT_EQ(TtcDebugSession::ToolStatusName(ToolStatus::kInterrupted),
+            "interrupted");
+}
+
 TEST_F(TtcDebugSessionTest, ExportOmitsVerboseEvents) {
   Speak(5, 0.1f);
   session_->OnServerFrame(
@@ -514,41 +539,84 @@ TEST_F(TtcDebugSessionTest, BackgroundTargetAndNoEffectAreFlagged) {
 TEST_F(TtcDebugSessionTest, ToolErrorRaisesIssue) {
   session_->OnServerFrame(DebugSink::ToolCall{
       .call_id = "c1", .name = "navigate", .arguments_json = "{}"});
-  session_->OnToolDispatched("c1", "navigate", "{}", ForegroundTab(),
-                             /*verifying=*/true);
-  session_->OnToolFinished("c1", /*ok=*/false, "kNavigateInvalidUrl", "bad url",
-                           std::nullopt);
+  session_->OnToolDispatched("c1", "navigate", "{}");
+  session_->OnToolTarget("c1", ForegroundTab(), /*verifying=*/true);
+  session_->OnToolFailed("c1", "kNavigateInvalidUrl", "bad url", std::nullopt);
   const TtcDebugSession::Issue* issue = OpenIssue("tool_error:1");
   ASSERT_TRUE(issue);
   EXPECT_EQ(issue->severity, TtcDebugSession::IssueSeverity::kError);
+  EXPECT_EQ(session_->tool_calls()[0].status, ToolStatus::kError);
+  EXPECT_EQ(session_->tool_calls()[0].result_code, "kNavigateInvalidUrl");
   EXPECT_EQ(session_->tool_calls()[0].effect,
             TtcDebugSession::ToolEffect::kNotChecked);
 }
 
-TEST_F(TtcDebugSessionTest, ToolRejectedAndNoTargetRaiseIssues) {
-  session_->OnToolCallRejected("c1", "invalid arguments JSON");
-  EXPECT_TRUE(OpenIssue("tool_rejected:1"));
-  EXPECT_EQ(session_->tool_calls()[0].status,
-            TtcDebugSession::ToolStatus::kRejected);
-
+// A navigation that commits an error page fails the effect check before the
+// tool reports its error. The failure explains the missing effect, so only the
+// error stays open.
+TEST_F(TtcDebugSessionTest, ToolErrorExplainsMissingEffect) {
   session_->OnServerFrame(DebugSink::ToolCall{
-      .call_id = "c2", .name = "go_back", .arguments_json = "{}"});
-  session_->OnToolNoTarget("c2", "go_back");
-  EXPECT_TRUE(OpenIssue("tool_no_target:2"));
+      .call_id = "c1", .name = "navigate", .arguments_json = "{}"});
+  session_->OnToolDispatched("c1", "navigate", "{}");
+  session_->OnToolTarget("c1", ForegroundTab(), /*verifying=*/true);
+  session_->OnToolEffect("c1", /*verified=*/false, "error page");
+  ASSERT_TRUE(OpenIssue("tool_no_effect:1"));
+
+  session_->OnToolFailed("c1", "kNavigateFailed", "", std::nullopt);
+  EXPECT_TRUE(OpenIssue("tool_error:1"));
+  EXPECT_FALSE(OpenIssue("tool_no_effect:1"));
+  EXPECT_EQ(session_->tool_calls()[0].effect,
+            TtcDebugSession::ToolEffect::kNotChecked);
+}
+
+// A call the browser never ran (e.g. rejected as busy) is recorded as rejected
+// with the error from its response, rather than left pending.
+TEST_F(TtcDebugSessionTest, ResponseToCallThatNeverRanIsARejection) {
+  session_->OnServerFrame(DebugSink::ToolCall{
+      .call_id = "c1", .name = "navigate", .arguments_json = "{}"});
+  session_->OnClientFrame(DebugSink::ToolCallResponse{
+      .call_id = "c1",
+      .response_json =
+          base::StrCat({R"({"error":{"code":)",
+                        base::NumberToString(static_cast<int32_t>(
+                            actor::mojom::ActionResultCode::kExecutorBusy)),
+                        "}}"})});
+  const TtcDebugSession::ToolCall& tool_call = session_->tool_calls()[0];
+  EXPECT_EQ(tool_call.status, ToolStatus::kRejected);
+  EXPECT_EQ(tool_call.result_code, "kExecutorBusy");
+  EXPECT_TRUE(tool_call.finished_ms.has_value());
+  const TtcDebugSession::Issue* issue = OpenIssue("tool_rejected:1");
+  ASSERT_TRUE(issue);
+  EXPECT_THAT(issue->detail, HasSubstr("kExecutorBusy"));
+
+  // Ending the session doesn't mark it interrupted.
+  session_->End();
+  EXPECT_EQ(session_->tool_calls()[0].status, ToolStatus::kRejected);
+}
+
+TEST_F(TtcDebugSessionTest, ResponseWithMessageNamesTheReason) {
+  session_->OnServerFrame(DebugSink::ToolCall{
+      .call_id = "c1", .name = "navigate", .arguments_json = "{not json"});
+  session_->OnClientFrame(DebugSink::ToolCallResponse{
+      .call_id = "c1",
+      .response_json = R"({"error":{"message":"invalid arguments JSON"}})"});
+  EXPECT_EQ(session_->tool_calls()[0].status, ToolStatus::kRejected);
+  EXPECT_EQ(session_->tool_calls()[0].result_message, "invalid arguments JSON");
+  EXPECT_TRUE(OpenIssue("tool_rejected:1"));
 }
 
 TEST_F(TtcDebugSessionTest, ToolTimeoutResolvesWhenToolFinishes) {
   session_->OnTransportStateChanged(true);
   session_->OnServerFrame(DebugSink::ToolCall{
       .call_id = "c1", .name = "click", .arguments_json = "{}"});
-  session_->OnToolDispatched("c1", "click", "{}", ForegroundTab(),
-                             /*verifying=*/false);
+  session_->OnToolDispatched("c1", "click", "{}");
+  session_->OnToolTarget("c1", ForegroundTab(), /*verifying=*/false);
   task_environment_.FastForwardBy(TtcDebugSession::kToolTimeout -
                                   base::Milliseconds(300));
   EXPECT_FALSE(AnyIssue("tool_timeout:1"));
   task_environment_.FastForwardBy(base::Milliseconds(600));
   EXPECT_TRUE(OpenIssue("tool_timeout:1"));
-  session_->OnToolFinished("c1", /*ok=*/true, "kOk", "", ForegroundTab());
+  session_->OnToolSucceeded("c1", ForegroundTab());
   EXPECT_FALSE(OpenIssue("tool_timeout:1"));
   EXPECT_TRUE(AnyIssue("tool_timeout:1")->resolved);
 }
@@ -666,26 +734,34 @@ TEST_F(TtcDebugSessionTest, TransportLossRaisedAndResolvedOnReconnect) {
 }
 
 TEST_F(TtcDebugSessionTest, PageContextFailureResolvedByNextContextUpdate) {
-  session_->OnPageContextFailed("https://example.com/",
-                                "kPageContextNotEligible");
+  session_->OnPageContextFetchFailed(
+      GURL("https://example.com/"), FetchPageContextError::kWebContentsChanged);
   EXPECT_TRUE(OpenIssue("page_context_failed"));
+  EXPECT_FALSE(OpenIssue("page_context_blocked:https://example.com/"));
   session_->OnClientFrame(DebugSink::ContextUpdate{
       .url = "https://example.com/", .content_bytes = 1234});
   EXPECT_FALSE(OpenIssue("page_context_failed"));
   EXPECT_TRUE(HasEvent(EventKind::kContextSent));
+}
 
-  session_->OnPageContextBlocked("chrome://settings/");
+// A page that may not share its context is reported once, as blocked, and not
+// as a failed fetch as well.
+TEST_F(TtcDebugSessionTest, IneligiblePageIsBlockedNotFailed) {
+  session_->OnPageContextFetchFailed(
+      GURL("chrome://settings/"),
+      FetchPageContextError::kPageContextNotEligible);
   const TtcDebugSession::Issue* blocked =
       OpenIssue("page_context_blocked:chrome://settings/");
   ASSERT_TRUE(blocked);
   EXPECT_EQ(blocked->severity, TtcDebugSession::IssueSeverity::kInfo);
+  EXPECT_FALSE(OpenIssue("page_context_failed"));
 }
 
 TEST_F(TtcDebugSessionTest, ActorStepsAreAttachedToTheRunningTool) {
   session_->OnServerFrame(DebugSink::ToolCall{
       .call_id = "c1", .name = "navigate", .arguments_json = "{}"});
-  session_->OnToolDispatched("c1", "navigate", "{}", ForegroundTab(),
-                             /*verifying=*/true);
+  session_->OnToolDispatched("c1", "navigate", "{}");
+  session_->OnToolTarget("c1", ForegroundTab(), /*verifying=*/true);
   session_->OnActorJournalEntry("NavigateTool", 'B', "url=https://a.test",
                                 /*has_error=*/false);
   session_->OnActorJournalEntry("NavigateTool", 'E', "error=boom",
@@ -929,17 +1005,17 @@ TEST_F(TtcDebugSessionTest, LateReplyAfterNewSpeechStartsNewTurn) {
 }
 
 TEST_F(TtcDebugSessionTest, ServerFrameErrorsAreClassified) {
-  session_->OnServerFrame(DebugSink::ServerError{
-      .code = "MalformedAudioChunk",
-      .message = "malformed audio chunk of 3 bytes"});
+  session_->OnServerFrame(
+      DebugSink::ServerError{.code = "MalformedAudioChunk",
+                             .message = "malformed audio chunk of 3 bytes"});
   const TtcDebugSession::Issue* malformed = OpenIssue("malformed_audio");
   ASSERT_TRUE(malformed);
   EXPECT_EQ(malformed->severity, IssueSeverity::kWarning);
   EXPECT_FALSE(AnyIssue("server_error:MalformedAudioChunk"));
 
-  session_->OnServerFrame(DebugSink::ServerError{
-      .code = "UnparsableServerFrame",
-      .message = "unparsable server frame of 3 bytes"});
+  session_->OnServerFrame(
+      DebugSink::ServerError{.code = "UnparsableServerFrame",
+                             .message = "unparsable server frame of 3 bytes"});
   const TtcDebugSession::Issue* error =
       OpenIssue("server_error:UnparsableServerFrame");
   ASSERT_TRUE(error);
@@ -972,7 +1048,7 @@ TEST_F(TtcDebugSessionTest, PlaybackAfterTurnClosedIsRecorded) {
   EXPECT_TRUE(session_->turns()[0].first_playback_ms.has_value());
 }
 
-TEST_F(TtcDebugSessionTest, BackgroundTargetIsCountedOnce) {
+TEST_F(TtcDebugSessionTest, BackgroundTargetIsOnlyFlaggedAtDispatch) {
   // Dispatched and finished in a background tab: one occurrence.
   RunNavigate("c1", BackgroundTab());
   const TtcDebugSession::Issue* issue = OpenIssue("tool_background_target:1");
@@ -981,25 +1057,24 @@ TEST_F(TtcDebugSessionTest, BackgroundTargetIsCountedOnce) {
   EXPECT_EQ(issue->title, "navigate is acting on a background tab");
   EXPECT_EQ(session_->issues().size(), 1u);
 
-  // Dispatched in the foreground, finished in the background.
+  // Dispatched in the foreground, finished in the background, as when the
+  // tool opens a new tab in front of it: expected, so not an issue.
   session_->OnServerFrame(DebugSink::ToolCall{
-      .call_id = "c2", .name = "navigate", .arguments_json = "{}"});
-  session_->OnToolDispatched("c2", "navigate", "{}", ForegroundTab(),
-                             /*verifying=*/true);
-  session_->OnToolFinished("c2", /*ok=*/true, "kOk", "", BackgroundTab());
-  issue = OpenIssue("tool_background_target:2");
-  ASSERT_TRUE(issue);
-  EXPECT_EQ(issue->count, 1);
-  EXPECT_EQ(issue->title, "navigate finished in a background tab");
+      .call_id = "c2", .name = "open_url", .arguments_json = "{}"});
+  session_->OnToolDispatched("c2", "open_url", "{}");
+  session_->OnToolTarget("c2", ForegroundTab(), /*verifying=*/false);
+  session_->OnToolSucceeded("c2", BackgroundTab());
+  EXPECT_FALSE(AnyIssue("tool_background_target:2"));
+  ASSERT_TRUE(session_->tool_calls()[1].target_after.has_value());
+  EXPECT_FALSE(session_->tool_calls()[1].target_after->visible);
 }
 
 TEST_F(TtcDebugSessionTest, BrowserLevelToolHasNoTarget) {
   // Browser-level tools are reported without a target.
   session_->OnServerFrame(DebugSink::ToolCall{
       .call_id = "c1", .name = "switch_tab", .arguments_json = "{}"});
-  session_->OnToolDispatched("c1", "switch_tab", "{}", std::nullopt,
-                             /*verifying=*/false);
-  session_->OnToolFinished("c1", /*ok=*/true, "kOk", "", std::nullopt);
+  session_->OnToolDispatched("c1", "switch_tab", "{}");
+  session_->OnToolSucceeded("c1", std::nullopt);
   const TtcDebugSession::ToolCall& tool_call = session_->tool_calls()[0];
   EXPECT_EQ(tool_call.status, ToolStatus::kOk);
   EXPECT_FALSE(tool_call.target_before.has_value());
@@ -1065,9 +1140,9 @@ TEST_F(TtcDebugSessionTest, ToolCallsAreCapped) {
   // A dropped call is counted once, however often it is reported.
   session_->OnServerFrame(DebugSink::ToolCall{
       .call_id = "extra", .name = "click", .arguments_json = "{}"});
-  session_->OnToolDispatched("extra", "click", "{}", ForegroundTab(),
-                             /*verifying=*/false);
-  session_->OnToolFinished("extra", /*ok=*/true, "kOk", "", ForegroundTab());
+  session_->OnToolDispatched("extra", "click", "{}");
+  session_->OnToolTarget("extra", ForegroundTab(), /*verifying=*/false);
+  session_->OnToolSucceeded("extra", ForegroundTab());
   EXPECT_EQ(session_->tool_calls().size(), TtcDebugSession::kMaxToolCalls);
   EXPECT_EQ(session_->GetSnapshot().dropped_items, 1);
   session_->OnServerFrame(DebugSink::ToolCall{
@@ -1076,8 +1151,7 @@ TEST_F(TtcDebugSessionTest, ToolCallsAreCapped) {
   EXPECT_EQ(CountEvents(EventKind::kItemsTruncated), 1);
 
   // Calls that were kept still update.
-  session_->OnToolDispatched("0", "click", "{}", ForegroundTab(),
-                             /*verifying=*/false);
+  session_->OnToolDispatched("0", "click", "{}");
   EXPECT_EQ(session_->tool_calls()[0].status, ToolStatus::kRunning);
 }
 

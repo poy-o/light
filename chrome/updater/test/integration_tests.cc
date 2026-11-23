@@ -12,7 +12,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/check_deref.h"
 #include "base/containers/flat_set.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
@@ -43,6 +42,7 @@
 #include "base/test/bind.h"
 #include "base/test/scoped_run_loop_timeout.h"
 #include "base/test/task_environment.h"
+#include "base/test/test_future.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
@@ -143,15 +143,13 @@ void ExpectNoUpdateSequence(
     const std::string& app_id,
     const base::Version& updater_version = base::Version(kUpdaterVersion),
     std::optional<base::Version> app_version = std::nullopt) {
-  base::DictValue app_expectation = base::DictValue().Set("appid", app_id);
-  if (app_version) {
-    app_expectation.Set("version", app_version->GetString());
-  }
   test_server.ExpectOnce(
       {request::GetUpdaterUserAgentMatcher(updater_version),
-       request::GetJSONContentMatcher(base::DictValue().SetByDottedPath(
-           "request.apps",
-           base::ListValue().Append(std::move(app_expectation))))},
+       request::GetJSONContentMatcher(
+           app_version
+               ? json::HasApp(app_id,
+                              json::HasKey("version", app_version->GetString()))
+               : json::HasApp(app_id))},
       base::BindRepeating(
           [](const std::string& app_id, ProtocolVersion protocol_version) {
             if (protocol_version == ProtocolVersion::kV4) {
@@ -195,17 +193,18 @@ void ExpectPingRequest(
     const std::string& app_id,
     const update_client::UpdateClient::PingParams& ping_params,
     const base::Version& version = base::Version(kUpdaterVersion)) {
+  std::vector<json::ValueMatcher> event_matchers = {
+      json::HasKey("errorcode", ping_params.error_code),
+      json::HasKey("eventresult", ping_params.result),
+      json::HasKey("eventtype", ping_params.event_type)};
+  if (ping_params.extra_code1) {
+    event_matchers.push_back(
+        json::HasKey("extracode1", ping_params.extra_code1));
+  }
   test_server.ExpectOnce(
       {request::GetUpdaterUserAgentMatcher(version),
-       request::GetContentMatcher({absl::StrFormat(
-           R"(.*"appid":"%s".*"errorcode":%d,"eventresult":%d,"eventtype":%d,)"
-           R"(%s.*)",
-           app_id.c_str(), ping_params.error_code, ping_params.result,
-           ping_params.event_type,
-           ping_params.extra_code1
-               ? absl::StrFormat(R"("extracode1":%d,)", ping_params.extra_code1)
-                     .c_str()
-               : "")})},
+       request::GetJSONContentMatcher(json::HasApp(
+           app_id, json::HasEvent(testing::AllOfArray(event_matchers))))},
       absl::StrFormat(")]}'\n"
                       R"({"response":{)"
                       R"(  "protocol":"4.0",)"
@@ -224,22 +223,17 @@ void ExpectInstallEvent(
     const std::string& app_id,
     std::optional<int> event_result = std::nullopt,
     std::optional<std::string> prev_version = std::nullopt) {
-  base::DictValue event_expectation = base::DictValue().Set("eventtype", 2);
+  std::vector<json::ValueMatcher> event_matchers = {
+      json::HasKey("eventtype", 2)};
   if (event_result) {
-    event_expectation.Set("eventresult", *event_result);
+    event_matchers.push_back(json::HasKey("eventresult", *event_result));
   }
   if (prev_version) {
-    event_expectation.Set("previousversion", *prev_version);
+    event_matchers.push_back(json::HasKey("previousversion", *prev_version));
   }
-  base::DictValue app_expectation =
-      base::DictValue()
-          .Set("appid", app_id)
-          .Set("events",
-               base::ListValue().Append(std::move(event_expectation)));
   test_server.ExpectOnce(
-      {request::GetJSONContentMatcher(base::DictValue().SetByDottedPath(
-          "request.apps",
-          base::ListValue().Append(std::move(app_expectation))))},
+      {request::GetJSONContentMatcher(json::HasApp(
+          app_id, json::HasEvent(testing::AllOfArray(event_matchers))))},
       absl::StrFormat(")]}'\n"
                       R"({"response":{)"
                       R"(  "protocol":"3.1",)"
@@ -258,22 +252,25 @@ void ExpectAppErrorEvent(ScopedServer& test_server,
                          const std::string& app_id,
                          const int error_code,
                          const int event_type) {
-  test_server.ExpectOnce({request::GetPathMatcher(test_server.update_path()),
-                          request::GetUpdaterUserAgentMatcher(),
-                          request::GetContentMatcher({absl::StrFormat(
-                              R"(.*"appid":"%s",.*)"
-                              R"(.*"errorcode":%d,)"
-                              R"("eventresult":0,"eventtype":%d,.*)",
-                              app_id, error_code, event_type)})},
-                         ")]}'\n");
+  test_server.ExpectOnce(
+      {request::GetPathMatcher(test_server.update_path()),
+       request::GetUpdaterUserAgentMatcher(),
+       request::GetJSONContentMatcher(
+           json::HasApp(app_id, json::HasEvent(testing::AllOf(
+                                    json::HasKey("errorcode", error_code),
+                                    json::HasKey("eventresult", 0),
+                                    json::HasKey("eventtype", event_type)))))},
+      ")]}'\n");
 }
 
 void ExpectUninstallPingPreviousVersion(ScopedServer& test_server,
                                         const base::Version& previous_version) {
   test_server.ExpectOnce(
-      {request::GetContentMatcher({absl::StrFormat(
-          R"(.*"appid":"%s".*"eventtype":4,"previousversion":"%s".*)",
-          kUpdaterAppId, previous_version.GetString())})},
+      {request::GetJSONContentMatcher(json::HasApp(
+          kUpdaterAppId, json::HasEvent(testing::AllOf(
+                             json::HasKey("eventtype", 4),
+                             json::HasKey("previousversion",
+                                          previous_version.GetString())))))},
       absl::StrFormat(")]}'\n"
                       R"({"response":{)"
                       R"(  "protocol":"3.1",)"
@@ -778,16 +775,27 @@ class IntegrationTest : public ::testing::Test {
                                               updater_version);
   }
 
+  // Expects the updater's uninstall ping.
   void ExpectUninstallPing(ScopedServer& test_server,
                            std::optional<GURL> target_url = {}) {
-    test_commands_->ExpectPing(test_server,
+    test_commands_->ExpectPing(test_server, kUpdaterAppId,
                                update_client::protocol_request::kEventUninstall,
                                target_url);
   }
 
+  // Expects the uninstall ping that the updater sends for `app_id` when it
+  // removes the app's registration.
+  void ExpectAppUninstallPing(ScopedServer& test_server,
+                              const std::string& app_id) {
+    test_commands_->ExpectPing(test_server, app_id,
+                               update_client::protocol_request::kEventUninstall,
+                               /*target_url=*/{});
+  }
+
   void ExpectInstallSource(ScopedServer& test_server,
+                           const std::string& app_id,
                            const std::string& install_source) {
-    test_commands_->ExpectInstallSource(test_server, install_source);
+    test_commands_->ExpectInstallSource(test_server, app_id, install_source);
   }
 
   void ExpectAppCommandPing(
@@ -814,12 +822,12 @@ class IntegrationTest : public ::testing::Test {
       bool do_fault_injection = false,
       bool skip_download = false,
       const base::Version& updater_version = base::Version(kUpdaterVersion),
-      const std::string& event_regex = ".*",
+      std::optional<json::ValueMatcher> ping_app_matcher = std::nullopt,
       bool use_xz = false) {
     test_commands_->ExpectUpdateSequence(
         test_server, app_id, install_data_index, priority, from_version,
         to_version, do_fault_injection, skip_download, updater_version,
-        event_regex, use_xz);
+        std::move(ping_app_matcher), use_xz);
   }
 
   void ExpectUpdateSequenceBadHash(ScopedServer& test_server,
@@ -847,11 +855,11 @@ class IntegrationTest : public ::testing::Test {
       bool do_fault_injection = false,
       bool skip_download = false,
       const base::Version& updater_version = base::Version(kUpdaterVersion),
-      const std::string& event_regex = ".*") {
+      std::optional<json::ValueMatcher> ping_app_matcher = std::nullopt) {
     test_commands_->ExpectInstallSequence(
         test_server, app_id, install_data_index, priority, from_version,
         to_version, do_fault_injection, skip_download, updater_version,
-        event_regex);
+        std::move(ping_app_matcher));
   }
 
   void StressUpdateService() { test_commands_->StressUpdateService(); }
@@ -1343,7 +1351,7 @@ TEST_F(IntegrationTest, QualifyUpdater) {
   // for updates on the next check.
   test_server.ExpectOnce(
       {request::GetUpdaterUserAgentMatcher(),
-       request::GetContentMatcher({absl::StrFormat(".*%s.*", kUpdaterAppId)})},
+       request::GetJSONContentMatcher(json::HasApp(kUpdaterAppId))},
       ")]}'\n");
   ASSERT_NO_FATAL_FAILURE(RunWake(0));
   ASSERT_TRUE(WaitForUpdaterExit());
@@ -1517,7 +1525,6 @@ TEST_F(IntegrationTest, SelfUpdateAfterEulaAcceptedViaInstall) {
   // Installing an app implies EULA accepted.
   ASSERT_NO_FATAL_FAILURE(ExpectAppsUpdateSequence(
       GetUpdaterScopeForTesting(), test_server,
-      /*request_attributes=*/{},
       {
           AppUpdateExpectation(
               kApp1.GetInstallCommandLineArgs(/*install_v1=*/true), kApp1.appid,
@@ -1646,7 +1653,6 @@ TEST_F(IntegrationTest, CheckForUpdateAndInstallAppViaMojo) {
       if (!IsSystemInstall(GetUpdaterScopeForTesting())) {
         ASSERT_NO_FATAL_FAILURE(ExpectAppsUpdateSequence(
             GetUpdaterScopeForTesting(), test_server,
-            /*request_attributes=*/{},
             {
                 AppUpdateExpectation(
                     kApp1.GetInstallCommandLineArgs(/*install_v1=*/true),
@@ -1797,59 +1803,34 @@ TEST_F(IntegrationTest, GetPoliciesJson) {
 #else   // BUILDFLAG(IS_WIN)
         CreateUpdateServiceProxy(GetUpdaterScopeForTesting());
 #endif  // BUILDFLAG(IS_WIN)
-    base::RunLoop loop;
-    update_service->GetPoliciesJson(
-        base::BindLambdaForTesting([&](const std::string& result) {
-          const auto root = base::JSONReader::Read(
-              result, base::JSON_PARSE_CHROMIUM_EXTENSIONS);
-          ASSERT_TRUE(root);
-          const base::DictValue& app_policies = CHECK_DEREF(
-              CHECK_DEREF(root).GetDict().FindDict("policiesByAppId"));
-          const base::DictValue& test1_install_policy = CHECK_DEREF(
-              CHECK_DEREF(app_policies.FindDict("test1")).FindDict("Install"));
-          EXPECT_EQ(
-              CHECK_DEREF(test1_install_policy.FindString("prevailingSource")),
-              "DictValuePolicy");
-          EXPECT_EQ(CHECK_DEREF(CHECK_DEREF(test1_install_policy.FindDict(
-                                                "valuesBySource"))
-                                    .FindInt("DictValuePolicy")),
-                    6);
-          const base::DictValue& test2_update_policy = CHECK_DEREF(
-              CHECK_DEREF(app_policies.FindDict("test2")).FindDict("Update"));
-          EXPECT_EQ(
-              CHECK_DEREF(test2_update_policy.FindString("prevailingSource")),
-              "DictValuePolicy");
-          EXPECT_EQ(CHECK_DEREF(CHECK_DEREF(test2_update_policy.FindDict(
-                                                "valuesBySource"))
-                                    .FindInt("DictValuePolicy")),
-                    3);
+    base::test::TestFuture<const std::string&> policies_json;
+    update_service->GetPoliciesJson(policies_json.GetCallback());
+    ASSERT_TRUE(policies_json.Wait());
+    const std::optional<base::Value> root = base::JSONReader::Read(
+        policies_json.Get(), base::JSON_PARSE_CHROMIUM_EXTENSIONS);
+    ASSERT_TRUE(root) << policies_json.Get();
 
-          const base::DictValue& updater_policies = CHECK_DEREF(
-              CHECK_DEREF(root).GetDict().FindDict("policiesByName"));
-          const base::DictValue& last_check_period_policy =
-              CHECK_DEREF(updater_policies.FindDict("LastCheckPeriod"));
-          EXPECT_EQ(CHECK_DEREF(last_check_period_policy.FindString(
-                        "prevailingSource")),
-                    "DictValuePolicy");
-          EXPECT_EQ(CHECK_DEREF(CHECK_DEREF(last_check_period_policy.FindDict(
-                                                "valuesBySource"))
-                                    .FindString("DictValuePolicy")),
-                    "64800000000");
-          const base::DictValue& updates_suppressed_policy =
-              CHECK_DEREF(updater_policies.FindDict("UpdatesSuppressed"));
-          EXPECT_EQ(CHECK_DEREF(updates_suppressed_policy.FindString(
-                        "prevailingSource")),
-                    "DictValuePolicy");
-          EXPECT_EQ(CHECK_DEREF(CHECK_DEREF(updates_suppressed_policy.FindDict(
-                                                "valuesBySource"))
-                                    .FindDict("DictValuePolicy")),
-                    base::DictValue()
-                        .Set("Duration", 120)
-                        .Set("StartHour", 15)
-                        .Set("StartMinute", 0));
-          loop.Quit();
-        }));
-    loop.Run();
+    // Returns a matcher for a policy whose prevailing source,
+    // `DictValuePolicy`, sets it to `value`.
+    const auto set_by_dict_policy = [](const auto& value) {
+      return testing::AllOf(
+          json::HasKey("prevailingSource", "DictValuePolicy"),
+          json::HasPath("valuesBySource.DictValuePolicy", value));
+    };
+    EXPECT_THAT(
+        *root,
+        testing::AllOf(
+            json::HasPath("policiesByAppId.test1.Install",
+                          set_by_dict_policy(6)),
+            json::HasPath("policiesByAppId.test2.Update",
+                          set_by_dict_policy(3)),
+            json::HasPath("policiesByName.LastCheckPeriod",
+                          set_by_dict_policy("64800000000")),
+            json::HasPath("policiesByName.UpdatesSuppressed",
+                          set_by_dict_policy(base::DictValue()
+                                                 .Set("Duration", 120)
+                                                 .Set("StartHour", 15)
+                                                 .Set("StartMinute", 0)))));
   }
 
   ASSERT_NO_FATAL_FAILURE(Uninstall());
@@ -1881,7 +1862,7 @@ TEST_F(IntegrationTest, UpdateErrorStatus) {
        {"noupdate", "error-internal", "error-hash", "error-osnotsupported",
         "error-hwnotsupported", "error-unsupportedprotocol"}) {
     ASSERT_NO_FATAL_FAILURE(ExpectAppsUpdateSequence(
-        GetUpdaterScopeForTesting(), test_server, {},
+        GetUpdaterScopeForTesting(), test_server,
         {
             AppUpdateExpectation(
                 kApp1.GetInstallCommandLineArgs(/*install_v1=*/false),
@@ -1948,8 +1929,9 @@ TEST_F(IntegrationTest, UpdateAppXZ) {
   ScopedServer test_server(test_commands_);
   ASSERT_NO_FATAL_FAILURE(ExpectUpdateSequence(
       test_server, kAppId, "", UpdateService::Priority::kBackground,
-      base::Version("0.1"), v1, false, false, base::Version(kUpdaterVersion),
-      ".*", true));
+      base::Version("0.1"), v1, /*do_fault_injection=*/false,
+      /*skip_download=*/false, base::Version(kUpdaterVersion),
+      /*ping_app_matcher=*/std::nullopt, /*use_xz=*/true));
   ASSERT_NO_FATAL_FAILURE(RunWake(0));
   ASSERT_TRUE(WaitForUpdaterExit());
   ASSERT_NO_FATAL_FAILURE(ExpectAppVersion(kAppId, v1));
@@ -2488,8 +2470,10 @@ TEST_F(IntegrationTest, InstallId) {
   ExpectInstallEvent(test_server, kUpdaterAppId);
   ASSERT_NO_FATAL_FAILURE(ExpectInstallSequence(
       test_server, kAppId, "", UpdateService::Priority::kForeground,
-      base::Version({0, 0, 0, 0}), base::Version("1"), false, false,
-      base::Version(kUpdaterVersion), "\"iid\":\"my_install_id\""));
+      base::Version({0, 0, 0, 0}), base::Version("1"),
+      /*do_fault_injection=*/false, /*skip_download=*/false,
+      base::Version(kUpdaterVersion),
+      /*ping_app_matcher=*/json::HasKey("iid", "my_install_id")));
   ASSERT_NO_FATAL_FAILURE(InstallUpdaterAndApp(
       kAppId, /*is_silent_install=*/true,
       base::StrCat({"appguid=", kAppId, "&iid=my_install_id"})));
@@ -2521,7 +2505,7 @@ TEST_P(IntegrationSansInstallIdTest, Test) {
   ASSERT_NO_FATAL_FAILURE(ExpectInstallSequence(
       test_server, kAppId, "", UpdateService::Priority::kForeground,
       base::Version({0, 0, 0, 0}), base::Version("1"), false, false,
-      GetParam().version, ".*"));
+      GetParam().version));
   ASSERT_NO_FATAL_FAILURE(InstallUpdaterAndApp(
       kAppId, /*is_silent_install=*/true,
       base::StrCat({"appguid=", kAppId, "&iid=my_install_id"}),
@@ -2596,7 +2580,6 @@ TEST_F(IntegrationTest, UpdateAllPerAppDictPolicies) {
 
   ASSERT_NO_FATAL_FAILURE(ExpectAppsUpdateSequence(
       GetUpdaterScopeForTesting(), test_server,
-      /*request_attributes=*/base::DictValue().Set("dlpref", "cacheable"),
       {
           AppUpdateExpectation(
               kApp1.GetInstallCommandLineArgs(/*install_v1=*/false),
@@ -2623,7 +2606,8 @@ TEST_F(IntegrationTest, UpdateAllPerAppDictPolicies) {
               /*should_update=*/true, /*allow_rollback=*/false,
               /*target_version_prefix=*/"", /*target_channel=*/"canary",
               GetInstallerPath(kApp3.v2_crx)),
-      }));
+      },
+      /*request_matcher=*/json::HasKey("dlpref", "cacheable")));
   ASSERT_NO_FATAL_FAILURE(UpdateAll());
   ASSERT_TRUE(WaitForUpdaterExit());
 
@@ -2941,7 +2925,7 @@ TEST_F(IntegrationTest, SameVersionUpdate) {
       ")]}'\n"
       R"({"response":{)"
       R"(  "protocol":"4.0",)"
-      R"(  "app":[)"
+      R"(  "apps":[)"
       R"(    {)"
       R"(      "appid":"%s",)"
       R"(      "status":"ok",)"
@@ -2954,16 +2938,22 @@ TEST_F(IntegrationTest, SameVersionUpdate) {
       app_id.c_str());
   test_server.ExpectOnce(
       {request::GetUpdaterUserAgentMatcher(),
-       request::GetContentMatcher(
-           {R"("updatecheck":{"sameversionupdate":true},"version":"0.1"}.*)"})},
+       request::GetJSONContentMatcher(json::HasApp(
+           app_id, testing::AllOf(json::HasKey("updatecheck",
+                                               base::DictValue().Set(
+                                                   "sameversionupdate", true)),
+                                  json::HasKey("version", "0.1"))))},
       response);
   ASSERT_NO_FATAL_FAILURE(CallServiceUpdate(
       app_id, "", UpdateService::PolicySameVersionUpdate::kAllowed));
 
-  test_server.ExpectOnce({request::GetUpdaterUserAgentMatcher(),
-                          request::GetContentMatcher(
-                              {R"(.*"updatecheck":{},"version":"0.1"}.*)"})},
-                         response);
+  test_server.ExpectOnce(
+      {request::GetUpdaterUserAgentMatcher(),
+       request::GetJSONContentMatcher(json::HasApp(
+           app_id,
+           testing::AllOf(json::HasKey("updatecheck", base::DictValue()),
+                          json::HasKey("version", "0.1"))))},
+      response);
   ASSERT_NO_FATAL_FAILURE(CallServiceUpdate(
       app_id, "", UpdateService::PolicySameVersionUpdate::kNotAllowed));
   ASSERT_NO_FATAL_FAILURE(ExpectUninstallPing(test_server));
@@ -3000,9 +2990,12 @@ TEST_F(IntegrationTest, InstallDataIndex) {
 
   test_server.ExpectOnce(
       {request::GetUpdaterUserAgentMatcher(),
-       request::GetContentMatcher(
-           {absl::StrFormat(R"(.*"data":\[{"index":"%s","name":"install"}],.*)",
-                            install_data_index.c_str())})},
+       request::GetJSONContentMatcher(json::HasApp(
+           app_id,
+           json::HasKey("data", base::ListValue().Append(
+                                    base::DictValue()
+                                        .Set("index", install_data_index)
+                                        .Set("name", "install")))))},
       response);
 
   ASSERT_NO_FATAL_FAILURE(
@@ -3285,7 +3278,6 @@ TEST_F(IntegrationTestDeviceManagement,
 
   ASSERT_NO_FATAL_FAILURE(ExpectAppsUpdateSequence(
       UpdaterScope::kSystem, *test_server_,
-      /*request_attributes=*/{},
       {
           AppUpdateExpectation(
               kApp1.GetInstallCommandLineArgs(/*install_v1=*/true), kApp1.appid,
@@ -3317,7 +3309,6 @@ TEST_F(IntegrationTestDeviceManagement, PolicyFetchFailedButAppUpdatedAnyway) {
 
   ASSERT_NO_FATAL_FAILURE(ExpectAppsUpdateSequence(
       UpdaterScope::kSystem, *test_server_,
-      /*request_attributes=*/{},
       {AppUpdateExpectation(
           kApp1.GetInstallCommandLineArgs(/*install_v1=*/false), kApp1.appid,
           kApp1.v1, kApp1.v2,
@@ -3354,7 +3345,6 @@ TEST_F(IntegrationTestDeviceManagement, AppInstall) {
                                            omaha_settings);
   ASSERT_NO_FATAL_FAILURE(ExpectAppsUpdateSequence(
       UpdaterScope::kSystem, *test_server_,
-      /*request_attributes=*/{},
       {
           AppUpdateExpectation(
               kApp1.GetInstallCommandLineArgs(/*install_v1=*/true), kApp1.appid,
@@ -3410,7 +3400,6 @@ TEST_F(IntegrationTestDeviceManagement, ForceInstall) {
   ExpectUpdateCheckRequest(*test_server_);
   ASSERT_NO_FATAL_FAILURE(ExpectAppsUpdateSequence(
       UpdaterScope::kSystem, *test_server_,
-      /*request_attributes=*/{},
       {
           AppUpdateExpectation(
               kApp1.GetInstallCommandLineArgs(/*install_v1=*/true), kApp1.appid,
@@ -3478,7 +3467,7 @@ TEST_F(IntegrationTestDeviceManagement, QualifyUpdaterWhenUpdateDisabled) {
       *test_server_, kDMToken, omaha_settings, /*first_request=*/false);
   test_server_->ExpectOnce(
       {request::GetUpdaterUserAgentMatcher(),
-       request::GetContentMatcher({absl::StrFormat(".*%s.*", kUpdaterAppId)})},
+       request::GetJSONContentMatcher(json::HasApp(kUpdaterAppId))},
       ")]}'\n");
   ASSERT_NO_FATAL_FAILURE(RunWake(0));
   ASSERT_TRUE(WaitForUpdaterExit());
@@ -3582,7 +3571,7 @@ TEST_F(IntegrationTestDeviceManagement,
   ASSERT_NO_FATAL_FAILURE(InstallEnterpriseCompanionApp());
 
   // Uninstall ping for the app.
-  ASSERT_NO_FATAL_FAILURE(ExpectUninstallPing(*test_server_));
+  ASSERT_NO_FATAL_FAILURE(ExpectAppUninstallPing(*test_server_, kApp1.appid));
   // Expect an update check and then the uninstall ping for the updater itself.
   ExpectUpdateCheckRequest(*test_server_);
   ASSERT_NO_FATAL_FAILURE(ExpectUninstallPing(*test_server_));
@@ -3662,7 +3651,6 @@ TEST_F(IntegrationTestDeviceManagement, AppUpdateConflictPolicies) {
 
   ASSERT_NO_FATAL_FAILURE(ExpectAppsUpdateSequence(
       UpdaterScope::kSystem, *test_server_,
-      /*request_attributes=*/{},
       {
           AppUpdateExpectation(
               kApp1.GetInstallCommandLineArgs(/*install_v1=*/false),
@@ -3730,7 +3718,6 @@ TEST_F(IntegrationTestDeviceManagement, IPolicyStatus) {
                                            omaha_settings);
   ASSERT_NO_FATAL_FAILURE(ExpectAppsUpdateSequence(
       UpdaterScope::kSystem, *test_server_,
-      /*request_attributes=*/{},
       {
           AppUpdateExpectation(
               kApp1.GetInstallCommandLineArgs(/*install_v1=*/false),
@@ -3880,7 +3867,6 @@ TEST_P(IntegrationTestCloudPolicyOverridesPlatformPolicy, UseCloudPolicy) {
                                            omaha_settings);
   ASSERT_NO_FATAL_FAILURE(ExpectAppsUpdateSequence(
       UpdaterScope::kSystem, *test_server_,
-      /*request_attributes=*/base::DictValue().Set("dlpref", "cacheable"),
       {
           AppUpdateExpectation(
               kApp1.GetInstallCommandLineArgs(/*install_v1=*/false),
@@ -3904,7 +3890,8 @@ TEST_P(IntegrationTestCloudPolicyOverridesPlatformPolicy, UseCloudPolicy) {
               /*is_install=*/false,
               /*should_update=*/true, false, "", "canary",
               GetInstallerPath(kApp3.v2_crx)),
-      }));
+      },
+      /*request_matcher=*/json::HasKey("dlpref", "cacheable")));
   ASSERT_NO_FATAL_FAILURE(RunWake(0));
   ASSERT_TRUE(WaitForUpdaterExit());
   ASSERT_NO_FATAL_FAILURE(ExpectAppInstalled(kApp1.appid, kApp1.v2));
@@ -3950,7 +3937,6 @@ TEST_F(IntegrationTestDeviceManagement, RollbackToTargetVersion) {
 
   ASSERT_NO_FATAL_FAILURE(ExpectAppsUpdateSequence(
       UpdaterScope::kSystem, *test_server_,
-      /*request_attributes=*/{},
       {AppUpdateExpectation(
           kApp1.GetInstallCommandLineArgs(/*install_v1=*/true), kApp1.appid,
           kApp1.v2, kApp1.v1,
@@ -4035,11 +4021,12 @@ class IntegrationTestUserInSystem : public IntegrationTest {
 
   void CopyUserLog() { user_test_commands_->CopyLog("user"); }
 
+  // Expects the user updater's uninstall ping.
   void ExpectUserUninstallPing(ScopedServer& test_server,
                                std::optional<GURL> target_url = {}) {
     user_test_commands_->ExpectPing(
-        test_server, update_client::protocol_request::kEventUninstall,
-        target_url);
+        test_server, kUpdaterAppId,
+        update_client::protocol_request::kEventUninstall, target_url);
   }
 
 #if BUILDFLAG(IS_MAC)
@@ -4064,7 +4051,7 @@ class IntegrationTestUserInSystem : public IntegrationTest {
         /*do_fault_injection=*/false,
         /*skip_download=*/false,
         /*updater_version=*/base::Version(kUpdaterVersion),
-        /*event_regex=*/".*");
+        /*ping_app_matcher=*/std::nullopt);
   }
 
   void InstallUserUpdaterAndApp(
@@ -5676,7 +5663,8 @@ TEST_F(IntegrationTest, OfflineInstallProvidedInstallSource) {
   ExpectInstallEvent(test_server, kUpdaterAppId);
   ASSERT_NO_FATAL_FAILURE(Install());
   ASSERT_NO_FATAL_FAILURE(ExpectInstalled());
-  ASSERT_NO_FATAL_FAILURE(ExpectInstallSource(test_server, "enterprisemsi"));
+  ASSERT_NO_FATAL_FAILURE(ExpectInstallSource(
+      test_server, "{CDABE316-39CD-43BA-8440-6D1E0547AEE6}", "enterprisemsi"));
   ASSERT_NO_FATAL_FAILURE(
       RunOfflineInstall(/*is_legacy_install=*/false,
                         /*is_silent_install=*/false,
@@ -5694,7 +5682,8 @@ TEST_F(IntegrationTest, OfflineInstallInferredInstallSource) {
   ASSERT_NO_FATAL_FAILURE(Install());
   ASSERT_NO_FATAL_FAILURE(ExpectInstalled());
   ASSERT_NO_FATAL_FAILURE(
-      ExpectInstallSource(test_server, updater::kInstallSourceOffline));
+      ExpectInstallSource(test_server, "{CDABE316-39CD-43BA-8440-6D1E0547AEE6}",
+                          updater::kInstallSourceOffline));
   ASSERT_NO_FATAL_FAILURE(RunOfflineInstall(/*is_legacy_install=*/false,
                                             /*is_silent_install=*/false));
 
@@ -6156,7 +6145,6 @@ TEST_F(IntegrationTestMsi, Install) {
   const base::FilePath crx_path = GetInstallerPath(kMsiCrx);
   ASSERT_NO_FATAL_FAILURE(ExpectAppsUpdateSequence(
       UpdaterScope::kSystem, *test_server_,
-      /*request_attributes=*/{},
       {
           AppUpdateExpectation({}, kMsiAppId, base::Version({0, 0, 0, 0}),
                                kMsiUpdatedVersion,
@@ -6175,7 +6163,6 @@ TEST_F(IntegrationTestMsi, InstallViaCommandLine) {
   ExpectInstallEvent(*test_server_, kUpdaterAppId);
   ASSERT_NO_FATAL_FAILURE(ExpectAppsUpdateSequence(
       UpdaterScope::kSystem, *test_server_,
-      /*request_attributes=*/{},
       {
           AppUpdateExpectation({}, kMsiAppId, base::Version({0, 0, 0, 0}),
                                kMsiUpdatedVersion,
@@ -6203,7 +6190,6 @@ TEST_F(IntegrationTestMsi, InstallViaCommandLineTwice) {
     }
     ASSERT_NO_FATAL_FAILURE(ExpectAppsUpdateSequence(
         UpdaterScope::kSystem, *test_server_,
-        /*request_attributes=*/{},
         {
             AppUpdateExpectation(
                 {}, kMsiAppId,
@@ -6231,7 +6217,6 @@ TEST_F(IntegrationTestMsi, Upgrade) {
   const base::FilePath crx_path = GetInstallerPath(kMsiCrx);
   ASSERT_NO_FATAL_FAILURE(ExpectAppsUpdateSequence(
       UpdaterScope::kSystem, *test_server_,
-      /*request_attributes=*/{},
       {
           AppUpdateExpectation({}, kMsiAppId, kMsiInitialVersion,
                                kMsiUpdatedVersion,
@@ -6700,7 +6685,6 @@ TEST_P(IntegrationInstallerResultsTest, TestCases) {
 
   ASSERT_NO_FATAL_FAILURE(ExpectAppsUpdateSequence(
       UpdaterScope::kSystem, *test_server_,
-      /*request_attributes=*/{},
       {
           AppUpdateExpectation(
               GetTestCase().command_line_args, kMsiAppId,
@@ -6801,7 +6785,6 @@ TEST_P(IntegrationInstallerResultsTest, OnDemandTestCases) {
 
   ASSERT_NO_FATAL_FAILURE(ExpectAppsUpdateSequence(
       UpdaterScope::kSystem, *test_server_,
-      /*request_attributes=*/{},
       {
           AppUpdateExpectation(
               GetTestCase().command_line_args, kMsiAppId,
@@ -6812,7 +6795,7 @@ TEST_P(IntegrationInstallerResultsTest, OnDemandTestCases) {
               GetTestCase().error_category, GetTestCase().error_code,
               /*EVENT_UPDATE_COMPLETE=*/3, GetTestCase().custom_app_response),
       },
-      GetSetup().version));
+      /*request_matcher=*/std::nullopt, GetSetup().version));
   ASSERT_NO_FATAL_FAILURE(ExpectUninstallPing(*test_server_));
 
   ASSERT_NO_FATAL_FAILURE(ExpectLegacyUpdate3WebSucceeds(
@@ -6897,7 +6880,6 @@ TEST_P(IntegrationInstallerResultsNewInstallsTest, OnDemandCancel) {
 
   ASSERT_NO_FATAL_FAILURE(ExpectAppsUpdateSequence(
       UpdaterScope::kSystem, *test_server_,
-      /*request_attributes=*/{},
       {
           AppUpdateExpectation(
               "INSTALLER_RESULT=0", kMsiAppId, base::Version({0, 0, 0, 0}),
@@ -6910,7 +6892,7 @@ TEST_P(IntegrationInstallerResultsNewInstallsTest, OnDemandCancel) {
               std::to_underlying(update_client::ServiceError::CANCELLED),
               /*EVENT_INSTALL_COMPLETE=*/2, {}),
       },
-      GetParam().version));
+      /*request_matcher=*/std::nullopt, GetParam().version));
   ASSERT_NO_FATAL_FAILURE(ExpectUninstallPing(*test_server_));
 
   ASSERT_NO_FATAL_FAILURE(ExpectLegacyUpdate3WebSucceeds(

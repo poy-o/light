@@ -2702,6 +2702,7 @@ chromium-metrics-reviews@google.com.
   <int value="1497" label="IsolatedModeUserInstalledExtensionsSettings"/>
   <int value="1498" label="SystemTitleBarEnabled"/>
   <int value="1499" label="SearchFromDesktopEnabled"/>
+  <int value="1500" label="IsolatedModeForceInstalledExtensionsSettings"/>
 </enum>
 
 <enum name="EnterprisePoliciesSources">
@@ -2868,6 +2869,19 @@ chromium-metrics-reviews@google.com.
 
 <!-- LINT.ThenChange(//components/enterprise/net/core/enterprise_proxy_error_data.h:SecureGatewayErrorPageEvent) -->
 
+<!-- LINT.IfChange(EnterpriseSecureGatewayStaticErrorPageRedirectOutcome) -->
+
+<enum name="EnterpriseSecureGatewayStaticErrorPageRedirectOutcome">
+  <int value="0" label="Redirected"/>
+  <int value="1" label="Rejected: malformed or ambiguous auth challenge"/>
+  <int value="2" label="Rejected: invalid or unsafe URL"/>
+  <int value="3" label="Rejected: redirect loop or self-redirect"/>
+  <int value="4" label="Rejected: destination URL mismatch"/>
+  <int value="5" label="Canceled before redirect navigation started"/>
+</enum>
+
+<!-- LINT.ThenChange(//components/enterprise/net/core/enterprise_proxy_error_data.h:SecureGatewayStaticErrorPageRedirectOutcome) -->
+
 <!-- LINT.IfChange(EnterpriseSignalsDisclaimerDismissalCause) -->
 
 <enum name="EnterpriseSignalsDisclaimerDismissalCause">
@@ -3010,6 +3024,15 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Re-registration successful"/>
   <int value="2" label="Re-registration unsuccessful"/>
 </enum>
+
+<!-- LINT.IfChange(ExtensibleEnterpriseSSOFailureReason) -->
+
+<enum name="ExtensibleEnterpriseSSOFailureReason">
+  <int value="0" label="OS cannot perform authorization for the URL"/>
+  <int value="1" label="Capability check timed out"/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/enterprise/platform_auth/extensible_enterprise_sso_provider_mac.h:FailureReason) -->
 
 <!-- LINT.IfChange(ExtensionActorAttributionResult) -->
 

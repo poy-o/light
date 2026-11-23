@@ -22,6 +22,7 @@
 #include "net/device_bound_sessions/session_usage.h"
 #include "net/filter/source_stream_type.h"
 #include "net/http/http_connection_info.h"
+#include "net/http/http_request_headers.h"
 #include "net/http/http_response_info.h"
 #include "net/storage_access_api/status.h"
 #include "net/url_request/url_request.h"
@@ -405,10 +406,26 @@ std::unique_ptr<net::UploadDataStream> CreateUploadDataStream(
       std::move(element_readers), body->identifier());
 }
 
+bool IsStorageAccessPotentiallyAllowed(
+    bool factory_is_storage_access_potentially_allowed,
+    const ResourceRequest& request) {
+  // Trusted browser callers such as `NavigationURLLoaderImpl` share a single
+  // trusted `URLLoaderFactory` across frames (whose factory-level flag is
+  // true) and use per-request `trusted_params` to mark restricted frames.
+  if (factory_is_storage_access_potentially_allowed &&
+      (!request.trusted_params ||
+       request.trusted_params->is_storage_access_potentially_allowed)) {
+    return true;
+  }
+  return !base::FeatureList::IsEnabled(
+      features::kEnforceStorageAccessApiRestrictions);
+}
+
 net::CookieSettingOverrides CalculateCookieSettingOverrides(
     net::CookieSettingOverrides factory_overrides,
     net::CookieSettingOverrides devtools_overrides,
-    const ResourceRequest& request) {
+    const ResourceRequest& request,
+    bool is_storage_access_potentially_allowed) {
   net::CookieSettingOverrides overrides(factory_overrides);
 
   // Only apply the DevTools overrides if the request is from devtools enabled
@@ -430,10 +447,23 @@ net::CookieSettingOverrides CalculateCookieSettingOverrides(
   // Add the Storage Access override enum based on whether the request's url and
   // initiator are same-site, to prevent cross-site sibling iframes benefit from
   // each other's storage access API grants. This must be updated on redirects.
-  if (net::cookie_util::ShouldAddInitialStorageAccessApiOverride(
-          request.url, request.storage_access_api_status,
-          request.request_initiator)) {
-    overrides.Put(net::CookieSettingOverride::kStorageAccessGrantEligible);
+  if (is_storage_access_potentially_allowed) {
+    // `CalculateCookieSettingOverrides()` handles both renderer subresource
+    // requests (where `trusted_params` is null) and trusted browser requests
+    // such as navigations (where `trusted_params` is populated). Verify that
+    // callers passed the combined `IsStorageAccessPotentiallyAllowed()` result
+    // rather than the raw factory boolean.
+    CHECK(!request.trusted_params ||
+          request.trusted_params->is_storage_access_potentially_allowed ||
+          !base::FeatureList::IsEnabled(
+              features::kEnforceStorageAccessApiRestrictions));
+    if (net::cookie_util::ShouldAddInitialStorageAccessApiOverride(
+            request.url, request.storage_access_api_status,
+            request.request_initiator)) {
+      overrides.Put(net::CookieSettingOverride::kStorageAccessGrantEligible);
+    }
+  } else {
+    overrides.Remove(net::CookieSettingOverride::kStorageAccessGrantEligible);
   }
 
   // The `kStorageAccessGrantEligibleViaHeader` override will be applied
@@ -483,7 +513,17 @@ std::string GetCookiesFromHeaders(
   return std::move(cookies).value_or(std::string());
 }
 
-
+net::HttpRequestHeaders MergeHeadersAndSetUserAgentIfMissing(
+    net::HttpRequestHeaders original,
+    const net::HttpRequestHeaders& merged,
+    base::optional_ref<const std::string> user_agent) {
+  original.MergeFrom(merged);
+  if (user_agent.has_value()) {
+    original.SetHeaderIfMissing(net::HttpRequestHeaders::kUserAgent,
+                                *user_agent);
+  }
+  return original;
+}
 
 void MaybeRecordSharedDictionaryUsedResponseMetrics(
     int error_code,
@@ -573,11 +613,12 @@ void ConfigureUrlRequest(const ResourceRequest& request,
           ? net::SecureDnsPolicy::kDisable
           : net::SecureDnsPolicy::kAllow);
 
-  // |cors_exempt_headers| must be merged here to avoid breaking CORS checks.
-  // They are non-empty when the values are given by the UA code, therefore
-  // they should be ignored by CORS checks.
-  net::HttpRequestHeaders merged_headers = request.headers;
-  merged_headers.MergeFrom(request.cors_exempt_headers);
+  // `cors_exempt_headers` and `content_user_agent` are set by Chromium code
+  // (including Blink), not by web script, so they are added to the outgoing
+  // headers only here, after CORS checks.
+  net::HttpRequestHeaders merged_headers = MergeHeadersAndSetUserAgentIfMissing(
+      request.headers, request.cors_exempt_headers, request.content_user_agent);
+
   // This should be ensured by the CorsURLLoaderFactory(), which is called
   // before URLLoaders are created.
   DCHECK(AreRequestHeadersSafe(merged_headers));
@@ -602,7 +643,9 @@ void ConfigureUrlRequest(const ResourceRequest& request,
   // `url_request.storage_access_status()`.
   url_request.cookie_setting_overrides() = CalculateCookieSettingOverrides(
       factory_params.cookie_setting_overrides,
-      factory_params.devtools_cookie_setting_overrides, request);
+      factory_params.devtools_cookie_setting_overrides, request,
+      IsStorageAccessPotentiallyAllowed(
+          factory_params.is_storage_access_potentially_allowed, request));
   url_request.SetLoadFlags(request.load_flags);
   SetRequestCredentials(
       request.url, factory_params.client_security_state, request.mode,

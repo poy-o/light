@@ -1024,15 +1024,10 @@ GURL RenderFrameDevToolsAgentHost::GetFaviconURL() {
 }
 
 bool RenderFrameDevToolsAgentHost::Activate() {
-  scoped_refptr<RenderFrameDevToolsAgentHost> protect(this);
-  if (web_contents()) {
-    static_cast<WebContentsImpl*>(web_contents()->GetOutermostWebContents())
-        ->Activate();
-    // Re-check this since activation can synchronously destroy the WebContents.
-    if (web_contents()) {
-      web_contents()->GetOutermostWebContents()->Focus();
-      return true;
-    }
+  WebContentsImpl* wc = static_cast<WebContentsImpl*>(web_contents());
+  if (wc) {
+    wc->Activate();
+    return true;
   }
   return false;
 }
@@ -1258,7 +1253,7 @@ RenderFrameDevToolsAgentHost::content_security_policy(const std::string& id) {
 }
 
 bool RenderFrameDevToolsAgentHost::HasSessionsWithoutTabTargetSupport() const {
-  const std::vector<raw_ptr<DevToolsSession, VectorExperimental>>& sessions =
+  const std::vector<raw_ptr<DevToolsSession, DanglingUntriaged>>& sessions =
       DevToolsAgentHostImpl::sessions();
 
   return std::any_of(sessions.begin(), sessions.end(), [](DevToolsSession* s) {

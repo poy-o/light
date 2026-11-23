@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/feature_list.h"
+#include "base/i18n/language_tag.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notimplemented.h"
@@ -38,6 +39,7 @@
 #include "components/autofill/core/browser/permissions/autofill_ai/autofill_ai_permission_util.h"
 #include "components/autofill/core/browser/ui/autofill_ai/entity_attribute_update_details.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/strings/grit/components_strings.h"
@@ -68,7 +70,7 @@ std::u16string GetPrimaryAccountEmailFromProfile(Profile* profile) {
 
 AutofillAiImportDataControllerImpl::AutofillAiImportDataControllerImpl(
     content::WebContents* web_contents,
-    const std::string& app_locale)
+    const base::i18n::LanguageTag& app_locale)
     : AutofillBubbleControllerBase(
           web_contents,
           PageActionConfig{.action_id = kActionShowAddressesBubbleOrPage}),
@@ -82,7 +84,7 @@ AutofillAiImportDataControllerImpl::~AutofillAiImportDataControllerImpl() =
 // static
 AutofillAiImportDataController* AutofillAiImportDataController::GetOrCreate(
     content::WebContents* web_contents,
-    const std::string& app_locale) {
+    const base::i18n::LanguageTag& app_locale) {
   if (!web_contents) {
     return nullptr;
   }
@@ -278,21 +280,32 @@ int AutofillAiImportDataControllerImpl::
   const bool use_wallet_branding =
       IsWalletableEntity() &&
       base::FeatureList::IsEnabled(features::kAutofillAiWalletPassBranding2026);
+  const bool use_gradient_logos = base::FeatureList::IsEnabled(
+      features::kAutofillEnableGradientGoogleLogos);
   switch (GetSaveUpdateState().new_entity.type().name()) {
     case EntityTypeName::kDriversLicense:
-      return use_wallet_branding
-                 ? IDR_AUTOFILL_SAVE_DRIVERS_LICENSE_WALLET_LOTTIE
-                 : IDR_AUTOFILL_SAVE_DRIVERS_LICENSE_LOTTIE;
+      if (use_wallet_branding) {
+        return use_gradient_logos
+                   ? IDR_AUTOFILL_SAVE_DRIVERS_LICENSE_WALLET_GRADIENT_LOTTIE
+                   : IDR_AUTOFILL_SAVE_DRIVERS_LICENSE_WALLET_LOTTIE;
+      }
+      return IDR_AUTOFILL_SAVE_DRIVERS_LICENSE_LOTTIE;
     case EntityTypeName::kKnownTravelerNumber:
     case EntityTypeName::kRedressNumber:
-      return use_wallet_branding
-                 ? IDR_AUTOFILL_SAVE_KNOWN_TRAVELER_NUMBER_AND_REDRESS_NUMBER_WALLET_LOTTIE
-                 : IDR_AUTOFILL_SAVE_KNOWN_TRAVELER_NUMBER_AND_REDRESS_NUMBER_LOTTIE;
+      if (use_wallet_branding) {
+        return use_gradient_logos
+                   ? IDR_AUTOFILL_SAVE_KNOWN_TRAVELER_NUMBER_AND_REDRESS_NUMBER_WALLET_GRADIENT_LOTTIE
+                   : IDR_AUTOFILL_SAVE_KNOWN_TRAVELER_NUMBER_AND_REDRESS_NUMBER_WALLET_LOTTIE;
+      }
+      return IDR_AUTOFILL_SAVE_KNOWN_TRAVELER_NUMBER_AND_REDRESS_NUMBER_LOTTIE;
     case EntityTypeName::kNationalIdCard:
     case EntityTypeName::kPassport:
-      return use_wallet_branding
-                 ? IDR_AUTOFILL_SAVE_PASSPORT_AND_NATIONAL_ID_CARD_WALLET_LOTTIE
-                 : IDR_AUTOFILL_SAVE_PASSPORT_AND_NATIONAL_ID_CARD_LOTTIE;
+      if (use_wallet_branding) {
+        return use_gradient_logos
+                   ? IDR_AUTOFILL_SAVE_PASSPORT_AND_NATIONAL_ID_CARD_WALLET_GRADIENT_LOTTIE
+                   : IDR_AUTOFILL_SAVE_PASSPORT_AND_NATIONAL_ID_CARD_WALLET_LOTTIE;
+      }
+      return IDR_AUTOFILL_SAVE_PASSPORT_AND_NATIONAL_ID_CARD_LOTTIE;
     case EntityTypeName::kVehicle:
       return IDR_AUTOFILL_SAVE_VEHICLE_LOTTIE;
     case EntityTypeName::kFlightReservation:

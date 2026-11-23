@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_WORKERS_DEDICATED_WORKER_H_
 
 #include <memory>
+#include <optional>
 
 #include "base/functional/function_ref.h"
 #include "base/gtest_prod_util.h"
@@ -131,7 +132,8 @@ class CORE_EXPORT DedicatedWorker final
       CrossVariantMojoReceiver<mojom::blink::ReportingObserverInterfaceBase>
           coep_reporting_observer,
       CrossVariantMojoReceiver<mojom::blink::ReportingObserverInterfaceBase>
-          dip_reporting_observer) override;
+          dip_reporting_observer,
+      const std::optional<WebSecurityOrigin>& updated_origin) override;
   void OnScriptLoadStartFailed() override;
 
   void DispatchErrorEventForScriptFetchFailure();
@@ -153,6 +155,7 @@ class CORE_EXPORT DedicatedWorker final
   void EmulateStartForTesting();
 
  private:
+  friend class DedicatedWorkerEarlyAbortTest;
   FRIEND_TEST_ALL_PREFIXES(DedicatedWorkerTest, TopLevelFrameSecurityOrigin);
 
   // Starts the worker.

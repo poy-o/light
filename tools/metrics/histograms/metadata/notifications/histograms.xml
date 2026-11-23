@@ -457,30 +457,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Notifications.Blocker.ScreenCapture.SnoozedCount"
-    units="notifications" expires_after="2027-02-13">
-  <owner>knollr@chromium.org</owner>
-  <owner>peter@chromium.org</owner>
-  <summary>
-    The number of snoozed notifications that got prevented from showing up on
-    screen during a screen capture session. This means that the user clicked on
-    the &quot;Snooze&quot; action of a muted notification and continued to
-    receive notifications but we queued them without notifying the user at all.
-    Logged once after each screen capture session ends.
-
-    This metric was expired between August 2022 and January 2023, and may be
-    missing data until M111.
-
-    This metric may be logged at possibly inappropriate times, such as when
-    system profiles are being used. We expect that the number of &quot;0&quot;
-    samples is likely an overestimate because of this. This issue is tracked in
-    crbug.com/1385455.
-
-    This histogram was previously unused from 2023-07-09 to 2026-02-13, so data
-    might be missing.
-  </summary>
-</histogram>
-
 <histogram name="Notifications.Chime.Android.Events" enum="ChimeEvent"
     expires_after="never">
   <owner>dtrainor@chromium.org</owner>
@@ -1398,16 +1374,17 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
-<histogram name="Notifications.Tips.OptInPromo.EventType2"
+<histogram name="Notifications.Tips.OptInPromo.EventType3"
     enum="TipsNotificationsOptInPromoEventType" expires_after="2027-03-21">
   <owner>wylieb@google.com</owner>
   <owner>bjfong@google.com</owner>
   <summary>
-    Records the event type for user actions on the Tips Opt In Promo. This is
-    recorded on show, on promo acceptance, on promo decline, and on promo
-    ignore. Declining the promo includes clicking the negative button. Ignoring
-    the promo includes dismissal by scrim touch, backpress, and swipe away. This
-    is for Android only.
+    Records the event type for user actions on the Tips Opt In Promo. Shown is
+    recorded once, when the sheet opens. After that, exactly one of the other
+    events is recorded: acceptance, decline (the negative button), ignore
+    (dismissal by scrim touch, back press, or swipe away), or closed by system
+    (closed without a user choice, e.g. by navigation, omnibox focus, another
+    sheet, or the activity being destroyed). This is for Android only.
   </summary>
 </histogram>
 
@@ -1435,36 +1412,6 @@ chromium-metrics-reviews@google.com.
     from default priority to high priority, from high priority to default
     priority, or whether no migration was needed.
   </summary>
-</histogram>
-
-<histogram name="Notifications.WebPlatformV2.{Action}.TimeToActivity"
-    units="ms" expires_after="M112">
-  <owner>peconn@chromium.org</owner>
-  <owner>peter@chromium.org</owner>
-  <summary>
-    Records the delay between the user clicking on the {Action} of a web
-    platform notification, and an Activity being launched. Only records if the
-    duration is less than 10 seconds.
-  </summary>
-  <token key="Action">
-    <variant name="ActionButton" summary="action button"/>
-    <variant name="Body" summary="body"/>
-  </token>
-</histogram>
-
-<histogram name="Notifications.WebPlatformV2.{Action}.TimeToClose" units="ms"
-    expires_after="M112">
-  <owner>peconn@chromium.org</owner>
-  <owner>peter@chromium.org</owner>
-  <summary>
-    Records the delay between the user clicking on the {Action} of a web
-    platform notification, and the notification being closed. Only records if
-    the duration is less than 10 seconds.
-  </summary>
-  <token key="Action">
-    <variant name="ActionButton" summary="action button"/>
-    <variant name="Body" summary="body"/>
-  </token>
 </histogram>
 
 <histogram name="Notifications.Windows.ActivationStatus"

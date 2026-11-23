@@ -259,17 +259,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="CustomTabs.GoogleBottomBar.Button.Shown"
-    enum="GoogleBottomBarButtonEvent" expires_after="2025-07-27">
-  <owner>tivi@google.com</owner>
-  <owner>chrome-connective-tissue@google.com</owner>
-  <summary>
-    Recorded only on Android. Records GoogleBottomBar buttons that are shown.
-    Logged when a button is displayed in the GoogleBottomBar (when the
-    GoogleBottomBar feature is enabled and visible at the bottom of the CCT).
-  </summary>
-</histogram>
-
 <histogram name="CustomTabs.GoogleBottomBar.Button.Updated"
     enum="GoogleBottomBarButtonEvent" expires_after="2025-05-16">
   <owner>tivi@google.com</owner>
@@ -505,19 +494,6 @@ chromium-metrics-reviews@google.com.
   <summary>
     Network error code occuring upon page navigation. Recorded each time Custom
     tabs receives an event TabObserver.onPageLoadFailed.
-  </summary>
-</histogram>
-
-<histogram name="CustomTabs.ParallelRequestStatusOnStart"
-    enum="CustomTabsParallelRequestStatusOnStart" expires_after="2026-11-01">
-  <owner>lizeb@chromium.org</owner>
-  <owner>cct-team@google.com</owner>
-  <owner>mthiesse@chromium.org</owner>
-  <summary>
-    Recorded only on Android. Whether a parallel request was requested by the
-    calling application, and if so its initial status. Recorded once per handled
-    intent, when the request is initiated. Filter the platform for just CCT/TWA
-    data. Expired in M120 and brought back in M144.
   </summary>
 </histogram>
 

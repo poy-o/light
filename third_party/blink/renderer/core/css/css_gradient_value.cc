@@ -57,6 +57,7 @@
 #include "third_party/blink/renderer/platform/graphics/gradient.h"
 #include "third_party/blink/renderer/platform/graphics/gradient_generated_image.h"
 #include "third_party/blink/renderer/platform/graphics/image.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/stable_sort.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
 #include "third_party/blink/renderer/platform/wtf/text/strcat.h"
@@ -403,6 +404,7 @@ static Color ResolveStopColor(const CSSToLengthConversionData& conversion_data,
       .theme_info = {
           .color_provider = document.GetColorProviderForPainting(color_scheme),
           .color_scheme = color_scheme,
+          .in_forced_colors = document.InForcedColorsMode(),
           .accent_color = style.ResolveMirroredAccentColor(),
           .can_expose_system_accent_color =
               document.IsInWebAppScope() && document.IsInitialProfile()}};
@@ -426,7 +428,7 @@ void CSSGradientValue::AddDeprecatedStops(
                                        const CSSGradientColorStop& b) {
     return CompareStops(a, b, conversion_data);
   };
-  std::stable_sort(stops_sorted.begin(), stops_sorted.end(), comparator);
+  StableSort(stops_sorted, comparator);
 
   for (const auto& stop : stops_sorted) {
     float offset;

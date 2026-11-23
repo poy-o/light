@@ -81,9 +81,16 @@ class SessionServiceBase : public sessions::CommandStorageManagerDelegate,
   void SetWindowVisibleOnAllWorkspaces(SessionID window_id,
                                        bool visible_on_all_workspaces);
 
+  enum class ResetReason {
+    kServiceStartup,
+    kNavigationIndexOutOfRange,
+    kWebAppReparenting,
+  };
+
   // Resets the contents of the file from the current state of all open
-  // apps whose profile matches our profile.
-  void ResetFromCurrentBrowsers();
+  // browsers whose profile matches our profile.
+  void ResetFromCurrentBrowsers(ResetReason reason);
+  void ResetFromCurrentBrowsersForTesting();
 
   // Associates a tab with a window.
   void SetTabWindow(SessionID window_id, SessionID tab_id);
@@ -92,6 +99,11 @@ class SessionServiceBase : public sessions::CommandStorageManagerDelegate,
   void SetWindowBounds(SessionID window_id,
                        const gfx::Rect& bounds,
                        ui::mojom::WindowShowState show_state);
+
+  // Writes all pending commands to disk now, and runs `done_callback` on the
+  // backend task runner once they are written. Used when the session is ending
+  // and the process is terminated without a normal shutdown.
+  void SaveNow(base::OnceClosure done_callback);
 
   // Sets the workspace the window resides in.
   void SetWindowWorkspace(SessionID window_id, const std::string& workspace);
@@ -336,6 +348,8 @@ class SessionServiceBase : public sessions::CommandStorageManagerDelegate,
 
   // This is always non-null.
   raw_ptr<Profile> profile_;
+
+  const SessionServiceType type_;
 
   // Whether to use delayed save. Set to false when constructed with a FilePath
   // (which should only be used for testing).

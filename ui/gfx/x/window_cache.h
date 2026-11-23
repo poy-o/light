@@ -92,6 +92,11 @@ class COMPONENT_EXPORT(X11) WindowCache : public EventObserver {
   // Blocks until all outstanding requests are processed.
   void WaitUntilReady();
 
+  // Marks `window` as unmapped without waiting for the server's UnmapNotify or
+  // DestroyNotify. Called when this client unmaps or destroys one of its own
+  // windows, so that GetWindowAtPoint() stops returning it right away.
+  void OnWindowUnmappedLocally(Window window);
+
   // Destroys |self| if no calls to GetWindowAtPoint() are made within
   // a time window.
   void BeginDestroyTimer(std::unique_ptr<WindowCache> self);
@@ -112,6 +117,14 @@ class COMPONENT_EXPORT(X11) WindowCache : public EventObserver {
                                      std::forward<Args>(args)...));
     pending_requests_.push_back(std::move(future));
   }
+
+  // Implements GetWindowAtPoint(). Sets `*ignored_window_hit` if the point is
+  // over an ignored window, so that its ancestors (eg. WM frames, which may
+  // have a WM_NAME) are not returned in its place.
+  Window GetWindowAtPointImpl(gfx::Point point_px,
+                              Window window,
+                              const base::flat_set<Window>* ignore,
+                              bool* ignored_window_hit);
 
   // EventObserver:
   void OnEvent(const Event& event) override;

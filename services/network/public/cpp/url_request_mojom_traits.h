@@ -202,6 +202,11 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
     return trusted_params.expected_response_headers_for_synthetic_response;
   }
 
+  static bool is_storage_access_potentially_allowed(
+      const network::ResourceRequest::TrustedParams& trusted_params) {
+    return trusted_params.is_storage_access_potentially_allowed;
+  }
+
   static bool Read(network::mojom::TrustedUrlRequestParamsDataView data,
                    network::ResourceRequest::TrustedParams* out);
 };
@@ -279,6 +284,10 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
   static const net::HttpRequestHeaders& cors_exempt_headers(
       const network::ResourceRequest& request) {
     return request.cors_exempt_headers;
+  }
+  static const std::optional<std::string>& content_user_agent(
+      const network::ResourceRequest& request) {
+    return request.content_user_agent;
   }
   static int32_t load_flags(const network::ResourceRequest& request) {
     return request.load_flags;

@@ -236,6 +236,7 @@ import org.chromium.chrome.browser.tasks.tab_management.TabGroupFaviconCluster;
 import org.chromium.chrome.browser.tasks.tab_management.TabGroupListFaviconResolverFactory;
 import org.chromium.chrome.browser.tasks.tab_management.TabSearchOverlayCoordinator;
 import org.chromium.chrome.browser.tasks.tab_management.TabSearchOverlayCoordinator.TabSearchEntryPoint;
+import org.chromium.chrome.browser.tasks.tab_management.TabSwitcherBackPressHandlerManager;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiUtils;
 import org.chromium.chrome.browser.tasks.tab_management.vertical_tabs.VerticalTabListCoordinator;
 import org.chromium.chrome.browser.tasks.tab_management.vertical_tabs.VerticalTabsActionDelegate;
@@ -246,6 +247,7 @@ import org.chromium.chrome.browser.toolbar.ToolbarIntentMetadata;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarBehavior;
 import org.chromium.chrome.browser.toolbar.top.ToolbarControlContainer;
+import org.chromium.chrome.browser.ttc.TtcEntryPoint;
 import org.chromium.chrome.browser.ttc.TtcSessionCoordinator;
 import org.chromium.chrome.browser.ui.RootUiCoordinator;
 import org.chromium.chrome.browser.ui.actions.ActionRegistry;
@@ -344,6 +346,7 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
     private static final String TAG = "TabbedRootUiCoord";
     private static boolean sDisableTopControlsAnimationForTesting;
     private final RootUiTabObserver mRootUiTabObserver;
+    private final TabSwitcherBackPressHandlerManager mDragHandlerManager;
     private final SettableNonNullObservableSupplier<Boolean> mIsVerticalTabsActiveSupplier =
             ObservableSuppliers.createNonNull(false);
     private final SettableNonNullObservableSupplier<Boolean> mIsGlicPinnedSupplier =
@@ -614,6 +617,7 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
      * @param sendToBackground Callback exiting the app and closing the tab.
      * @param initializeUiWithIncognitoColors Whether to initialize the UI with incognito colors.
      * @param backPressManager The {@link BackPressManager} handling back press.
+     * @param dragHandlerManager The activity's shared handler for cancelling tab drags on ESC.
      * @param savedInstanceState The saved bundle for the last recorded state.
      * @param persistentState The persistent bundle for the last recorded state.
      * @param multiInstanceManager Manages multi-instance mode.
@@ -677,6 +681,7 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
             Callback<@Nullable Tab> sendToBackground,
             boolean initializeUiWithIncognitoColors,
             BackPressManager backPressManager,
+            TabSwitcherBackPressHandlerManager dragHandlerManager,
             @Nullable Bundle savedInstanceState,
             @Nullable PersistableBundle persistentState,
             @Nullable MultiInstanceManager multiInstanceManager,
@@ -792,6 +797,7 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
                     }
                 };
         mMultiInstanceManager = multiInstanceManager;
+        mDragHandlerManager = dragHandlerManager;
         mHubManagerSupplier = hubManagerSupplier;
         mStatusBarColorController.setAllowToolbarColorOnTablets(true);
         mSystemBarColorHelperSupplier = systemBarColorHelperSupplier;
@@ -1587,7 +1593,8 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
                 mChromeAndroidTaskSupplier,
                 mBrowserControlsManager,
                 mIsVerticalTabsActiveSupplier,
-                mIsGlicPinnedSupplier);
+                mIsGlicPinnedSupplier,
+                TtcEntryPoint.from(mWindowAndroid));
     }
 
     /** Returns the {@link LeadingButtonDelegate} for the tab strip's leading button. */
@@ -1626,11 +1633,11 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
         }
 
         boolean isTablet = DeviceFormFactor.isNonMultiDisplayContextOnTablet(mActivity);
-        boolean isNewTabPageCustomizationV2Enabled =
+        boolean isNtpThemeCustomizationEnabled =
                 isTablet
                         || NtpCustomizationUtils.supportsEnableEdgeToEdgeOnTop(
                                 mWindowAndroid, isTablet);
-        if (isNewTabPageCustomizationV2Enabled) {
+        if (isNtpThemeCustomizationEnabled) {
             NtpSyncedThemeManager.getInstance().onFinishNativeInitialization(originalProfile);
             NtpCustomizationPolicyManager.getInstance()
                     .onFinishNativeInitialization(currentlySelectedProfile);
@@ -2057,13 +2064,7 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
         }
         if (mInAppUpdateController == null
                 && ChromeFeatureList.isEnabled(ChromeFeatureList.IN_APP_UPDATE_FLOW)) {
-            mInAppUpdateController =
-                    new InAppUpdateController(
-                            mActivity,
-                            mSnackbarManagerSupplier,
-                            mPromoShownOneshotSupplier,
-                            this::getBottomSheetController,
-                            mModalDialogManagerSupplier);
+            mInAppUpdateController = new InAppUpdateController(mActivity, mSnackbarManagerSupplier);
         }
         return mInAppUpdateController;
     }
@@ -2512,6 +2513,8 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
                 mActivity.findViewById(R.id.side_ui_left_anchor_container_stub);
         ViewStub sideUiEndAnchorContainerStub =
                 mActivity.findViewById(R.id.side_ui_right_anchor_container_stub);
+        ViewStub sideUiResizeHandleContainerStub =
+                mActivity.findViewById(R.id.side_ui_resize_handle_container_stub);
 
         if (ChromeFeatureList.sTabSearchForDesktop.isEnabled()) {
             mTabSearchOverlayCoordinator =
@@ -2543,6 +2546,7 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
                         anchorContainerParent,
                         sideUiStartAnchorContainerStub,
                         sideUiEndAnchorContainerStub,
+                        sideUiResizeHandleContainerStub,
                         mTabModelSelectorSupplier.asNonNull().get());
 
         if (mSideUiCoordinator == null) {
@@ -2580,35 +2584,40 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
         }
 
         if (VerticalTabUtils.isVerticalTabsEligible(mActivity)) {
+            // Read now, since the current profile can be an incognito one that is destroyed later.
+            Profile originalProfile = currentlySelectedProfile.getOriginalProfile();
             mVerticalTabsSideUiCoordinator =
                     new VerticalTabsSideUiCoordinator(
                             mActivity,
                             mWindowAndroid,
                             mSideUiCoordinator,
-                            new VerticalTabListCoordinator(
-                                    mActivity,
-                                    assumeNonNull(mTabModelSelectorSupplier.get()),
-                                    assumeNonNull(mProfileSupplier.get()),
-                                    mVerticalTabsActionDelegate,
-                                    mWindowAndroid,
-                                    mActivityResultTracker,
-                                    assumeNonNull(mMultiInstanceManager),
-                                    assumeNonNull(mSnackbarManagerSupplier.get()),
-                                    getDesktopWindowStateManager(),
-                                    mShareDelegateSupplier,
-                                    mDataSharingTabManager,
-                                    mIsVerticalTabsActiveSupplier,
-                                    mVerticalTabsWidthSupplier,
-                                    canActivateTabLayoutToggleMenu(),
-                                    mActivity.findViewById(
-                                            R.id.vertical_tab_hover_card_holder_stub),
-                                    mActivity.findViewById(
-                                            R.id.vertical_tab_group_hover_card_holder_stub),
-                                    mTabContentManagerSupplier,
-                                    mUndoGroupSnackbarController,
-                                    mBrowserControlsManager,
-                                    mBackPressManager,
-                                    TabWindowManagerSingleton::getInstance),
+                            collapseController ->
+                                    new VerticalTabListCoordinator(
+                                            mActivity,
+                                            assumeNonNull(mTabModelSelectorSupplier.get()),
+                                            originalProfile,
+                                            mVerticalTabsActionDelegate,
+                                            mWindowAndroid,
+                                            mActivityResultTracker,
+                                            assumeNonNull(mMultiInstanceManager),
+                                            assumeNonNull(mSnackbarManagerSupplier.get()),
+                                            getDesktopWindowStateManager(),
+                                            mShareDelegateSupplier,
+                                            mDataSharingTabManager,
+                                            mIsVerticalTabsActiveSupplier,
+                                            mVerticalTabsWidthSupplier,
+                                            canActivateTabLayoutToggleMenu(),
+                                            mActivity.findViewById(
+                                                    R.id.vertical_tab_hover_card_holder_stub),
+                                            mActivity.findViewById(
+                                                    R.id.vertical_tab_group_hover_card_holder_stub),
+                                            mTabContentManagerSupplier,
+                                            mUndoGroupSnackbarController,
+                                            mBrowserControlsManager,
+                                            mBackPressManager,
+                                            mDragHandlerManager,
+                                            TabWindowManagerSingleton::getInstance,
+                                            collapseController),
                             mIsVerticalTabsActiveSupplier);
             if (mToolbarManager != null) {
                 mToolbarManager.setVerticalTabsAutoHiddenSupplier(

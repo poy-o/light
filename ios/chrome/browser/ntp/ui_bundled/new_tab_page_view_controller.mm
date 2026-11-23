@@ -206,6 +206,8 @@ const CGFloat kBackgroundImageAnimationDuration = 0.2;
   BOOL _aimImageGenerationAllowed;
   // Whether attaching images to an AIM search query is allowed.
   BOOL _aimAttachImagesAllowed;
+  // Whether incognito mode is allowed.
+  BOOL _incognitoAllowed;
   // Tracks whether the NTP was scrolled to the top before a size transition.
   BOOL _scrolledToTop;
   // Constraints for the feed top section promo.
@@ -240,6 +242,7 @@ const CGFloat kBackgroundImageAnimationDuration = 0.2;
     _shiftTileStartTime = -1;
     _appearing = YES;
     _scrolledToTop = YES;
+    _incognitoAllowed = YES;
   }
   return self;
 }
@@ -257,14 +260,12 @@ const CGFloat kBackgroundImageAnimationDuration = 0.2;
       [[NewTabPageQuickActionsViewController alloc] init];
   _quickActionsViewController.layoutGuideCenter = self.layoutGuideCenter;
   _quickActionsViewController.NTPShortcutsHandler = self.NTPShortcutsHandler;
-  _quickActionsViewController.incognitoDisabled = self.incognitoDisabled;
+  [_quickActionsViewController setIncognitoAllowed:_incognitoAllowed];
   [_quickActionsViewController setAIMTitle:_aimTitle
                                       icon:_aimIcon
                         accessibilityLabel:_aimAccessibilityLabel];
 
-  AimButtonRefactorArm arm = GetAimButtonRefactorArm();
-  if (arm == AimButtonRefactorArm::kImageGenerationQuickAction ||
-      arm == AimButtonRefactorArm::kAttachImageQuickAction) {
+  if (AreAimMerchandisingQuickActionsEnabled()) {
     [_quickActionsViewController
         setAIMImageGenerationAllowed:_aimImageGenerationAllowed
                  attachImagesAllowed:_aimAttachImagesAllowed];
@@ -948,9 +949,7 @@ const CGFloat kBackgroundImageAnimationDuration = 0.2;
 
 - (void)setAIMImageGenerationAllowed:(BOOL)imageGenerationAllowed
                  attachImagesAllowed:(BOOL)attachmentsAllowed {
-  AimButtonRefactorArm arm = GetAimButtonRefactorArm();
-  CHECK(arm == AimButtonRefactorArm::kImageGenerationQuickAction ||
-        arm == AimButtonRefactorArm::kAttachImageQuickAction);
+  CHECK(AreAimMerchandisingQuickActionsEnabled());
   _aimImageGenerationAllowed = imageGenerationAllowed;
   _aimAttachImagesAllowed = attachmentsAllowed;
   [_quickActionsViewController
@@ -968,6 +967,7 @@ const CGFloat kBackgroundImageAnimationDuration = 0.2;
     case AimButtonRefactorArm::kFocusComposeboxAimQuickAction:
     case AimButtonRefactorArm::kImageGenerationQuickAction:
     case AimButtonRefactorArm::kAttachImageQuickAction:
+    case AimButtonRefactorArm::kGenerateAndAttachQuickActions:
     case AimButtonRefactorArm::kDisabled:
       [_quickActionsViewController setAIMTitle:_aimTitle
                                           icon:_aimIcon
@@ -984,6 +984,15 @@ const CGFloat kBackgroundImageAnimationDuration = 0.2;
       break;
   }
 }
+
+- (void)setIncognitoAllowed:(BOOL)allowed {
+  if (_incognitoAllowed == allowed) {
+    return;
+  }
+  _incognitoAllowed = allowed;
+  [_quickActionsViewController setIncognitoAllowed:allowed];
+}
+
 - (void)setOmniboxInBottomPosition:(BOOL)isBottomOmnibox {
   if (_isBottomOmnibox == isBottomOmnibox) {
     return;
@@ -1039,14 +1048,6 @@ const CGFloat kBackgroundImageAnimationDuration = 0.2;
     [self updateFeedTopSectionHierarchy];
     [self updateNTPLayout];
   }
-}
-
-- (void)setIncognitoDisabled:(BOOL)incognitoDisabled {
-  if (_incognitoDisabled == incognitoDisabled) {
-    return;
-  }
-  _incognitoDisabled = incognitoDisabled;
-  _quickActionsViewController.incognitoDisabled = incognitoDisabled;
 }
 
 #pragma mark - UIScrollViewDelegate
@@ -1393,6 +1394,7 @@ const CGFloat kBackgroundImageAnimationDuration = 0.2;
     case AimButtonRefactorArm::kFocusComposeboxAimQuickAction:
     case AimButtonRefactorArm::kImageGenerationQuickAction:
     case AimButtonRefactorArm::kAttachImageQuickAction:
+    case AimButtonRefactorArm::kGenerateAndAttachQuickActions:
     case AimButtonRefactorArm::kDisabled:
       return YES;
     case AimButtonRefactorArm::kAimAsModule:

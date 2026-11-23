@@ -37,6 +37,7 @@
 
 #include "base/auto_reset.h"
 #include "base/check.h"
+#include "base/check_op.h"
 #include "base/dcheck_is_on.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/i18n/time_formatting.h"
@@ -3354,9 +3355,7 @@ void Document::NotifyDisplayLockChangedForSVGResources(const Element& element) {
   // `element` can only be a descendant of an SVG resource target if it has a
   // <foreignObject> flat-tree ancestor.
   const SVGForeignObjectElement* enclosing_foreign_object = nullptr;
-  if (element.isConnected() &&
-      !SlotAssignmentRecalcInProgressScope::IsFlatTreeTraversalForbidden() &&
-      !IsSlotAssignmentDirty()) {
+  if (element.isConnected() && !IsSlotAssignmentDirty()) {
     if (svg_extensions_ && svg_extensions_->MayContainForeignObjects()) {
       for (const Node& ancestor : FlatTreeTraversal::AncestorsOf(element)) {
         if (const auto* foreign_object =
@@ -3434,9 +3433,6 @@ void Document::Shutdown() {
   // Shutdown() is that |dom_window_| must not have an attached Document.
   // Allowing script execution when the Document is shutting down can make it
   // easy to accidentally violate this condition.
-
-  if (num_canvases_ > 0)
-    UMA_HISTOGRAM_COUNTS_100("Blink.Canvas.NumCanvasesPerPage", num_canvases_);
 
   GetViewportData().Shutdown();
 
@@ -8978,7 +8974,7 @@ Element* Document::PointerLockElement() const {
 }
 
 void Document::DecrementLoadEventDelayCount() {
-  DCHECK(load_event_delay_count_);
+  CHECK_GT(load_event_delay_count_, 0);
   --load_event_delay_count_;
 
   if (!load_event_delay_count_)
@@ -8986,7 +8982,7 @@ void Document::DecrementLoadEventDelayCount() {
 }
 
 void Document::DecrementLoadEventDelayCountAndCheckLoadEvent() {
-  DCHECK(load_event_delay_count_);
+  CHECK_GT(load_event_delay_count_, 0);
   --load_event_delay_count_;
 
   if (!load_event_delay_count_)

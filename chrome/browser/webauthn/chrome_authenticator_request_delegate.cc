@@ -26,6 +26,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/notimplemented.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -49,6 +50,10 @@
 #include "chrome/browser/webauthn/authenticator_request_dialog_controller.h"
 #include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
 #include "chrome/browser/webauthn/enclave_manager.h"
+#include "chrome/browser/webauthn/enclave_manager_factory.h"
+#include "chrome/browser/webauthn/gpm/gpm_browser_authenticator.h"
+#include "chrome/browser/webauthn/gpm/gpm_browser_authenticator_controller.h"
+#include "chrome/browser/webauthn/gpm/local_gpm_passkeys_util.h"
 #include "chrome/browser/webauthn/gpm_enclave_controller.h"
 #include "chrome/browser/webauthn/immediate_request_rate_limiter_factory.h"
 #include "chrome/browser/webauthn/passkey_model_factory.h"
@@ -74,7 +79,9 @@
 #include "components/webauthn/core/browser/passkey_model.h"
 #include "content/public/browser/authenticator_request_client_delegate.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_authentication_request_proxy.h"
 #include "content/public/browser/web_contents.h"
 #include "crypto/random.h"
@@ -82,10 +89,13 @@
 #include "device/fido/cable/v2_constants.h"
 #include "device/fido/cable/v2_handshake.h"
 #include "device/fido/discoverable_credential_metadata.h"
+#include "device/fido/enclave/enclave_discovery.h"
+#include "device/fido/enclave/types.h"
 #include "device/fido/fido_authenticator.h"
 #include "device/fido/fido_discovery_base.h"
 #include "device/fido/fido_discovery_factory.h"
 #include "device/fido/fido_request_handler_base.h"
+#include "device/fido/network_context_factory.h"
 #include "device/fido/public/features.h"
 #include "device/fido/public/fido_constants.h"
 #include "device/fido/public/fido_transport_protocol.h"
@@ -237,6 +247,32 @@ constexpr char kSigninHybridPasskeyOutcomeHistogram[] =
 constexpr char kHybridOutcomeHistogram[] = "WebAuthentication.Hybrid.Outcome";
 constexpr char kHybridQrEngagementHistogram[] =
     "WebAuthentication.Hybrid.QrEngagement";
+
+// Creates a network context factory for caBLE and enclave connections. With
+// `kWebAuthnHybridUseFrameNetworkContext`, requests go through the frame's
+// storage partition so they use the profile's network configuration (such as
+// its proxy settings).
+device::NetworkContextFactory CreateNetworkContextFactory(
+    content::GlobalRenderFrameHostId render_frame_host_id) {
+  if (base::FeatureList::IsEnabled(
+          device::kWebAuthnHybridUseFrameNetworkContext)) {
+    return base::BindRepeating(
+        [](content::GlobalRenderFrameHostId render_frame_host_id)
+            -> network::mojom::NetworkContext* {
+          content::RenderFrameHost* render_frame_host =
+              content::RenderFrameHost::FromID(render_frame_host_id);
+          CHECK(render_frame_host);
+          return render_frame_host->GetStoragePartition()->GetNetworkContext();
+        },
+        render_frame_host_id);
+  }
+  if (SystemNetworkContextManager::GetInstance()) {
+    return base::BindRepeating([]() {
+      return SystemNetworkContextManager::GetInstance()->GetContext();
+    });
+  }
+  return {};
+}
 
 // Triggers a HaTS survey about the WebAuthn ("passkey") experience.
 void TriggerWebAuthnHatsSurvey(content::RenderFrameHost* render_frame_host,
@@ -478,6 +514,11 @@ ChromeAuthenticatorRequestDelegate::enclave_controller_for_testing() const {
   return enclave_controller_.get();
 }
 
+GpmBrowserAuthenticatorController*
+ChromeAuthenticatorRequestDelegate::gpm_browser_controller_for_testing() const {
+  return gpm_browser_controller_.get();
+}
+
 void ChromeAuthenticatorRequestDelegate::SetRelyingPartyId(
     const std::string& rp_id) {
   dialog_model_->relying_party_id = rp_id;
@@ -551,6 +592,12 @@ bool ChromeAuthenticatorRequestDelegate::DoesBlockRequestOnFailure(
     case InterestingFailureReason::kNoPasskeys:
       return dialog_controller_->OnNoPasskeys();
     case InterestingFailureReason::kEnclaveError:
+      // TODO(crbug.com/570170982): Separate `MakeCredentialStatus` /
+      // `GetAssertionStatus` (and outcome metrics) for
+      // `GpmBrowserAuthenticator` from `kEnclaveError`.
+      if (gpm_browser_controller_) {
+        return gpm_browser_controller_->OnAuthenticatorError();
+      }
       return enclave_controller_ ? enclave_controller_->OnEnclaveError()
                                  : false;
     case InterestingFailureReason::kEnclaveCancel:
@@ -684,6 +731,9 @@ void ChromeAuthenticatorRequestDelegate::ConfigureDiscoveries(
             resident_key_requirement.has_value(),
         base::NotFatalUntil::M163);
   request_source_ = request_source;
+  platform_discoveries_.clear();
+  enclave_controller_.reset();
+  gpm_browser_controller_.reset();
 
   // Without the UI enabled, discoveries like caBLE, Android AOA, iCloud
   // keychain, and the enclave, don't make sense.
@@ -698,53 +748,10 @@ void ChromeAuthenticatorRequestDelegate::ConfigureDiscoveries(
     return;
   }
 
-  // Configure the enclave authenticator.
   if (browser_provided_passkeys_available && !IsVirtualEnvironmentEnabled() &&
       request_source == RequestSource::kWebAuthentication) {
-    // Creating credentials in GPM can be disabled by policy, but get() is
-    // always allowed.
-    const bool enclave_create_enabled =
-        profile()->GetPrefs()->GetBoolean(
-            password_manager::prefs::kCredentialsEnableService) &&
-        profile()->GetPrefs()->GetBoolean(
-            password_manager::prefs::kCredentialsEnablePasskeys);
-    if (!enclave_create_enabled) {
-      dialog_model_->gpm_create_available_but_disabled_by_policy = true;
-    }
-    if (dialog_controller_->ui_presentation() ==
-            UIPresentation::kPasskeyUpgrade &&
-        enclave_create_enabled) {
-      // PasskeyUpgradeRequestController will handle enclave transactions in
-      // place of the "regular" GPMEnclaveController.
-      CHECK(!enclave_controller_);
-      dialog_controller_->ConfigureEnclaveForUpgrade(discovery_factory,
-                                                     cmtg_key_requested);
-      discovery_factory->set_network_context_factory(base::BindRepeating([]() {
-        return SystemNetworkContextManager::GetInstance()->GetContext();
-      }));
-    } else if (request_type == device::FidoRequestType::kGetAssertion ||
-               enclave_create_enabled) {
-      // Set up the "regular" enclave controller.
-      auto* const identity_manager = IdentityManagerFactory::GetForProfile(
-          profile()->GetOriginalProfile());
-      const auto consent = signin::ConsentLevel::kSignin;
-      if (identity_manager->HasPrimaryAccount(consent)) {
-        CoreAccountInfo account_info =
-            identity_manager->GetPrimaryAccountInfo(consent);
-        if (SkipGpmPasskeyCreationForOwnAccount(
-                request_type, rp_id, user_name.value_or(""), account_info)) {
-          FIDO_LOG(EVENT)
-              << "Creation in GPM not offered (same primary account)";
-        } else {
-          enclave_controller_ = std::make_unique<GPMEnclaveController>(
-              GetRenderFrameHost(), dialog_model_.get(), rp_id, request_type,
-              user_verification_requirement, cmtg_key_requested);
-        }
-      }
-    } else {
-      FIDO_LOG(EVENT)
-          << "Enclave unavailable for creating passkeys due to policy.";
-    }
+    ConfigureGpm(rp_id, request_type, user_verification_requirement,
+                 cmtg_key_requested, user_name);
   }
 
   std::array<uint8_t, device::cablev2::kQRKeySize> qr_generator_key;
@@ -770,24 +777,13 @@ void ChromeAuthenticatorRequestDelegate::ConfigureDiscoveries(
   }
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
-  discovery_factory->set_cable_data(request_type, qr_generator_key);
-
-  if (SystemNetworkContextManager::GetInstance()) {
-    // caBLE and the enclave depend on the network context factory.
-    // TODO(nsatragno): this should probably use a storage partition network
-    // context instead. See the SystemNetworkContextManager class comments.
-    discovery_factory->set_network_context_factory(base::BindRepeating([]() {
-      return SystemNetworkContextManager::GetInstance()->GetContext();
-    }));
-  }
+  discovery_factory->set_cable_data(
+      request_type, qr_generator_key,
+      CreateNetworkContextFactory(render_frame_host_id_));
 
 #if BUILDFLAG(IS_MAC)
   ConfigureNSWindow(discovery_factory);
 #endif
-
-  if (enclave_controller_) {
-    enclave_controller_->ConfigureDiscoveries(discovery_factory);
-  }
 
   dialog_controller_->set_is_non_webauthn_request(
       request_source != RequestSource::kWebAuthentication);
@@ -887,6 +883,112 @@ void ChromeAuthenticatorRequestDelegate::SetUserEntityForMakeCredentialRequest(
   dialog_model_->user_entity = user_entity;
 }
 
+void ChromeAuthenticatorRequestDelegate::ConfigureGpm(
+    const std::string& rp_id,
+    device::FidoRequestType request_type,
+    device::UserVerificationRequirement user_verification_requirement,
+    bool cmtg_key_requested,
+    std::optional<std::string_view> user_name) {
+  // Creating credentials in GPM can be disabled by policy, but get() is always
+  // allowed.
+  const bool gpm_passkeys_creation_enabled =
+      profile()->GetPrefs()->GetBoolean(
+          password_manager::prefs::kCredentialsEnableService) &&
+      profile()->GetPrefs()->GetBoolean(
+          password_manager::prefs::kCredentialsEnablePasskeys);
+  if (!gpm_passkeys_creation_enabled) {
+    dialog_model_->gpm_create_available_but_disabled_by_policy = true;
+    if (request_type == device::FidoRequestType::kMakeCredential) {
+      FIDO_LOG(EVENT) << "GPM unavailable (create disabled by policy)";
+      return;
+    }
+  }
+
+  auto* const identity_manager =
+      IdentityManagerFactory::GetForProfile(profile()->GetOriginalProfile());
+  const auto consent = signin::ConsentLevel::kSignin;
+  if (!identity_manager->HasPrimaryAccount(consent)) {
+    FIDO_LOG(EVENT) << "GPM unavailable (no primary account)";
+    return;
+  }
+  CoreAccountInfo account_info =
+      identity_manager->GetPrimaryAccountInfo(consent);
+  if (SkipGpmPasskeyCreationForOwnAccount(
+          request_type, rp_id, user_name.value_or(""), account_info)) {
+    FIDO_LOG(EVENT) << "GPM unavailable (create request for own account)";
+    return;
+  }
+
+  // GPM is available. Configure discovery and request controller.
+  bool use_gpm_browser_authenticator = false;
+  if (webauthn::IsLocalGpmPasskeysEnabled()) {
+    switch (device::kWebAuthnLocalGpmPasskeysMode.Get()) {
+      case device::LocalGpmPasskeysMode::kAllUsers:
+        use_gpm_browser_authenticator = true;
+        break;
+      case device::LocalGpmPasskeysMode::kNewUsersOnly: {
+        EnclaveManager* enclave_manager =
+            EnclaveManagerFactory::GetAsEnclaveManagerForProfile(
+                profile()->GetOriginalProfile());
+        if (!enclave_manager) {
+          use_gpm_browser_authenticator = true;
+        } else {
+          // `BrowserProvidedPasskeysAvailable()` loads `enclave_manager` before
+          // `ConfigureDiscoveries()` is called.
+          CHECK(enclave_manager->IsLoaded());
+          use_gpm_browser_authenticator = !enclave_manager->IsRegistered();
+        }
+        break;
+      }
+    }
+  }
+
+  const bool is_passkey_upgrade =
+      dialog_controller_->ui_presentation() == UIPresentation::kPasskeyUpgrade;
+  if (use_gpm_browser_authenticator) {
+    if (is_passkey_upgrade) {
+      // TODO(crbug.com/570170982): Support `GpmBrowserAuthenticator` in
+      // `PasskeyUpgradeRequestController`.
+      NOTIMPLEMENTED();
+      return;
+    }
+    auto discovery = std::make_unique<GpmBrowserAuthenticatorDiscovery>();
+    GpmBrowserAuthenticatorDiscovery::AddAuthenticatorCallback
+        request_callback = discovery->GetAddAuthenticatorCallback();
+    platform_discoveries_.push_back(std::move(discovery));
+    gpm_browser_controller_ =
+        std::make_unique<GpmBrowserAuthenticatorController>(
+            *GetRenderFrameHost(), *dialog_model_, rp_id, request_type,
+            user_verification_requirement, std::move(request_callback));
+    return;
+  }
+
+  using EnclaveEventStream = device::FidoDiscoveryBase::EventStream<
+      std::unique_ptr<device::enclave::CredentialRequest>>;
+  auto [enclave_request_callback, event_stream] = EnclaveEventStream::New();
+  platform_discoveries_.push_back(
+      std::make_unique<device::enclave::EnclaveAuthenticatorDiscovery>(
+          std::move(event_stream),
+          CreateNetworkContextFactory(render_frame_host_id_)));
+
+  if (is_passkey_upgrade) {
+    // PasskeyUpgradeRequestController will handle enclave transactions in place
+    // of the "regular" GPMEnclaveController.
+    dialog_controller_->ConfigureEnclaveForUpgrade(
+        std::move(enclave_request_callback), cmtg_key_requested);
+    return;
+  }
+
+  enclave_controller_ = std::make_unique<GPMEnclaveController>(
+      GetRenderFrameHost(), dialog_model_.get(), rp_id, request_type,
+      user_verification_requirement, cmtg_key_requested,
+      std::move(enclave_request_callback));
+}
+
+std::vector<std::unique_ptr<device::FidoDiscoveryBase>>
+ChromeAuthenticatorRequestDelegate::CreatePlatformDiscoveries() {
+  return std::exchange(platform_discoveries_, {});
+}
 void ChromeAuthenticatorRequestDelegate::StartObserving(
     device::FidoRequestHandlerBase* request_handler) {
   request_handler_observation_.Observe(request_handler);
@@ -1145,7 +1247,10 @@ void ChromeAuthenticatorRequestDelegate::ShowUI(TransportAvailabilityInfo tai,
 
   // Precalculate the UV method for immediate mode requests.
   dialog_model_->gpm_uv_method.reset();
-  if (enclave_controller_) {
+  if (gpm_browser_controller_) {
+    dialog_model_->gpm_uv_method =
+        gpm_browser_controller_->GetUserVerificationMethod();
+  } else if (enclave_controller_) {
     dialog_model_->gpm_uv_method =
         enclave_controller_->GetEnclaveUserVerificationMethod();
   }
@@ -1171,11 +1276,17 @@ bool ChromeAuthenticatorRequestDelegate::PasswordsUsable() {
   return ui_presentation == UIPresentation::kModalImmediate;
 }
 
-bool ChromeAuthenticatorRequestDelegate::IsEnclaveActive() {
+bool ChromeAuthenticatorRequestDelegate::IsGpmActive() {
+  if (gpm_browser_controller_) {
+    return gpm_browser_controller_->is_active();
+  }
   return enclave_controller_ && enclave_controller_->is_active();
 }
 
-bool ChromeAuthenticatorRequestDelegate::IsEnclaveReady() {
+bool ChromeAuthenticatorRequestDelegate::IsGpmReady() {
+  if (gpm_browser_controller_) {
+    return gpm_browser_controller_->ready_for_ui();
+  }
   return !enclave_controller_ || enclave_controller_->ready_for_ui();
 }
 
@@ -1200,19 +1311,22 @@ void ChromeAuthenticatorRequestDelegate::GetGpmPasskeys(
   // synchronously. Note that if the account state check takes longer than the
   // immediate mode timeout, enclave passkeys won't be offered.
   if (dialog_controller_->ui_presentation() ==
-          UIPresentation::kModalImmediate &&
-      enclave_controller_) {
-    switch (enclave_controller_->account_ready_state()) {
-      case GPMEnclaveController::AccountReadyState::kLoading:
-        enclave_controller_->RunWhenAccountReady(base::BindOnce(
-            &ChromeAuthenticatorRequestDelegate::DoGetGpmPasskeys,
-            weak_ptr_factory_.GetWeakPtr(), std::move(tai),
-            std::move(callback)));
-        return;
-      case GPMEnclaveController::AccountReadyState::kReady:
-      case GPMEnclaveController::AccountReadyState::kNotReady:
-        // Fall through to run synchronously.
-        break;
+      UIPresentation::kModalImmediate) {
+    if (gpm_browser_controller_ &&
+        gpm_browser_controller_->account_ready_state() ==
+            GpmBrowserAuthenticatorController::AccountReadyState::kLoading) {
+      gpm_browser_controller_->RunWhenAccountReady(base::BindOnce(
+          &ChromeAuthenticatorRequestDelegate::DoGetGpmPasskeys,
+          weak_ptr_factory_.GetWeakPtr(), std::move(tai), std::move(callback)));
+      return;
+    }
+    if (enclave_controller_ &&
+        enclave_controller_->account_ready_state() ==
+            GPMEnclaveController::AccountReadyState::kLoading) {
+      enclave_controller_->RunWhenAccountReady(base::BindOnce(
+          &ChromeAuthenticatorRequestDelegate::DoGetGpmPasskeys,
+          weak_ptr_factory_.GetWeakPtr(), std::move(tai), std::move(callback)));
+      return;
     }
   }
 
@@ -1222,24 +1336,37 @@ void ChromeAuthenticatorRequestDelegate::GetGpmPasskeys(
 void ChromeAuthenticatorRequestDelegate::DoGetGpmPasskeys(
     TransportAvailabilityInfo tai,
     base::OnceCallback<void(TransportAvailabilityInfo)> callback) {
-  if (!enclave_controller_ || !enclave_controller_->is_active() ||
-      enclave_controller_->creds().empty()) {
+  const std::vector<sync_pb::WebauthnCredentialSpecifics>* creds = nullptr;
+  bool gpm_account_state_ready = false;
+  if (gpm_browser_controller_ && gpm_browser_controller_->is_active()) {
+    creds = &gpm_browser_controller_->creds();
+    gpm_account_state_ready =
+        gpm_browser_controller_->account_ready_state() ==
+        GpmBrowserAuthenticatorController::AccountReadyState::kReady;
+  } else if (enclave_controller_ && enclave_controller_->is_active()) {
+    creds = &enclave_controller_->creds();
+    gpm_account_state_ready = enclave_controller_->account_ready_state() ==
+                              GPMEnclaveController::AccountReadyState::kReady;
+  }
+  if (!creds || creds->empty()) {
     std::move(callback).Run(std::move(tai));
     return;
   }
   if (dialog_controller_->ui_presentation() ==
       UIPresentation::kModalImmediate) {
-    bool enclave_ready = enclave_controller_->account_ready_state() ==
-                         GPMEnclaveController::AccountReadyState::kReady;
-    base::UmaHistogramBoolean(
-        "WebAuthentication.GetAssertion.Immediate.EnclaveReady", enclave_ready);
-    if (!enclave_ready) {
+    if (enclave_controller_) {
+      // TODO(crbug.com/570170982): Record an immediate-mode readiness histogram
+      // for `GpmBrowserAuthenticatorController`.
+      base::UmaHistogramBoolean(
+          "WebAuthentication.GetAssertion.Immediate.EnclaveReady",
+          gpm_account_state_ready);
+    }
+    if (!gpm_account_state_ready) {
       std::move(callback).Run(std::move(tai));
       return;
     }
   }
-  for (const sync_pb::WebauthnCredentialSpecifics& passkey :
-       enclave_controller_->creds()) {
+  for (const sync_pb::WebauthnCredentialSpecifics& passkey : *creds) {
     const base::Time last_used_time = base::Time::FromDeltaSinceWindowsEpoch(
         base::Microseconds(passkey.last_used_time_windows_epoch_micros()));
     const base::Time creation_time =

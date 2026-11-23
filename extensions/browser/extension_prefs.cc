@@ -1439,9 +1439,13 @@ void ExtensionPrefs::SetIsIncognitoEnabled(const ExtensionId& extension_id,
   }
 }
 
-bool ExtensionPrefs::IsIsolatedModeEnabled(
+std::optional<bool> ExtensionPrefs::GetIsolatedModeEnabledPref(
     const ExtensionId& extension_id) const {
-  return ReadPrefAsBooleanAndReturn(extension_id, kPrefIsolatedModeEnabled);
+  bool enabled = false;
+  if (ReadPrefAsBoolean(extension_id, kPrefIsolatedModeEnabled, &enabled)) {
+    return enabled;
+  }
+  return std::nullopt;
 }
 
 void ExtensionPrefs::SetIsIsolatedModeEnabled(const ExtensionId& extension_id,
@@ -2368,6 +2372,10 @@ void ExtensionPrefs::RegisterProfilePrefs(
       pref_names::kIsolatedModeUserInstalledExtensionsSettings,
       std::to_underlying(
           IsolatedModeUserInstalledExtensionsSetting::kEnabledByDefault));
+  registry->RegisterIntegerPref(
+      pref_names::kIsolatedModeForceInstalledExtensionsSettings,
+      std::to_underlying(
+          IsolatedModeForceInstalledExtensionsSetting::kAlwaysEnabled));
 }
 
 template <class ExtensionIdContainer>
@@ -2426,9 +2434,10 @@ void ExtensionPrefs::PopulateExtensionInfoPrefs(
 
   std::string install_time_str = base::NumberToString(
       install_time.ToDeltaSinceWindowsEpoch().InMicroseconds());
+  const bool is_first_install = !extension_dict->HasKey(kPrefFirstInstallTime);
   // Don't overwrite any existing first_install_time pref value so that we
   // preserve the original install time.
-  if (!extension_dict->HasKey(kPrefFirstInstallTime)) {
+  if (is_first_install) {
     extension_dict->SetString(kPrefFirstInstallTime, install_time_str);
   }
   extension_dict->SetString(kPrefLastUpdateTime, install_time_str);
@@ -2456,9 +2465,15 @@ void ExtensionPrefs::PopulateExtensionInfoPrefs(
   removed_prefs.Append(kDNREnabledStaticRulesetIDs);
 
   if (util::CanWithholdPermissionsFromExtension(*extension)) {
+    const bool withhold_creation_flag =
+        (extension->creation_flags() & Extension::WITHHOLD_PERMISSIONS) != 0;
+    if (is_first_install && withhold_creation_flag) {
+      extension_dict->SetBoolean(kPrefPermissionsWithheldOnInstall, true);
+    }
+
     // If the withhold permission creation flag is present it takes precedence
     // over any previous stored value.
-    if (extension->creation_flags() & Extension::WITHHOLD_PERMISSIONS) {
+    if (withhold_creation_flag) {
       extension_dict->SetBoolean(kPrefWithholdingPermissions, true);
     } else if (!HasWithholdingPermissionsSetting(extension->id())) {
       // If no withholding creation flag was specified and there is no value
@@ -2500,9 +2515,13 @@ void ExtensionPrefs::InitExtensionControlledPrefs(
     bool is_enabled =
         !IsExtensionDisabled(extension_id) &&
         !blocklist_prefs::IsExtensionBlocklisted(extension_id, this);
-    bool is_incognito_enabled = IsolatedModeReplacesIncognito()
-                                    ? IsIsolatedModeEnabled(extension_id)
-                                    : IsIncognitoEnabled(extension_id);
+    // Only the stored pref is available here.
+    // `ExtensionPrefValueMap::OnExtensionLoaded()` overwrites this with
+    // `util::IsIncognitoEnabled()`.
+    bool is_incognito_enabled =
+        IsolatedModeReplacesIncognito()
+            ? GetIsolatedModeEnabledPref(extension_id).value_or(false)
+            : IsIncognitoEnabled(extension_id);
     extension_pref_value_map_->RegisterExtension(
         extension_id, install_time, is_enabled, is_incognito_enabled);
 
@@ -2608,9 +2627,13 @@ void ExtensionPrefs::FinishExtensionInfoPrefs(
     is_enabled = is_enabled && disable_reasons->empty();
   }
 
-  bool is_incognito_enabled = IsolatedModeReplacesIncognito()
-                                  ? IsIsolatedModeEnabled(extension_id)
-                                  : IsIncognitoEnabled(extension_id);
+  // Only the stored pref is available here.
+  // `ExtensionPrefValueMap::OnExtensionLoaded()` overwrites this with
+  // `util::IsIncognitoEnabled()`.
+  bool is_incognito_enabled =
+      IsolatedModeReplacesIncognito()
+          ? GetIsolatedModeEnabledPref(extension_id).value_or(false)
+          : IsIncognitoEnabled(extension_id);
 
   extension_pref_value_map_->RegisterExtension(
       extension_id, install_time, is_enabled, is_incognito_enabled);

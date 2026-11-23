@@ -1593,6 +1593,22 @@ interface WebClientHandler {
   // tooltip) so Chrome stops considering it visible for ClosedWhileShown
   // tracking.
   OnTooltipHidden();
+
+  // Switches the active assistant selection preference for the current profile
+  // to `options.target` and triggers a browser relaunch if switching is
+  // allowed (advertised via `HostCapability.kSwitchAssistant`).
+  SwitchAssistant(SwitchAssistantOptions options)
+      => (SwitchAssistantResponse response);
+
+  // Shows a modal Google Drive file picker dialog.
+  // Must only be called when `HostCapability::kDrivePicker` is advertised in
+  // `WebClientInitialState.host_capabilities`; otherwise the browser rejects
+  // the call as a bad message.
+  // Only one picker may be open at a time per profile; calling again while a
+  // picker is already open immediately returns
+  // `DrivePickerErrorReason::kAlreadyActive` without affecting the active
+  // picker.
+  ShowDrivePicker(DrivePickerOptions options) => (DrivePickerResult result);
 };
 
 // Accesses zero state suggestions from the web client.
@@ -2613,6 +2629,81 @@ enum HostCapability {
   // Indicates that the host supports isolated-world JavaScript execution for
   // browser actuation.
   kExecuteJs = 21,
+  // Indicates that the current profile is eligible to switch to another
+  // assistant provider via switchAssistant().
+  kSwitchAssistant = 22,
+  // Indicates that the host supports the drive picker.
+  kDrivePicker = 23,
+};
+
+// @generate glic_api
+// Represents a file selected from Google Drive.
+struct DriveFileSelection {
+  // The Google Drive file ID, used to identify and fetch the file.
+  string id;
+  // The user-visible display name of the file (e.g. "Q3 Report.pdf").
+  string title;
+  // The file's MIME type (e.g. "application/pdf", "image/png"), used to
+  // validate upload support and choose client rendering.
+  string mime_type;
+  // The file size in bytes, when reported by Drive (0 for Google Docs editors
+  // files that have no raw byte size).
+  uint64 size_bytes;
+  // Optional resource key required alongside `id` to access link-shared Drive
+  // files.
+  string? resource_key;
+};
+
+// @generate glic_api
+// Options for showing the Drive picker.
+struct DrivePickerOptions {
+  // The web client's obfuscated Gaia ID. The browser fails with
+  // kAccountMismatch if this is empty or does not match the primary account,
+  // whose files the picker shows.
+  string account_id;
+};
+
+// @generate glic_api
+// Reason why showDrivePicker() failed.
+[Stable, Extensible]
+enum DrivePickerErrorReason {
+  [Default] kUnknown = 0,
+  // The primary account is absent from or signed out of the browser's Google
+  // cookie jar, either before the picker opened or while it was open.
+  kWebSessionSignedOut = 1,
+  // Chrome has no signed-in primary account or its refresh token is missing or
+  // in a persistent error state (e.g. sign-in paused), so the browser cannot
+  // mint an OAuth token for the picker.
+  kChromeSignInRequired = 2,
+  // The web client's account isn't the browser's primary account.
+  kAccountMismatch = 3,
+  // A picker is already open.
+  kAlreadyActive = 4,
+  // There is no active browser window or floating Glic window to anchor the
+  // picker dialog to.
+  kNoAnchorWindow = 5,
+  // The picker failed to load, returned no valid files, or encountered a token
+  // or IPC error.
+  kLoadFailed = 6,
+  // The picker is disabled by policy or Glic is not enabled and consented for
+  // the profile.
+  kDisabledByPolicy = 7,
+  // The picker isn't supported on this platform, provider, or feature
+  // configuration.
+  kUnsupported = 8,
+};
+
+// @generate glic_api
+// Result of showing the Drive picker. Exactly one field is set: either the
+// selected files (empty if the user cancelled or the picker was closed before
+// a selection was made), or the error reason if the picker could not be shown
+// or failed.
+union DrivePickerResult {
+  // The files selected by the user, or an empty array if the picker was
+  // cancelled.
+  array<DriveFileSelection> files;
+  // The reason the picker could not be shown or failed.
+  DrivePickerErrorReason error_reason;
 };
 
 // @generate glic_api
@@ -2621,4 +2712,57 @@ enum ClientCapabilities {
   // The glic web client does not use favicons in TabData, so they can
   // be omitted from TabData.
   kIgnoresTabDataFavicons = 0,
+};
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// LINT.IfChange(AssistantTarget)
+// @generate glic_api
+// Target assistant for switching the profile's active assistant provider.
+[Extensible]
+enum AssistantTarget {
+  // Unknown or unsupported target (e.g. sent by a newer web client). Always
+  // rejected.
+  [Default] kUnknown = 0,
+  // Consumer Gemini in Chrome (GiC).
+  kGeminiConsumer = 1,
+  // Gemini Enterprise in Chrome (GEiC).
+  kGeminiEnterprise = 2,
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/glic/histograms.xml:GlicAssistantTarget, //chrome/browser/glic/host/glic_assistant_switcher.cc:GlicAssistantTargetSuffix)
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// LINT.IfChange(SwitchAssistantResult)
+// @generate glic_api
+// Result of attempting to switch the active assistant provider.
+enum SwitchAssistantResult {
+  kUnknown = 0,
+  // The assistant selection preference was updated to the requested target and
+  // a browser relaunch was initiated.
+  kSuccess = 1,
+  // Switching to the requested assistant target is not allowed for the current
+  // profile (e.g. no machine-scoped `GeminiEnterpriseUrl` policy,
+  // off-the-record or managed profile, consumer Gemini disabled by
+  // `GeminiSettings` policy, or already latched to the requested target).
+  kErrorNotAllowed = 2,
+  // The requested assistant target is unknown or unsupported.
+  kErrorInvalidTarget = 3,
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/glic/enums.xml:GlicSwitchAssistantResult)
+
+// @generate glic_api
+// Options for `SwitchAssistant`.
+struct SwitchAssistantOptions {
+  // The assistant target to switch the current profile to.
+  AssistantTarget target;
+};
+
+// @generate glic_api
+// Response for `SwitchAssistant`. A struct (rather than a bare enum) so that
+// fields can be added later without breaking the glic API's backwards
+// compatibility.
+struct SwitchAssistantResponse {
+  // The result of attempting to switch the active assistant provider.
+  SwitchAssistantResult result;
 };

@@ -25,6 +25,7 @@
 #include "base/containers/span.h"
 #include "base/feature_list.h"
 #include "base/memory/raw_ref.h"
+#include "base/memory/raw_span.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
@@ -33,7 +34,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversion_utils.h"
-#include "base/timer/elapsed_timer.h"
 #include "base/types/optional_ref.h"
 #include "components/pdf/renderer/pdf_accessibility_metrics.h"
 #include "components/pdf/renderer/pdf_accessibility_table_detector.h"
@@ -370,6 +370,25 @@ struct ListPlacement {
   ListPlacementKind kind;
   // For `kNested` or `kExistingLevel`, the index of the level the item joins.
   size_t level_index = 0;
+};
+
+// Page inputs shared by the list marker checks.
+struct ListMarkerContext {
+  const raw_ref<const PageLayoutData> layout;
+  const raw_ref<const HeuristicPageProperties> page_properties;
+  // The open list levels, outermost first.
+  base::raw_span<const ListLevel> list_levels;
+};
+
+// Result of `IsOrderedListStartConfirmed()` and
+// `ContinuesOrConfirmsOrderedList()`.
+struct OrderedListCheck {
+  // The checked marker, or empty if it doesn't continue or start a list.
+  ListMarkerKind kind;
+  // Lines scanned by `IsOrderedListStartConfirmed()` before the next marker
+  // confirmed the list, or the overflow bucket when it hit the limit. Unset
+  // otherwise.
+  std::optional<size_t> lookahead_lines;
 };
 
 // Returns whether `heading_level` is in bounds, i.e. whether it corresponds to
@@ -2005,18 +2024,17 @@ bool StartsIndentedSublist(const TextRunContext& run_context,
   return run_x <= marker_x + max_nest;
 }
 
-// Returns whether the first line after the marker run at `marker_run_index`
+// Checks whether the first line after the marker run at `marker_run_index`
 // that starts with an ordered marker of the same type continues
 // `marker_kind`'s numbering in the same column, within
-// `kMaxOrderedListLookaheadLines` lines. Records the lines scanned when
-// confirmed, or the overflow bucket when the limit is reached.
-bool IsOrderedListStartConfirmed(
-    const PageLayoutData& layout,
+// `kMaxOrderedListLookaheadLines` lines.
+OrderedListCheck IsOrderedListStartConfirmed(
+    const ListMarkerContext& context,
     size_t marker_run_index,
-    const ListMarkerKind& marker_kind,
-    const HeuristicPageProperties& page_properties,
-    std::optional<size_t>& last_recorded_lookahead_run_index) {
+    const ListMarkerKind& marker_kind) {
   CHECK(marker_kind.ordered_marker.has_value());
+  const PageLayoutData& layout = *context.layout;
+  const HeuristicPageProperties& page_properties = *context.page_properties;
   const float marker_x = layout.text_runs[marker_run_index].bounds.x();
 
   // Start after the item text run, which follows a standalone marker.
@@ -2027,7 +2045,7 @@ bool IsOrderedListStartConfirmed(
   for (size_t i = first_run_index; i < layout.text_runs.size(); ++i) {
     // A table ends the candidate list.
     if (layout.table_text_run_indices->contains(i)) {
-      return false;
+      return {};
     }
     const chrome_pdf::AccessibilityTextRunInfo& prev_run =
         layout.text_runs[i - 1];
@@ -2049,11 +2067,9 @@ bool IsOrderedListStartConfirmed(
             marker_kind.ordered_marker->type) {
       if (!is_aligned || next_marker_kind.ordered_marker->value !=
                              marker_kind.ordered_marker->value + 1) {
-        return false;
+        return {};
       }
-      RecordOrderedListLookaheadLines(marker_run_index, lines_count,
-                                      last_recorded_lookahead_run_index);
-      return true;
+      return {.kind = marker_kind, .lookahead_lines = lines_count};
     }
     // A paragraph gap right after the marker's line suggests a numbered
     // heading followed by body text (e.g. "1. Introduction").
@@ -2065,32 +2081,68 @@ bool IsOrderedListStartConfirmed(
             GetTextRunContext(layout, i - 1),
             page_properties.paragraph_spacing_threshold) &&
         !StartsIndentedSublist(run_context, next_marker_kind, marker_x)) {
-      return false;
+      return {};
     }
     // A heading-styled line ends the candidate list.
     if (ClassifyHeading(run_context, page_properties) !=
         HeadingClassifier::kNone) {
-      return false;
+      return {};
     }
     if (++lines_count > kMaxOrderedListLookaheadLines) {
-      RecordOrderedListLookaheadLines(marker_run_index,
-                                      kOrderedListLookaheadLinesHistogramMax,
-                                      last_recorded_lookahead_run_index);
-      return false;
+      return {.lookahead_lines = kOrderedListLookaheadLinesHistogramMax};
     }
   }
-  return false;
+  return {};
+}
+
+// Checks whether `ordered_kind`, the ordered marker of the run at `run_index`,
+// is next in sequence in the list it joins, or starts a new list that the next
+// marker confirms.
+OrderedListCheck ContinuesOrConfirmsOrderedList(
+    const ListMarkerContext& context,
+    size_t run_index,
+    const ListMarkerKind& ordered_kind) {
+  CHECK(ordered_kind.ordered_marker.has_value());
+  const PageLayoutData& layout = *context.layout;
+  const HeuristicPageProperties& page_properties = *context.page_properties;
+  const base::span<const ListLevel> list_levels = context.list_levels;
+  const TextRunContext run_context = GetTextRunContext(layout, run_index);
+  const float max_nest = kMaxListNestingIndentEm *
+                         GetListItemFontSize(run_context, ordered_kind.form);
+  const ListPlacement placement =
+      GetListPlacement(list_levels, run_context.run->bounds.x(), max_nest,
+                       ordered_kind.ordered_marker);
+
+  const int value = ordered_kind.ordered_marker->value;
+  if (placement.kind == ListPlacementKind::kExistingLevel) {
+    // Continuing a list requires the next number or letter in sequence.
+    if (list_levels[placement.level_index].last_ordered_marker->value !=
+        value - 1) {
+      return {};
+    }
+    return {.kind = ordered_kind};
+  }
+  // A new list may start at any positive number (e.g. when it resumes on a
+  // new page). "0." is excluded because table decimals such as "0.98" are
+  // often split into "0." and "98" runs. Heading-styled numbering (e.g. a
+  // bold "1. Introduction") cannot start a list, but may continue one, since
+  // a bold list's last item is heading-styled when body text follows.
+  if (value < 1 || ClassifyHeading(run_context, page_properties) !=
+                       HeadingClassifier::kNone) {
+    return {};
+  }
+  return IsOrderedListStartConfirmed(context, run_index, ordered_kind);
 }
 
 // Classifies whether the run at `run_index` is a standalone list marker run or
 // combines a list marker with item text.
 ListMarkerKind ClassifyListMarker(
-    const PageLayoutData& layout,
+    const ListMarkerContext& context,
     size_t run_index,
-    base::span<const ListLevel> list_levels,
-    const HeuristicPageProperties& page_properties,
     std::optional<size_t>& last_recorded_lookahead_run_index) {
   CHECK(features::IsPdfAccessibilityHeuristicEnhancementsEnabled());
+  const PageLayoutData& layout = *context.layout;
+  const base::span<const ListLevel> list_levels = context.list_levels;
   const TextRunContext run_context = GetTextRunContext(layout, run_index);
   if (!IsLeftToRightRun(*run_context.run)) {
     return {};
@@ -2141,34 +2193,13 @@ ListMarkerKind ClassifyListMarker(
     return {};
   }
 
-  const float item_font_size =
-      GetListItemFontSize(run_context, ordered_kind.form);
-  const float max_nest = kMaxListNestingIndentEm * item_font_size;
-  const ListPlacement placement = GetListPlacement(list_levels, run_x, max_nest,
-                                                   ordered_kind.ordered_marker);
-
-  const int value = ordered_kind.ordered_marker->value;
-  if (placement.kind == ListPlacementKind::kExistingLevel) {
-    // Continuing a list requires the next number or letter in sequence.
-    if (list_levels[placement.level_index].last_ordered_marker->value !=
-        value - 1) {
-      return {};
-    }
-  } else if (value < 1 ||
-             ClassifyHeading(run_context, page_properties) !=
-                 HeadingClassifier::kNone ||
-             !IsOrderedListStartConfirmed(layout, run_index, ordered_kind,
-                                          page_properties,
-                                          last_recorded_lookahead_run_index)) {
-    // A new list may start at any positive number (e.g. when it resumes on a
-    // new page). "0." is excluded because table decimals such as "0.98" are
-    // often split into "0." and "98" runs. Heading-styled numbering (e.g. a
-    // bold "1. Introduction") cannot start a list, but may continue one, since
-    // a bold list's last item is heading-styled when body text follows.
-    return {};
+  const OrderedListCheck check =
+      ContinuesOrConfirmsOrderedList(context, run_index, ordered_kind);
+  if (check.lookahead_lines.has_value()) {
+    RecordOrderedListLookaheadLines(run_index, *check.lookahead_lines,
+                                    last_recorded_lookahead_run_index);
   }
-
-  return ordered_kind;
+  return check.kind;
 }
 
 struct ListMarkerPrefix {
@@ -2282,17 +2313,17 @@ void TrimTextRunPrefix(size_t prefix_char_count,
 // merges into the previous item's text or ends the list.
 // TODO(crbug.com/525509231): Investigate whether it's worth handling this.
 bool BreakAtListBoundary(
-    const PageLayoutData& layout,
+    const ListMarkerContext& context,
     size_t next_run_index,
     const ui::AXNodeData* block_node,
-    base::span<const ListLevel> list_levels,
-    const HeuristicPageProperties& page_properties,
     std::optional<size_t>& last_recorded_lookahead_run_index) {
   CHECK(features::IsPdfAccessibilityHeuristicEnhancementsEnabled());
   CHECK(block_node);
-  const ListMarkerKind kind =
-      ClassifyListMarker(layout, next_run_index, list_levels, page_properties,
-                         last_recorded_lookahead_run_index);
+  const PageLayoutData& layout = *context.layout;
+  const HeuristicPageProperties& page_properties = *context.page_properties;
+  const base::span<const ListLevel> list_levels = context.list_levels;
+  const ListMarkerKind kind = ClassifyListMarker(
+      context, next_run_index, last_recorded_lookahead_run_index);
   if (kind.form != ListMarkerForm::kNone) {
     return true;
   }
@@ -2371,8 +2402,11 @@ bool BreakParagraph(uint32_t text_run_index,
       return header_footer_break.value();
     }
 
-    if (BreakAtListBoundary(layout, text_run_index + 1, block_node, list_levels,
-                            page_properties,
+    const ListMarkerContext list_marker_context = {
+        .layout = raw_ref(layout),
+        .page_properties = raw_ref(page_properties),
+        .list_levels = list_levels};
+    if (BreakAtListBoundary(list_marker_context, text_run_index + 1, block_node,
                             last_recorded_lookahead_run_index)) {
       return true;
     }
@@ -2613,14 +2647,53 @@ base::flat_set<size_t> GetAnnotatedRunIndices(
   return base::flat_set<size_t>(std::move(indices));
 }
 
+// Records the size of `table` and how full its cells are.
+//
+// A very long cell suggests a paragraph next to the table was pulled into it.
+void RecordTableShapeMetrics(
+    const HeuristicTable& table,
+    base::span<const chrome_pdf::AccessibilityTextRunInfo> text_runs) {
+  base::UmaHistogramCounts100("Accessibility.PdfHeuristics.TableRowCount",
+                              table.rows.size());
+  base::UmaHistogramCounts100("Accessibility.PdfHeuristics.TableColumnCount",
+                              table.rows[0].cells.size());
+
+  size_t cell_count = 0;
+  size_t populated_cell_count = 0;
+  size_t max_cell_length = 0;
+  for (const HeuristicTableRow& row : table.rows) {
+    cell_count += row.cells.size();
+    for (const HeuristicTableCell& cell : row.cells) {
+      if (cell.text_run_indices.empty()) {
+        continue;
+      }
+      ++populated_cell_count;
+      size_t cell_length = 0;
+      for (size_t run_index : cell.text_run_indices) {
+        cell_length += text_runs[run_index].len;
+      }
+      max_cell_length = std::max(max_cell_length, cell_length);
+    }
+  }
+  base::UmaHistogramPercentage(
+      "Accessibility.PdfHeuristics.TablePopulatedCellPercentage",
+      base::ClampRound(100.0 * populated_cell_count / cell_count));
+  base::UmaHistogramCounts1000("Accessibility.PdfHeuristics.TableMaxCellLength",
+                               max_cell_length);
+}
+
 // Detects grid tables on the page and collects the text runs in them. Skips
 // tables with a run covered by a link, highlight, or graphic. Returns no
-// tables when heuristic enhancements are disabled.
+// tables when heuristic enhancements are disabled or the page has no text.
+// Records table metrics.
 PageTables ComputePageTables(
     const PdfAccessibilityTreeBuilder& builder,
     const std::vector<chrome_pdf::AccessibilityFormGraphicInfo>& graphics) {
   PageTables result;
-  if (!features::IsPdfAccessibilityHeuristicEnhancementsEnabled()) {
+  // Skip pages with no text, such as scanned pages without OCR, so they don't
+  // crowd the 0 bucket of Accessibility.PdfHeuristics.TableCountPerPage.
+  if (!features::IsPdfAccessibilityHeuristicEnhancementsEnabled() ||
+      builder.text_runs().empty()) {
     return result;
   }
   // Leave runs covered by annotations in normal flow so their nodes stay
@@ -2633,6 +2706,8 @@ PageTables ComputePageTables(
                              builder.highlights(), graphics);
   result.tables = DetectGridTables(builder.text_runs(), builder.ruling_lines(),
                                    annotated_run_indices);
+  base::UmaHistogramCounts100("Accessibility.PdfHeuristics.TableCountPerPage",
+                              result.tables.size());
   if (result.tables.empty()) {
     return result;
   }
@@ -2643,6 +2718,7 @@ PageTables ComputePageTables(
         result.tables.end());
   std::vector<size_t> table_text_run_indices;
   for (const HeuristicTable& table : result.tables) {
+    RecordTableShapeMetrics(table, builder.text_runs());
     base::Extend(table_text_run_indices, GetTableTextRunIndices(table));
   }
   result.table_text_run_indices =
@@ -2727,6 +2803,13 @@ void RecordListEndMetrics(const ListLevel& level,
         "Accessibility.PdfHeuristics.ListMaxNestingDepth",
         level.max_nesting_depth, kListMaxNestingDepthHistogramMax);
   }
+}
+
+// Adds the character count of `level`'s last item, which ends at
+// `end_char_index`, to `level.item_char_counts`.
+void AddLastItemCharCount(ListLevel& level, size_t end_char_index) {
+  level.item_char_counts.push_back(end_char_index -
+                                   level.last_item_start_char_index);
 }
 
 // Ends all but the outermost `levels_to_keep` levels. All level removals must
@@ -2886,14 +2969,11 @@ PdfAccessibilityTreeBuilderHeuristic::~PdfAccessibilityTreeBuilderHeuristic() =
     default;
 
 void PdfAccessibilityTreeBuilderHeuristic::BuildPageTree() {
-  base::ElapsedTimer timer;
   std::optional<float> min_heading_ratio;
   std::optional<float> max_heading_ratio;
-  absl::Cleanup run_on_exit = [&timer, &min_heading_ratio, &max_heading_ratio] {
-    base::UmaHistogramTimes("Accessibility.PDF.Heuristic.BuildPageTreeTime",
-                            timer.Elapsed());
+  absl::Cleanup run_on_exit = [&min_heading_ratio, &max_heading_ratio] {
     if (features::IsPdfAccessibilityHeuristicEnhancementsEnabled() &&
-        min_heading_ratio && max_heading_ratio) {
+        min_heading_ratio.has_value() && max_heading_ratio.has_value()) {
       RecordHeadingToBodySizeRatioHistogram(
           "Accessibility.PdfHeuristics.HeadingToBodySizeRatioMax",
           static_cast<int>(std::round(*max_heading_ratio * 100.0f)));
@@ -2945,9 +3025,9 @@ void PdfAccessibilityTreeBuilderHeuristic::BuildPageTree() {
       previous_on_line_node = nullptr;
       current_heading_classifier = HeadingClassifier::kNone;
       if (!list_levels_.empty()) {
-        list_levels_.back().item_char_counts.push_back(
-            page_layout_.text_run_start_indices[text_run_index] -
-            list_levels_.back().last_item_start_char_index);
+        AddLastItemCharCount(
+            list_levels_.back(),
+            page_layout_.text_run_start_indices[text_run_index]);
         PopListLevels(list_levels_, /*levels_to_keep=*/0,
                       ListEndReason::kTable);
       }
@@ -3090,15 +3170,11 @@ void PdfAccessibilityTreeBuilderHeuristic::BuildPageTree() {
     if (IsObjectWithRangeInTextRun(builder_->links(), current_link_index_,
                                    text_run_index)) {
       BuildStaticNode(&static_text_state);
-      const chrome_pdf::AccessibilityLinkInfo& link =
-          (builder_->links())[current_link_index_++];
-      AddLinkToParaNode(link, block_node, &previous_on_line_node, &line_helper,
-                        &text_run_index);
-
-      if (link.text_range.count == 0) {
+      if (!AddLinkToParaNode((builder_->links())[current_link_index_++],
+                             block_node, &previous_on_line_node, &line_helper,
+                             &text_run_index)) {
         continue;
       }
-
     } else if (IsObjectInTextRun(images, current_image_index_,
                                  text_run_index)) {
       BuildStaticNode(&static_text_state);
@@ -3202,9 +3278,7 @@ void PdfAccessibilityTreeBuilderHeuristic::BuildPageTree() {
   }
 
   if (!list_levels_.empty()) {
-    list_levels_.back().item_char_counts.push_back(
-        page_layout_.chars.size() -
-        list_levels_.back().last_item_start_char_index);
+    AddLastItemCharCount(list_levels_.back(), page_layout_.chars.size());
     PopListLevels(list_levels_, /*levels_to_keep=*/0, ListEndReason::kPageEnd);
   }
 
@@ -3274,9 +3348,8 @@ PdfAccessibilityTreeBuilderHeuristic::CreateBlockLevelNode(
   if (features::IsPdfAccessibilityHeuristicEnhancementsEnabled()) {
     std::swap(levels, list_levels_);
     if (!levels.empty()) {
-      levels.back().item_char_counts.push_back(
-          page_layout_.text_run_start_indices[text_run_index] -
-          levels.back().last_item_start_char_index);
+      AddLastItemCharCount(levels.back(),
+                           page_layout_.text_run_start_indices[text_run_index]);
     }
   }
   // Set on each path that returns with an open list.
@@ -3317,9 +3390,13 @@ PdfAccessibilityTreeBuilderHeuristic::CreateBlockLevelNode(
     // start a new list if there is none. The marker run itself becomes the
     // item's `kListMarker` in `BuildPageTree()`.
     if (!header_footer_ax_role.has_value()) {
-      result.list_marker_kind = ClassifyListMarker(
-          page_layout_, text_run_index, levels, page_properties,
-          last_recorded_lookahead_run_index_);
+      const ListMarkerContext list_marker_context = {
+          .layout = raw_ref(page_layout_),
+          .page_properties = raw_ref(page_properties),
+          .list_levels = levels};
+      result.list_marker_kind =
+          ClassifyListMarker(list_marker_context, text_run_index,
+                             last_recorded_lookahead_run_index_);
     }
     if (result.list_marker_kind.form != ListMarkerForm::kNone) {
       result.node = CreateListItemNode(run_context, result.list_marker_kind,
@@ -3663,7 +3740,7 @@ void PdfAccessibilityTreeBuilderHeuristic::AddTextToObjectNode(
       NormalizeTextRunIndex(object_end_text_run_index, *text_run_index);
 }
 
-void PdfAccessibilityTreeBuilderHeuristic::AddLinkToParaNode(
+bool PdfAccessibilityTreeBuilderHeuristic::AddLinkToParaNode(
     const chrome_pdf::AccessibilityLinkInfo& link,
     ui::AXNodeData* para_node,
     ui::AXNodeData** previous_on_line_node,
@@ -3676,7 +3753,7 @@ void PdfAccessibilityTreeBuilderHeuristic::AddLinkToParaNode(
   // text. Push it ahead of the current text run.
   if (link.text_range.count == 0) {
     --(*text_run_index);
-    return;
+    return false;
   }
 
   // Make the text runs contained by the link children of
@@ -3684,6 +3761,7 @@ void PdfAccessibilityTreeBuilderHeuristic::AddLinkToParaNode(
   AddTextToObjectNode(link.text_range.index, link.text_range.count, link_node,
                       para_node, previous_on_line_node, line_helper,
                       text_run_index);
+  return true;
 }
 
 void PdfAccessibilityTreeBuilderHeuristic::AddImageToParaNode(

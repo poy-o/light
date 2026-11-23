@@ -420,10 +420,6 @@ BASE_FEATURE_PARAM(std::string,
 BASE_FEATURE(kGlicWhatsNewQuizzes, base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kGlicBrowserCommandInvoke, base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE_PARAM(std::string,
-                   kGlicBrowserCommandInvokePrompt,
-                   &kGlicBrowserCommandInvoke,
-                   "");
 
 BASE_FEATURE(kGlicForceFcmExperimentalTriggerFailure,
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -460,4 +456,8 @@ const base::FeatureParam<base::TimeDelta>
 BASE_FEATURE(kGlicApiBundleResource, base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kGlicDrivePicker, base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kGlicCic, base::FEATURE_DISABLED_BY_DEFAULT);
+const base::FeatureParam<std::string> kGlicCicUrl{
+    &kGlicCic, "url", "https://glic-cic.apps.corp.google.com/"};
 }  // namespace features

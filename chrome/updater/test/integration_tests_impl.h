@@ -20,6 +20,7 @@
 #include "build/build_config.h"
 #include "chrome/updater/external_constants.h"
 #include "chrome/updater/registration_data.h"
+#include "chrome/updater/test/json_matchers.h"
 #include "chrome/updater/update_service.h"
 #include "chrome/updater/updater_version.h"
 #include "components/update_client/update_client_errors.h"
@@ -449,12 +450,18 @@ int CountDirectoryFiles(const base::FilePath& dir);
 
 void ExpectSelfUpdateSequence(UpdaterScope scope, ScopedServer& test_server);
 
+// Expects a ping with an event of type `event_type` for `app_id`, proxied to
+// `target_url` if set.
 void ExpectPing(UpdaterScope scope,
                 ScopedServer& test_server,
+                const std::string& app_id,
                 int event_type,
                 std::optional<GURL> target_url);
+// Expects an install ping for `app_id` with `installsource` set to
+// `install_source`.
 void ExpectInstallSource(UpdaterScope scope,
                          ScopedServer& test_server,
+                         const std::string& app_id,
                          const std::string& install_source);
 void ExpectAppCommandPing(UpdaterScope scope,
                           ScopedServer& test_server,
@@ -466,6 +473,8 @@ void ExpectAppCommandPing(UpdaterScope scope,
                           const base::Version& version,
                           const base::Version& updater_version);
 
+// Expects an update check in which at least one app has an empty
+// `updatecheck`, and responds with no apps.
 void ExpectUpdateCheckRequest(UpdaterScope scope, ScopedServer& test_server);
 
 void ExpectUpdateCheckSequence(UpdaterScope scope,
@@ -476,6 +485,12 @@ void ExpectUpdateCheckSequence(UpdaterScope scope,
                                const base::Version& to_version,
                                const base::Version& updater_version);
 
+// Expects an update check for `app_id`, the CRX download unless
+// `skip_download`, and an event ping for a successful update from
+// `from_version` to `to_version`. The ping's entry for `app_id` in
+// `request.apps` must also match `ping_app_matcher`, if set. With
+// `do_fault_injection`, the server answers the first attempt at each request
+// with an HTTP 500 error. With `use_xz`, the server serves the `.xz` CRX.
 void ExpectUpdateSequence(
     UpdaterScope scope,
     ScopedServer& test_server,
@@ -487,7 +502,7 @@ void ExpectUpdateSequence(
     bool do_fault_injection,
     bool skip_download,
     const base::Version& updater_version = base::Version(kUpdaterVersion),
-    const std::string& event_regex = ".*",
+    std::optional<json::ValueMatcher> ping_app_matcher = std::nullopt,
     bool use_xz = false);
 
 void ExpectUpdateSequenceBadHash(UpdaterScope scope,
@@ -498,6 +513,10 @@ void ExpectUpdateSequenceBadHash(UpdaterScope scope,
                                  const base::Version& from_version,
                                  const base::Version& to_version);
 
+// Like `ExpectUpdateSequence()`, but for an install, and never with the `.xz`
+// CRX. In event pings, the updater sends the app's `iid` only with install
+// events, so `ping_app_matcher` can check it here but not in
+// `ExpectUpdateSequence()`.
 void ExpectInstallSequence(UpdaterScope scope,
                            ScopedServer& test_server,
                            const std::string& app_id,
@@ -508,17 +527,17 @@ void ExpectInstallSequence(UpdaterScope scope,
                            bool do_fault_injection,
                            bool skip_download,
                            const base::Version& updater_version,
-                           const std::string& event_regex);
+                           std::optional<json::ValueMatcher> ping_app_matcher);
 
 void ExpectEnterpriseCompanionAppOTAInstallSequence(ScopedServer& test_server);
 
 // Expects one update check for `apps`, then each app's CRX download (once per
-// CRX file name) and event ping in any order. The check's `request` must cover
-// `request_attributes` and list every app, in any order, with `version` set to
-// `from_version`, and `release_channel`, `rollback_allowed`,
-// `targetversionprefix`, and `updatedisabled` set from `target_channel`,
-// `allow_rollback`, `target_version_prefix`, and `update_disabled`. An empty or
-// false field forbids its key.
+// CRX file name) and event ping in any order. The check's `request` must match
+// `request_matcher`, if set, and list every app, in any order, with `version`
+// set to `from_version` and `release_channel`, `updatecheck.rollback_allowed`,
+// `updatecheck.targetversionprefix`, and `updatecheck.updatedisabled` set from
+// `target_channel`, `allow_rollback`, `target_version_prefix`, and
+// `update_disabled`. An empty or false field forbids its key.
 //
 // Expects a success ping if `should_update`; otherwise, if
 // `custom_app_response` is empty and `response_status` is "ok", an error ping
@@ -526,8 +545,8 @@ void ExpectEnterpriseCompanionAppOTAInstallSequence(ScopedServer& test_server);
 void ExpectAppsUpdateSequence(
     UpdaterScope scope,
     ScopedServer& test_server,
-    const base::DictValue& request_attributes,
     const std::vector<AppUpdateExpectation>& apps,
+    std::optional<json::ValueMatcher> request_matcher = std::nullopt,
     const base::Version& updater_version = base::Version(kUpdaterVersion));
 
 void StressUpdateService(UpdaterScope scope);
@@ -664,10 +683,6 @@ void ExpectDeviceManagementPolicyFetchRequest(
     bool first_request = true,
     bool rotate_public_key = false,
     std::optional<GURL> target_url = std::nullopt);
-void ExpectDeviceManagementTokenDeletionRequest(ScopedServer& test_server,
-                                                const std::string& dm_token,
-                                                bool invalidate_token);
-void ExpectProxyPacScriptRequest(ScopedServer& test_server);
 
 #if BUILDFLAG(IS_MAC)
 

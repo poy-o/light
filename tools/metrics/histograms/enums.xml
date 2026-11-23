@@ -1196,11 +1196,6 @@ uploading your change for review.  These are checked by presubmit scripts.
   <int value="1" label="Loaded"/>
 </enum>
 
-<enum name="BooleanLockingSuccess">
-  <int value="0" label="Locking failed"/>
-  <int value="1" label="Locking succeeded"/>
-</enum>
-
 <enum name="BooleanMainFrame">
   <int value="0" label="Subframe"/>
   <int value="1" label="Main frame"/>
@@ -3904,6 +3899,7 @@ shown properly on the user-facing crash UI.
   <int value="50" label="Omnibox"/>
   <int value="51" label="Reading Mode"/>
   <int value="52" label="Omnibox Everywhere"/>
+  <int value="53" label="Contextual Tasks"/>
 </enum>
 
 <!--LINT.ThenChange(//chrome/browser/feedback/public/feedback_source.h:FeedbackSource) -->
@@ -14382,6 +14378,7 @@ from previous Chrome versions.
   <int value="-192433738" label="AutofillEnableCardBenefits:enabled"/>
   <int value="-192389983" label="NoStatePrefetch:enabled"/>
   <int value="-191625183" label="AccessibilityReducedAnimations:enabled"/>
+  <int value="-191607048" label="GlicCic:disabled"/>
   <int value="-191533242" label="SyncEncryptedTabContext:disabled"/>
   <int value="-191329924" label="WallpaperSearchSettingsVisibility:disabled"/>
   <int value="-190723154" label="AppLaunchAutomation:enabled"/>
@@ -15077,6 +15074,7 @@ from previous Chrome versions.
   <int value="12016364" label="OmniboxBubbleUrlSuggestions:enabled"/>
   <int value="12423208" label="ImprovedSettingsUIOnDesktop:enabled"/>
   <int value="13976438" label="ReduceTransferSizeUpdatedIPC:disabled"/>
+  <int value="14378964" label="AccessibilitySelectionOffsetTypes:enabled"/>
   <int value="14744795" label="OmniboxDebounceKeyboardVisibility:disabled"/>
   <int value="14817184" label="FilesSearchV2:enabled"/>
   <int value="15614295" label="Portals:enabled"/>
@@ -18087,6 +18085,7 @@ from previous Chrome versions.
   <int value="910964036" label="ChangeUnfocusedPriority:disabled"/>
   <int value="911212299" label="AndroidKeyboardShortcutHints:disabled"/>
   <int value="911256399" label="GlobalMediaControlsModernUI:enabled"/>
+  <int value="911903069" label="NewTabPageCustomizationThemeDebug:enabled"/>
   <int value="911991932" label="OnDeviceModelLitertLmBackend:enabled"/>
   <int value="912119426" label="InfiniteSessionRestore:disabled"/>
   <int value="912145170" label="FirstRunDesktopChoiceScreenRefresh:disabled"/>
@@ -19961,6 +19960,7 @@ from previous Chrome versions.
   <int value="1454527518" label="ArcNativeBridgeExperiment:enabled"/>
   <int value="1454656852" label="ResponsiveToolbar:enabled"/>
   <int value="1455200894" label="GlicActorUiMagicCursorChip:disabled"/>
+  <int value="1455546205" label="AccessibilitySelectionOffsetTypes:disabled"/>
   <int value="1455708250" label="AutofillEnableVerveCardSupport:disabled"/>
   <int value="1455753326" label="EnableNearbyBleV2GattServer:disabled"/>
   <int value="1455881930" label="V8VmFuture:enabled"/>
@@ -20786,6 +20786,7 @@ from previous Chrome versions.
   <int value="1702985369"
       label="IncognitoClearBrowsingDataDialogForDesktop:enabled"/>
   <int value="1703206814" label="CloseAllTabsModalDialog:disabled"/>
+  <int value="1703255331" label="NewTabPageCustomizationThemeDebug:disabled"/>
   <int value="1703927420" label="PiexWasm:enabled"/>
   <int value="1704490504"
       label="UseDirectXkbLayoutForThaiTisInputMethod:disabled"/>
@@ -20981,6 +20982,7 @@ from previous Chrome versions.
       label="RevokeNotificationsPermissionIfDisabledOnAppLevel:enabled"/>
   <int value="1763256921" label="PerformanceNavigateSystemEntropy:disabled"/>
   <int value="1763791860" label="CastMessageLogging:enabled"/>
+  <int value="1763918732" label="GlicCic:enabled"/>
   <int value="1764208497" label="AndroidUnknownGamepadExtraAxes:enabled"/>
   <int value="1764243510"
       label="EnableClientCertificateProvisioningOnAndroid:enabled"/>
@@ -26858,7 +26860,7 @@ Called by update_net_error_codes.py.-->
   <int value="16" label="BrowserActuatorDownstreamMessage"/>
 </enum>
 
-<!-- LINT.ThenChange(//components/sharing_message/proto/sharing_message_type.proto:MessageType) -->
+<!-- LINT.ThenChange(//components/sharing_message/proto/sharing_message_type.proto:MessageType, //tools/metrics/histograms/metadata/sharing/histograms.xml:PulseIntervalOrSharingMessage) -->
 
 <enum name="SharingScreenshotAction">
 <!--
@@ -28644,6 +28646,8 @@ Called by update_net_error_codes.py.-->
 </enum>
 
 <enum name="VariationsSeedFetchResult">
+  <int value="-7"
+      label="Missing hybrid signature when current seed already has one"/>
   <int value="-6"
       label="Exception when applying delta patch when fetching seed"/>
   <int value="-5" label="Invalid IM-Header when fetching seed"/>

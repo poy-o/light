@@ -931,37 +931,18 @@ public class TabContextMenuCoordinator extends TabStripReorderingHelper<AnchorIn
                 .build();
     }
 
-    private static @Nullable Token getSharedTabGroupId(List<Tab> tabs) {
-        if (tabs.isEmpty()) {
-            return null;
-        }
-        Token firstGroupId = tabs.get(0).getTabGroupId();
-        if (firstGroupId == null) {
-            return null;
-        }
-        for (int i = 1; i < tabs.size(); i++) {
-            Token tabGroupId = tabs.get(i).getTabGroupId();
-            if (!Objects.equals(firstGroupId, tabGroupId)) {
-                return null;
-            }
-        }
-        return firstGroupId;
-    }
-
     private ListItem createMoveToTabGroupItem(
             AnchorInfo anchorInfo, List<Tab> tabs, boolean isIncognito) {
         // Available tab groups.
-        @Nullable Token groupToNotBeIncluded = getSharedTabGroupId(tabs);
+        @Nullable Token groupToNotBeIncluded = TabGroupUtils.findSingleTabGroupIfPresent(tabs);
         TabModel tabModel = getTabModel();
         GroupWindowChecker windowChecker =
                 new GroupWindowChecker(mActivity, mTabGroupSyncService, tabModel);
         boolean hasOtherGroups = windowChecker.hasOtherGroups(groupToNotBeIncluded);
+        String title =
+                TabGroupUiUtils.getAddToGroupMenuItemTitle(
+                        mActivity, groupToNotBeIncluded, hasOtherGroups, tabs.size());
         if (!hasOtherGroups) {
-            int tabCount = tabs.size();
-            String title =
-                    mActivity
-                            .getResources()
-                            .getQuantityString(R.plurals.add_tab_to_new_group_menu_item, tabCount);
             return new ListItemBuilder()
                     .withTitle(title)
                     .withMenuId(R.id.add_to_new_tab_group)
@@ -969,10 +950,6 @@ public class TabContextMenuCoordinator extends TabStripReorderingHelper<AnchorIn
                     .build();
         }
 
-        int tabCount = tabs.size();
-        String title =
-                TabGroupUiUtils.getAddToGroupMenuItemTitle(
-                        mActivity, groupToNotBeIncluded, tabCount);
         Supplier<List<ListItem>> submenuProvider =
                 () -> buildMoveToTabGroupSubmenu(anchorInfo, isIncognito);
         return new ListItemBuilder()
@@ -987,7 +964,7 @@ public class TabContextMenuCoordinator extends TabStripReorderingHelper<AnchorIn
         List<Integer> tabIds = anchorInfo.getAllTabIds();
         TabModel tabModel = getTabModel();
         List<Tab> liveTabs = TabModelUtils.getTabsById(tabIds, tabModel, /* allowClosing= */ false);
-        @Nullable Token groupToNotBeIncluded = getSharedTabGroupId(liveTabs);
+        @Nullable Token groupToNotBeIncluded = TabGroupUtils.findSingleTabGroupIfPresent(liveTabs);
 
         // "Add to new group" item
         OnClickListener newGroupClickListener = (v) -> onAddToNewGroupClicked(tabIds, isIncognito);

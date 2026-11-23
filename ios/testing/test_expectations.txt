@@ -500,7 +500,6 @@ crbug.com/40807242 [ iPad ] RecentTabsTestCase/testContextMenuOpenInNewWindow [ 
 crbug.com/456803766 [ iPad Device iOS18 ] SafeModeTestCase/testPostCrashNTP [ Pass Failure ]
 crbug.com/333519732 SearchEngineTestCase/testUserActionWhenExpandingSnippetChevron [ Pass Failure ]
 crbug.com/484191734 ActivityServiceControllerTestCase/testOpenActivityServiceControllerAndOpenExtension [ Pass Failure ]
-crbug.com/455768805 TipsNotificationsTestCase/testTriggerNotifications [ Pass Failure ]
 crbug.com/379849501 VariationsSafeModeEndToEndTestCase/testVariationsSafeModeEndToEnd [ Pass Failure ]
 
 # Gardening surpression 2026-07-09
@@ -747,10 +746,22 @@ crbug.com/586829581 [ Device ] ContentSuggestionsTestCase/testMagicStackCompacte
 
 # CQ flakiness quarantine 2026-11-17
 crbug.com/586867871 [ iOS26 iOS27 Simulator ] BookmarksEntriesTestCase/testContextMenuForMultipleURLOpenAll [ Pass Failure ]
+crbug.com/584310068 [ iOS26 iOS27 Simulator ] RecentTabsTestCase/testContextMenuRepeatedShare [ Pass Failure ]
 
 # Gardening suppression 2026-11-18
 crbug.com/587350667 [ iOS27 Simulator ] InternalOneTapTestCase/testNoConsent [ Pass Failure ]
 crbug.com/587350667 [ ASan ] InternalOneTapTestCase/testNoConsent [ Crash ]
 
 # Gardening suppression 2026-11-19
-crbug.com/587935331 [ iPad Simulator ] ReadingListAccountStorageTestCase/testMoveItemThenRefreshSignIn [ Pass Failure ]
+crbug.com/587312040 GeminiContainerTestCase [ Pass Failure ]
+
+# Gardening suppression 2026-11-20
+crbug.com/584668727 [ iPad Device ] ChromeTestCaseTestCase/testLoadURLFailsWhenInTabGrid [ Pass Failure ]
+crbug.com/512425968 [ iOS27.3 Simulator ] GoogleServicesSettingsTestCase/testCancelAllowChromeSignin [ Failure ]
+crbug.com/584625508 [ iOS27.3 Simulator ] ManageAccountsTableTestCase/testRemoveAccountSeveralTime [ Failure ]
+crbug.com/40752508 [ iOS27 iPad ] TabGridTestCase/testDragAndDropAtEdgeToCreateNewWindow [ Pass Failure ]
+crbug.com/427699033 [ iOS27 iPad ] TabGridTestCase/testIncognitoDragAndDropAtEdgeToCreateNewWindow [ Pass Failure ]
+crbug.com/588393258 PasswordManagerSearchTestCase/testPasswordsDeletionNavigation [ Pass Failure ]
+crbug.com/584364590 GeminiAppSwitchingTestCase/testAppSwitchingAISummarizationFloatyNotInvoked [ Pass Failure ]
+crbug.com/571459477 [ iPhone Simulator ] ReadingListTestCase/testDeleteEntries [ Pass Failure ]
+crbug.com/588447001 [ iOS26 iOS27 iPad Simulator ] SharedTabGroupsTestCase/testCloseLastTabInIncognito [ Pass Failure ]

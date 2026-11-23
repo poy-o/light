@@ -79,12 +79,16 @@ import java.util.List;
 /** Integration tests for Adaptive UI on a real bottom sheet and a real ModalDialogManager. */
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
-public class AdaptiveUiIntegrationTest implements AdaptiveUiObserver {
+public class AdaptiveUiIntegrationTest {
     private static final int ROOT_SIZE_PX = 2000;
+    private static final int TALL_CUSTOM_VIEW_HEIGHT_PX = 1000;
     private static final long PERIOD_MS = 500;
     private static final long LONGER_THAN_PERIOD_MS = PERIOD_MS * 2;
     private static final int SWIPE_STEPS = 10;
     private static final long SWIPE_STEP_MS = 10;
+    private static final float FLICK_DISTANCE_FRACTION = 0.15f;
+    private static final int FLICK_STEPS = 5;
+    private static final long FLICK_STEP_MS = 8;
 
     // Adaptive UI dialogs need a TITLE or DIALOG_CONTENT_DESCRIPTION, and TabModalPresenter
     // asserts the same, so title-less dialog models set DIALOG_CONTENT_DESCRIPTION.
@@ -140,16 +144,6 @@ public class AdaptiveUiIntegrationTest implements AdaptiveUiObserver {
     private ModalDialogManager mDialogManager;
     private AdaptiveUiControllerImpl mController;
     private @Nullable PropertyModel mScrimModel;
-
-    @Override
-    public void onShown(@AdaptiveUiContainer int container) {
-        mShownContainers.add(container);
-    }
-
-    @Override
-    public void onDismissed(@DismissReason int reason) {
-        mDismissReasons.add(reason);
-    }
 
     @Before
     public void setUp() {
@@ -417,6 +411,91 @@ public class AdaptiveUiIntegrationTest implements AdaptiveUiObserver {
         assertTrue(primaryButton.getHeight() > 0);
         assertTrue(bottomInSheetContent(footer) <= visibleHeight);
         assertTrue(bottomInSheetContent(primaryButton) <= visibleHeight);
+    }
+
+    @Test
+    public void testGestureDismissalDisabled_SheetBlocksFlingWhileScrimDragAndBackDismiss() {
+        // Baseline: a short fast downward flick (< 30% distance) dismisses when enabled.
+        showSheet(tallSheetModel(/* gestureDismissalDisabled= */ false));
+        dispatchShortFastDownwardFlick(sheetContainerView());
+        mSheetSupport.endAllAnimations();
+        assertEquals(List.of(DismissReason.SWIPE_DOWN), mDismissReasons);
+        mDismissReasons.clear();
+
+        // With GESTURE_DISMISSAL_DISABLED, the same short fast flick snaps back to FULL.
+        PropertyModel disabledModel = tallSheetModel(/* gestureDismissalDisabled= */ true);
+        showSheet(disabledModel);
+        dispatchShortFastDownwardFlick(sheetContainerView());
+        mSheetSupport.endAllAnimations();
+        assertTrue(mDismissReasons.isEmpty());
+        assertEquals(SheetState.FULL, mSheetController.getSheetState());
+
+        // Re-enabling live allows the same fast flick to dismiss.
+        disabledModel.set(AdaptiveUiProperties.GESTURE_DISMISSAL_DISABLED, false);
+        dispatchShortFastDownwardFlick(sheetContainerView());
+        mSheetSupport.endAllAnimations();
+        assertEquals(List.of(DismissReason.SWIPE_DOWN), mDismissReasons);
+        mDismissReasons.clear();
+
+        // Scrim tap, full drag past threshold, and Back press still close non-peeking sheets.
+        showSheet(tallSheetModel(/* gestureDismissalDisabled= */ true));
+        assertNotNull(mScrimModel);
+        mScrimModel.get(ScrimProperties.CLICK_DELEGATE).run();
+        mSheetSupport.endAllAnimations();
+        assertEquals(List.of(DismissReason.TOUCH_OUTSIDE), mDismissReasons);
+        mDismissReasons.clear();
+
+        showSheet(tallSheetModel(/* gestureDismissalDisabled= */ true));
+        dispatchVerticalSwipe(sheetContainerView());
+        mSheetSupport.endAllAnimations();
+        assertEquals(List.of(DismissReason.SWIPE_DOWN), mDismissReasons);
+        mDismissReasons.clear();
+
+        showSheet(tallSheetModel(/* gestureDismissalDisabled= */ true));
+        assertTrue(mSheetSupport.handleBackPress());
+        mSheetSupport.endAllAnimations();
+        assertEquals(List.of(DismissReason.BACK_PRESS), mDismissReasons);
+    }
+
+    @Test
+    public void testGestureDismissalDisabled_DialogBlocksOutsideTouchWhileBackDismisses() {
+        // Baseline: outside touch dismisses the dialog by default.
+        showDialog(
+                newModelBuilder().with(AdaptiveUiProperties.TITLE, str(R.string.ok)).build(),
+                AdaptiveUiScope.WINDOW);
+        assertTrue(dispatchDialogOutsideTouch());
+        assertFalse(mDialogManager.isShowing());
+        assertEquals(List.of(DismissReason.TOUCH_OUTSIDE), mDismissReasons);
+        mDismissReasons.clear();
+
+        // With GESTURE_DISMISSAL_DISABLED, outside touch is ignored until re-enabled live.
+        PropertyModel disabledModel =
+                newModelBuilder()
+                        .with(AdaptiveUiProperties.TITLE, str(R.string.ok))
+                        .with(AdaptiveUiProperties.GESTURE_DISMISSAL_DISABLED, true)
+                        .build();
+        showDialog(disabledModel, AdaptiveUiScope.WINDOW);
+        assertFalse(dispatchDialogOutsideTouch());
+        assertTrue(mDialogManager.isShowing());
+        assertTrue(mDismissReasons.isEmpty());
+
+        disabledModel.set(AdaptiveUiProperties.GESTURE_DISMISSAL_DISABLED, false);
+        assertTrue(dispatchDialogOutsideTouch());
+        assertFalse(mDialogManager.isShowing());
+        assertEquals(List.of(DismissReason.TOUCH_OUTSIDE), mDismissReasons);
+        mDismissReasons.clear();
+
+        // Back press still closes the dialog when GESTURE_DISMISSAL_DISABLED is true.
+        PropertyModel backModel =
+                newModelBuilder()
+                        .with(AdaptiveUiProperties.TITLE, str(R.string.ok))
+                        .with(AdaptiveUiProperties.GESTURE_DISMISSAL_DISABLED, true)
+                        .build();
+        showDialog(backModel, AdaptiveUiScope.WINDOW);
+        assertFalse(dispatchDialogOutsideTouch());
+        mDialogPresenter.getDialogForTesting().getOnBackPressedDispatcher().onBackPressed();
+        assertFalse(mDialogManager.isShowing());
+        assertEquals(List.of(DismissReason.BACK_PRESS), mDismissReasons);
     }
 
     @Test
@@ -794,8 +873,11 @@ public class AdaptiveUiIntegrationTest implements AdaptiveUiObserver {
         return mActivity.getResources().getString(resId);
     }
 
-    private static PropertyModel.Builder newModelBuilder() {
-        return new PropertyModel.Builder(AdaptiveUiProperties.ALL_KEYS);
+    /** Every model records its lifecycle callbacks in the test's lists. */
+    private PropertyModel.Builder newModelBuilder() {
+        return new PropertyModel.Builder(AdaptiveUiProperties.ALL_KEYS)
+                .with(AdaptiveUiProperties.ON_SHOWN, mShownContainers::add)
+                .with(AdaptiveUiProperties.ON_DISMISSED, mDismissReasons::add);
     }
 
     private PropertyModel primaryModel(Runnable onPrimary, long tapProtectionMs) {
@@ -827,12 +909,21 @@ public class AdaptiveUiIntegrationTest implements AdaptiveUiObserver {
                 .build();
     }
 
+    private PropertyModel tallSheetModel(boolean gestureDismissalDisabled) {
+        View customView = new View(mActivity);
+        customView.setMinimumHeight(TALL_CUSTOM_VIEW_HEIGHT_PX);
+        return newModelBuilder()
+                .with(AdaptiveUiProperties.TITLE, str(R.string.ok))
+                .with(AdaptiveUiProperties.CUSTOM_VIEW, customView)
+                .with(AdaptiveUiProperties.GESTURE_DISMISSAL_DISABLED, gestureDismissalDisabled)
+                .build();
+    }
+
     private AdaptiveUiEntry newEntry(
             PropertyModel model, @AdaptiveUiScope int scope, @AdaptiveUiContainer int container) {
         return new AdaptiveUiEntry.Builder(model)
                 .setScope(scope)
                 .addAllowedContainer(container)
-                .setObserver(this)
                 .build();
     }
 
@@ -840,11 +931,10 @@ public class AdaptiveUiIntegrationTest implements AdaptiveUiObserver {
         var model =
                 newModelBuilder()
                         .with(AdaptiveUiProperties.PRIMARY_BUTTON_TEXT, str(R.string.ok))
+                        .with(AdaptiveUiProperties.SHEET_INITIAL_STATE, SheetState.HALF)
                         .build();
         return new AdaptiveUiEntry.Builder(model)
                 .addAllowedContainer(AdaptiveUiContainer.BOTTOM_SHEET)
-                .setSheetInitialState(SheetState.HALF)
-                .setObserver(this)
                 .build();
     }
 
@@ -991,18 +1081,47 @@ public class AdaptiveUiIntegrationTest implements AdaptiveUiObserver {
     }
 
     private void dispatchVerticalSwipe(View sheetView) {
+        dispatchVerticalSwipe(sheetView, /* distanceFraction= */ 1f, SWIPE_STEPS, SWIPE_STEP_MS);
+    }
+
+    // Drags 15% of the sheet height (< 30% state threshold) fast enough that fling velocity
+    // carries the projected offset past 30% while remaining > 0px.
+    private void dispatchShortFastDownwardFlick(View sheetView) {
+        dispatchVerticalSwipe(sheetView, FLICK_DISTANCE_FRACTION, FLICK_STEPS, FLICK_STEP_MS);
+    }
+
+    private void dispatchVerticalSwipe(
+            View sheetView, float distanceFraction, int steps, long stepMs) {
         long downTime = TimeUtils.uptimeMillis();
         float x = sheetView.getWidth() / 2f;
         float startY = sheetView.getHeight() - mSheetSupport.getCurrentOffsetPx() / 2f;
-        float endY = startY + mSheetSupport.getCurrentOffsetPx();
-        for (int i = 0; i <= SWIPE_STEPS + 1; i++) {
+        float endY = startY + mSheetSupport.getCurrentOffsetPx() * distanceFraction;
+        for (int i = 0; i <= steps + 1; i++) {
             int action = MotionEvent.ACTION_MOVE;
             if (i == 0) action = MotionEvent.ACTION_DOWN;
-            if (i > SWIPE_STEPS) action = MotionEvent.ACTION_UP;
-            float y = startY + (endY - startY) * Math.min(i, SWIPE_STEPS) / SWIPE_STEPS;
-            var ev = MotionEvent.obtain(downTime, downTime + i * SWIPE_STEP_MS, action, x, y, 0);
+            if (i > steps) action = MotionEvent.ACTION_UP;
+            float y = startY + (endY - startY) * Math.min(i, steps) / steps;
+            var ev =
+                    MotionEvent.obtain(
+                            downTime, downTime + i * stepMs, action, x, y, /* metaState= */ 0);
             sheetView.dispatchTouchEvent(ev);
             ev.recycle();
         }
+    }
+
+    private boolean dispatchDialogOutsideTouch() {
+        long t = TimeUtils.uptimeMillis();
+        MotionEvent ev =
+                MotionEvent.obtain(
+                        /* downTime= */ t,
+                        /* eventTime= */ t,
+                        MotionEvent.ACTION_OUTSIDE,
+                        /* x= */ 0f,
+                        /* y= */ 0f,
+                        /* metaState= */ 0);
+        boolean handled = mDialogPresenter.getDialogForTesting().onTouchEvent(ev);
+        ev.recycle();
+        ShadowLooper.idleMainLooper();
+        return handled;
     }
 }

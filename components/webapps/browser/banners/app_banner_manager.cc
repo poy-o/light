@@ -407,6 +407,9 @@ void AppBannerManager::OnNativeAppInstallableCheckComplete(
   CHECK(mode_ == AppBannerMode::kNativeApp);
 
   native_app_data_.emplace(result.value());
+  // The page prefers a native app, so do not promote the web app. This also
+  // overwrites `last_known_result_`, which can hold a result of an earlier run.
+  SetInstallableWebAppCheckResult(InstallableWebAppCheckResult::kNo);
 
   SendBannerPromptRequest();
 }
@@ -522,16 +525,22 @@ void AppBannerManager::ResetBindings() {
 }
 
 void AppBannerManager::ResetCurrentPageData() {
+  active_media_players_.clear();
+  validated_url_ = GURL();
+  UpdateState(State::INACTIVE);
+  ResetCurrentPipelineData();
+  delegate_->ResetCurrentPageData();
+}
+
+void AppBannerManager::ResetCurrentPipelineData() {
   delegate_->InvalidateWeakPtrsForThisNavigation();
   weak_factory_for_this_navigation_.InvalidateWeakPtrs();
-  active_media_players_.clear();
+  ResetBindings();
   web_app_data_.reset();
   native_app_data_.reset();
   mode_ = AppBannerMode::kWebApp;
-  validated_url_ = GURL();
-  UpdateState(State::INACTIVE);
+  delegate_->ResetCurrentPipelineData();
   SetInstallableWebAppCheckResult(InstallableWebAppCheckResult::kUnknown);
-  delegate_->ResetCurrentPageData();
 }
 
 void AppBannerManager::ResetCurrentPageDataForTesting() {
@@ -616,6 +625,7 @@ void AppBannerManager::RecheckInstallabilityForLoadedPage() {
   }
 
   UpdateState(State::INACTIVE);
+  ResetCurrentPipelineData();
   RequestAppBanner();
 }
 

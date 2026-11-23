@@ -67,8 +67,9 @@ import org.chromium.chrome.browser.ui.system.StatusBarColorController;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.transit.AutoResetCtaTransitTestRule;
 import org.chromium.chrome.test.transit.ChromeTransitTestRules;
+import org.chromium.chrome.test.transit.ChromeTriggers;
+import org.chromium.chrome.test.transit.tabmodel.TabClosingCondition;
 import org.chromium.chrome.test.util.ActivityTestUtils;
-import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.components.browser_ui.widget.scrim.ScrimManager;
 import org.chromium.components.browser_ui.widget.scrim.ScrimProperties;
@@ -556,10 +557,9 @@ public class EdgeToEdgeInstrumentationTest {
     }
 
     /**
-     * Verifies that when NEW_TAB_PAGE_CUSTOMIZATION_V2 and EDGE_TO_EDGE_TOP_INSET are enabled,
-     * navigating from an NTP with a customized background theme (where top edge-to-edge is active)
-     * to a standard web page properly transitions isDrawingToTopEdge to false without displacing
-     * browser controls.
+     * Verifies that when EDGE_TO_EDGE_TOP_INSET is enabled, navigating from an NTP with a
+     * customized background theme (where top edge-to-edge is active) to a standard web page
+     * properly transitions isDrawingToTopEdge to false without displacing browser controls.
      */
     @Test
     @MediumTest
@@ -657,7 +657,8 @@ public class EdgeToEdgeInstrumentationTest {
 
         // 3. Close the customized NTP tab directly (without entering the Tab Switcher Hub) so the
         // already-loaded viewport-fit=cover tab becomes active without an offset delta.
-        ChromeTabUtils.closeCurrentTab(InstrumentationRegistry.getInstrumentation(), mActivity);
+        ChromeTriggers.closeCurrentTabTo(mActivity)
+                .waitFor(new TabClosingCondition(mActivity::getCurrentTabModel));
         CriteriaHelper.pollUiThread(
                 () -> {
                     Criteria.checkThat(
@@ -678,8 +679,7 @@ public class EdgeToEdgeInstrumentationTest {
     @MediumTest
     @EnableFeatures({
         ChromeFeatureList.EDGE_TO_EDGE_TOP_INSET + ":enable_top_edge_to_edge/true",
-        ChromeFeatureList.EDGE_TO_EDGE_EVERYWHERE,
-        ChromeFeatureList.NEW_TAB_PAGE_CUSTOMIZATION_V2
+        ChromeFeatureList.EDGE_TO_EDGE_EVERYWHERE
     })
     public void testTopEdgeToEdge_customNtpWithStatusIndicator() {
         TabbedRootUiCoordinator.setDisableTopControlsAnimationsForTesting(true);

@@ -215,7 +215,6 @@ export class OmniboxPopupSearchboxElement extends
         type: Boolean,
         reflect: true,
       },
-      omniboxDogfoodFeedbackEnabled_: {type: Boolean},
       searchboxChromeRefreshTheming: {
         type: Boolean,
         reflect: true,
@@ -276,9 +275,6 @@ export class OmniboxPopupSearchboxElement extends
         reflect: true,
       },
       hasUserInput_: {
-        type: Boolean,
-      },
-      searchboxDynamicAnimation_: {
         type: Boolean,
       },
       aimButtonVisible_: {
@@ -380,7 +376,7 @@ export class OmniboxPopupSearchboxElement extends
       loadTimeData.getBoolean('searchboxCr23SteadyStateShadow');
   accessor omniboxPopupDebugEnabled_: boolean =
       loadTimeData.getBoolean('omniboxPopupDebugEnabled');
-  protected accessor omniboxDogfoodFeedbackEnabled_: boolean =
+  protected readonly omniboxDogfoodFeedbackEnabled_: boolean =
       loadTimeData.getBoolean('omniboxDogfoodFeedbackEnabled');
   protected accessor searchboxIcon_: string =
       loadTimeData.getString('searchboxDefaultIcon');
@@ -389,6 +385,11 @@ export class OmniboxPopupSearchboxElement extends
   private accessor aimHintText_: string = '';
   // The current focus session's request for `aimHintText_`, if any.
   private aimHintRequest_: Promise<{hint: string}>|null = null;
+  // The Views omnibox's accessible name and placeholder.
+  protected readonly inputAccessibleName_: string =
+      loadTimeData.getString('omniboxAccessibleName');
+  protected readonly inputAccessiblePlaceholder_: string =
+      loadTimeData.getString('omniboxAccessiblePlaceholder');
   protected accessor searchboxVoiceSearchEnabled_: boolean =
       loadTimeData.getBoolean('searchboxVoiceSearch');
   protected accessor searchboxLensSearchEnabled_: boolean =
@@ -404,7 +405,7 @@ export class OmniboxPopupSearchboxElement extends
       loadTimeData.getBoolean('composeboxPersistentAimButton');
   protected accessor searchboxDynamicColorScheme_: boolean =
       loadTimeData.getBoolean('searchboxDynamicColorScheme');
-  protected accessor searchboxDynamicAnimation_: boolean =
+  protected readonly searchboxDynamicAnimation_: boolean =
       loadTimeData.getBoolean('searchboxDynamicAnimation');
   protected accessor hasUserInput_: boolean = false;
   protected accessor aimButtonVisible_: boolean = false;
@@ -2856,7 +2857,7 @@ export class OmniboxPopupSearchboxElement extends
         this.selectedMatchIndex !== -1;
   }
 
-  override handleKeyNavigation(e: KeyboardEvent) {
+  override async handleKeyNavigation(e: KeyboardEvent) {
     // Ignore key navigation (including ESC) during active IME text composition
     // (e.g. Japanese/Chinese/Korean) so the OS IME engine handles the key
     // first.
@@ -2923,7 +2924,7 @@ export class OmniboxPopupSearchboxElement extends
             return;
           }
         }
-        super.handleKeyNavigation(e);
+        await super.handleKeyNavigation(e);
         return;
       }
 
@@ -2966,7 +2967,7 @@ export class OmniboxPopupSearchboxElement extends
       }
     }
 
-    super.handleKeyNavigation(e);
+    await super.handleKeyNavigation(e);
   }
 
   private handleEscapeKey_() {

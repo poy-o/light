@@ -54,6 +54,7 @@
 #include "components/password_manager/core/browser/mock_webauthn_credentials_delegate.h"
 #include "components/password_manager/core/browser/password_autofill_manager.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
+#include "components/password_manager/core/browser/password_change/mock_password_change_service.h"
 #include "components/password_manager/core/browser/password_change/password_change_service_interface.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_form_manager.h"
@@ -64,6 +65,7 @@
 #include "components/password_manager/core/browser/password_manager_driver.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
+#include "components/password_manager/core/browser/password_store/actionable_error.h"
 #include "components/password_manager/core/browser/password_store/password_form_converters.h"
 #include "components/password_manager/core/browser/password_store/password_store_interface.h"
 #include "components/password_manager/core/browser/password_store/test_password_store.h"
@@ -193,24 +195,6 @@ class MockStoreResultFilter : public StubCredentialsFilter {
   MOCK_CONST_METHOD1(ShouldSaveGaiaPasswordHash, bool(const PasswordForm&));
   MOCK_CONST_METHOD1(ShouldSaveEnterprisePasswordHash,
                      bool(const PasswordForm&));
-};
-
-class MockPasswordChangeService : public PasswordChangeServiceInterface {
- public:
-  MOCK_METHOD(bool, IsPasswordChangeAvailable, (), (const, override));
-  MOCK_METHOD(bool,
-              IsPasswordChangeSupported,
-              (const LeakedPasswordDetails&, bool),
-              (const, override));
-  MOCK_METHOD(void,
-              RecordLoginAttemptQuality,
-              (password_manager::LogInWithChangedPasswordOutcome, const GURL&),
-              (const, override));
-  MOCK_METHOD(void, AddChangePasswordUrlOverride, (const GURL&), (override));
-  MOCK_METHOD(PasswordChangeCredentialsProvider*,
-              GetCredentialsProviderForActorSurface,
-              (int32_t),
-              (override));
 };
 
 class MockPasswordManagerClient : public StubPasswordManagerClient {
@@ -449,7 +433,7 @@ void SanitizeFormData(FormData* form) {
 const ukm::mojom::UkmEntry* GetMetricEntry(
     const ukm::TestUkmRecorder& test_ukm_recorder,
     std::string_view entry) {
-  std::vector<raw_ptr<const ukm::mojom::UkmEntry, VectorExperimental>>
+  std::vector<raw_ptr<const ukm::mojom::UkmEntry, DanglingUntriaged>>
       ukm_entries = test_ukm_recorder.GetEntriesByName(entry);
   EXPECT_EQ(1u, ukm_entries.size());
   return ukm_entries[0];
@@ -2287,7 +2271,140 @@ TEST_P(PasswordManagerTest, SavingBlockedByTrustedVaultErrorMetric) {
   histogram_tester.ExpectUniqueSample(
       "PasswordManager.SavingBlockedByTrustedVaultErrorOnSuccessfulLogin",
       expected_saving_blocked_by_trusted_vault_error, 1);
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.SavingBlockedByPassphraseErrorOnSuccessfulLogin", false,
+      1);
+#else
+  histogram_tester.ExpectTotalCount(
+      "PasswordManager.SavingBlockedByPassphraseErrorOnSuccessfulLogin", 0);
+#endif
 }
+
+TEST_P(PasswordManagerTest, SavingBlockedByPassphraseErrorMetric) {
+  base::test::ScopedFeatureList feature_list{
+      password_manager::features::
+          kPasswordSaveInContextPassphraseErrorResolution};
+
+  syncer::TestSyncService sync_service;
+  ON_CALL(client_, GetSyncService()).WillByDefault(Return(&sync_service));
+
+  if (ShouldEnableAccountStorage()) {
+    ON_CALL(*client_.GetPasswordFeatureManager(), IsAccountStorageActive())
+        .WillByDefault(Return(true));
+    account_store_->SetError(ActionableError::kNeedsPassphrase);
+  } else {
+    store_->SetError(ActionableError::kNeedsPassphrase);
+  }
+
+  FormData observed_form = MakeSimpleFormData();
+  manager()->OnPasswordFormsParsed(&driver_, {observed_form});
+  manager()->OnPasswordFormsRendered(&driver_, {observed_form});
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return manager()->HaveFormManagersReceivedData(&driver_); }));
+
+  manager()->OnPasswordFormSubmitted(&driver_, observed_form);
+
+  base::HistogramTester histogram_tester;
+  EXPECT_CALL(client_, IsSavingAndFillingEnabled).WillRepeatedly(Return(true));
+  manager()->OnPasswordFormsRendered(&driver_, {});
+
+  // On platforms other than Android, `IsAbleToSavePasswords()` currently only
+  // checks the profile store.
+  bool expected_able_to_save = ShouldEnableAccountStorage();
+#if BUILDFLAG(IS_ANDROID)
+  expected_able_to_save = false;
+#endif
+
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.AbleToSavePasswordsOnSuccessfulLogin",
+      expected_able_to_save, 1);
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.SavingBlockedByPassphraseErrorOnSuccessfulLogin", true,
+      1);
+#else
+  // Passphrase error resolution in context is desktop-only.
+  histogram_tester.ExpectTotalCount(
+      "PasswordManager.SavingBlockedByPassphraseErrorOnSuccessfulLogin", 0);
+#endif
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.SavingBlockedByTrustedVaultErrorOnSuccessfulLogin",
+      false, 1);
+}
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+TEST_P(PasswordManagerTest,
+       SavingBlockedByPassphraseErrorWhenFeatureEnabledPromptsToSave) {
+  base::test::ScopedFeatureList feature_list{
+      password_manager::features::
+          kPasswordSaveInContextPassphraseErrorResolution};
+
+  syncer::TestSyncService sync_service;
+  ON_CALL(client_, GetSyncService()).WillByDefault(Return(&sync_service));
+  store_->SetError(ActionableError::kNeedsPassphrase);
+  if (ShouldEnableAccountStorage()) {
+    ON_CALL(*client_.GetPasswordFeatureManager(), IsAccountStorageActive())
+        .WillByDefault(Return(true));
+    account_store_->SetError(ActionableError::kNeedsPassphrase);
+  }
+
+  FormData observed_form = MakeSimpleFormData();
+  manager()->OnPasswordFormsParsed(&driver_, {observed_form});
+  manager()->OnPasswordFormsRendered(&driver_, {observed_form});
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return manager()->HaveFormManagersReceivedData(&driver_); }));
+
+  EXPECT_CALL(client_, IsSavingAndFillingEnabled).WillRepeatedly(Return(true));
+  manager()->OnPasswordFormSubmitted(&driver_, observed_form);
+
+  base::HistogramTester histogram_tester;
+  EXPECT_CALL(client_, PromptUserToSaveOrUpdatePassword);
+  manager()->OnPasswordFormsRendered(&driver_, {});
+
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.AbleToSavePasswordsOnSuccessfulLogin", false, 1);
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.SavingBlockedByPassphraseErrorOnSuccessfulLogin", true,
+      1);
+}
+
+TEST_P(PasswordManagerTest,
+       SavingBlockedByPassphraseErrorWhenFeatureDisabledDoesNotPrompt) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(
+      password_manager::features::
+          kPasswordSaveInContextPassphraseErrorResolution);
+
+  syncer::TestSyncService sync_service;
+  ON_CALL(client_, GetSyncService()).WillByDefault(Return(&sync_service));
+  store_->SetError(ActionableError::kNeedsPassphrase);
+  if (ShouldEnableAccountStorage()) {
+    ON_CALL(*client_.GetPasswordFeatureManager(), IsAccountStorageActive())
+        .WillByDefault(Return(true));
+    account_store_->SetError(ActionableError::kNeedsPassphrase);
+  }
+
+  FormData observed_form = MakeSimpleFormData();
+  manager()->OnPasswordFormsParsed(&driver_, {observed_form});
+  manager()->OnPasswordFormsRendered(&driver_, {observed_form});
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return manager()->HaveFormManagersReceivedData(&driver_); }));
+
+  EXPECT_CALL(client_, IsSavingAndFillingEnabled).WillRepeatedly(Return(true));
+  manager()->OnPasswordFormSubmitted(&driver_, observed_form);
+
+  base::HistogramTester histogram_tester;
+  EXPECT_CALL(client_, PromptUserToSaveOrUpdatePassword).Times(0);
+  manager()->OnPasswordFormsRendered(&driver_, {});
+
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.AbleToSavePasswordsOnSuccessfulLogin", false, 1);
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.SavingBlockedByPassphraseErrorOnSuccessfulLogin", false,
+      1);
+}
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 
 TEST_P(PasswordManagerTest,
        MetricsReportedLogInFailedWithPrimaryPasswordChangeSubmission) {

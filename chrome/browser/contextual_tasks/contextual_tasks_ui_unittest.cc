@@ -265,6 +265,10 @@ class FakeContextualTasksPermissionController
     last_clicked_is_mouse_interaction = is_mouse_interaction;
     last_clicked_state_token = state_token;
   }
+  void OnChipMousePressed(
+      toolbar_ui_api::mojom::LhsChipIdentifier identifier) override {
+    last_mouse_pressed_ = identifier;
+  }
   void OnChipPointerEntered(
       toolbar_ui_api::mojom::LhsChipIdentifier identifier) override {
     last_pointer_entered_ = identifier;
@@ -285,8 +289,12 @@ class FakeContextualTasksPermissionController
   bool last_clicked_is_mouse_interaction = false;
   uint32_t last_clicked_state_token = 0;
 
-  std::optional<toolbar_ui_api::mojom::LhsChipIdentifier>
-  last_pointer_entered() const {
+  std::optional<toolbar_ui_api::mojom::LhsChipIdentifier> last_mouse_pressed()
+      const {
+    return last_mouse_pressed_;
+  }
+  std::optional<toolbar_ui_api::mojom::LhsChipIdentifier> last_pointer_entered()
+      const {
     return last_pointer_entered_;
   }
   std::optional<toolbar_ui_api::mojom::LhsChipIdentifier>
@@ -295,6 +303,7 @@ class FakeContextualTasksPermissionController
   }
 
  private:
+  std::optional<toolbar_ui_api::mojom::LhsChipIdentifier> last_mouse_pressed_;
   std::optional<toolbar_ui_api::mojom::LhsChipIdentifier> last_pointer_entered_;
   std::optional<toolbar_ui_api::mojom::LhsChipIdentifier> last_pointer_exited_;
 };
@@ -2167,11 +2176,15 @@ TEST_F(ContextualTasksUiTest, ContextualTasksToolbarUIServiceBindTest) {
   EXPECT_TRUE(fake_controller.last_clicked_is_mouse_interaction);
   EXPECT_EQ(fake_controller.last_clicked_state_token, 42u);
 
+  remote->OnChipMousePressed(
+      toolbar_ui_api::mojom::LhsChipIdentifier::kPermissionIndicator);
   remote->OnChipPointerEntered(
       toolbar_ui_api::mojom::LhsChipIdentifier::kPermissionRequest);
   remote->OnChipPointerExited(
       toolbar_ui_api::mojom::LhsChipIdentifier::kPermissionIndicator);
   remote.FlushForTesting();
+  EXPECT_EQ(fake_controller.last_mouse_pressed(),
+            toolbar_ui_api::mojom::LhsChipIdentifier::kPermissionIndicator);
   EXPECT_EQ(fake_controller.last_pointer_entered(),
             toolbar_ui_api::mojom::LhsChipIdentifier::kPermissionRequest);
   EXPECT_EQ(fake_controller.last_pointer_exited(),
@@ -3764,6 +3777,19 @@ TEST_F(ContextualTasksUiTest, OpenFeedbackUi_NoBrowser_SafeNoOp) {
   base_ui->OpenFeedbackUi();
 }
 
+TEST_F(ContextualTasksUiTest, OpenDogfoodFeedback_NoBrowser_SafeNoOp) {
+  content::TestWebUI web_ui;
+  web_ui.set_web_contents(embedded_web_contents_.get());
+  ContextualTasksUIConfig config;
+  std::unique_ptr<content::WebUIController> controller =
+      config.CreateWebUIController(&web_ui, GURL("chrome://contextual-tasks"));
+  ASSERT_TRUE(controller);
+  auto* base_ui = static_cast<ContextualTasksUIBase*>(controller.get());
+  ASSERT_NE(base_ui, nullptr);
+
+  base_ui->OpenDogfoodFeedback();
+}
+
 TEST_F(ContextualTasksUiTest, MoveTaskUiToNewTab_NoBrowser_SafeNoOp) {
   content::TestWebUI web_ui;
   web_ui.set_web_contents(embedded_web_contents_.get());
@@ -5103,6 +5129,8 @@ TEST_F(ContextualTasksUiTest,
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 TEST_F(ContextualTasksUiTest, ProfileIndicator_SignedOutInitially) {
+  base::test::ScopedFeatureList scoped_feature_list{
+      kContextualTasksSidePanelRearchitecture};
   content::TestWebUI web_ui;
   web_ui.set_web_contents(embedded_web_contents_.get());
   TestContextualTasksUIBase controller(&web_ui);
@@ -5126,6 +5154,8 @@ TEST_F(ContextualTasksUiTest, ProfileIndicator_SignedOutInitially) {
 }
 
 TEST_F(ContextualTasksUiTest, ProfileIndicator_WebSignedInWithoutExtendedInfo) {
+  base::test::ScopedFeatureList scoped_feature_list{
+      kContextualTasksSidePanelRearchitecture};
   AccountInfo account_info =
       identity_test_env()->MakeAccountAvailable("user@example.com");
   identity_test_env()->SetCookieAccounts(
@@ -5154,6 +5184,8 @@ TEST_F(ContextualTasksUiTest, ProfileIndicator_WebSignedInWithoutExtendedInfo) {
 }
 
 TEST_F(ContextualTasksUiTest, ProfileIndicator_HiddenUntilCookieJarIsFresh) {
+  base::test::ScopedFeatureList scoped_feature_list{
+      kContextualTasksSidePanelRearchitecture};
   AccountInfo account_info =
       identity_test_env()->MakeAccountAvailable("user@example.com");
   identity_test_env()->SetCookieAccounts(
@@ -5193,6 +5225,8 @@ TEST_F(ContextualTasksUiTest, ProfileIndicator_HiddenUntilCookieJarIsFresh) {
 }
 
 TEST_F(ContextualTasksUiTest, ProfileIndicator_WebSignedInWithExtendedInfo) {
+  base::test::ScopedFeatureList scoped_feature_list{
+      kContextualTasksSidePanelRearchitecture};
   AccountInfo account_info =
       identity_test_env()->MakeAccountAvailable("user@example.com");
   SkBitmap bitmap;
@@ -5230,6 +5264,8 @@ TEST_F(ContextualTasksUiTest, ProfileIndicator_WebSignedInWithExtendedInfo) {
 }
 
 TEST_F(ContextualTasksUiTest, AccountInfo_WebSignedInWithFullName) {
+  base::test::ScopedFeatureList scoped_feature_list{
+      kContextualTasksSidePanelRearchitecture};
   AccountInfo account_info =
       identity_test_env()->MakeAccountAvailable("user@example.com");
   account_info =
@@ -5265,6 +5301,8 @@ TEST_F(ContextualTasksUiTest, AccountInfo_WebSignedInWithFullName) {
 }
 
 TEST_F(ContextualTasksUiTest, SignedInAccountCount_MultipleWebAccounts) {
+  base::test::ScopedFeatureList scoped_feature_list{
+      kContextualTasksSidePanelRearchitecture};
   AccountInfo account_info1 =
       identity_test_env()->MakeAccountAvailable("user1@example.com");
   AccountInfo account_info2 =
@@ -5294,6 +5332,8 @@ TEST_F(ContextualTasksUiTest, SignedInAccountCount_MultipleWebAccounts) {
 }
 
 TEST_F(ContextualTasksUiTest, SignedInAccountCount_ZeroWhenSignedOut) {
+  base::test::ScopedFeatureList scoped_feature_list{
+      kContextualTasksSidePanelRearchitecture};
   content::TestWebUI web_ui;
   web_ui.set_web_contents(embedded_web_contents_.get());
   TestContextualTasksUIBase controller(&web_ui);
@@ -5334,6 +5374,8 @@ TEST_F(ContextualTasksUiTest,
 }
 
 TEST_F(ContextualTasksUiTest, AccountInfo_EmptyWhenSignedOut) {
+  base::test::ScopedFeatureList scoped_feature_list{
+      kContextualTasksSidePanelRearchitecture};
   content::TestWebUI web_ui;
   web_ui.set_web_contents(embedded_web_contents_.get());
   TestContextualTasksUIBase controller(&web_ui);
@@ -5360,6 +5402,8 @@ TEST_F(ContextualTasksUiTest, AccountInfo_EmptyWhenSignedOut) {
 }
 
 TEST_F(ContextualTasksUiTest, AccountInfo_EmptyWhenSignedInToChrome) {
+  base::test::ScopedFeatureList scoped_feature_list{
+      kContextualTasksSidePanelRearchitecture};
   AccountInfo account_info = identity_test_env()->MakePrimaryAccountAvailable(
       "user@example.com", signin::ConsentLevel::kSignin);
   identity_test_env()->SetCookieAccounts(
@@ -5391,6 +5435,8 @@ TEST_F(ContextualTasksUiTest, AccountInfo_EmptyWhenSignedInToChrome) {
 }
 
 TEST_F(ContextualTasksUiTest, ProfileIndicator_HiddenWhenSignedInToChrome) {
+  base::test::ScopedFeatureList scoped_feature_list{
+      kContextualTasksSidePanelRearchitecture};
   AccountInfo account_info = identity_test_env()->MakePrimaryAccountAvailable(
       "user@example.com", signin::ConsentLevel::kSignin);
   SkBitmap bitmap;
@@ -5426,6 +5472,8 @@ TEST_F(ContextualTasksUiTest, ProfileIndicator_HiddenWhenSignedInToChrome) {
 
 TEST_F(ContextualTasksUiTest,
        ProfileIndicator_UpdateProfileIndicatorPushesAvatarUrl) {
+  base::test::ScopedFeatureList scoped_feature_list{
+      kContextualTasksSidePanelRearchitecture};
   content::TestWebUI web_ui;
   web_ui.set_web_contents(embedded_web_contents_.get());
   TestContextualTasksUIBase controller(&web_ui);
@@ -5504,6 +5552,8 @@ TEST_F(ContextualTasksUiTest,
 }
 
 TEST_F(ContextualTasksUiTest, ProfileIndicator_LoadTimeDataPopulated) {
+  base::test::ScopedFeatureList scoped_feature_list{
+      kContextualTasksSidePanelRearchitecture};
   // Signed-out test.
   base::DictValue signed_out_dict =
       ContextualTasksUIBase::GetContextualTasksLoadTimeData(profile_);
@@ -5548,6 +5598,43 @@ TEST_F(ContextualTasksUiTest, ProfileIndicator_LoadTimeDataPopulated) {
       chrome_signed_in_dict.FindString("profileAvatarUrl");
   ASSERT_TRUE(chrome_signed_in_avatar_url);
   EXPECT_EQ(*chrome_signed_in_avatar_url, "");
+}
+
+TEST_F(ContextualTasksUiTest,
+       ProfileIndicator_DisabledWhenSidePanelRearchitectureOff) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      kContextualTasksSidePanelRearchitecture);
+
+  AccountInfo account_info =
+      identity_test_env()->MakeAccountAvailable("user@example.com");
+  identity_test_env()->SetCookieAccounts(
+      {{std::string(account_info.GetEmail()), account_info.GetGaiaId()}});
+
+  base::DictValue dict =
+      ContextualTasksUIBase::GetContextualTasksLoadTimeData(profile_);
+  const std::string* avatar_url = dict.FindString("profileAvatarUrl");
+  ASSERT_TRUE(avatar_url);
+  EXPECT_EQ(*avatar_url, "");
+
+  content::TestWebUI web_ui;
+  web_ui.set_web_contents(embedded_web_contents_.get());
+  TestContextualTasksUIBase controller(&web_ui);
+
+  mojo::Remote<contextual_tasks_toolbar::mojom::PageHandlerFactory>
+      factory_remote;
+  controller.BindInterface(factory_remote.BindNewPipeAndPassReceiver());
+
+  testing::NiceMock<MockContextualTasksToolbarPage> mock_page;
+  EXPECT_CALL(mock_page, SetProfileAvatarUrl(_)).Times(0);
+  EXPECT_CALL(mock_page, SetAccountInfo(_, _)).Times(0);
+  EXPECT_CALL(mock_page, SetSignedInAccountCount(_)).Times(0);
+
+  mojo::Remote<contextual_tasks_toolbar::mojom::PageHandler> page_handler;
+  factory_remote->CreatePageHandler(mock_page.BindAndGetRemote(),
+                                    page_handler.BindNewPipeAndPassReceiver());
+  controller.UpdateProfileIndicator(GURL("https://google.com/search"));
+  mock_page.FlushForTesting();
 }
 
 TEST_F(ContextualTasksUiTest, ProfileIndicator_IncognitoSignedOutInitially) {
@@ -5735,6 +5822,8 @@ TEST_F(ContextualTasksUiTest,
 
 TEST_F(ContextualTasksUiTest,
        ProfileIndicator_UpdatesWhenExtendedAccountInfoArrivesLater) {
+  base::test::ScopedFeatureList scoped_feature_list{
+      kContextualTasksSidePanelRearchitecture};
   identity_test_env()->EnableRemovalOfExtendedAccountInfo();
 
   content::TestWebUI web_ui;
@@ -5813,6 +5902,8 @@ TEST_F(ContextualTasksUiTest,
 
 TEST_F(ContextualTasksUiTest,
        ProfileIndicator_UpdatesWhenPrimaryAccountChanges) {
+  base::test::ScopedFeatureList scoped_feature_list{
+      kContextualTasksSidePanelRearchitecture};
   AccountInfo account_info =
       identity_test_env()->MakeAccountAvailable("user@example.com");
   account_info =
@@ -5873,6 +5964,61 @@ TEST_F(ContextualTasksUiTest,
   EXPECT_EQ(last_full_name, "");
   EXPECT_EQ(last_email, "");
   EXPECT_EQ(last_account_count, 0u);
+}
+
+TEST_F(ContextualTasksUiTest,
+       GetDogfoodFeedbackLoadTimeData_DisabledByDefault) {
+  base::DictValue dict =
+      ContextualTasksUIBase::GetDogfoodFeedbackLoadTimeData();
+  EXPECT_EQ(dict.FindBool("contextualTasksDogfoodFeedbackEnabled"), false);
+  const std::string* attribute =
+      dict.FindString("contextualTasksDogfoodFeedbackAttribute");
+  ASSERT_TRUE(attribute);
+  EXPECT_EQ(*attribute, "");
+  ASSERT_NE(dict.FindString("dogfoodFeedbackTooltip"), nullptr);
+  EXPECT_EQ(*dict.FindString("dogfoodFeedbackTooltip"),
+            "Submit Contextual Tasks Dogfood Feedback");
+}
+
+TEST_F(ContextualTasksUiTest, GetDogfoodFeedbackLoadTimeData_ParamEnabled) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeatureWithParameters(
+      kContextualTasks, {{"ContextualTasks_DogfoodFeedback", "true"}});
+
+  base::DictValue dict =
+      ContextualTasksUIBase::GetDogfoodFeedbackLoadTimeData();
+  const std::string* attribute =
+      dict.FindString("contextualTasksDogfoodFeedbackAttribute");
+  ASSERT_TRUE(attribute);
+  // The dogfood feedback form can only be opened on desktop.
+#if BUILDFLAG(IS_ANDROID)
+  EXPECT_EQ(dict.FindBool("contextualTasksDogfoodFeedbackEnabled"), false);
+  EXPECT_EQ(*attribute, "");
+#else
+  EXPECT_EQ(dict.FindBool("contextualTasksDogfoodFeedbackEnabled"), true);
+  EXPECT_EQ(*attribute, "dogfood-feedback-enabled");
+#endif
+}
+
+TEST_F(ContextualTasksUiTest,
+       GetContextualTasksLoadTimeData_IncludesDogfoodFeedback) {
+  // Read by the top toolbar in both WebUI hosts.
+  base::DictValue toolbar_dict =
+      ContextualTasksUIBase::GetContextualTasksLoadTimeData(profile_);
+  EXPECT_TRUE(toolbar_dict.FindBool("contextualTasksDogfoodFeedbackEnabled")
+                  .has_value());
+  EXPECT_NE(toolbar_dict.FindString("dogfoodFeedbackTooltip"), nullptr);
+
+  // Also served to the extension, whose tab_picker.html and tab_picker.js use
+  // these keys in template replacements.
+  base::DictValue extension_dict =
+      ContextualTasksUI::GetContextualTasksLoadTimeData(profile_);
+  EXPECT_TRUE(extension_dict.FindBool("contextualTasksDogfoodFeedbackEnabled")
+                  .has_value());
+  EXPECT_NE(extension_dict.FindString("dogfoodFeedbackTooltip"), nullptr);
+  EXPECT_NE(
+      extension_dict.FindString("contextualTasksDogfoodFeedbackAttribute"),
+      nullptr);
 }
 
 #if !BUILDFLAG(IS_ANDROID)

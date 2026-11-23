@@ -82,8 +82,7 @@ bool FindDescendantRoleWithMaxDepth(const AXPlatformNodeBase* node,
 }
 
 // Map from each AXPlatformNode's unique id to its instance.
-using UniqueIdMap =
-    absl::flat_hash_map<int32_t, raw_ptr<AXPlatformNode, CtnExperimental>>;
+using UniqueIdMap = absl::flat_hash_map<int32_t, raw_ptr<AXPlatformNode>>;
 UniqueIdMap& GetUniqueIdMap() {
   static base::NoDestructor<UniqueIdMap> map;
   return *map;
@@ -1460,7 +1459,8 @@ void AXPlatformNodeBase::ComputeAttributes(PlatformAttributeList* attributes) {
   }
 
   std::string src;
-  if (IsImage(GetRole()) &&
+  const ax::mojom::Role role = GetRole();
+  if (IsImage(role) &&
       GetStringAttribute(ax::mojom::StringAttribute::kUrl, &src)) {
     AddAttributeToList("src", src, attributes);
   }
@@ -1504,7 +1504,10 @@ void AXPlatformNodeBase::ComputeAttributes(PlatformAttributeList* attributes) {
     AddAttributeToList("text-model", "a1", attributes);
 
   // Expose input-text type attribute.
-  if (IsAtomicTextField() || IsDateOrTimeInput(GetRole())) {
+  // A searchbox reports "search" regardless of its HTML input type.
+  if (role == ax::mojom::Role::kSearchBox) {
+    AddAttributeToList("text-input-type", "search", attributes);
+  } else if (IsAtomicTextField() || IsDateOrTimeInput(role)) {
     AddAttributeToList(ax::mojom::StringAttribute::kInputType,
                        "text-input-type", attributes);
   }
