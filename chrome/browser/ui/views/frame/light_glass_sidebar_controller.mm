@@ -2086,7 +2086,10 @@ NSMenuItem* MakeSymbolMenuItem(NSString* title,
             NSForegroundColorAttributeName : titleColor,
             NSParagraphStyleAttributeName : titlePS,
           }];
-  NSColor* pipeGray = [NSColor.labelColor colorWithAlphaComponent:0.30];
+  // Use native semantic vibrant colors so the separator stays subtly dimmer
+  // than titleColor in both selected and unselected / out-of-focus states.
+  NSColor* pipeGray =
+      selected ? NSColor.tertiaryLabelColor : NSColor.quaternaryLabelColor;
   NSRange searchRange = NSMakeRange(0, displayTitle.length);
   while (searchRange.length > 0) {
     NSRange found = [displayTitle rangeOfString:@" | "
@@ -2353,18 +2356,40 @@ NSMenuItem* MakeSymbolMenuItem(NSString* title,
   [self setNeedsDisplay:YES];
 }
 
+- (NSView*)hitTest:(NSPoint)point {
+  NSPoint local = [self convertPoint:point fromView:self.superview];
+  return NSPointInRect(local, self.bounds) ? self : nil;
+}
+
 - (void)mouseDown:(NSEvent*)event {
+  if ((event.modifierFlags & NSEventModifierFlagControl) != 0) {
+    [self rightMouseDown:event];
+    return;
+  }
   _pressed = YES;
   [self setNeedsDisplay:YES];
 }
 
 - (void)mouseUp:(NSEvent*)event {
+  if (!_pressed) {
+    return;
+  }
   BOOL inside = NSPointInRect(
       [self convertPoint:event.locationInWindow fromView:nil], self.bounds);
   _pressed = NO;
   [self setNeedsDisplay:YES];
   if (inside && _actionBlock) {
     _actionBlock();
+  }
+}
+
+- (void)rightMouseDown:(NSEvent*)event {
+  _pressed = NO;
+  [self setNeedsDisplay:YES];
+  NSMenu* menu = _menuProvider ? _menuProvider() : nil;
+  if (menu) {
+    NSPoint local = [self convertPoint:event.locationInWindow fromView:nil];
+    [menu popUpMenuPositioningItem:nil atLocation:local inView:self];
   }
 }
 
@@ -3010,6 +3035,7 @@ NSMenuItem* MakeSymbolMenuItem(NSString* title,
   BOOL _hovered;
   BOOL _holding;
   CGFloat _holdProgress;
+  NSUInteger _progressAnimGen;
 }
 
 @synthesize onConfirmClicked = _onConfirmClicked;
@@ -3031,7 +3057,9 @@ NSMenuItem* MakeSymbolMenuItem(NSString* title,
     _progressLayer = [CALayer layer];
     _progressLayer.backgroundColor =
         [NSColor colorWithSRGBRed:1.0 green:0.30 blue:0.25 alpha:0.46].CGColor;
-    _progressLayer.frame = CGRectZero;
+    _progressLayer.anchorPoint = CGPointMake(0.0, 0.0);
+    _progressLayer.position = CGPointZero;
+    _progressLayer.bounds = CGRectZero;
     _progressLayer.hidden = YES;
     [self.layer addSublayer:_progressLayer];
 
@@ -3060,8 +3088,14 @@ NSMenuItem* MakeSymbolMenuItem(NSString* title,
   if (!expanded) {
     _holding = NO;
     _holdProgress = 0.0;
+    _progressAnimGen += 1;
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    [_progressLayer removeAnimationForKey:@"progressRetreat"];
     _progressLayer.hidden = YES;
-    _progressLayer.frame = CGRectZero;
+    _progressLayer.position = CGPointZero;
+    _progressLayer.bounds = CGRectZero;
+    [CATransaction commit];
   }
   _redXIcon.hidden = !expanded;
   _confirmLabel.hidden = !expanded;
@@ -3083,13 +3117,60 @@ NSMenuItem* MakeSymbolMenuItem(NSString* title,
 
   CGFloat w = self.bounds.size.width;
   CGFloat h = self.bounds.size.height;
-  [CATransaction begin];
-  [CATransaction setDisableActions:(holding && clamped > 0.001)];
   if (!holding && clamped <= 0.001) {
-    [CATransaction setAnimationDuration:0.14];
+    CALayer* pres = _progressLayer.presentationLayer ?: _progressLayer;
+    CGFloat fromW = pres.bounds.size.width;
+    NSUInteger gen = ++_progressAnimGen;
+    if (_expanded && !_progressLayer.isHidden && fromW > 0.5) {
+      __weak __typeof(self) weakSelf = self;
+      [CATransaction begin];
+      [CATransaction setDisableActions:YES];
+      [CATransaction setCompletionBlock:^{
+        __strong __typeof(weakSelf) s = weakSelf;
+        if (s && s->_progressAnimGen == gen && !s->_holding &&
+            s->_holdProgress <= 0.001) {
+          [CATransaction begin];
+          [CATransaction setDisableActions:YES];
+          s->_progressLayer.hidden = YES;
+          [CATransaction commit];
+        }
+      }];
+      [_progressLayer removeAnimationForKey:@"progressRetreat"];
+      _progressLayer.hidden = NO;
+      _progressLayer.position = CGPointZero;
+      CGRect fromBounds = CGRectMake(0.0, 0.0, fromW, h);
+      CGRect toBounds = CGRectMake(0.0, 0.0, 0.0, h);
+      _progressLayer.bounds = toBounds;
+
+      CABasicAnimation* retreat =
+          [CABasicAnimation animationWithKeyPath:@"bounds"];
+      retreat.fromValue = [NSValue valueWithRect:NSRectFromCGRect(fromBounds)];
+      retreat.toValue = [NSValue valueWithRect:NSRectFromCGRect(toBounds)];
+      retreat.duration = 0.13;
+      retreat.timingFunction = [CAMediaTimingFunction
+          functionWithControlPoints:0.16 :1.0 :0.30 :1.0];
+      retreat.removedOnCompletion = YES;
+      [_progressLayer addAnimation:retreat forKey:@"progressRetreat"];
+      [CATransaction commit];
+    } else {
+      [CATransaction begin];
+      [CATransaction setDisableActions:YES];
+      [_progressLayer removeAnimationForKey:@"progressRetreat"];
+      _progressLayer.hidden = YES;
+      _progressLayer.position = CGPointZero;
+      _progressLayer.bounds = CGRectMake(0.0, 0.0, 0.0, h);
+      [CATransaction commit];
+    }
+    return;
   }
+
+  _progressAnimGen += 1;
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
+  [_progressLayer removeAnimationForKey:@"progressRetreat"];
   _progressLayer.hidden = (!_expanded || clamped <= 0.001);
-  _progressLayer.frame = CGRectMake(0.0, 0.0, std::floor(w * clamped), h);
+  _progressLayer.position = CGPointZero;
+  _progressLayer.bounds = CGRectMake(0.0, 0.0, w * clamped, h);
   [CATransaction commit];
 }
 
@@ -3129,10 +3210,11 @@ NSMenuItem* MakeSymbolMenuItem(NSString* title,
                  std::ceil(fit.width), std::ceil(fit.height));
   if (_expanded) {
     self.layer.cornerRadius = h * 0.5;
-    if (!_progressLayer.isHidden) {
+    if (!_progressLayer.isHidden && (_holding || _holdProgress > 0.001)) {
       [CATransaction begin];
       [CATransaction setDisableActions:YES];
-      _progressLayer.frame = CGRectMake(0.0, 0.0, std::floor(w * _holdProgress), h);
+      _progressLayer.position = CGPointZero;
+      _progressLayer.bounds = CGRectMake(0.0, 0.0, w * _holdProgress, h);
       [CATransaction commit];
     }
   }
@@ -8815,6 +8897,8 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
   _scrollView.autohidesScrollers = YES;
   _scrollView.scrollerStyle = NSScrollerStyleOverlay;
   _scrollView.borderType = NSNoBorder;
+  _scrollView.automaticallyAdjustsContentInsets = NO;
+  _scrollView.contentView.automaticallyAdjustsContentInsets = NO;
 
   _tabsDocumentView = [[LightFlippedDocumentView alloc] initWithFrame:NSZeroRect];
   _tabsDocumentView.onDoubleClickEmpty = ^{
@@ -10026,8 +10110,7 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
   std::vector<LightTabContainer> containers = LightGetTabContainers();
   for (const auto& c : containers) {
     std::string cid = c.id;
-    NSString* title = base::SysUTF8ToNSString(
-        c.in_memory ? (c.name + "  (Private)") : c.name);
+    NSString* title = base::SysUTF8ToNSString(c.name);
     NSString* sym = base::SysUTF8ToNSString(c.symbol);
     NSColor* col = SidebarColorFromHex(c.color_hex);
 

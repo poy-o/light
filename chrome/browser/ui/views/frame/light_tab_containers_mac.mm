@@ -81,14 +81,14 @@ class LightTabContainerUserData : public base::SupportsUserData::Data {
 
 std::vector<LightTabContainer> DefaultContainers() {
   return {
-      {"private", "Private", "eye.slash", "#AF52DE", true,
-       LightContainerClearBehavior::kOnAllTabsClosed},
       {"personal", "Personal", "person", "#0A84FF", false,
        LightContainerClearBehavior::kKeep},
       {"work", "Work", "briefcase", "#FF9F0A", false,
        LightContainerClearBehavior::kKeep},
       {"shopping", "Shopping", "bag", "#30D158", false,
        LightContainerClearBehavior::kKeep},
+      {"private", "Private", "eye.slash", "#AF52DE", true,
+       LightContainerClearBehavior::kOnAllTabsClosed},
   };
 }
 
@@ -148,6 +148,15 @@ std::vector<LightTabContainer> LightGetTabContainers() {
                       base::SysNSStringToUTF8(colorHex), effectiveInMemory,
                       behavior});
   }
+  // Always keep Private (and ephemeral containers) at the end of the list.
+  std::stable_partition(result.begin(), result.end(),
+                        [](const LightTabContainer& c) {
+                          return !c.in_memory && c.id != "private";
+                        });
+  std::stable_partition(result.begin(), result.end(),
+                        [](const LightTabContainer& c) {
+                          return c.id != "private";
+                        });
   return result;
 }
 
