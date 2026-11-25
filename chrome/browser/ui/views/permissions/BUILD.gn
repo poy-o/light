@@ -151,6 +151,11 @@ if (toolkit_views) {
       "//chrome/browser/ui/views/frame:browser_view_header",
       "//chrome/browser/ui/views/frame:contents_web_view",
       "//chrome/browser/ui/views/infobars",
+    ]
+    if (is_mac) {
+      deps += [ "//chrome/browser/ui/views/frame:light_glass_modal_mac" ]
+    }
+    deps += [
       "//chrome/browser/ui/views/location_bar",
       "//chrome/browser/ui/views/omnibox",
       "//chrome/browser/ui/views/page_info",

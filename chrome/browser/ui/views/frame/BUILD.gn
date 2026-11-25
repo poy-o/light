@@ -1997,6 +1997,9 @@ if (is_mac) {
       "//base",
       "//chrome/browser/extensions",
       "//chrome/browser/webauthn",
+      "//components/permissions",
+      "//components/url_formatter",
+      "//content/public/browser",
       "//ui/gfx",
       "//ui/views",
     ]
@@ -2013,6 +2016,8 @@ if (is_mac) {
       "light_glass_sidebar_controller.mm",
       "light_native_settings_controller.h",
       "light_native_settings_controller.mm",
+      "light_tab_containers_mac.h",
+      "light_tab_containers_mac.mm",
     ]
     public_deps = [ ":browser_native_widget_mac" ]
     deps = [

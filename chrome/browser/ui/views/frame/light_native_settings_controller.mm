@@ -25,6 +25,7 @@
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/views/frame/light_tab_containers_mac.h"
 #include "chrome/common/pref_names.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/prefs/pref_service.h"
@@ -382,15 +383,11 @@ void PrefSetString(PrefService* prefs,
 }
 
 - (void)drawRect:(NSRect)dirtyRect {
-  NSRect inset = NSInsetRect(self.bounds, 0.5, 0.5);
-  NSBezierPath* path = [NSBezierPath bezierPathWithRoundedRect:inset
+  NSBezierPath* path = [NSBezierPath bezierPathWithRoundedRect:self.bounds
                                                        xRadius:10.0
                                                        yRadius:10.0];
   [[NSColor.labelColor colorWithAlphaComponent:0.045] setFill];
   [path fill];
-  [[NSColor.separatorColor colorWithAlphaComponent:0.45] setStroke];
-  path.lineWidth = 0.5;
-  [path stroke];
 }
 
 @end
@@ -407,6 +404,7 @@ void PrefSetString(PrefService* prefs,
                         browser:(BrowserWindowInterface*)browser;
 - (void)updateContextWithProfile:(Profile*)profile
                          browser:(BrowserWindowInterface*)browser;
+- (void)selectCategoryByTitle:(NSString*)title;
 - (void)showWindow;
 
 @end
@@ -451,6 +449,12 @@ void PrefSetString(PrefService* prefs,
         @"symbol" : @"sparkles",
         @"color" : NSColor.systemIndigoColor,
         @"keywords" : @"corner radius sidebar blur spring animation log light"
+      },
+      @{
+        @"title" : @"Containers",
+        @"symbol" : @"square.stack.3d.up.fill",
+        @"color" : NSColor.systemPurpleColor,
+        @"keywords" : @"container private isolated tab profile cookies storage"
       },
       @{
         @"title" : @"General",
@@ -740,6 +744,15 @@ void PrefSetString(PrefService* prefs,
 - (void)controlTextDidChange:(NSNotification*)obj {
   if (obj.object == _searchField) {
     [self layoutSidebarRows];
+  }
+}
+
+- (void)selectCategoryByTitle:(NSString*)title {
+  for (NSUInteger i = 0; i < _categories.count; ++i) {
+    if ([_categories[i][@"title"] isEqualToString:title]) {
+      [self selectCategory:static_cast<NSInteger>(i)];
+      return;
+    }
   }
 }
 
@@ -1357,7 +1370,206 @@ void PrefSetString(PrefService* prefs,
       break;
     }
 
-    case 1: {  // General
+    case 1: {  // Containers
+      auto parseHex = [](const std::string& hex) -> NSColor* {
+        unsigned int rgb = 0x0A84FF;
+        if (!hex.empty() && hex[0] == '#' && hex.size() == 7) {
+          std::sscanf(hex.c_str() + 1, "%x", &rgb);
+        }
+        return [NSColor colorWithSRGBRed:((rgb >> 16) & 0xFF) / 255.0
+                                   green:((rgb >> 8) & 0xFF) / 255.0
+                                    blue:(rgb & 0xFF) / 255.0
+                                   alpha:1.0];
+      };
+
+      std::vector<LightTabContainer> containers = LightGetTabContainers();
+      NSMutableArray* existingRows = [NSMutableArray array];
+      for (const auto& c : containers) {
+        std::string cid = c.id;
+        NSView* row = [[LightSettingsFlippedView alloc]
+            initWithFrame:NSMakeRect(0, 0, cardW, 52.0)];
+
+        LightSettingsIconBadgeView* badge = [[LightSettingsIconBadgeView alloc]
+            initWithSymbol:base::SysUTF8ToNSString(c.symbol)
+                     color:parseHex(c.color_hex)];
+        badge.frame = NSMakeRect(14.0, 14.0, 24.0, 24.0);
+        [row addSubview:badge];
+
+        NSTextField* titleLbl =
+            [NSTextField labelWithString:base::SysUTF8ToNSString(c.name)];
+        titleLbl.font = [NSFont systemFontOfSize:13.0 weight:NSFontWeightMedium];
+        titleLbl.textColor = NSColor.labelColor;
+        titleLbl.frame = NSMakeRect(48.0, 9.0, std::max<CGFloat>(100.0, cardW - 210.0), 17.0);
+        [row addSubview:titleLbl];
+
+        NSString* subText =
+            c.in_memory ? @"Private (in-memory, clears on close)"
+                        : @"Isolated persistent cookies & site data";
+        NSTextField* subLbl = [NSTextField labelWithString:subText];
+        subLbl.font = [NSFont systemFontOfSize:11.0 weight:NSFontWeightRegular];
+        subLbl.textColor = NSColor.secondaryLabelColor;
+        subLbl.frame = NSMakeRect(48.0, 28.0, std::max<CGFloat>(100.0, cardW - 210.0), 15.0);
+        [row addSubview:subLbl];
+
+        NSButton* clearBtn = [NSButton buttonWithTitle:@"Clear Data"
+                                                target:nil
+                                                action:nil];
+        clearBtn.bezelStyle = NSBezelStylePush;
+        clearBtn.font = [NSFont systemFontOfSize:12.0];
+        clearBtn.frame = NSMakeRect(cardW - 156.0, 12.0, 82.0, 26.0);
+        LightControlBlockTarget* clearTgt =
+            [LightControlBlockTarget targetWithBlock:^(id sender) {
+              __strong __typeof(weakSelf) s = weakSelf;
+              if (s && s->_profile) {
+                LightClearTabContainerData(s->_profile, cid);
+              }
+            }];
+        [_retainedTargets addObject:clearTgt];
+        clearBtn.target = clearTgt;
+        clearBtn.action = @selector(invoke:);
+        [row addSubview:clearBtn];
+
+        NSButton* delBtn = [NSButton buttonWithTitle:@"Delete"
+                                              target:nil
+                                              action:nil];
+        delBtn.bezelStyle = NSBezelStylePush;
+        delBtn.font = [NSFont systemFontOfSize:12.0];
+        delBtn.frame = NSMakeRect(cardW - 68.0, 12.0, 56.0, 26.0);
+        LightControlBlockTarget* delTgt =
+            [LightControlBlockTarget targetWithBlock:^(id sender) {
+              LightDeleteTabContainer(cid);
+              [weakSelf rebuildDetailPage];
+            }];
+        [_retainedTargets addObject:delTgt];
+        delBtn.target = delTgt;
+        delBtn.action = @selector(invoke:);
+        [row addSubview:delBtn];
+
+        [existingRows addObject:row];
+      }
+      if (existingRows.count == 0) {
+        [existingRows
+            addObject:[self makeRowWithTitle:@"No Tab Containers"
+                                    subtitle:@"Create a container below or reset defaults."
+                                     control:nil
+                                       width:cardW]];
+      }
+      y = [self appendSectionHeader:@"Tab Containers"
+                               rows:existingRows
+                             atYPos:y
+                              width:cardW
+                              leftX:leftX];
+
+      // Create New Container card.
+      NSTextField* nameField =
+          [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 190, 24)];
+      nameField.placeholderString = @"e.g. Banking, Social, Work";
+      nameField.font = [NSFont systemFontOfSize:12.5];
+
+      NSArray<NSString*>* symbolNames = @[
+        @"eye.slash", @"person", @"briefcase", @"bag", @"shield", @"star",
+        @"flame", @"globe", @"lock", @"heart"
+      ];
+      NSArray<NSString*>* symbolLabels = @[
+        @"Private (Eye Slash)", @"Person", @"Briefcase", @"Shopping Bag",
+        @"Shield", @"Star", @"Flame", @"Globe", @"Lock", @"Heart"
+      ];
+      NSPopUpButton* symbolPop =
+          [[NSPopUpButton alloc] initWithFrame:NSMakeRect(0, 0, 190, 26)
+                                     pullsDown:NO];
+      symbolPop.font = [NSFont systemFontOfSize:12.5];
+      [symbolPop addItemsWithTitles:symbolLabels];
+
+      NSArray<NSString*>* colorLabels = @[
+        @"Purple", @"Blue", @"Orange", @"Green", @"Red", @"Cyan", @"Pink",
+        @"Gray"
+      ];
+      NSArray<NSString*>* colorHexes = @[
+        @"#AF52DE", @"#0A84FF", @"#FF9F0A", @"#30D158", @"#FF453A", @"#64D2FF",
+        @"#FF375F", @"#8E8E93"
+      ];
+      NSPopUpButton* colorPop =
+          [[NSPopUpButton alloc] initWithFrame:NSMakeRect(0, 0, 190, 26)
+                                     pullsDown:NO];
+      colorPop.font = [NSFont systemFontOfSize:12.5];
+      [colorPop addItemsWithTitles:colorLabels];
+      [colorPop selectItemAtIndex:1];
+
+      NSSwitch* privateSwitch =
+          [[NSSwitch alloc] initWithFrame:NSMakeRect(0, 0, 38, 22)];
+      privateSwitch.state = NSControlStateValueOff;
+      [privateSwitch sizeToFit];
+
+      NSArray* createRows = @[
+        [self makeRowWithTitle:@"Container Name"
+                      subtitle:@"Shown when right-clicking the + button in the sidebar"
+                       control:nameField
+                         width:cardW],
+        [self makeRowWithTitle:@"Icon"
+                      subtitle:nil
+                       control:symbolPop
+                         width:cardW],
+        [self makeRowWithTitle:@"Accent Color"
+                      subtitle:nil
+                       control:colorPop
+                         width:cardW],
+        [self makeRowWithTitle:@"Private (In-Memory)"
+                      subtitle:@"Discard cookies, logins, and storage when Light quits"
+                       control:privateSwitch
+                         width:cardW],
+        [self makeButtonRow:@"Add Container"
+                   subtitle:@"Right-click the + button under your tabs to open a tab in any container"
+                buttonTitle:@"Add Container"
+                      width:cardW
+                   onAction:^{
+                     NSString* rawName =
+                         [nameField.stringValue
+                             stringByTrimmingCharactersInSet:
+                                 NSCharacterSet.whitespaceAndNewlineCharacterSet];
+                     if (rawName.length == 0) {
+                       return;
+                     }
+                     NSString* slug =
+                         [[rawName lowercaseString]
+                             stringByReplacingOccurrencesOfString:@" "
+                                                       withString:@"_"];
+                     NSString* uniqueId = [NSString
+                         stringWithFormat:@"%@_%ld", slug,
+                                          (long)[NSDate.date timeIntervalSince1970]];
+                     NSInteger symIdx = std::clamp<NSInteger>(
+                         symbolPop.indexOfSelectedItem, 0,
+                         static_cast<NSInteger>(symbolNames.count) - 1);
+                     NSInteger colIdx = std::clamp<NSInteger>(
+                         colorPop.indexOfSelectedItem, 0,
+                         static_cast<NSInteger>(colorHexes.count) - 1);
+                     LightTabContainer c;
+                     c.id = base::SysNSStringToUTF8(uniqueId);
+                     c.name = base::SysNSStringToUTF8(rawName);
+                     c.symbol = base::SysNSStringToUTF8(symbolNames[symIdx]);
+                     c.color_hex = base::SysNSStringToUTF8(colorHexes[colIdx]);
+                     c.in_memory =
+                         (privateSwitch.state == NSControlStateValueOn);
+                     LightAddTabContainer(c);
+                     [weakSelf rebuildDetailPage];
+                   }],
+        [self makeButtonRow:@"Reset Defaults"
+                   subtitle:@"Restore Private, Personal, Work, and Shopping containers"
+                buttonTitle:@"Reset Defaults"
+                      width:cardW
+                   onAction:^{
+                     LightResetDefaultTabContainers();
+                     [weakSelf rebuildDetailPage];
+                   }],
+      ];
+      y = [self appendSectionHeader:@"New Container"
+                               rows:createRows
+                             atYPos:y
+                              width:cardW
+                              leftX:leftX];
+      break;
+    }
+
+    case 2: {  // General
       int restoreVal = PrefGetInt(prefs, prefs::kRestoreOnStartup, 5);
       NSInteger startupIdx = (restoreVal == 1) ? 1 : 0;
       NSArray* startupRows = @[
@@ -1392,7 +1604,7 @@ void PrefSetString(PrefService* prefs,
       break;
     }
 
-    case 2: {  // Appearance
+    case 3: {  // Appearance
       ThemeService* themeService =
           _profile ? ThemeServiceFactory::GetForProfile(_profile) : nullptr;
       NSInteger schemeIdx = 0;
@@ -1465,7 +1677,7 @@ void PrefSetString(PrefService* prefs,
       break;
     }
 
-    case 3: {  // Search Engine
+    case 4: {  // Search Engine
       NSMutableArray<NSString*>* titles = [NSMutableArray array];
       auto providers = std::make_shared<std::vector<raw_ptr<TemplateURL>>>();
       NSInteger activeIdx = 0;
@@ -1511,7 +1723,7 @@ void PrefSetString(PrefService* prefs,
       break;
     }
 
-    case 4: {  // Privacy & Security
+    case 5: {  // Privacy & Security
       bool sbEnabled = PrefGetBool(prefs, "safebrowsing.enabled", true);
       bool sbEnhanced = PrefGetBool(prefs, "safebrowsing.enhanced", false);
       NSInteger sbIdx = !sbEnabled ? 2 : (sbEnhanced ? 0 : 1);
@@ -1590,7 +1802,7 @@ void PrefSetString(PrefService* prefs,
       break;
     }
 
-    case 5: {  // Autofill & Passwords
+    case 6: {  // Autofill & Passwords
       NSArray* afRows = @[
         [self makeSwitchRow:@"Offer to Save Passwords"
                    subtitle:@"Save login credentials in Password Manager"
@@ -1632,7 +1844,7 @@ void PrefSetString(PrefService* prefs,
       break;
     }
 
-    case 6: {  // Downloads
+    case 7: {  // Downloads
       std::string dlPath =
           PrefGetString(prefs, prefs::kDownloadDefaultDirectory, "");
       NSString* dlDisplay =
@@ -1677,7 +1889,7 @@ void PrefSetString(PrefService* prefs,
       break;
     }
 
-    case 7: {  // Performance
+    case 8: {  // Performance
       int memState =
           PrefGetInt(localState, "performance_tuning.high_efficiency_mode.state",
                      2);
@@ -1720,7 +1932,7 @@ void PrefSetString(PrefService* prefs,
       break;
     }
 
-    case 8: {  // Languages
+    case 9: {  // Languages
       NSArray* langRows = @[
         [self makeSwitchRow:@"Check Spelling While Typing"
                    subtitle:@"Highlight misspelled words in text fields"
@@ -1789,6 +2001,17 @@ void ShowSettingsWindowImpl(Profile* profile, BrowserWindowInterface* browser) {
 void LightNativeSettingsController::ShowForBrowser(
     BrowserWindowInterface* browser) {
   ShowSettingsWindowImpl(browser ? browser->GetProfile() : nullptr, browser);
+}
+
+// static
+void LightNativeSettingsController::ShowForBrowserToCategory(
+    BrowserWindowInterface* browser,
+    const std::string& category_title) {
+  ShowSettingsWindowImpl(browser ? browser->GetProfile() : nullptr, browser);
+  if (g_settings_controller && !category_title.empty()) {
+    [g_settings_controller
+        selectCategoryByTitle:base::SysUTF8ToNSString(category_title)];
+  }
 }
 
 // static

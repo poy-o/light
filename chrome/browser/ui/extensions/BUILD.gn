@@ -149,6 +149,9 @@ source_set("extension_post_install_dialog") {
   if (toolkit_views) {
     deps += [ "//chrome/browser/ui/views/extensions:extension_post_install_dialog_view_utils" ]
   }
+  if (is_mac) {
+    deps += [ "//chrome/browser/ui/views/frame:light_glass_modal_mac" ]
+  }
 }
 
 source_set("impl") {
@@ -193,6 +196,11 @@ source_set("impl") {
     "//chrome/browser/favicon",
     "//chrome/browser/image_fetcher",
     "//chrome/browser/profiles:profile",
+  ]
+  if (is_mac) {
+    deps += [ "//chrome/browser/ui/views/frame:light_glass_modal_mac" ]
+  }
+  deps += [
     "//chrome/browser/profiles:profile_util",
     "//chrome/browser/safe_browsing:advanced_protection",
     "//chrome/browser/search_engines",

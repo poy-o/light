@@ -31,6 +31,7 @@ class LightGlassSidebarBridge {
   virtual ~LightGlassSidebarBridge() = default;
 
   virtual void FocusAddressBar(bool select_all) = 0;
+  virtual void ShowSpotlightCommandBar() = 0;
   virtual void ToggleCollapsed() = 0;
   virtual bool IsCollapsed() const = 0;
 };

@@ -29,8 +29,30 @@
 #import "ui/base/l10n/l10n_util_mac.h"
 #include "ui/strings/grit/ui_strings.h"
 
+@interface LightExtensionsMenuDelegate : NSObject <NSMenuDelegate>
+@end
+
+@implementation LightExtensionsMenuDelegate
+- (void)menuNeedsUpdate:(NSMenu*)menu {
+  Class bridgeCls = NSClassFromString(@"LightExtensionsMenuBridge");
+  SEL sel = NSSelectorFromString(@"populateExtensionsMenu:");
+  if (bridgeCls && [bridgeCls respondsToSelector:sel]) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+    [bridgeCls performSelector:sel withObject:menu];
+#pragma clang diagnostic pop
+  }
+}
+@end
+
 namespace chrome {
 namespace {
+
+LightExtensionsMenuDelegate* GetExtensionsMenuDelegate() {
+  static LightExtensionsMenuDelegate* __strong delegate =
+      [[LightExtensionsMenuDelegate alloc] init];
+  return delegate;
+}
 
 using Item = internal::MenuItemBuilder;
 
@@ -457,50 +479,26 @@ NSMenuItem* BuildProfilesMenu(NSApplication* nsapp,
   return item;
 }
 
-NSMenuItem* BuildWindowMenu(NSApplication* nsapp,
-                            id app_delegate,
-                            const std::u16string& product_name,
-                            bool is_pwa,
-                            bool is_rtl) {
-  // clang-format off
-  NSMenuItem* item =
-      Item(IDS_WINDOW_MENU_MAC)
-          .tag(IDC_WINDOW_MENU)
-          .submenu({
-              Item(IDS_MINIMIZE_WINDOW_MAC)
-                  .tag(IDC_MINIMIZE_WINDOW)
-                  .action(@selector(performMiniaturize:)),
-              Item(IDS_ZOOM_WINDOW_MAC)
-                  .tag(IDC_MAXIMIZE_WINDOW)
-                  .action(@selector(performZoom:)),
-              Item().is_separator(),
-              Item(IDS_SHOW_AS_TAB)
-                  .command_id(IDC_SHOW_AS_TAB)
-                  .remove_if(is_pwa),
-               Item(IDS_NAME_WINDOW_MAC)
-                   .command_id(IDC_NAME_WINDOW)
-                   .remove_if(is_pwa),
-              Item().is_separator()
-                  .remove_if(is_pwa),
-              Item(IDS_SHOW_DOWNLOADS_MAC)
-                  .command_id(IDC_SHOW_DOWNLOADS)
-                  .remove_if(is_pwa),
-              Item(IDS_SHOW_EXTENSIONS_MAC)
-                  .command_id(IDC_MANAGE_EXTENSIONS)
-                  .remove_if(is_pwa),
-              Item(IDS_TASK_MANAGER_MAC)
-                  .command_id(IDC_TASK_MANAGER_MAIN_MENU)
-                  .remove_if(is_pwa),
-              Item().is_separator()
-                  .remove_if(is_pwa),
-              Item(IDS_ALL_WINDOWS_FRONT_MAC)
-                  .tag(IDC_ALL_WINDOWS_FRONT)
-                  .action(@selector(arrangeInFront:)),
-              Item().is_separator(),
-          })
-          .Build();
-  // clang-format on
-  nsapp.windowsMenu = item.submenu;
+NSMenuItem* BuildExtensionsMenu(NSApplication* nsapp,
+                                id app_delegate,
+                                const std::u16string& product_name,
+                                bool is_pwa,
+                                bool is_rtl) {
+  if (is_pwa) {
+    return nil;
+  }
+
+  NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:@"Extensions"
+                                                action:nil
+                                         keyEquivalent:@""];
+  NSMenu* submenu = [[NSMenu alloc] initWithTitle:@"Extensions"];
+  submenu.delegate = GetExtensionsMenuDelegate();
+  NSMenuItem* manageItem =
+      Item(IDS_SHOW_EXTENSIONS_MAC).command_id(IDC_MANAGE_EXTENSIONS).Build();
+  if (manageItem) {
+    [submenu addItem:manageItem];
+  }
+  item.submenu = submenu;
   return item;
 }
 
@@ -624,11 +622,11 @@ NSMenu* BuildMainMenu(NSApplication* nsapp,
            &BuildFileMenu,
            &BuildEditMenu,
            &BuildViewMenu,
-           &BuildHistoryMenu,
-           &BuildBookmarksMenu,
            &BuildProfilesMenu,
            &BuildTabMenu,
-           &BuildWindowMenu,
+           &BuildBookmarksMenu,
+           &BuildExtensionsMenu,
+           &BuildHistoryMenu,
            &BuildHelpMenu,
        }) {
     auto item = builder(nsapp, app_delegate, product_name, is_pwa, is_rtl);

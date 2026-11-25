@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_FRAME_LIGHT_NATIVE_SETTINGS_CONTROLLER_H_
 #define CHROME_BROWSER_UI_VIEWS_FRAME_LIGHT_NATIVE_SETTINGS_CONTROLLER_H_
 
+#include <string>
+
 class BrowserWindowInterface;
 class Profile;
 
@@ -13,6 +15,8 @@ class Profile;
 class LightNativeSettingsController {
  public:
   static void ShowForBrowser(BrowserWindowInterface* browser);
+  static void ShowForBrowserToCategory(BrowserWindowInterface* browser,
+                                       const std::string& category_title);
   static void ShowForProfile(Profile* profile);
 };
 

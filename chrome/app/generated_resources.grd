@@ -14498,7 +14498,7 @@ Please help our engineers fix this problem. Tell us what happened right before y
           Window
         </message>
         <message name="IDS_TAB_MENU_MAC" desc="In Title Case: The menu title of the Mac tab menu." meaning="Top-level menu, tab as in the UI element in the tabstrip containing a website">
-          Tab
+          Tabs
         </message>
         <message name="IDS_HELP_MENU_MAC" desc="In Title Case: The menu title of the Mac help menu." meaning="Top-level menu">
           Help

@@ -45,6 +45,7 @@
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_desktop.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/light_native_settings_controller.h"
+#include "chrome/browser/ui/views/frame/light_tab_containers_mac.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
@@ -240,6 +241,17 @@ NSImage* SymbolImage(NSString* name, CGFloat pointSize, NSFontWeight weight) {
   return [img imageWithSymbolConfiguration:config];
 }
 
+NSColor* SidebarColorFromHex(const std::string& hex) {
+  unsigned int rgb = 0x0A84FF;
+  if (!hex.empty() && hex[0] == '#' && hex.size() == 7) {
+    std::sscanf(hex.c_str() + 1, "%x", &rgb);
+  }
+  return [NSColor colorWithSRGBRed:((rgb >> 16) & 0xFF) / 255.0
+                             green:((rgb >> 8) & 0xFF) / 255.0
+                              blue:(rgb & 0xFF) / 255.0
+                             alpha:1.0];
+}
+
 }  // namespace
 
 class LightGlassSidebarBridgeImpl;
@@ -250,6 +262,7 @@ class LightGlassSidebarBridgeImpl;
 @interface LightIconButton : NSView
 @property(nonatomic, copy) void (^actionBlock)(void);
 @property(nonatomic, assign, getter=isEnabled) BOOL enabled;
+@property(nonatomic, assign) BOOL activeHighlight;
 @property(nonatomic, assign) CGFloat cornerRadius;
 - (instancetype)initWithSymbol:(NSString*)symbolName
                      pointSize:(CGFloat)pointSize
@@ -265,10 +278,12 @@ class LightGlassSidebarBridgeImpl;
   NSTrackingArea* __strong _trackingArea;
   BOOL _hovered;
   BOOL _pressed;
+  BOOL _activeHighlight;
 }
 
 @synthesize actionBlock = _actionBlock;
 @synthesize enabled = _enabled;
+@synthesize activeHighlight = _activeHighlight;
 @synthesize cornerRadius = _cornerRadius;
 
 - (instancetype)initWithSymbol:(NSString*)symbolName
@@ -365,11 +380,19 @@ class LightGlassSidebarBridgeImpl;
   return NO;
 }
 
-- (void)drawRect:(NSRect)dirtyRect {
-  if (!_enabled || (!_hovered && !_pressed)) {
+- (void)setActiveHighlight:(BOOL)activeHighlight {
+  if (_activeHighlight == activeHighlight) {
     return;
   }
-  CGFloat alpha = _pressed ? 0.18 : 0.10;
+  _activeHighlight = activeHighlight;
+  [self setNeedsDisplay:YES];
+}
+
+- (void)drawRect:(NSRect)dirtyRect {
+  if (!_enabled || (!_hovered && !_pressed && !_activeHighlight)) {
+    return;
+  }
+  CGFloat alpha = _pressed ? 0.18 : (_activeHighlight ? 0.16 : 0.10);
   [[NSColor.labelColor colorWithAlphaComponent:alpha] setFill];
   NSBezierPath* path = [NSBezierPath bezierPathWithRoundedRect:self.bounds
                                                        xRadius:_cornerRadius
@@ -1659,12 +1682,16 @@ NSMenuItem* MakeSymbolMenuItem(NSString* title,
                    favicon:(NSImage*)favicon
                  isLoading:(BOOL)isLoading
                   selected:(BOOL)selected
-                    pinned:(BOOL)pinned;
+                    pinned:(BOOL)pinned
+           containerSymbol:(NSString*)containerSymbol
+            containerColor:(NSColor*)containerColor;
 @end
 
 @implementation LightTabRowView {
   NSImageView* __strong _iconView;
   NSTextField* __strong _titleField;
+  NSImageView* __strong _containerBadgeView;
+  NSColor* __strong _containerColor;
   LightIconButton* __strong _closeButton;
   NSTrackingArea* __strong _trackingArea;
   BOOL _hovered;
@@ -1705,6 +1732,11 @@ NSMenuItem* MakeSymbolMenuItem(NSString* title,
     _titleField.selectable = NO;
     [self addSubview:_titleField];
 
+    _containerBadgeView = [[NSImageView alloc] initWithFrame:NSZeroRect];
+    _containerBadgeView.imageScaling = NSImageScaleProportionallyDown;
+    _containerBadgeView.hidden = YES;
+    [self addSubview:_containerBadgeView];
+
     __weak __typeof(self) weakSelf = self;
     _closeButton = [[LightIconButton alloc] initWithSymbol:@"xmark"
                                                  pointSize:10.0
@@ -1727,9 +1759,21 @@ NSMenuItem* MakeSymbolMenuItem(NSString* title,
                    favicon:(NSImage*)favicon
                  isLoading:(BOOL)isLoading
                   selected:(BOOL)selected
-                    pinned:(BOOL)pinned {
+                    pinned:(BOOL)pinned
+           containerSymbol:(NSString*)containerSymbol
+            containerColor:(NSColor*)containerColor {
   _selected = selected;
   _pinned = pinned;
+  _containerColor = containerColor;
+
+  if (containerSymbol.length > 0 && containerColor) {
+    _containerBadgeView.image =
+        SymbolImage(containerSymbol, 10.5, NSFontWeightSemibold);
+    _containerBadgeView.contentTintColor = containerColor;
+    _containerBadgeView.hidden = NO;
+  } else {
+    _containerBadgeView.hidden = YES;
+  }
 
   NSString* displayTitle = title.length > 0 ? title : @"New Tab";
   _titleField.stringValue = displayTitle;
@@ -1772,8 +1816,18 @@ NSMenuItem* MakeSymbolMenuItem(NSString* title,
       NSMakeRect(w - closeSize - 6.0, std::floor((h - closeSize) * 0.5),
                  closeSize, closeSize);
 
-  CGFloat titleX = 33.0;
-  CGFloat titleRight = showClose ? (w - closeSize - 10.0) : (w - 8.0);
+  CGFloat titleX = _containerColor ? 36.0 : 33.0;
+  _iconView.frame = NSMakeRect(_containerColor ? 12.0 : 9.0,
+                               std::floor((h - 16.0) * 0.5), 16.0, 16.0);
+  CGFloat rightBound = showClose ? (w - closeSize - 10.0) : (w - 8.0);
+  if (!_containerBadgeView.isHidden) {
+    CGFloat badgeSize = 14.0;
+    _containerBadgeView.frame = NSMakeRect(
+        rightBound - badgeSize - 2.0, std::floor((h - badgeSize) * 0.5),
+        badgeSize, badgeSize);
+    rightBound -= (badgeSize + 6.0);
+  }
+  CGFloat titleRight = rightBound;
   NSSize fit = [_titleField sizeThatFits:NSMakeSize(1000.0, h)];
   CGFloat titleH = std::min(h, std::ceil(fit.height));
   _titleField.frame = NSMakeRect(titleX, std::floor((h - titleH) * 0.5),
@@ -1846,23 +1900,154 @@ NSMenuItem* MakeSymbolMenuItem(NSString* title,
 }
 
 - (void)drawRect:(NSRect)dirtyRect {
-  if (!_selected && !_hovered) {
-    return;
+  if (_selected || _hovered) {
+    NSBezierPath* path = [NSBezierPath bezierPathWithRoundedRect:self.bounds
+                                                         xRadius:9.0
+                                                         yRadius:9.0];
+    CGFloat fillAlpha = _selected ? 0.16 : 0.08;
+    [[NSColor.labelColor colorWithAlphaComponent:fillAlpha] setFill];
+    [path fill];
   }
-  NSBezierPath* path = [NSBezierPath bezierPathWithRoundedRect:self.bounds
-                                                       xRadius:9.0
-                                                       yRadius:9.0];
-  CGFloat fillAlpha = _selected ? 0.16 : 0.08;
-  [[NSColor.labelColor colorWithAlphaComponent:fillAlpha] setFill];
-  [path fill];
-
-  if (_selected) {
-    [[NSColor.labelColor colorWithAlphaComponent:0.12] setStroke];
-    path.lineWidth = 0.5;
-    [path stroke];
+  if (_containerColor) {
+    NSRect barRect = NSMakeRect(3.0, 7.0, 2.5,
+                                std::max<CGFloat>(4.0, self.bounds.size.height - 14.0));
+    NSBezierPath* bar = [NSBezierPath bezierPathWithRoundedRect:barRect
+                                                        xRadius:1.25
+                                                        yRadius:1.25];
+    [_containerColor setFill];
+    [bar fill];
   }
 }
 
+@end
+
+// -----------------------------------------------------------------------------
+// Compact inline "+" button placed directly underneath all tabs in the sidebar.
+// Left-click opens a new tab; right-click opens the Tab Containers menu.
+// -----------------------------------------------------------------------------
+@interface LightInlinePlusButtonView : NSView
+@property(nonatomic, copy) void (^actionBlock)(void);
+@property(nonatomic, copy) NSMenu* (^menuProvider)(void);
+@end
+
+@implementation LightInlinePlusButtonView {
+  NSImageView* __strong _plusIcon;
+  NSTrackingArea* __strong _trackingArea;
+  BOOL _hovered;
+  BOOL _pressed;
+}
+
+@synthesize actionBlock = _actionBlock;
+@synthesize menuProvider = _menuProvider;
+
+- (BOOL)isFlipped {
+  return YES;
+}
+
+- (BOOL)mouseDownCanMoveWindow {
+  return NO;
+}
+
+- (instancetype)initWithFrame:(NSRect)frameRect {
+  if ((self = [super initWithFrame:frameRect])) {
+    self.wantsLayer = YES;
+    self.toolTip = @"New Tab (Right-click for Containers)";
+    _plusIcon = [[NSImageView alloc] initWithFrame:NSZeroRect];
+    _plusIcon.image = SymbolImage(@"plus", 13.0, NSFontWeightMedium);
+    _plusIcon.contentTintColor = NSColor.secondaryLabelColor;
+    _plusIcon.imageScaling = NSImageScaleNone;
+    _plusIcon.imageAlignment = NSImageAlignCenter;
+    [self addSubview:_plusIcon];
+  }
+  return self;
+}
+
+- (void)layout {
+  [super layout];
+  _plusIcon.frame = self.bounds;
+}
+
+- (void)updateTrackingAreas {
+  [super updateTrackingAreas];
+  if (_trackingArea) {
+    [self removeTrackingArea:_trackingArea];
+  }
+  _trackingArea = [[NSTrackingArea alloc]
+      initWithRect:self.bounds
+           options:(NSTrackingMouseEnteredAndExited | NSTrackingActiveAlways |
+                    NSTrackingInVisibleRect)
+             owner:self
+          userInfo:nil];
+  [self addTrackingArea:_trackingArea];
+}
+
+- (void)mouseEntered:(NSEvent*)event {
+  _hovered = YES;
+  _plusIcon.contentTintColor = NSColor.labelColor;
+  [self setNeedsDisplay:YES];
+}
+
+- (void)mouseExited:(NSEvent*)event {
+  _hovered = NO;
+  _pressed = NO;
+  _plusIcon.contentTintColor = NSColor.secondaryLabelColor;
+  [self setNeedsDisplay:YES];
+}
+
+- (void)mouseDown:(NSEvent*)event {
+  _pressed = YES;
+  [self setNeedsDisplay:YES];
+}
+
+- (void)mouseUp:(NSEvent*)event {
+  BOOL inside = NSPointInRect(
+      [self convertPoint:event.locationInWindow fromView:nil], self.bounds);
+  _pressed = NO;
+  [self setNeedsDisplay:YES];
+  if (inside && _actionBlock) {
+    _actionBlock();
+  }
+}
+
+- (NSMenu*)menuForEvent:(NSEvent*)event {
+  return _menuProvider ? _menuProvider() : nil;
+}
+
+- (void)drawRect:(NSRect)dirtyRect {
+  CGFloat alpha = _pressed ? 0.19 : (_hovered ? 0.13 : 0.065);
+  NSBezierPath* path = [NSBezierPath bezierPathWithRoundedRect:self.bounds
+                                                       xRadius:9.0
+                                                       yRadius:9.0];
+  [[NSColor.labelColor colorWithAlphaComponent:alpha] setFill];
+  [path fill];
+}
+
+@end
+
+// -----------------------------------------------------------------------------
+// Spotlight / Raycast-style centered Liquid Glass Command/URL Panel (Cmd+T)
+// -----------------------------------------------------------------------------
+@interface LightSpotlightOverlayPanel : NSPanel
+@property(nonatomic, copy) void (^onDismiss)(void);
+@end
+
+@implementation LightSpotlightOverlayPanel
+@synthesize onDismiss = _onDismiss;
+
+- (BOOL)canBecomeKeyWindow {
+  return YES;
+}
+
+- (BOOL)canBecomeMainWindow {
+  return NO;
+}
+
+- (void)resignKeyWindow {
+  [super resignKeyWindow];
+  if (self.isVisible && _onDismiss) {
+    _onDismiss();
+  }
+}
 @end
 
 // -----------------------------------------------------------------------------
@@ -2910,6 +3095,7 @@ API_AVAILABLE(macos(26.0))
                         window:(NSWindow*)window;
 - (void)teardown;
 - (void)focusAddressBar:(BOOL)selectAll;
+- (void)showSpotlightCommandBar;
 - (void)toggleCollapsed;
 - (BOOL)isCollapsed;
 - (void)reloadTabsAndNavigation;
@@ -2917,6 +3103,10 @@ API_AVAILABLE(macos(26.0))
 - (void)applyAutocompleteSuggestions:(NSArray<LightSuggestionItem*>*)items;
 - (void)beginInlineRenameForGroupToken:(NSString*)token;
 - (NSMenu*)buildNewTabButtonContextMenu;
+- (NSMenu*)buildInlinePlusContextMenu;
+- (NSRect)beginExtensionPopup;
+- (void)endExtensionPopup;
+- (void)populateExtensionsMenu:(NSMenu*)menu;
 - (BOOL)handleConfirmQuitAttempt;
 - (void)cancelConfirmQuit;
 - (NSWindow*)targetWindow;
@@ -3049,6 +3239,12 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
     }
   }
 
+  void ShowSpotlightCommandBar() override {
+    if (@available(macOS 26.0, *)) {
+      [controller_ showSpotlightCommandBar];
+    }
+  }
+
   void ToggleCollapsed() override {
     if (@available(macOS 26.0, *)) {
       [controller_ toggleCollapsed];
@@ -3100,7 +3296,32 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
 
   void CreateNewTab() {
     if (BrowserWindowInterface* b = browser()) {
-      chrome::ExecuteCommand(b, IDC_NEW_TAB);
+      chrome::NewTab(b, NewTabTypes::kNewTabCommand);
+    }
+  }
+
+  void OpenNewTabInContainer(const std::string& container_id) {
+    if (BrowserWindowInterface* b = browser()) {
+      if (LightOpenNewTabInContainer(b, container_id)) {
+        if (@available(macOS 26.0, *)) {
+          [controller_ reloadTabsAndNavigation];
+          [controller_ focusAddressBar:YES];
+        }
+      }
+    }
+  }
+
+  void OpenContainersSettings() {
+    LightNativeSettingsController::ShowForBrowserToCategory(browser(),
+                                                            "Containers");
+  }
+
+  void OpenChromeWebStore() {
+    if (BrowserWindowInterface* b = browser()) {
+      NavigateParams params(b, GURL("https://chromewebstore.google.com/"),
+                            ui::PAGE_TRANSITION_LINK);
+      params.disposition = WindowOpenDisposition::kNewForegroundTab;
+      Navigate(&params);
     }
   }
 
@@ -3628,7 +3849,7 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
     }
   }
 
-  void NavigateToInput(const std::u16string& raw_input) {
+  void NavigateToInput(const std::u16string& raw_input, bool new_tab = false) {
     BrowserWindowInterface* b = browser();
     if (!b) {
       return;
@@ -3681,12 +3902,31 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
     }
 
     NavigateParams params(b, destination_url, transition);
-    params.disposition = WindowOpenDisposition::kCurrentTab;
+    params.disposition = new_tab ? WindowOpenDisposition::kNewForegroundTab
+                                 : WindowOpenDisposition::kCurrentTab;
     Navigate(&params);
     FocusActiveWebContents();
   }
 
-  void StartAutocomplete(const std::u16string& raw_text) {
+  void StartSpotlightZeroSuggest() {
+    if (!autocomplete_controller_) {
+      return;
+    }
+    BrowserWindowInterface* b = browser();
+    if (!b || !b->GetProfile()) {
+      return;
+    }
+    last_autocomplete_query_.clear();
+    AutocompleteInput input(
+        std::u16string(), metrics::OmniboxEventProto::NTP,
+        ChromeAutocompleteSchemeClassifier(b->GetProfile()));
+    input.set_focus_type(metrics::OmniboxFocusType::INTERACTION_FOCUS);
+    input.set_prevent_inline_autocomplete(true);
+    autocomplete_controller_->Start(input);
+  }
+
+  void StartAutocomplete(const std::u16string& raw_text,
+                         bool allow_zero_suggest = false) {
     if (!autocomplete_controller_) {
       return;
     }
@@ -3698,6 +3938,10 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
     base::TrimWhitespace(raw_text, base::TRIM_ALL, &trimmed);
     last_autocomplete_query_ = trimmed;
     if (trimmed.empty()) {
+      if (allow_zero_suggest) {
+        StartSpotlightZeroSuggest();
+        return;
+      }
       autocomplete_controller_->Stop(AutocompleteStopReason::kClobbered);
       if (@available(macOS 26.0, *)) {
         [controller_ applyAutocompleteSuggestions:@[]];
@@ -3728,7 +3972,7 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
                                        : AutocompleteStopReason::kInteraction);
   }
 
-  void OpenSuggestionItem(LightSuggestionItem* item) {
+  void OpenSuggestionItem(LightSuggestionItem* item, bool new_tab = false) {
     if (!item) {
       return;
     }
@@ -3736,11 +3980,14 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
     if (!b) {
       return;
     }
+    const WindowOpenDisposition disp =
+        new_tab ? WindowOpenDisposition::kNewForegroundTab
+                : WindowOpenDisposition::kCurrentTab;
     if (item.directUrlSpec.length > 0) {
       GURL url(base::SysNSStringToUTF8(item.directUrlSpec));
       if (url.is_valid()) {
         NavigateParams params(b, url, ui::PAGE_TRANSITION_TYPED);
-        params.disposition = WindowOpenDisposition::kCurrentTab;
+        params.disposition = disp;
         Navigate(&params);
         FocusActiveWebContents();
         return;
@@ -3753,7 +4000,7 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
         const AutocompleteMatch& match = result.match_at(idx);
         if (match.destination_url.is_valid()) {
           NavigateParams params(b, match.destination_url, match.transition);
-          params.disposition = WindowOpenDisposition::kCurrentTab;
+          params.disposition = disp;
           Navigate(&params);
           FocusActiveWebContents();
           return;
@@ -3761,7 +4008,7 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
       }
     }
     if (item.fillIntoEdit.length > 0) {
-      NavigateToInput(base::SysNSStringToUTF16(item.fillIntoEdit));
+      NavigateToInput(base::SysNSStringToUTF16(item.fillIntoEdit), new_tab);
     }
   }
 
@@ -4082,11 +4329,28 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
   NSMutableArray<LightPinnedTileView*>* __strong _pinnedTileViews;
   NSMutableArray<LightTabGroupBlockView*>* __strong _groupBlockViews;
   NSMutableArray<LightTabRowView*>* __strong _tabRowViews;
+  LightInlinePlusButtonView* __strong _inlinePlusButton;
   NSString* __strong _renamingGroupToken;
 
   NSBox* __strong _footerDivider;
-  LightNewTabButtonView* __strong _newTabButton;
   LightIconButton* __strong _settingsButton;
+
+  // Spotlight / Raycast-style centered Liquid Glass Command/URL overlay (Cmd+T)
+  LightSpotlightOverlayPanel* __strong _spotlightPanel;
+  NSGlassEffectView* __strong _spotlightGlassView;
+  LightExpandedUrlContentView* __strong _spotlightContent;
+  NSImageView* __strong _spotlightIconView;
+  LightAddressTextField* __strong _spotlightField;
+  LightIconButton* __strong _spotlightClearButton;
+  NSBox* __strong _spotlightDivider;
+  NSMutableArray<LightSuggestionRowView*>* __strong _spotlightSuggestionRows;
+  NSArray<LightSuggestionItem*>* __strong _spotlightSuggestionItems;
+  NSString* __strong _spotlightUserTyped;
+  NSInteger _spotlightSelectedIndex;
+  BOOL _spotlightActive;
+
+  NSInteger _extensionPopupCount;
+  NSMutableArray* __strong _menuBarExtTargets;
 
   NSString* __strong _fullAddressString;
   NSString* __strong _displayAddressString;
@@ -4115,6 +4379,10 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
     _tabRowViews = [NSMutableArray array];
     _suggestionRowViews = [NSMutableArray array];
     _suggestionItems = @[];
+    _spotlightSuggestionRows = [NSMutableArray array];
+    _spotlightSuggestionItems = @[];
+    _spotlightUserTyped = @"";
+    _spotlightSelectedIndex = -1;
     _userTypedAddressString = @"";
     _selectedSuggestionIndex = -1;
     _fullAddressString = @"";
@@ -4180,6 +4448,11 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
              object:nil];
     [NSNotificationCenter.defaultCenter
         addObserver:self
+           selector:@selector(lightTabContainersDidChange:)
+               name:@"LightTabContainersDidChangeNotification"
+             object:nil];
+    [NSNotificationCenter.defaultCenter
+        addObserver:self
            selector:@selector(settingsSidebarPreviewHoverChanged:)
                name:@"LightSettingsSidebarPreviewHoverNotification"
              object:nil];
@@ -4216,6 +4489,11 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
   }
   [_hoverWatchTimer invalidate];
   _hoverWatchTimer = nil;
+  [self dismissSpotlight];
+  if (_spotlightPanel) {
+    [_spotlightPanel orderOut:nil];
+    _spotlightPanel = nil;
+  }
   _bridge = nullptr;
   [_overlayView removeFromSuperview];
   _overlayView = nil;
@@ -4255,6 +4533,9 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
   if (_expandedUrlGlassView) {
     _expandedUrlGlassView.style = glassStyle;
   }
+  if (_spotlightGlassView) {
+    _spotlightGlassView.style = glassStyle;
+  }
 
   NSInteger adaptiveVal = std::clamp<NSInteger>(
       SidebarUDInt(@"LightSidebarGlassAdaptive", 2), 0, 2);
@@ -4267,12 +4548,20 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
     [_expandedUrlGlassView setValue:@(adaptiveVal)
                              forKey:@"_adaptiveAppearance"];
   }
+  if (_spotlightGlassView &&
+      [_spotlightGlassView respondsToSelector:adaptiveSel]) {
+    [_spotlightGlassView setValue:@(adaptiveVal)
+                           forKey:@"_adaptiveAppearance"];
+  }
 
   if (@available(macOS 27.0, *)) {
     BOOL interactive = SidebarUDBool(@"LightSidebarGlassInteractive", true);
     _glassView.effectIsInteractive = interactive;
     if (_expandedUrlGlassView) {
       _expandedUrlGlassView.effectIsInteractive = interactive;
+    }
+    if (_spotlightGlassView) {
+      _spotlightGlassView.effectIsInteractive = interactive;
     }
   }
 
@@ -4282,6 +4571,10 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
     _glassView.tintColor = nil;
     if (_expandedUrlGlassView) {
       _expandedUrlGlassView.tintColor = nil;
+    }
+    if (_spotlightGlassView) {
+      _spotlightGlassView.tintColor =
+          [NSColor colorWithWhite:1.0 alpha:0.04];
     }
   } else {
     CGFloat tr = std::clamp<CGFloat>(
@@ -4299,6 +4592,13 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
                               green:tg
                                blue:tb
                               alpha:std::min<CGFloat>(0.90, alpha + 0.02)];
+    }
+    if (_spotlightGlassView) {
+      _spotlightGlassView.tintColor =
+          [NSColor colorWithSRGBRed:tr
+                              green:tg
+                               blue:tb
+                              alpha:std::min<CGFloat>(0.90, alpha + 0.03)];
     }
   }
 
@@ -4639,27 +4939,27 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
   _tabsDocumentView.menuProvider = ^NSMenu* {
     return [weakSelf buildNewTabButtonContextMenu];
   };
-  _scrollView.documentView = _tabsDocumentView;
-  [_contentView addSubview:_scrollView];
-
-  // Footer with "+ New Tab" button.
-  _footerDivider = [[NSBox alloc] initWithFrame:NSZeroRect];
-  _footerDivider.boxType = NSBoxCustom;
-  _footerDivider.borderWidth = 0.0;
-  _footerDivider.fillColor = [NSColor.labelColor colorWithAlphaComponent:0.10];
-  [_contentView addSubview:_footerDivider];
-
-  _newTabButton = [[LightNewTabButtonView alloc] initWithFrame:NSZeroRect];
-  _newTabButton.actionBlock = ^{
+  _inlinePlusButton =
+      [[LightInlinePlusButtonView alloc] initWithFrame:NSZeroRect];
+  _inlinePlusButton.actionBlock = ^{
     __strong __typeof(weakSelf) s = weakSelf;
     if (s && s->_bridge) {
       s->_bridge->CreateNewTab();
     }
   };
-  _newTabButton.menuProvider = ^NSMenu* {
-    return [weakSelf buildNewTabButtonContextMenu];
+  _inlinePlusButton.menuProvider = ^NSMenu* {
+    return [weakSelf buildInlinePlusContextMenu];
   };
-  [_contentView addSubview:_newTabButton];
+  [_tabsDocumentView addSubview:_inlinePlusButton];
+  _scrollView.documentView = _tabsDocumentView;
+  [_contentView addSubview:_scrollView];
+
+  // Compact footer with Settings gear button (new tab + lives inline under tabs).
+  _footerDivider = [[NSBox alloc] initWithFrame:NSZeroRect];
+  _footerDivider.boxType = NSBoxCustom;
+  _footerDivider.borderWidth = 0.0;
+  _footerDivider.fillColor = [NSColor.labelColor colorWithAlphaComponent:0.10];
+  [_contentView addSubview:_footerDivider];
 
   _settingsButton = [[LightIconButton alloc] initWithSymbol:@"gearshape"
                                                   pointSize:14.0
@@ -4756,6 +5056,10 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
   }
 }
 
+- (void)lightTabContainersDidChange:(NSNotification*)note {
+  [self reloadTabsAndNavigation];
+}
+
 - (void)lightSettingsDidChange:(NSNotification*)note {
   BOOL autoHide = SidebarUDBool(@"LightSidebarAutoHide", true);
   _pinned = !autoHide;
@@ -4767,9 +5071,11 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
   [self applyGlassMaterialSettings];
   [_overlayView invalidateEdgeTrackingArea];
   [self layoutOuterGlassGeometryForce:YES];
-  if ((_pinned || _settingsPreviewForceOpen) && !_sidebarVisible) {
+  if ((_pinned || _settingsPreviewForceOpen || _extensionPopupCount > 0) &&
+      !_sidebarVisible) {
     [self setSidebarVisible:YES animated:YES];
-  } else if (!_pinned && !_settingsPreviewForceOpen && _sidebarVisible &&
+  } else if (!_pinned && !_settingsPreviewForceOpen &&
+             _extensionPopupCount == 0 && _sidebarVisible &&
              ![self isCursorInLeftTriggerOrSidebar]) {
     [self setSidebarVisible:NO animated:YES];
   }
@@ -4987,7 +5293,8 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
       [self setSidebarVisible:YES animated:YES];
     }
   } else if (!_pinned && !_trafficLightsGroup.isConfirmingQuit &&
-             !_settingsPreviewForceOpen && !_contextMenuOpen) {
+             !_settingsPreviewForceOpen && !_contextMenuOpen &&
+             _extensionPopupCount == 0) {
     // Only auto-close when cursor is INSIDE the window and crosses onto the
     // web page.
     if (!_editingAddress && _renamingGroupToken.length == 0 &&
@@ -5022,7 +5329,7 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
   if (_inLiveResize || _window.inLiveResize || _editingAddress ||
       _renamingGroupToken.length > 0 || _contextMenuOpen ||
       _trafficLightsGroup.isConfirmingQuit || _settingsPreviewForceOpen ||
-      [NSEvent pressedMouseButtons] != 0) {
+      _extensionPopupCount > 0 || [NSEvent pressedMouseButtons] != 0) {
     return;
   }
   NSPoint winPt = [_window convertPointFromScreen:[NSEvent mouseLocation]];
@@ -5321,14 +5628,12 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
       NSMakeRect(27.0, std::floor((addrH - fieldH) * 0.5),
                  std::max<CGFloat>(0.0, addrW - 27.0 - rightReserve), fieldH);
 
-  // Footer: "+ New Tab" on the left, Settings gear button on the right.
+  // Compact footer: Settings gear button (new tab + sits right under tabs).
   CGFloat footerTop = std::max<CGFloat>(kHeaderHeight, h - kFooterHeight);
   _footerDivider.frame =
       NSMakeRect(10.0, footerTop, std::max<CGFloat>(0.0, w - 20.0), 0.5);
   _settingsButton.frame =
       NSMakeRect(w - 38.0, footerTop + 9.0, 28.0, 28.0);
-  _newTabButton.frame =
-      NSMakeRect(6.0, footerTop + 6.0, std::max<CGFloat>(0.0, w - 48.0), 34.0);
 
   // Scrollable tabs area between header and footer.
   CGFloat scrollY = kHeaderHeight;
@@ -5342,8 +5647,16 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
   if (!_extensionsButton || !_addressContainer) {
     return;
   }
+  const BOOL popupForced = (_extensionPopupCount > 0);
   BOOL shouldShow =
-      _addressContainer.hovered && _bridge && _bridge->HasInstalledExtensions();
+      popupForced || (_addressContainer.hovered && _bridge &&
+                      _bridge->HasInstalledExtensions());
+  [_extensionsButton
+      setSymbol:(popupForced ? @"puzzlepiece.extension.fill"
+                             : @"puzzlepiece.extension")
+      pointSize:12.0
+         weight:NSFontWeightMedium];
+  _extensionsButton.activeHighlight = popupForced;
   if (shouldShow) {
     _extensionsButton.hidden = NO;
   }
@@ -5366,8 +5679,9 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
         if (!s) {
           return;
         }
-        BOOL stillShow = s->_addressContainer.hovered && s->_bridge &&
-                         s->_bridge->HasInstalledExtensions();
+        BOOL stillShow = (s->_extensionPopupCount > 0) ||
+                         (s->_addressContainer.hovered && s->_bridge &&
+                          s->_bridge->HasInstalledExtensions());
         if (!stillShow) {
           s->_extensionsButton.hidden = YES;
         }
@@ -5408,6 +5722,178 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
 
 - (void)beginInlineRenameForGroupToken:(NSString*)token {
   _renamingGroupToken = token ?: @"";
+}
+
+- (NSMenu*)buildInlinePlusContextMenu {
+  _menuActionTargets = [NSMutableArray array];
+  NSMenu* menu = [[NSMenu alloc] initWithTitle:@"New Container Tab"];
+  __weak __typeof(self) weakSelf = self;
+
+  NSMenuItem* header =
+      [NSMenuItem sectionHeaderWithTitle:@"Open Tab in Container"];
+  [menu addItem:header];
+
+  std::vector<LightTabContainer> containers = LightGetTabContainers();
+  for (const auto& c : containers) {
+    std::string cid = c.id;
+    NSString* title = base::SysUTF8ToNSString(
+        c.in_memory ? (c.name + "  (Private)") : c.name);
+    NSString* sym = base::SysUTF8ToNSString(c.symbol);
+    NSColor* col = SidebarColorFromHex(c.color_hex);
+
+    NSImage* tinted = nil;
+    if (NSImage* baseImg = SymbolImage(sym, 13.0, NSFontWeightMedium)) {
+      tinted = [NSImage imageWithSize:NSMakeSize(16.0, 16.0)
+                              flipped:NO
+                       drawingHandler:^BOOL(NSRect dstRect) {
+                         [col set];
+                         NSSize sz = baseImg.size;
+                         NSRect r = NSMakeRect(
+                             std::floor((dstRect.size.width - sz.width) * 0.5),
+                             std::floor((dstRect.size.height - sz.height) * 0.5),
+                             sz.width, sz.height);
+                         [baseImg drawInRect:r];
+                         NSRectFillUsingOperation(r, NSCompositingOperationSourceAtop);
+                         return YES;
+                       }];
+      [tinted setTemplate:NO];
+    }
+
+    [menu addItem:[self menuItemWithTitle:title
+                                   symbol:nil
+                                    image:tinted
+                                  handler:^{
+                                    __strong __typeof(weakSelf) s = weakSelf;
+                                    if (s && s->_bridge) {
+                                      s->_bridge->OpenNewTabInContainer(cid);
+                                    }
+                                  }]];
+  }
+
+  [menu addItem:[NSMenuItem separatorItem]];
+  [menu addItem:[self menuItemWithTitle:@"Manage Containers…"
+                                 symbol:@"square.stack.3d.up"
+                                  image:nil
+                                handler:^{
+                                  __strong __typeof(weakSelf) s = weakSelf;
+                                  if (s && s->_bridge) {
+                                    s->_bridge->OpenContainersSettings();
+                                  }
+                                }]];
+  return menu;
+}
+
+- (NSRect)beginExtensionPopup {
+  _extensionPopupCount += 1;
+  [self setSidebarVisible:YES animated:YES];
+  [self updateExtensionsButtonVisibilityAnimated:NO];
+  [self layoutOuterGlassGeometryForce:YES];
+
+  if (!_window) {
+    return NSZeroRect;
+  }
+  NSRect winFrame = _window.frame;
+  CGFloat sidebarW = [self currentSidebarWidth];
+  BOOL docked = _pinned && ![self isWindowFullScreen];
+  CGFloat rightEdgeInWin = docked ? sidebarW : (kSidebarInset + sidebarW);
+  CGFloat extTopFromWindowTop = 44.0;
+  CGFloat extHeight = 28.0;
+  if (_extensionsButton && _extensionsButton.superview) {
+    NSRect extInWin =
+        [_extensionsButton convertRect:_extensionsButton.bounds toView:nil];
+    if (extInWin.size.height > 1.0) {
+      return NSMakeRect(winFrame.origin.x + rightEdgeInWin,
+                        winFrame.origin.y + extInWin.origin.y, 0.0,
+                        extInWin.size.height);
+    }
+  }
+  return NSMakeRect(
+      winFrame.origin.x + rightEdgeInWin,
+      winFrame.origin.y + winFrame.size.height - extTopFromWindowTop - extHeight,
+      0.0, extHeight);
+}
+
+- (void)endExtensionPopup {
+  if (_extensionPopupCount > 0) {
+    _extensionPopupCount -= 1;
+  }
+  [self updateExtensionsButtonVisibilityAnimated:YES];
+  if (_extensionPopupCount == 0 && !_pinned && !_settingsPreviewForceOpen &&
+      !_editingAddress && !_contextMenuOpen &&
+      !_trafficLightsGroup.isConfirmingQuit &&
+      [self shouldAutoCloseForCurrentCursor]) {
+    [self setSidebarVisible:NO animated:YES];
+  } else if (_extensionPopupCount == 0 && !_pinned && _sidebarVisible) {
+    [self ensureHoverWatchTimerRunning];
+  }
+}
+
+- (void)populateExtensionsMenu:(NSMenu*)menu {
+  if (!menu) {
+    return;
+  }
+  [menu removeAllItems];
+  _menuBarExtTargets = [NSMutableArray array];
+  __weak __typeof(self) weakSelf = self;
+
+  auto addItem = ^(NSString* title, NSString* symbol, NSImage* img,
+                   void (^handler)(void)) {
+    LightSidebarMenuTarget* target = [[LightSidebarMenuTarget alloc] init];
+    target.handler = handler;
+    [self->_menuBarExtTargets addObject:target];
+    NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:title
+                                                  action:@selector(invoke:)
+                                           keyEquivalent:@""];
+    item.target = target;
+    if (img) {
+      img.size = NSMakeSize(16.0, 16.0);
+      item.image = img;
+    } else if (symbol) {
+      NSImage* symImg = SymbolImage(symbol, 13.0, NSFontWeightRegular);
+      [symImg setTemplate:YES];
+      item.image = symImg;
+    }
+    [menu addItem:item];
+  };
+
+  std::vector<std::tuple<std::string, std::u16string, NSImage*>> extensions;
+  if (_bridge) {
+    _bridge->GetInstalledExtensions(extensions);
+  }
+  if (!extensions.empty()) {
+    for (const auto& [actionId, name, icon] : extensions) {
+      std::string capturedId = actionId;
+      NSString* title = base::SysUTF16ToNSString(name);
+      addItem(title, @"puzzlepiece.extension", icon, ^{
+        __strong __typeof(weakSelf) s = weakSelf;
+        if (s && s->_bridge) {
+          s->_bridge->TriggerExtensionAction(capturedId);
+        }
+      });
+    }
+    [menu addItem:[NSMenuItem separatorItem]];
+  } else {
+    NSMenuItem* emptyItem =
+        [[NSMenuItem alloc] initWithTitle:@"No Extensions Installed"
+                                   action:nil
+                            keyEquivalent:@""];
+    emptyItem.enabled = NO;
+    [menu addItem:emptyItem];
+    [menu addItem:[NSMenuItem separatorItem]];
+  }
+
+  addItem(@"Manage Extensions…", @"slider.horizontal.3", nil, ^{
+    __strong __typeof(weakSelf) s = weakSelf;
+    if (s && s->_bridge) {
+      s->_bridge->OpenManageExtensions();
+    }
+  });
+  addItem(@"Visit Chrome Web Store", @"bag", nil, ^{
+    __strong __typeof(weakSelf) s = weakSelf;
+    if (s && s->_bridge) {
+      s->_bridge->OpenChromeWebStore();
+    }
+  });
 }
 
 - (NSMenu*)buildNewTabButtonContextMenu {
@@ -5641,6 +6127,12 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
         NSMakeRect(6.0, y, std::max<CGFloat>(0.0, w - 12.0), kTabRowHeight);
     y += kTabRowHeight + kTabRowSpacing;
   }
+  if (_inlinePlusButton) {
+    y += 2.0;
+    _inlinePlusButton.frame =
+        NSMakeRect(6.0, y, std::max<CGFloat>(0.0, w - 12.0), 30.0);
+    y += 30.0 + 4.0;
+  }
   CGFloat docH = std::max<CGFloat>(_scrollView.bounds.size.height, y + 6.0);
   _tabsDocumentView.frame = NSMakeRect(0.0, 0.0, w, docH);
 }
@@ -5767,7 +6259,310 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
   }
 }
 
+- (void)ensureSpotlightPanelCreated {
+  if (_spotlightPanel) {
+    return;
+  }
+  constexpr CGFloat kW = 580.0;
+  constexpr CGFloat kHeaderH = 52.0;
+
+  _spotlightPanel = [[LightSpotlightOverlayPanel alloc]
+      initWithContentRect:NSMakeRect(0, 0, kW, kHeaderH)
+                styleMask:NSWindowStyleMaskBorderless
+                  backing:NSBackingStoreBuffered
+                    defer:NO];
+  _spotlightPanel.opaque = NO;
+  _spotlightPanel.backgroundColor = [NSColor clearColor];
+  _spotlightPanel.hasShadow = YES;
+  _spotlightPanel.level = NSFloatingWindowLevel;
+  _spotlightPanel.collectionBehavior =
+      NSWindowCollectionBehaviorMoveToActiveSpace;
+  _spotlightPanel.releasedWhenClosed = NO;
+
+  __weak __typeof(self) weakSelf = self;
+  _spotlightPanel.onDismiss = ^{
+    [weakSelf dismissSpotlight];
+  };
+
+  NSView* root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, kW, kHeaderH)];
+  root.wantsLayer = YES;
+  root.layer.cornerRadius = 16.0;
+  root.layer.cornerCurve = kCACornerCurveContinuous;
+  root.layer.masksToBounds = YES;
+  root.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  _spotlightPanel.contentView = root;
+
+  _spotlightGlassView =
+      [[NSGlassEffectView alloc] initWithFrame:root.bounds];
+  _spotlightGlassView.wantsLayer = YES;
+  _spotlightGlassView.cornerRadius = 16.0;
+  _spotlightGlassView.autoresizingMask =
+      NSViewWidthSizable | NSViewHeightSizable;
+  [root addSubview:_spotlightGlassView];
+
+  _spotlightContent =
+      [[LightExpandedUrlContentView alloc] initWithFrame:root.bounds];
+  _spotlightContent.wantsLayer = YES;
+  _spotlightContent.layer.masksToBounds = YES;
+  _spotlightContent.cornerRadius = 16.0;
+  _spotlightContent.autoresizingMask =
+      NSViewWidthSizable | NSViewHeightSizable;
+  _spotlightContent.onLayoutBlock = ^{
+    [weakSelf layoutSpotlightInnerControls];
+  };
+  _spotlightGlassView.contentView = _spotlightContent;
+
+  _spotlightIconView = [[NSImageView alloc] initWithFrame:NSZeroRect];
+  _spotlightIconView.imageScaling = NSImageScaleNone;
+  _spotlightIconView.imageAlignment = NSImageAlignCenter;
+  _spotlightIconView.image =
+      SymbolImage(@"magnifyingglass", 17.0, NSFontWeightMedium);
+  _spotlightIconView.contentTintColor = NSColor.secondaryLabelColor;
+  [_spotlightContent addSubview:_spotlightIconView];
+
+  _spotlightField = [[LightAddressTextField alloc] initWithFrame:NSZeroRect];
+  _spotlightField.bordered = NO;
+  _spotlightField.bezeled = NO;
+  _spotlightField.drawsBackground = NO;
+  _spotlightField.focusRingType = NSFocusRingTypeNone;
+  _spotlightField.font =
+      [NSFont systemFontOfSize:17.0 weight:NSFontWeightRegular];
+  _spotlightField.textColor = NSColor.labelColor;
+  _spotlightField.placeholderString = @"Search or enter address…";
+  _spotlightField.lineBreakMode = NSLineBreakByClipping;
+  _spotlightField.usesSingleLineMode = YES;
+  _spotlightField.cell.scrollable = YES;
+  _spotlightField.cell.wraps = NO;
+  _spotlightField.delegate = self;
+  [_spotlightContent addSubview:_spotlightField];
+
+  _spotlightClearButton =
+      [[LightIconButton alloc] initWithSymbol:@"xmark.circle.fill"
+                                    pointSize:14.0
+                                       weight:NSFontWeightMedium
+                                      toolTip:@"Clear"];
+  _spotlightClearButton.cornerRadius = 12.0;
+  _spotlightClearButton.hidden = YES;
+  _spotlightClearButton.actionBlock = ^{
+    __strong __typeof(weakSelf) s = weakSelf;
+    if (!s) {
+      return;
+    }
+    s->_spotlightField.stringValue = @"";
+    s->_spotlightUserTyped = @"";
+    s->_spotlightSelectedIndex = -1;
+    s->_spotlightClearButton.hidden = YES;
+    if (s->_bridge) {
+      s->_bridge->StartSpotlightZeroSuggest();
+    }
+    [s layoutSpotlightInnerControls];
+    [s->_spotlightPanel makeFirstResponder:s->_spotlightField];
+  };
+  [_spotlightContent addSubview:_spotlightClearButton];
+
+  _spotlightDivider = [[NSBox alloc] initWithFrame:NSZeroRect];
+  _spotlightDivider.boxType = NSBoxCustom;
+  _spotlightDivider.borderWidth = 0.0;
+  _spotlightDivider.fillColor =
+      [NSColor.labelColor colorWithAlphaComponent:0.10];
+  _spotlightDivider.hidden = YES;
+  [_spotlightContent addSubview:_spotlightDivider];
+
+  [self applyGlassMaterialSettings];
+}
+
+- (NSRect)spotlightFrameForSuggestionCount:(NSUInteger)count {
+  constexpr CGFloat kW = 580.0;
+  constexpr CGFloat kHeaderH = 52.0;
+  const CGFloat extraH =
+      count > 0 ? (1.0 + 12.0 + static_cast<CGFloat>(count) * 38.0) : 0.0;
+  const CGFloat totalH = kHeaderH + extraH;
+
+  NSRect ref = _window ? _window.frame : NSScreen.mainScreen.visibleFrame;
+  CGFloat x = std::floor(NSMidX(ref) - kW * 0.5);
+  CGFloat topY = std::floor(NSMinY(ref) + ref.size.height * 0.72);
+  NSScreen* scr = (_window && _window.screen) ? _window.screen : NSScreen.mainScreen;
+  if (scr) {
+    NSRect vf = scr.visibleFrame;
+    topY = std::min<CGFloat>(topY, NSMaxY(vf) - 40.0);
+    if (topY - totalH < NSMinY(vf) + 24.0) {
+      topY = NSMinY(vf) + 24.0 + totalH;
+    }
+  }
+  return NSMakeRect(x, topY - totalH, kW, totalH);
+}
+
+- (void)layoutSpotlightInnerControls {
+  if (!_spotlightContent) {
+    return;
+  }
+  NSRect b = _spotlightContent.bounds;
+  CGFloat w = b.size.width;
+  constexpr CGFloat kHeaderH = 52.0;
+
+  _spotlightIconView.frame = NSMakeRect(16.0, 0.0, 24.0, kHeaderH);
+
+  BOOL hasText = (_spotlightField.stringValue.length > 0);
+  _spotlightClearButton.hidden = !hasText;
+  _spotlightClearButton.frame =
+      NSMakeRect(w - 38.0, std::floor((kHeaderH - 24.0) * 0.5), 24.0, 24.0);
+
+  NSSize fit = [_spotlightField sizeThatFits:NSMakeSize(500.0, kHeaderH)];
+  CGFloat fh = std::ceil(fit.height);
+  CGFloat rightPad = hasText ? 46.0 : 18.0;
+  _spotlightField.frame =
+      NSMakeRect(46.0, std::floor((kHeaderH - fh) * 0.5),
+                 std::max<CGFloat>(0.0, w - 46.0 - rightPad), fh);
+
+  const BOOL showSuggestions = (_spotlightSuggestionItems.count > 0);
+  _spotlightDivider.hidden = !showSuggestions;
+  _spotlightDivider.frame =
+      NSMakeRect(14.0, kHeaderH, std::max<CGFloat>(0.0, w - 28.0), 0.5);
+
+  CGFloat rowY = kHeaderH + 6.0;
+  for (NSUInteger i = 0; i < _spotlightSuggestionRows.count; ++i) {
+    LightSuggestionRowView* row = _spotlightSuggestionRows[i];
+    if (i < _spotlightSuggestionItems.count) {
+      row.hidden = NO;
+      row.frame = NSMakeRect(8.0, rowY, std::max<CGFloat>(0.0, w - 16.0), 36.0);
+      rowY += 38.0;
+    } else {
+      row.hidden = YES;
+    }
+  }
+}
+
+- (void)showSpotlightCommandBar {
+  if (_editingAddress) {
+    [self dismissExpandedAddressBarAnimated:NO];
+  }
+  [self ensureSpotlightPanelCreated];
+  [self applyGlassMaterialSettings];
+
+  _spotlightActive = YES;
+  _spotlightSuggestionItems = @[];
+  _spotlightSelectedIndex = -1;
+  _spotlightUserTyped = @"";
+  _spotlightField.stringValue = @"";
+  _spotlightClearButton.hidden = YES;
+  _spotlightDivider.hidden = YES;
+  for (LightSuggestionRowView* row in _spotlightSuggestionRows) {
+    row.hidden = YES;
+  }
+
+  NSRect frame = [self spotlightFrameForSuggestionCount:0];
+  [_spotlightPanel setFrame:frame display:YES];
+  [self layoutSpotlightInnerControls];
+
+  if (_window && _spotlightPanel.parentWindow != _window) {
+    [_window addChildWindow:_spotlightPanel ordered:NSWindowAbove];
+  }
+  [_spotlightPanel makeKeyAndOrderFront:nil];
+  [_spotlightPanel makeFirstResponder:_spotlightField];
+
+  if (_bridge) {
+    _bridge->StartSpotlightZeroSuggest();
+  }
+}
+
+- (void)dismissSpotlight {
+  if (!_spotlightActive && (!_spotlightPanel || !_spotlightPanel.isVisible)) {
+    return;
+  }
+  _spotlightActive = NO;
+  _spotlightSuggestionItems = @[];
+  _spotlightSelectedIndex = -1;
+  if (_bridge) {
+    _bridge->StopAutocomplete(/*clear_results=*/true);
+  }
+  if (_spotlightPanel) {
+    if (_window && _spotlightPanel.parentWindow == _window) {
+      [_window removeChildWindow:_spotlightPanel];
+    }
+    [_spotlightPanel orderOut:nil];
+  }
+  if (_window) {
+    [_window makeKeyAndOrderFront:nil];
+  }
+}
+
+- (void)acceptSpotlightSuggestionAtIndex:(NSInteger)idx {
+  if (idx < 0 || idx >= static_cast<NSInteger>(_spotlightSuggestionItems.count)) {
+    return;
+  }
+  LightSuggestionItem* item = _spotlightSuggestionItems[idx];
+  if (_bridge) {
+    _bridge->StopAutocomplete(/*clear_results=*/false);
+  }
+  [self dismissSpotlight];
+  if (_bridge) {
+    _bridge->OpenSuggestionItem(item, /*new_tab=*/true);
+  }
+}
+
+- (void)refreshSpotlightSelection {
+  for (NSUInteger i = 0; i < _spotlightSuggestionItems.count; ++i) {
+    [_spotlightSuggestionRows[i]
+        configureWithItem:_spotlightSuggestionItems[i]
+                 selected:(static_cast<NSInteger>(i) ==
+                           _spotlightSelectedIndex)];
+  }
+  NSString* newText =
+      (_spotlightSelectedIndex >= 0 &&
+       _spotlightSelectedIndex <
+           static_cast<NSInteger>(_spotlightSuggestionItems.count))
+          ? (_spotlightSuggestionItems[_spotlightSelectedIndex].fillIntoEdit ?: @"")
+          : (_spotlightUserTyped ?: @"");
+  _spotlightField.stringValue = newText;
+  if (NSText* editor = _spotlightField.currentEditor) {
+    [editor setSelectedRange:NSMakeRange(newText.length, 0)];
+  }
+  [self layoutSpotlightInnerControls];
+}
+
+- (void)applySpotlightSuggestions:(NSArray<LightSuggestionItem*>*)items {
+  if (!_spotlightActive || !_spotlightPanel || !_spotlightPanel.isVisible) {
+    _spotlightSuggestionItems = @[];
+    return;
+  }
+  _spotlightSuggestionItems = items ? [items copy] : @[];
+  if (_spotlightSelectedIndex >=
+      static_cast<NSInteger>(_spotlightSuggestionItems.count)) {
+    _spotlightSelectedIndex = -1;
+  }
+
+  __weak __typeof(self) weakSelf = self;
+  while (_spotlightSuggestionRows.count < _spotlightSuggestionItems.count) {
+    LightSuggestionRowView* row =
+        [[LightSuggestionRowView alloc] initWithFrame:NSZeroRect];
+    row.onClick = ^(NSInteger clickedIdx) {
+      [weakSelf acceptSpotlightSuggestionAtIndex:clickedIdx];
+    };
+    [_spotlightContent addSubview:row];
+    [_spotlightSuggestionRows addObject:row];
+  }
+
+  for (NSUInteger i = 0; i < _spotlightSuggestionItems.count; ++i) {
+    LightSuggestionRowView* row = _spotlightSuggestionRows[i];
+    row.rowIndex = static_cast<NSInteger>(i);
+    [row configureWithItem:_spotlightSuggestionItems[i]
+                  selected:(static_cast<NSInteger>(i) ==
+                            _spotlightSelectedIndex)];
+  }
+
+  NSRect targetFrame =
+      [self spotlightFrameForSuggestionCount:_spotlightSuggestionItems.count];
+  if (!NSEqualRects(_spotlightPanel.frame, targetFrame)) {
+    [_spotlightPanel setFrame:targetFrame display:YES animate:NO];
+  }
+  [self layoutSpotlightInnerControls];
+}
+
 - (void)applyAutocompleteSuggestions:(NSArray<LightSuggestionItem*>*)items {
+  if (_spotlightActive) {
+    [self applySpotlightSuggestions:items];
+    return;
+  }
   if (!_editingAddress || !_expandedUrlGlassView ||
       _expandedUrlGlassView.isHidden) {
     _suggestionItems = @[];
@@ -5945,6 +6740,17 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
 }
 
 - (void)controlTextDidChange:(NSNotification*)obj {
+  if (obj.object == _spotlightField && _spotlightActive) {
+    NSString* currentText = _spotlightField.stringValue ?: @"";
+    _spotlightUserTyped = currentText;
+    _spotlightSelectedIndex = -1;
+    [self layoutSpotlightInnerControls];
+    if (_bridge) {
+      _bridge->StartAutocomplete(base::SysNSStringToUTF16(currentText),
+                                 /*allow_zero_suggest=*/true);
+    }
+    return;
+  }
   if (obj.object == _expandedAddressField) {
     NSString* currentText = _expandedAddressField.stringValue ?: @"";
     _userTypedAddressString = currentText;
@@ -5957,6 +6763,9 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
 }
 
 - (void)controlTextDidEndEditing:(NSNotification*)obj {
+  if (obj.object == _spotlightField) {
+    return;
+  }
   if (obj.object == _expandedAddressField && _editingAddress) {
     if (CACurrentMediaTime() < _ignoreEndEditingUntil &&
         _window.isKeyWindow) {
@@ -5964,7 +6773,8 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
       return;
     }
     [self dismissExpandedAddressBarAnimated:YES];
-    if (!_pinned && !_settingsPreviewForceOpen && _sidebarVisible) {
+    if (!_pinned && !_settingsPreviewForceOpen && _extensionPopupCount == 0 &&
+        _sidebarVisible) {
       [self ensureHoverWatchTimerRunning];
     }
   }
@@ -5973,6 +6783,59 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
 - (BOOL)control:(NSControl*)control
                textView:(NSTextView*)textView
     doCommandBySelector:(SEL)commandSelector {
+  if (control == _spotlightField && _spotlightActive) {
+    if (commandSelector == @selector(moveDown:)) {
+      if (_spotlightSuggestionItems.count > 0) {
+        if (_spotlightSelectedIndex + 1 <
+            static_cast<NSInteger>(_spotlightSuggestionItems.count)) {
+          _spotlightSelectedIndex += 1;
+        } else {
+          _spotlightSelectedIndex = -1;
+        }
+        [self refreshSpotlightSelection];
+        return YES;
+      }
+    }
+    if (commandSelector == @selector(moveUp:)) {
+      if (_spotlightSuggestionItems.count > 0) {
+        if (_spotlightSelectedIndex >= 0) {
+          _spotlightSelectedIndex -= 1;
+        } else {
+          _spotlightSelectedIndex =
+              static_cast<NSInteger>(_spotlightSuggestionItems.count) - 1;
+        }
+        [self refreshSpotlightSelection];
+        return YES;
+      }
+    }
+    if (commandSelector == @selector(insertNewline:)) {
+      if (_spotlightSelectedIndex >= 0 &&
+          _spotlightSelectedIndex <
+              static_cast<NSInteger>(_spotlightSuggestionItems.count)) {
+        [self acceptSpotlightSuggestionAtIndex:_spotlightSelectedIndex];
+        return YES;
+      }
+      NSString* input = _spotlightField.stringValue ?: @"";
+      [self dismissSpotlight];
+      if (_bridge) {
+        NSString* trimmed = [input
+            stringByTrimmingCharactersInSet:
+                NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if (trimmed.length > 0) {
+          _bridge->NavigateToInput(base::SysNSStringToUTF16(trimmed),
+                                   /*new_tab=*/true);
+        } else {
+          _bridge->CreateNewTab();
+        }
+      }
+      return YES;
+    }
+    if (commandSelector == @selector(cancelOperation:)) {
+      [self dismissSpotlight];
+      return YES;
+    }
+    return NO;
+  }
   if (commandSelector == @selector(moveDown:)) {
     if (_suggestionItems.count == 0 && _bridge &&
         _expandedAddressField.stringValue.length > 0) {
@@ -6301,13 +7164,25 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
     BOOL isLoading = data.network_state == tabs::TabNetworkState::kWaiting ||
                      data.network_state == tabs::TabNetworkState::kLoading;
 
+    NSString* containerSym = nil;
+    NSColor* containerCol = nil;
+    if (content::WebContents* wc = model->GetWebContentsAt(i)) {
+      std::string cid = LightGetTabContainerIdForWebContents(wc);
+      if (auto container = LightFindTabContainer(cid)) {
+        containerSym = base::SysUTF8ToNSString(container->symbol);
+        containerCol = SidebarColorFromHex(container->color_hex);
+      }
+    }
+
     LightTabRowView* row = _tabRowViews[u];
     row.tabIndex = i;
     [row configureWithTitle:title
                     favicon:extractFavicon(data)
                   isLoading:isLoading
                    selected:(i == activeIndex)
-                     pinned:NO];
+                     pinned:NO
+            containerSymbol:containerSym
+             containerColor:containerCol];
   }
 
   [self layoutTabRows];
@@ -6352,6 +7227,80 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
       LightGlassSidebarObjCController* ctrl =
           (LightGlassSidebarObjCController*)obj;
       [ctrl cancelConfirmQuit];
+    }
+  }
+}
+
+@end
+
+@interface LightExtensionsMenuBridge : NSObject
++ (void)populateExtensionsMenu:(NSMenu*)menu;
+@end
+
+@implementation LightExtensionsMenuBridge
+
++ (void)populateExtensionsMenu:(NSMenu*)menu {
+  if (@available(macOS 26.0, *)) {
+    LightGlassSidebarObjCController* target = nil;
+    NSWindow* keyWin = NSApp.keyWindow ?: NSApp.mainWindow;
+    for (id obj in ActiveSidebarControllers()) {
+      LightGlassSidebarObjCController* ctrl =
+          (LightGlassSidebarObjCController*)obj;
+      if (ctrl.targetWindow == keyWin) {
+        target = ctrl;
+        break;
+      }
+      if (!target && ctrl.targetWindow.isVisible) {
+        target = ctrl;
+      }
+    }
+    if (target) {
+      [target populateExtensionsMenu:menu];
+    }
+  }
+}
+
+@end
+
+@interface LightSidebarExtensionPopupBridge : NSObject
++ (NSValue*)beginExtensionPopupForWindow:(NSWindow*)window;
++ (void)endExtensionPopupForWindow:(NSWindow*)window;
+@end
+
+@implementation LightSidebarExtensionPopupBridge
+
++ (LightGlassSidebarObjCController*)controllerForWindow:(NSWindow*)window
+    API_AVAILABLE(macos(26.0)) {
+  NSWindow* targetWin = window ?: (NSApp.keyWindow ?: NSApp.mainWindow);
+  LightGlassSidebarObjCController* fallback = nil;
+  for (id obj in ActiveSidebarControllers()) {
+    LightGlassSidebarObjCController* ctrl =
+        (LightGlassSidebarObjCController*)obj;
+    if (ctrl.targetWindow == targetWin) {
+      return ctrl;
+    }
+    if (!fallback && ctrl.targetWindow.isVisible) {
+      fallback = ctrl;
+    }
+  }
+  return fallback;
+}
+
++ (NSValue*)beginExtensionPopupForWindow:(NSWindow*)window {
+  if (@available(macOS 26.0, *)) {
+    LightGlassSidebarObjCController* ctrl = [self controllerForWindow:window];
+    if (ctrl) {
+      return [NSValue valueWithRect:[ctrl beginExtensionPopup]];
+    }
+  }
+  return [NSValue valueWithRect:NSZeroRect];
+}
+
++ (void)endExtensionPopupForWindow:(NSWindow*)window {
+  if (@available(macOS 26.0, *)) {
+    LightGlassSidebarObjCController* ctrl = [self controllerForWindow:window];
+    if (ctrl) {
+      [ctrl endExtensionPopup];
     }
   }
 }

@@ -39,6 +39,10 @@
 #include "third_party/blink/public/common/features_generated.h"
 #include "url/origin.h"
 
+#if BUILDFLAG(IS_MAC)
+#include "chrome/browser/ui/views/frame/light_glass_modal_mac.h"
+#endif
+
 namespace {
 
 BrowserWindowInterface* GetBrowser(content::WebContents* web_contents) {
@@ -254,10 +258,17 @@ std::unique_ptr<permissions::PermissionPrompt> CreateNormalPrompt(
                ? std::make_unique<EmbeddedPermissionPrompt>(web_contents,
                                                             delegate)
                : nullptr;
-  } else if (ShouldUseChip(web_contents, delegate) &&
-             IsLocationBarDisplayed(web_contents)) {
-    return std::make_unique<PermissionPromptChip>(web_contents, delegate);
   } else {
+#if BUILDFLAG(IS_MAC)
+    if (auto glass_prompt =
+            LightCreateGlassPermissionPrompt(web_contents, delegate)) {
+      return glass_prompt;
+    }
+#endif
+    if (ShouldUseChip(web_contents, delegate) &&
+        IsLocationBarDisplayed(web_contents)) {
+      return std::make_unique<PermissionPromptChip>(web_contents, delegate);
+    }
     return std::make_unique<PermissionPromptBubble>(web_contents, delegate);
   }
 }

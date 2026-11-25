@@ -7,6 +7,7 @@
 #import <QuartzCore/QuartzCore.h>
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 #include <vector>
 
@@ -63,13 +64,14 @@ NSMenuItem* GetMenuItemByID(ui::MenuModel* model,
   return nil;
 }
 
-constexpr CGFloat kPinnedTileHeight = 38.0;
-constexpr CGFloat kPinnedTileMinWidth = 44.0;
-constexpr CGFloat kPinnedTileGap = 6.0;
-constexpr CGFloat kPinnedTileRadius = 10.0;
-constexpr CGFloat kPinnedIconPointSize = 17.0;
-constexpr CGFloat kPinnedPaddingX = 14.0;
-constexpr CGFloat kPinnedPaddingY = 7.0;
+constexpr CGFloat kPinnedTileHeight = 30.0;
+constexpr CGFloat kPinnedTileMinWidth = 34.0;
+constexpr CGFloat kPinnedTileGap = 5.0;
+constexpr CGFloat kPinnedTileRadius = 8.0;
+constexpr CGFloat kPinnedIconBasePointSize = 13.5;
+constexpr CGFloat kPinnedIconMinPointSize = 11.0;
+constexpr CGFloat kPinnedPaddingX = 8.0;
+constexpr CGFloat kPinnedPaddingY = 5.0;
 
 NSString* SymbolForCommand(int command_id) {
   switch (command_id) {
@@ -472,10 +474,13 @@ void RemoveCommandsAndSqueezeSeparators(NSMenu* menu,
 @property(nonatomic, copy) void (^onClick)(void);
 @property(nonatomic, readonly, getter=isTileEnabled) BOOL tileEnabled;
 - (instancetype)initWithSymbol:(NSString*)symbol enabled:(BOOL)enabled;
+- (void)updateIconPointSize:(CGFloat)pointSize;
 - (void)clearHover;
 @end
 
 @implementation LightCtxPinnedTileView {
+  NSString* __strong _symbolName;
+  CGFloat _currentPointSize;
   NSImageView* __strong _icon;
   NSTrackingArea* __strong _trackingArea;
   id __strong _mouseMonitor;
@@ -491,6 +496,8 @@ void RemoveCommandsAndSqueezeSeparators(NSMenu* menu,
   self = [super
       initWithFrame:NSMakeRect(0, 0, kPinnedTileMinWidth, kPinnedTileHeight)];
   if (self) {
+    _symbolName = [symbol copy];
+    _currentPointSize = 0.0;
     _tileEnabled = enabled;
     self.wantsLayer = YES;
     self.layer.cornerRadius = kPinnedTileRadius;
@@ -499,22 +506,14 @@ void RemoveCommandsAndSqueezeSeparators(NSMenu* menu,
     self.layer.backgroundColor =
         [NSColor.whiteColor colorWithAlphaComponent:0.12].CGColor;
 
-    NSImage* image =
-        [NSImage imageWithSystemSymbolName:symbol accessibilityDescription:nil];
-    NSImageSymbolConfiguration* config = [NSImageSymbolConfiguration
-        configurationWithPointSize:kPinnedIconPointSize
-                            weight:NSFontWeightMedium];
-    image = [image imageWithSymbolConfiguration:config];
-    [image setTemplate:YES];
-
     _icon = [[NSImageView alloc] initWithFrame:self.bounds];
-    _icon.image = image;
     _icon.contentTintColor = NSColor.labelColor;
     _icon.imageScaling = NSImageScaleNone;
     _icon.imageAlignment = NSImageAlignCenter;
     _icon.alphaValue = enabled ? 1.0 : 0.4;
     _icon.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     [self addSubview:_icon];
+    [self updateIconPointSize:kPinnedIconBasePointSize];
 
     __weak LightCtxPinnedTileView* weakSelf = self;
     _windowObserver = [NSNotificationCenter.defaultCenter
@@ -533,6 +532,21 @@ void RemoveCommandsAndSqueezeSeparators(NSMenu* menu,
                 }];
   }
   return self;
+}
+
+- (void)updateIconPointSize:(CGFloat)pointSize {
+  if (std::abs(_currentPointSize - pointSize) < 0.25 || !_symbolName) {
+    return;
+  }
+  _currentPointSize = pointSize;
+  NSImage* image = [NSImage imageWithSystemSymbolName:_symbolName
+                             accessibilityDescription:nil];
+  NSImageSymbolConfiguration* config = [NSImageSymbolConfiguration
+      configurationWithPointSize:pointSize
+                          weight:NSFontWeightMedium];
+  image = [image imageWithSymbolConfiguration:config];
+  [image setTemplate:YES];
+  _icon.image = image;
 }
 
 - (void)dealloc {
@@ -693,12 +707,23 @@ void RemoveCommandsAndSqueezeSeparators(NSMenu* menu,
     return;
   }
   const CGFloat gaps = count > 1 ? (count - 1) * kPinnedTileGap : 0;
-  const CGFloat content = width - 2 * kPinnedPaddingX;
+  // Shrink horizontal padding and icon size proportionally as menu width narrows.
+  const CGFloat padX = std::clamp<CGFloat>(width * 0.04, 5.0, kPinnedPaddingX);
+  const CGFloat content = width - 2 * padX;
   const CGFloat tileWidth = MAX((content - gaps) / count, kPinnedTileMinWidth);
   const CGFloat rowWidth = tileWidth * count + gaps;
-  CGFloat x = kPinnedPaddingX + floor((content - rowWidth) / 2);
+  const CGFloat padRatio =
+      std::clamp<CGFloat>((padX - 5.0) / (kPinnedPaddingX - 5.0), 0.0, 1.0);
+  const CGFloat tileRatio =
+      std::clamp<CGFloat>((tileWidth - kPinnedTileMinWidth) / 28.0, 0.0, 1.0);
+  const CGFloat scale = std::min<CGFloat>(padRatio, tileRatio);
+  const CGFloat iconSize =
+      kPinnedIconMinPointSize +
+      (kPinnedIconBasePointSize - kPinnedIconMinPointSize) * scale;
+  CGFloat x = padX + floor((content - rowWidth) / 2);
   for (LightCtxPinnedTileView* tile in _tiles) {
     tile.frame = NSMakeRect(x, kPinnedPaddingY, tileWidth, kPinnedTileHeight);
+    [tile updateIconPointSize:iconSize];
     x += tileWidth + kPinnedTileGap;
   }
 }

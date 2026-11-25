@@ -41,6 +41,10 @@
 #include "chrome/browser/ui/views/extensions/extension_post_install_dialog_view_utils.h"
 #endif
 
+#if BUILDFLAG(IS_MAC)
+#include "chrome/browser/ui/views/frame/light_glass_modal_mac.h"
+#endif
+
 namespace extensions {
 
 namespace {
@@ -148,6 +152,46 @@ void ShowExtensionPostInstallDialog(
   if (!native_window) {
     return;
   }
+
+#if BUILDFLAG(IS_MAC)
+  {
+    std::u16string extension_name =
+        extensions::ui_util::GetFixupExtensionNameForUIDisplay(
+            delegate->model()->extension_name());
+    base::i18n::AdjustStringForLocaleDirection(&extension_name);
+    std::u16string title = l10n_util::GetStringFUTF16(
+        IDS_EXTENSION_INSTALLED_HEADING, extension_name);
+    std::vector<std::u16string> paragraphs;
+    if (delegate->model()->show_how_to_use()) {
+      paragraphs.push_back(delegate->model()->GetHowToUseText());
+    }
+    if (delegate->model()->show_how_to_manage()) {
+      paragraphs.push_back(
+          l10n_util::GetStringUTF16(IDS_EXTENSION_INSTALLED_MANAGE_INFO));
+    }
+    base::OnceClosure shortcuts_cb;
+    if (delegate->model()->show_key_binding()) {
+      shortcuts_cb = base::BindOnce(&extensions::OpenExtensionsShortcutsPage,
+                                    web_contents->GetWeakPtr());
+    }
+    base::OnceClosure closed_cb;
+    if (!show_iph_callback.is_null()) {
+      closed_cb = base::BindOnce(
+          [](base::OnceCallback<void(base::WeakPtr<content::WebContents>)> cb,
+             base::WeakPtr<content::WebContents> wc) {
+            base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+                FROM_HERE, base::BindOnce(std::move(cb), wc));
+          },
+          std::move(show_iph_callback), web_contents->GetWeakPtr());
+    }
+    if (LightShowGlassExtensionPostInstallPopup(
+            native_window, title, paragraphs,
+            delegate->model()->MakeIconOfSize(kMaxIconSize),
+            std::move(shortcuts_cb), std::move(closed_cb))) {
+      return;
+    }
+  }
+#endif
 
   auto* weak_delegate = delegate.get();
 

@@ -18,6 +18,10 @@
 #include "ui/base/models/dialog_model.h"
 #include "ui/gfx/image/image_skia_operations.h"
 
+#if BUILDFLAG(IS_MAC)
+#include "chrome/browser/ui/views/frame/light_glass_modal_mac.h"
+#endif
+
 static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 namespace {
@@ -51,6 +55,9 @@ class ExtensionUninstallDialogImpl
   // to the dialog after it's been closed, as well as preventing multiple
   // reports of OnDialogClosed.
   raw_ptr<ui::DialogModel> dialog_model_ = nullptr;
+#if BUILDFLAG(IS_MAC)
+  void* light_glass_handle_ = nullptr;
+#endif
 
   // WeakPtrs because the associated dialog may outlive |this|, which is owned
   // by the caller of extensions::ExtensionsUninstallDialog::Create().
@@ -64,6 +71,13 @@ ExtensionUninstallDialogImpl::ExtensionUninstallDialogImpl(
     : extensions::ExtensionUninstallDialog(profile, parent, delegate) {}
 
 ExtensionUninstallDialogImpl::~ExtensionUninstallDialogImpl() {
+#if BUILDFLAG(IS_MAC)
+  if (light_glass_handle_) {
+    void* handle = light_glass_handle_;
+    light_glass_handle_ = nullptr;
+    LightCloseGlassExtensionUninstallPopup(handle);
+  }
+#endif
   if (dialog_model_) {
     dialog_model_->host()->Close();
   }
@@ -71,6 +85,58 @@ ExtensionUninstallDialogImpl::~ExtensionUninstallDialogImpl() {
 }
 
 void ExtensionUninstallDialogImpl::Show() {
+#if BUILDFLAG(IS_MAC)
+  {
+    std::u16string title = l10n_util::GetStringFUTF16(
+        IDS_EXTENSION_PROMPT_UNINSTALL_TITLE,
+        extensions::ui_util::GetFixupExtensionNameForUIDisplay(
+            extension()->name()));
+    std::u16string subtitle;
+    if (triggering_extension()) {
+      subtitle = l10n_util::GetStringFUTF16(
+          IDS_EXTENSION_PROMPT_UNINSTALL_TRIGGERED_BY_EXTENSION,
+          extensions::ui_util::GetFixupExtensionNameForUIDisplay(
+              triggering_extension()->name()));
+    }
+    std::u16string checkbox_label;
+    if (ShouldShowCheckbox()) {
+      checkbox_label =
+          triggering_extension()
+              ? l10n_util::GetStringFUTF16(
+                    IDS_EXTENSION_PROMPT_UNINSTALL_REPORT_ABUSE_FROM_EXTENSION,
+                    extensions::ui_util::GetFixupExtensionNameForUIDisplay(
+                        extension()->name()))
+              : l10n_util::GetStringUTF16(
+                    IDS_EXTENSION_PROMPT_UNINSTALL_REPORT_ABUSE);
+    }
+    gfx::ImageSkia resized = gfx::ImageSkiaOperations::CreateResizedImage(
+        icon(), skia::ImageOperations::ResizeMethod::RESIZE_GOOD,
+        gfx::Size(extension_misc::EXTENSION_ICON_SMALL,
+                  extension_misc::EXTENSION_ICON_SMALL));
+    light_glass_handle_ = LightShowGlassExtensionUninstallPopup(
+        parent(), title, subtitle, checkbox_label, resized,
+        base::BindOnce(
+            [](base::WeakPtr<ExtensionUninstallDialogImpl> self, bool accepted,
+               bool checkbox_checked) {
+              if (!self) {
+                return;
+              }
+              self->light_glass_handle_ = nullptr;
+              if (accepted) {
+                self->OnDialogClosed(
+                    checkbox_checked
+                        ? CLOSE_ACTION_UNINSTALL_AND_CHECKBOX_CHECKED
+                        : CLOSE_ACTION_UNINSTALL);
+              } else {
+                self->OnDialogClosed(CLOSE_ACTION_CANCELED);
+              }
+            },
+            weak_ptr_factory_.GetWeakPtr()));
+    if (light_glass_handle_) {
+      return;
+    }
+  }
+#endif
   ui::DialogModel::Builder dialog_builder;
   dialog_builder.SetInternalName("ExtensionUninstallDialog")
       .SetTitle(l10n_util::GetStringFUTF16(
@@ -128,6 +194,14 @@ void ExtensionUninstallDialogImpl::Show() {
 }
 
 void ExtensionUninstallDialogImpl::Close() {
+#if BUILDFLAG(IS_MAC)
+  if (light_glass_handle_) {
+    void* handle = light_glass_handle_;
+    light_glass_handle_ = nullptr;
+    LightCloseGlassExtensionUninstallPopup(handle);
+    return;
+  }
+#endif
   CHECK(dialog_model_, base::NotFatalUntil::M162);
   dialog_model_->host()->Close();
 }

@@ -304,6 +304,9 @@ void BrowserNativeWidgetMac::GetWindowFrameTitlebarHeight(
 }
 
 std::optional<int> BrowserNativeWidgetMac::GetGlassFrameHeight() const {
+  if (light_sidebar_bridge_) {
+    return std::nullopt;
+  }
   // If vertical tabs are being drawn, the glass effect view is not restricted
   // vertically to top chrome (it spans full height).
   if (!browser_view_ || browser_view_->ShouldDrawVerticalTabStrip()) {
@@ -327,6 +330,9 @@ std::optional<int> BrowserNativeWidgetMac::GetGlassFrameHeight() const {
 }
 
 std::optional<int> BrowserNativeWidgetMac::GetGlassFrameWidth() const {
+  if (light_sidebar_bridge_) {
+    return std::nullopt;
+  }
   // If vertical tabs are not being drawn (e.g. horizontal tab strip mode,
   // popup/app windows, or window too narrow to render vertical tabs), the glass
   // effect view spans the full window width without horizontal restriction.
@@ -706,17 +712,7 @@ bool BrowserNativeWidgetMac::ExecuteCommand(
       return true;
     }
     if (command == IDC_NEW_TAB) {
-      chrome::NewTab(browser, NewTabTypes::kNewTabCommand);
-      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-          FROM_HERE,
-          base::BindOnce(
-              [](base::WeakPtr<BrowserView> bv,
-                 LightGlassSidebarBridge* bridge) {
-                if (bv && bridge) {
-                  bridge->FocusAddressBar(/*select_all=*/true);
-                }
-              },
-              browser_view_->GetAsWeakPtr(), light_sidebar_bridge_.get()));
+      light_sidebar_bridge_->ShowSpotlightCommandBar();
       return true;
     }
     if (command == IDC_TOGGLE_VERTICAL_TABS ||
@@ -1298,8 +1294,11 @@ void BrowserNativeWidgetMac::UpdateBackgroundColor() {
   has_multiple_profiles_open_ = are_multiple_profiles_open;
 
   const double tint_opacity =
-      GetGlassFrameTintOpacity(color_utils::IsDark(theme_color),
-                               is_vertical_tabs, has_multiple_profiles_open_);
+      light_sidebar_bridge_
+          ? 0.08
+          : GetGlassFrameTintOpacity(color_utils::IsDark(theme_color),
+                                     is_vertical_tabs,
+                                     are_multiple_profiles_open);
 
   const CGFloat r = SkColorGetR(theme_color) / 255.0;
   const CGFloat g = SkColorGetG(theme_color) / 255.0;

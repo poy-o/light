@@ -14,11 +14,20 @@
 #include <utility>
 #include <variant>
 
+#include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/extension_install_prompt.h"
 #include "chrome/browser/extensions/extension_install_prompt_show_params.h"
 #include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
+#include "components/permissions/permission_prompt.h"
+#include "components/permissions/permission_request.h"
+#include "components/permissions/permission_util.h"
+#include "components/permissions/request_type.h"
+#include "components/url_formatter/elide_url.h"
+#include "content/public/browser/web_contents.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia_util_mac.h"
 #include "ui/views/bubble/bubble_frame_view.h"
@@ -31,14 +40,84 @@
 
 namespace {
 
-NSView* MakeLiquidGlassBackdrop(NSRect bounds, CGFloat cornerRadius) {
+constexpr CGFloat kModalCornerRadius = 15.0;
+
+bool ModalUDBool(NSString* key, bool fallback) {
+  NSObject* obj = [NSUserDefaults.standardUserDefaults objectForKey:key];
+  if ([obj isKindOfClass:[NSNumber class]]) {
+    return [(NSNumber*)obj boolValue];
+  }
+  return fallback;
+}
+
+double ModalUDDouble(NSString* key, double fallback) {
+  NSObject* obj = [NSUserDefaults.standardUserDefaults objectForKey:key];
+  if ([obj isKindOfClass:[NSNumber class]]) {
+    return [(NSNumber*)obj doubleValue];
+  }
+  return fallback;
+}
+
+NSInteger ModalUDInt(NSString* key, NSInteger fallback) {
+  NSObject* obj = [NSUserDefaults.standardUserDefaults objectForKey:key];
+  if ([obj isKindOfClass:[NSNumber class]]) {
+    return [(NSNumber*)obj integerValue];
+  }
+  return fallback;
+}
+
+void ApplyAdaptiveGlassSettingsToView(NSView* view, CGFloat extraTintAlpha) {
+  if (@available(macOS 26.0, *)) {
+    if (![view isKindOfClass:[NSGlassEffectView class]]) {
+      return;
+    }
+    NSGlassEffectView* glass = (NSGlassEffectView*)view;
+    NSInteger styleIdx =
+        std::clamp<NSInteger>(ModalUDInt(@"LightSidebarGlassStyle", 0), 0, 1);
+    glass.style = (styleIdx == 1) ? NSGlassEffectViewStyleClear
+                                  : NSGlassEffectViewStyleRegular;
+
+    NSInteger adaptiveVal = std::clamp<NSInteger>(
+        ModalUDInt(@"LightSidebarGlassAdaptive", 2), 0, 2);
+    SEL adaptiveSel = NSSelectorFromString(@"set_adaptiveAppearance:");
+    if ([glass respondsToSelector:adaptiveSel]) {
+      [glass setValue:@(adaptiveVal) forKey:@"_adaptiveAppearance"];
+    }
+
+    if (@available(macOS 27.0, *)) {
+      BOOL interactive = ModalUDBool(@"LightSidebarGlassInteractive", true);
+      glass.effectIsInteractive = interactive;
+    }
+
+    CGFloat tintAlphaPct = std::clamp<CGFloat>(
+        ModalUDDouble(@"LightSidebarTintAlpha", 4.0), 0.0, 100.0);
+    CGFloat tr =
+        std::clamp<CGFloat>(ModalUDDouble(@"LightSidebarTintR", 1.0), 0.0, 1.0);
+    CGFloat tg =
+        std::clamp<CGFloat>(ModalUDDouble(@"LightSidebarTintG", 1.0), 0.0, 1.0);
+    CGFloat tb =
+        std::clamp<CGFloat>(ModalUDDouble(@"LightSidebarTintB", 1.0), 0.0, 1.0);
+    CGFloat alpha =
+        std::clamp<CGFloat>((tintAlphaPct / 100.0) + extraTintAlpha, 0.0, 0.90);
+    if (alpha <= 0.005) {
+      glass.tintColor = nil;
+    } else {
+      glass.tintColor =
+          [NSColor colorWithSRGBRed:tr green:tg blue:tb alpha:alpha];
+    }
+  }
+}
+
+NSView* MakeLiquidGlassBackdrop(NSRect bounds,
+                                CGFloat cornerRadius,
+                                CGFloat extraTintAlpha = 0.03) {
   if (@available(macOS 26.0, *)) {
     NSGlassEffectView* glass = [[NSGlassEffectView alloc] initWithFrame:bounds];
     glass.wantsLayer = YES;
-    glass.style = NSGlassEffectViewStyleRegular;
     glass.cornerRadius = cornerRadius;
-    glass.tintColor = [NSColor colorWithWhite:1.0 alpha:0.06];
+    glass.layer.borderWidth = 0.0;
     glass.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    ApplyAdaptiveGlassSettingsToView(glass, extraTintAlpha);
     return glass;
   }
   NSVisualEffectView* vfx = [[NSVisualEffectView alloc] initWithFrame:bounds];
@@ -49,8 +128,68 @@ NSView* MakeLiquidGlassBackdrop(NSRect bounds, CGFloat cornerRadius) {
   vfx.layer.cornerRadius = cornerRadius;
   vfx.layer.cornerCurve = kCACornerCurveContinuous;
   vfx.layer.masksToBounds = YES;
+  vfx.layer.borderWidth = 0.0;
   vfx.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   return vfx;
+}
+
+NSRect BeginSidebarExtensionPopup(NSWindow* parentWindow) {
+  Class bridgeCls = NSClassFromString(@"LightSidebarExtensionPopupBridge");
+  SEL sel = NSSelectorFromString(@"beginExtensionPopupForWindow:");
+  if (bridgeCls && [bridgeCls respondsToSelector:sel]) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+    id val = [bridgeCls performSelector:sel withObject:parentWindow];
+#pragma clang diagnostic pop
+    if ([val isKindOfClass:[NSValue class]]) {
+      return [(NSValue*)val rectValue];
+    }
+  }
+  return NSZeroRect;
+}
+
+void EndSidebarExtensionPopup(NSWindow* parentWindow) {
+  Class bridgeCls = NSClassFromString(@"LightSidebarExtensionPopupBridge");
+  SEL sel = NSSelectorFromString(@"endExtensionPopupForWindow:");
+  if (bridgeCls && [bridgeCls respondsToSelector:sel]) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+    [bridgeCls performSelector:sel withObject:parentWindow];
+#pragma clang diagnostic pop
+  }
+}
+
+NSRect FrameAnchoredToSidebarRight(NSWindow* parentWindow,
+                                   NSRect sidebarAnchorRect,
+                                   CGFloat width,
+                                   CGFloat height) {
+  NSRect frame = NSMakeRect(0, 0, width, height);
+  if (!NSIsEmptyRect(sidebarAnchorRect)) {
+    frame.origin.x = std::floor(NSMaxX(sidebarAnchorRect) + 10.0);
+    frame.origin.y = std::floor(NSMaxY(sidebarAnchorRect) - height + 4.0);
+  } else if (parentWindow) {
+    NSRect pf = parentWindow.frame;
+    frame.origin.x = std::floor(NSMinX(pf) + 270.0);
+    frame.origin.y = std::floor(NSMaxY(pf) - height - 48.0);
+  }
+  NSScreen* scr =
+      (parentWindow && parentWindow.screen) ? parentWindow.screen : NSScreen.mainScreen;
+  if (scr) {
+    NSRect vf = scr.visibleFrame;
+    if (NSMaxX(frame) > NSMaxX(vf) - 12.0) {
+      frame.origin.x = std::floor(NSMaxX(vf) - width - 12.0);
+    }
+    if (NSMinX(frame) < NSMinX(vf) + 12.0) {
+      frame.origin.x = std::floor(NSMinX(vf) + 12.0);
+    }
+    if (NSMinY(frame) < NSMinY(vf) + 12.0) {
+      frame.origin.y = std::floor(NSMinY(vf) + 12.0);
+    }
+    if (NSMaxY(frame) > NSMaxY(vf) - 12.0) {
+      frame.origin.y = std::floor(NSMaxY(vf) - height - 12.0);
+    }
+  }
+  return frame;
 }
 
 void ClearViewsBackgroundsRecursively(views::View* view) {
@@ -128,16 +267,18 @@ void LightApplyLiquidGlassToWidget(views::Widget* widget, float corner_radius) {
   if ((self = [super initWithFrame:NSZeroRect])) {
     _primary = primary;
     self.wantsLayer = YES;
-    self.layer.cornerRadius = 15.0;
+    self.layer.cornerRadius = 10.0;
     self.layer.cornerCurve = kCACornerCurveContinuous;
     self.layer.masksToBounds = YES;
+    self.layer.borderWidth = 0.0;
 
     _label = [NSTextField labelWithString:title];
     _label.font = [NSFont systemFontOfSize:13.0
                                     weight:(primary ? NSFontWeightSemibold
                                                     : NSFontWeightMedium)];
     _label.alignment = NSTextAlignmentCenter;
-    _label.textColor = primary ? NSColor.whiteColor : NSColor.labelColor;
+    _label.textColor =
+        primary ? [NSColor colorWithWhite:0.08 alpha:1.0] : NSColor.labelColor;
     _label.focusRingType = NSFocusRingTypeNone;
     [self addSubview:_label];
     [self updateAppearance];
@@ -147,17 +288,17 @@ void LightApplyLiquidGlassToWidget(views::Widget* widget, float corner_radius) {
 
 - (void)updateAppearance {
   if (_primary) {
-    NSColor* accent = NSColor.controlAccentColor;
-    CGFloat alpha = _pressed ? 0.80 : (_hovered ? 0.92 : 1.0);
-    self.layer.backgroundColor = [accent colorWithAlphaComponent:alpha].CGColor;
+    CGFloat alpha = _pressed ? 0.80 : (_hovered ? 1.0 : 0.93);
+    self.layer.backgroundColor =
+        [NSColor.whiteColor colorWithAlphaComponent:alpha].CGColor;
     self.layer.borderWidth = 0.0;
+    self.layer.borderColor = nil;
   } else {
     CGFloat alpha = _pressed ? 0.22 : (_hovered ? 0.16 : 0.10);
     self.layer.backgroundColor =
         [NSColor.labelColor colorWithAlphaComponent:alpha].CGColor;
-    self.layer.borderColor =
-        [NSColor.labelColor colorWithAlphaComponent:0.14].CGColor;
-    self.layer.borderWidth = 0.5;
+    self.layer.borderWidth = 0.0;
+    self.layer.borderColor = nil;
   }
 }
 
@@ -214,15 +355,23 @@ void LightApplyLiquidGlassToWidget(views::Widget* widget, float corner_radius) {
 @interface LightGlassExtensionInstallPanel : NSPanel
 @property(nonatomic, copy) void (^onCancel)(void);
 @property(nonatomic, copy) void (^onAccept)(void);
+@property(nonatomic, assign) BOOL dismissOnOutsideClick;
+@property(nonatomic, weak) NSView* adaptiveGlassView;
+@property(nonatomic, assign) CGFloat extraGlassTint;
 - (void)installKeyMonitor;
 - (void)removeKeyMonitor;
 @end
 
 @implementation LightGlassExtensionInstallPanel {
   id __strong _keyMonitor;
+  id __strong _clickMonitor;
+  id __strong _settingsObserver;
 }
 @synthesize onCancel = _onCancel;
 @synthesize onAccept = _onAccept;
+@synthesize dismissOnOutsideClick = _dismissOnOutsideClick;
+@synthesize adaptiveGlassView = _adaptiveGlassView;
+@synthesize extraGlassTint = _extraGlassTint;
 
 - (BOOL)canBecomeKeyWindow {
   return NO;
@@ -233,38 +382,77 @@ void LightApplyLiquidGlassToWidget(views::Widget* widget, float corner_radius) {
 }
 
 - (void)installKeyMonitor {
-  if (_keyMonitor) {
-    return;
+  if (!_settingsObserver) {
+    __weak __typeof(self) weakSelf = self;
+    _settingsObserver = [NSNotificationCenter.defaultCenter
+        addObserverForName:@"LightSettingsDidChangeNotification"
+                    object:nil
+                     queue:NSOperationQueue.mainQueue
+                usingBlock:^(NSNotification* note) {
+                  __strong __typeof(weakSelf) s = weakSelf;
+                  if (s && s.adaptiveGlassView) {
+                    ApplyAdaptiveGlassSettingsToView(s.adaptiveGlassView,
+                                                     s.extraGlassTint);
+                  }
+                }];
   }
-  __weak __typeof(self) weakSelf = self;
-  _keyMonitor = [NSEvent
-      addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown
-                                   handler:^NSEvent*(NSEvent* event) {
-                                     __strong __typeof(weakSelf) s = weakSelf;
-                                     if (!s || !s.isVisible) {
-                                       return event;
-                                     }
-                                     if (event.keyCode == 53) {  // Escape
-                                       if (s.onCancel) {
-                                         s.onCancel();
+  if (!_keyMonitor) {
+    __weak __typeof(self) weakSelf = self;
+    _keyMonitor = [NSEvent
+        addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown
+                                     handler:^NSEvent*(NSEvent* event) {
+                                       __strong __typeof(weakSelf) s = weakSelf;
+                                       if (!s || !s.isVisible) {
+                                         return event;
                                        }
-                                       return nil;
-                                     }
-                                     if (event.keyCode == 36 ||
-                                         event.keyCode == 76) {  // Return
-                                       if (s.onAccept) {
-                                         s.onAccept();
+                                       if (event.keyCode == 53) {  // Escape
+                                         if (s.onCancel) {
+                                           s.onCancel();
+                                         }
                                          return nil;
                                        }
-                                     }
-                                     return event;
-                                   }];
+                                       if (event.keyCode == 36 ||
+                                           event.keyCode == 76) {  // Return
+                                         if (s.onAccept) {
+                                           s.onAccept();
+                                           return nil;
+                                         }
+                                       }
+                                       return event;
+                                     }];
+  }
+  if (_dismissOnOutsideClick && !_clickMonitor) {
+    __weak __typeof(self) weakSelf = self;
+    _clickMonitor = [NSEvent
+        addLocalMonitorForEventsMatchingMask:(NSEventMaskLeftMouseDown |
+                                              NSEventMaskRightMouseDown)
+                                     handler:^NSEvent*(NSEvent* event) {
+                                       __strong __typeof(weakSelf) s = weakSelf;
+                                       if (!s || !s.isVisible) {
+                                         return event;
+                                       }
+                                       if (event.window != s) {
+                                         if (s.onCancel) {
+                                           s.onCancel();
+                                         }
+                                       }
+                                       return event;
+                                     }];
+  }
 }
 
 - (void)removeKeyMonitor {
   if (_keyMonitor) {
     [NSEvent removeMonitor:_keyMonitor];
     _keyMonitor = nil;
+  }
+  if (_clickMonitor) {
+    [NSEvent removeMonitor:_clickMonitor];
+    _clickMonitor = nil;
+  }
+  if (_settingsObserver) {
+    [NSNotificationCenter.defaultCenter removeObserver:_settingsObserver];
+    _settingsObserver = nil;
   }
 }
 
@@ -383,12 +571,17 @@ bool LightShowGlassExtensionInstallDialog(
 
   NSView* root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, kWidth, totalH)];
   root.wantsLayer = YES;
-  root.layer.cornerRadius = 20.0;
+  root.layer.cornerRadius = kModalCornerRadius;
   root.layer.cornerCurve = kCACornerCurveContinuous;
   root.layer.masksToBounds = YES;
+  root.layer.borderWidth = 0.0;
   panel.contentView = root;
 
-  NSView* glass = MakeLiquidGlassBackdrop(NSMakeRect(0, 0, kWidth, totalH), 20.0);
+  NSView* glass =
+      MakeLiquidGlassBackdrop(NSMakeRect(0, 0, kWidth, totalH),
+                              kModalCornerRadius, /*extraTintAlpha=*/0.035);
+  panel.adaptiveGlassView = glass;
+  panel.extraGlassTint = 0.035;
   [root addSubview:glass];
 
   // Flipped container inside glass for top-down layout.
@@ -783,12 +976,17 @@ bool LightUpdateGlassWebAuthnDialog(AuthenticatorRequestDialogModel* model,
 
   NSView* root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, kWidth, totalH)];
   root.wantsLayer = YES;
-  root.layer.cornerRadius = 20.0;
+  root.layer.cornerRadius = kModalCornerRadius;
   root.layer.cornerCurve = kCACornerCurveContinuous;
   root.layer.masksToBounds = YES;
+  root.layer.borderWidth = 0.0;
   panel.contentView = root;
 
-  NSView* glass = MakeLiquidGlassBackdrop(NSMakeRect(0, 0, kWidth, totalH), 20.0);
+  NSView* glass =
+      MakeLiquidGlassBackdrop(NSMakeRect(0, 0, kWidth, totalH),
+                              kModalCornerRadius, /*extraTintAlpha=*/0.035);
+  panel.adaptiveGlassView = glass;
+  panel.extraGlassTint = 0.035;
   [root addSubview:glass];
 
   NSView* content = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, kWidth, totalH)];
@@ -891,4 +1089,719 @@ void LightDismissGlassWebAuthnDialog(AuthenticatorRequestDialogModel* model) {
       [panel orderOut:nil];
     }
   }
+}
+
+// -----------------------------------------------------------------------------
+// Sidebar-Bound Extension Added ("<ext> has been added to Light") Popup
+// -----------------------------------------------------------------------------
+bool LightShowGlassExtensionPostInstallPopup(
+    gfx::NativeWindow parent_window,
+    const std::u16string& title,
+    const std::vector<std::u16string>& paragraphs,
+    const gfx::ImageSkia& icon,
+    base::OnceClosure on_manage_shortcuts,
+    base::OnceClosure on_closed) {
+  NSWindow* parentWindow =
+      parent_window ? parent_window.GetNativeNSWindow()
+                    : (NSApp.keyWindow ?: NSApp.mainWindow);
+  if (!parentWindow) {
+    return false;
+  }
+
+  NSRect anchorRect = BeginSidebarExtensionPopup(parentWindow);
+
+  NSString* titleText = base::SysUTF16ToNSString(title);
+  NSImage* iconImage = !icon.isNull() ? gfx::NSImageFromImageSkia(icon) : nil;
+
+  const CGFloat kWidth = 340.0;
+  const CGFloat kPad = 16.0;
+  CGFloat contentH = 40.0;  // header
+
+  NSMutableArray<NSTextField*>* paraLabels = [NSMutableArray array];
+  for (const auto& p : paragraphs) {
+    if (p.empty()) {
+      continue;
+    }
+    NSTextField* lbl =
+        [NSTextField wrappingLabelWithString:base::SysUTF16ToNSString(p)];
+    lbl.font = [NSFont systemFontOfSize:12.5 weight:NSFontWeightRegular];
+    lbl.textColor = NSColor.secondaryLabelColor;
+    NSSize fit = [lbl sizeThatFits:NSMakeSize(kWidth - kPad * 2.0, 200.0)];
+    lbl.frame = NSMakeRect(kPad, 0, kWidth - kPad * 2.0, std::ceil(fit.height));
+    contentH += 10.0 + std::ceil(fit.height);
+    [paraLabels addObject:lbl];
+  }
+
+  const CGFloat kBtnH = 30.0;
+  const CGFloat totalH = kPad + contentH + 14.0 + kBtnH + kPad;
+  NSRect frame = FrameAnchoredToSidebarRight(parentWindow, anchorRect, kWidth, totalH);
+
+  LightGlassExtensionInstallPanel* panel =
+      [[LightGlassExtensionInstallPanel alloc]
+          initWithContentRect:frame
+                    styleMask:(NSWindowStyleMaskBorderless |
+                               NSWindowStyleMaskNonactivatingPanel)
+                      backing:NSBackingStoreBuffered
+                        defer:NO];
+  panel.opaque = NO;
+  panel.backgroundColor = [NSColor clearColor];
+  panel.hasShadow = YES;
+  panel.level = NSFloatingWindowLevel;
+  panel.collectionBehavior = NSWindowCollectionBehaviorMoveToActiveSpace;
+  panel.releasedWhenClosed = NO;
+  panel.autorecalculatesKeyViewLoop = NO;
+  panel.dismissOnOutsideClick = YES;
+
+  NSView* root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, kWidth, totalH)];
+  root.wantsLayer = YES;
+  root.layer.cornerRadius = kModalCornerRadius;
+  root.layer.cornerCurve = kCACornerCurveContinuous;
+  root.layer.masksToBounds = YES;
+  root.layer.borderWidth = 0.0;
+  panel.contentView = root;
+
+  NSView* glass = MakeLiquidGlassBackdrop(NSMakeRect(0, 0, kWidth, totalH),
+                                          kModalCornerRadius, 0.035);
+  panel.adaptiveGlassView = glass;
+  panel.extraGlassTint = 0.035;
+  [root addSubview:glass];
+
+  NSView* content = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, kWidth, totalH)];
+  content.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  [glass addSubview:content];
+
+  CGFloat topY = totalH - kPad;
+
+  NSImageView* iconView =
+      [[NSImageView alloc] initWithFrame:NSMakeRect(kPad, topY - 36.0, 36.0, 36.0)];
+  iconView.wantsLayer = YES;
+  iconView.layer.cornerRadius = 8.0;
+  iconView.layer.cornerCurve = kCACornerCurveContinuous;
+  iconView.layer.masksToBounds = YES;
+  iconView.imageScaling = NSImageScaleProportionallyUpOrDown;
+  iconView.image =
+      iconImage ?: [NSImage imageWithSystemSymbolName:@"puzzlepiece.extension.fill"
+                             accessibilityDescription:nil];
+  [content addSubview:iconView];
+
+  NSTextField* titleField =
+      [NSTextField wrappingLabelWithString:(titleText.length > 0
+                                                ? titleText
+                                                : @"Extension added to Light")];
+  titleField.font = [NSFont systemFontOfSize:14.0 weight:NSFontWeightSemibold];
+  titleField.textColor = NSColor.labelColor;
+  NSSize titleFit =
+      [titleField sizeThatFits:NSMakeSize(kWidth - kPad * 2.0 - 46.0, 60.0)];
+  titleField.frame =
+      NSMakeRect(kPad + 46.0, topY - 18.0 - std::ceil(titleFit.height) * 0.5,
+                 kWidth - kPad * 2.0 - 46.0, std::ceil(titleFit.height));
+  [content addSubview:titleField];
+
+  CGFloat curY = topY - 40.0;
+  for (NSTextField* lbl in paraLabels) {
+    curY -= 10.0 + lbl.frame.size.height;
+    lbl.frame = NSMakeRect(kPad, curY, kWidth - kPad * 2.0, lbl.frame.size.height);
+    [content addSubview:lbl];
+  }
+
+  __block base::OnceClosure closedCb = std::move(on_closed);
+  __block base::OnceClosure shortcutsCb = std::move(on_manage_shortcuts);
+  __block BOOL finished = NO;
+  __weak NSWindow* weakParent = parentWindow;
+
+  auto dismiss = ^{
+    if (finished) {
+      return;
+    }
+    finished = YES;
+    NSWindow* p = weakParent;
+    if (p && panel.parentWindow == p) {
+      [p removeChildWindow:panel];
+    }
+    [panel orderOut:nil];
+    EndSidebarExtensionPopup(p);
+    if (closedCb) {
+      std::move(closedCb).Run();
+    }
+  };
+
+  panel.onCancel = dismiss;
+  panel.onAccept = dismiss;
+
+  BOOL hasShortcuts = !shortcutsCb.is_null();
+  if (hasShortcuts) {
+    CGFloat btnW = (kWidth - kPad * 2.0 - 8.0) * 0.5;
+    LightGlassPillButton* shortcutsBtn =
+        [[LightGlassPillButton alloc] initWithTitle:@"Shortcuts" primary:NO];
+    shortcutsBtn.frame = NSMakeRect(kPad, kPad, btnW, kBtnH);
+    shortcutsBtn.onClick = ^{
+      auto cb = std::move(shortcutsCb);
+      dismiss();
+      if (cb) {
+        std::move(cb).Run();
+      }
+    };
+    [content addSubview:shortcutsBtn];
+
+    LightGlassPillButton* doneBtn =
+        [[LightGlassPillButton alloc] initWithTitle:@"Done" primary:YES];
+    doneBtn.frame = NSMakeRect(kPad + btnW + 8.0, kPad, btnW, kBtnH);
+    doneBtn.onClick = dismiss;
+    [content addSubview:doneBtn];
+  } else {
+    LightGlassPillButton* doneBtn =
+        [[LightGlassPillButton alloc] initWithTitle:@"Done" primary:YES];
+    doneBtn.frame = NSMakeRect(kPad, kPad, kWidth - kPad * 2.0, kBtnH);
+    doneBtn.onClick = dismiss;
+    [content addSubview:doneBtn];
+  }
+
+  [parentWindow addChildWindow:panel ordered:NSWindowAbove];
+  StripFocusRingsRecursively(panel.contentView);
+  [panel installKeyMonitor];
+  [panel orderFront:nil];
+  return true;
+}
+
+// -----------------------------------------------------------------------------
+// Sidebar-Bound Remove Extension Popup
+// -----------------------------------------------------------------------------
+namespace {
+struct UninstallPopupState {
+  LightGlassExtensionInstallPanel* __strong panel = nil;
+  NSWindow* __weak parentWindow = nil;
+  base::OnceCallback<void(bool, bool)> on_result;
+  BOOL finished = NO;
+};
+
+std::unordered_map<void*, std::unique_ptr<UninstallPopupState>>&
+ActiveUninstallPopups() {
+  static auto* map =
+      new std::unordered_map<void*, std::unique_ptr<UninstallPopupState>>();
+  return *map;
+}
+
+void FinishUninstallPopup(void* handle, bool accepted, bool checked) {
+  auto& map = ActiveUninstallPopups();
+  auto it = map.find(handle);
+  if (it == map.end()) {
+    return;
+  }
+  auto state = std::move(it->second);
+  map.erase(it);
+  if (!state || state->finished) {
+    return;
+  }
+  state->finished = YES;
+  NSWindow* p = state->parentWindow;
+  if (p && state->panel && state->panel.parentWindow == p) {
+    [p removeChildWindow:state->panel];
+  }
+  [state->panel orderOut:nil];
+  EndSidebarExtensionPopup(p);
+  if (state->on_result) {
+    std::move(state->on_result).Run(accepted, checked);
+  }
+}
+}  // namespace
+
+void* LightShowGlassExtensionUninstallPopup(
+    gfx::NativeWindow parent_window,
+    const std::u16string& title,
+    const std::u16string& subtitle,
+    const std::u16string& checkbox_label,
+    const gfx::ImageSkia& icon,
+    base::OnceCallback<void(bool accepted, bool checkbox_checked)> on_result) {
+  NSWindow* parentWindow =
+      parent_window ? parent_window.GetNativeNSWindow()
+                    : (NSApp.keyWindow ?: NSApp.mainWindow);
+  if (!parentWindow) {
+    return nullptr;
+  }
+
+  NSRect anchorRect = BeginSidebarExtensionPopup(parentWindow);
+
+  const CGFloat kWidth = 340.0;
+  const CGFloat kPad = 16.0;
+  CGFloat bodyH = 40.0;
+
+  NSTextField* subField = nil;
+  if (!subtitle.empty()) {
+    subField =
+        [NSTextField wrappingLabelWithString:base::SysUTF16ToNSString(subtitle)];
+    subField.font = [NSFont systemFontOfSize:12.5 weight:NSFontWeightRegular];
+    subField.textColor = NSColor.secondaryLabelColor;
+    NSSize fit = [subField sizeThatFits:NSMakeSize(kWidth - kPad * 2.0, 120.0)];
+    subField.frame =
+        NSMakeRect(kPad, 0, kWidth - kPad * 2.0, std::ceil(fit.height));
+    bodyH += 10.0 + std::ceil(fit.height);
+  }
+
+  NSButton* reportCheckbox = nil;
+  if (!checkbox_label.empty()) {
+    reportCheckbox = [NSButton
+        checkboxWithTitle:base::SysUTF16ToNSString(checkbox_label)
+                   target:nil
+                   action:nil];
+    reportCheckbox.font = [NSFont systemFontOfSize:12.5];
+    reportCheckbox.state = NSControlStateValueOff;
+    bodyH += 10.0 + 22.0;
+  }
+
+  const CGFloat kBtnH = 30.0;
+  const CGFloat totalH = kPad + bodyH + 14.0 + kBtnH + kPad;
+  NSRect frame =
+      FrameAnchoredToSidebarRight(parentWindow, anchorRect, kWidth, totalH);
+
+  LightGlassExtensionInstallPanel* panel =
+      [[LightGlassExtensionInstallPanel alloc]
+          initWithContentRect:frame
+                    styleMask:(NSWindowStyleMaskBorderless |
+                               NSWindowStyleMaskNonactivatingPanel)
+                      backing:NSBackingStoreBuffered
+                        defer:NO];
+  panel.opaque = NO;
+  panel.backgroundColor = [NSColor clearColor];
+  panel.hasShadow = YES;
+  panel.level = NSFloatingWindowLevel;
+  panel.collectionBehavior = NSWindowCollectionBehaviorMoveToActiveSpace;
+  panel.releasedWhenClosed = NO;
+  panel.autorecalculatesKeyViewLoop = NO;
+  panel.dismissOnOutsideClick = YES;
+
+  NSView* root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, kWidth, totalH)];
+  root.wantsLayer = YES;
+  root.layer.cornerRadius = kModalCornerRadius;
+  root.layer.cornerCurve = kCACornerCurveContinuous;
+  root.layer.masksToBounds = YES;
+  root.layer.borderWidth = 0.0;
+  panel.contentView = root;
+
+  NSView* glass = MakeLiquidGlassBackdrop(NSMakeRect(0, 0, kWidth, totalH),
+                                          kModalCornerRadius, 0.035);
+  panel.adaptiveGlassView = glass;
+  panel.extraGlassTint = 0.035;
+  [root addSubview:glass];
+
+  NSView* content = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, kWidth, totalH)];
+  content.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  [glass addSubview:content];
+
+  CGFloat topY = totalH - kPad;
+
+  NSImage* iconImage = !icon.isNull() ? gfx::NSImageFromImageSkia(icon) : nil;
+  NSImageView* iconView =
+      [[NSImageView alloc] initWithFrame:NSMakeRect(kPad, topY - 36.0, 36.0, 36.0)];
+  iconView.wantsLayer = YES;
+  iconView.layer.cornerRadius = 8.0;
+  iconView.layer.cornerCurve = kCACornerCurveContinuous;
+  iconView.layer.masksToBounds = YES;
+  iconView.imageScaling = NSImageScaleProportionallyUpOrDown;
+  iconView.image =
+      iconImage ?: [NSImage imageWithSystemSymbolName:@"puzzlepiece.extension.fill"
+                             accessibilityDescription:nil];
+  [content addSubview:iconView];
+
+  NSTextField* titleField =
+      [NSTextField wrappingLabelWithString:base::SysUTF16ToNSString(title)];
+  titleField.font = [NSFont systemFontOfSize:14.0 weight:NSFontWeightSemibold];
+  titleField.textColor = NSColor.labelColor;
+  NSSize titleFit =
+      [titleField sizeThatFits:NSMakeSize(kWidth - kPad * 2.0 - 46.0, 60.0)];
+  titleField.frame =
+      NSMakeRect(kPad + 46.0, topY - 18.0 - std::ceil(titleFit.height) * 0.5,
+                 kWidth - kPad * 2.0 - 46.0, std::ceil(titleFit.height));
+  [content addSubview:titleField];
+
+  CGFloat curY = topY - 40.0;
+  if (subField) {
+    curY -= 10.0 + subField.frame.size.height;
+    subField.frame =
+        NSMakeRect(kPad, curY, kWidth - kPad * 2.0, subField.frame.size.height);
+    [content addSubview:subField];
+  }
+  if (reportCheckbox) {
+    curY -= 10.0 + 22.0;
+    reportCheckbox.frame = NSMakeRect(kPad, curY, kWidth - kPad * 2.0, 22.0);
+    [content addSubview:reportCheckbox];
+  }
+
+  auto state = std::make_unique<UninstallPopupState>();
+  state->panel = panel;
+  state->parentWindow = parentWindow;
+  state->on_result = std::move(on_result);
+  void* handle = state.get();
+  ActiveUninstallPopups()[handle] = std::move(state);
+
+  panel.onCancel = ^{
+    FinishUninstallPopup(handle, /*accepted=*/false, /*checked=*/false);
+  };
+  panel.onAccept = ^{
+    bool checked = reportCheckbox && reportCheckbox.state == NSControlStateValueOn;
+    FinishUninstallPopup(handle, /*accepted=*/true, checked);
+  };
+
+  CGFloat btnW = (kWidth - kPad * 2.0 - 8.0) * 0.5;
+  LightGlassPillButton* cancelBtn =
+      [[LightGlassPillButton alloc] initWithTitle:@"Cancel" primary:NO];
+  cancelBtn.frame = NSMakeRect(kPad, kPad, btnW, kBtnH);
+  cancelBtn.onClick = ^{
+    FinishUninstallPopup(handle, /*accepted=*/false, /*checked=*/false);
+  };
+  [content addSubview:cancelBtn];
+
+  LightGlassPillButton* removeBtn =
+      [[LightGlassPillButton alloc] initWithTitle:@"Remove" primary:YES];
+  removeBtn.frame = NSMakeRect(kPad + btnW + 8.0, kPad, btnW, kBtnH);
+  removeBtn.onClick = ^{
+    bool checked = reportCheckbox && reportCheckbox.state == NSControlStateValueOn;
+    FinishUninstallPopup(handle, /*accepted=*/true, checked);
+  };
+  [content addSubview:removeBtn];
+
+  [parentWindow addChildWindow:panel ordered:NSWindowAbove];
+  StripFocusRingsRecursively(panel.contentView);
+  [panel installKeyMonitor];
+  [panel orderFront:nil];
+  return handle;
+}
+
+void LightCloseGlassExtensionUninstallPopup(void* handle) {
+  if (!handle) {
+    return;
+  }
+  FinishUninstallPopup(handle, /*accepted=*/false, /*checked=*/false);
+}
+
+// -----------------------------------------------------------------------------
+// Native macOS Liquid Glass Site Permission Prompt
+// -----------------------------------------------------------------------------
+namespace {
+
+NSString* SymbolForPermissionRequest(permissions::RequestType type) {
+  switch (type) {
+    case permissions::RequestType::kCameraStream:
+    case permissions::RequestType::kCameraPanTiltZoom:
+      return @"camera.fill";
+    case permissions::RequestType::kMicStream:
+      return @"mic.fill";
+    case permissions::RequestType::kGeolocation:
+      return @"location.fill";
+    case permissions::RequestType::kNotifications:
+      return @"bell.fill";
+    case permissions::RequestType::kClipboard:
+      return @"doc.on.clipboard.fill";
+    default:
+      return @"hand.raised.fill";
+  }
+}
+
+class LightGlassPermissionPrompt : public permissions::PermissionPrompt {
+ public:
+  LightGlassPermissionPrompt(content::WebContents* web_contents,
+                             Delegate* delegate)
+      : web_contents_(web_contents), delegate_(delegate->GetWeakPtr()) {
+    delegate->SetPromptShown();
+    ShowPanel();
+  }
+
+  ~LightGlassPermissionPrompt() override { ClosePanel(); }
+
+  bool UpdateAnchor() override {
+    RepositionPanel();
+    return true;
+  }
+
+  TabSwitchingBehavior GetTabSwitchingBehavior() override {
+    return TabSwitchingBehavior::kDestroyPromptButKeepRequestPending;
+  }
+
+  permissions::PermissionPromptDisposition GetPromptDisposition()
+      const override {
+    return permissions::PermissionPromptDisposition::ANCHORED_BUBBLE;
+  }
+
+  std::optional<gfx::Rect> GetViewBoundsInScreen() const override {
+    return std::nullopt;
+  }
+
+  bool IsAskPrompt() const override { return true; }
+
+  std::vector<permissions::ElementAnchoredBubbleVariant> GetPromptVariants()
+      const override {
+    return {};
+  }
+
+  std::optional<permissions::feature_params::PermissionElementPromptPosition>
+  GetPromptPosition() const override {
+    return std::nullopt;
+  }
+
+ private:
+  void RepositionPanel() {
+    if (!panel_ || !parent_window_) {
+      return;
+    }
+    NSRect pf = parent_window_.frame;
+    NSSize sz = panel_.frame.size;
+    CGFloat x = std::floor(NSMidX(pf) - sz.width * 0.5);
+    CGFloat y = std::floor(NSMaxY(pf) - sz.height - 64.0);
+    [panel_ setFrameOrigin:NSMakePoint(x, y)];
+  }
+
+  void ClosePanel() {
+    if (!panel_) {
+      return;
+    }
+    LightGlassExtensionInstallPanel* p = panel_;
+    panel_ = nil;
+    p.onCancel = nil;
+    p.onAccept = nil;
+    if (parent_window_ && p.parentWindow == parent_window_) {
+      [parent_window_ removeChildWindow:p];
+    }
+    [p orderOut:nil];
+    parent_window_ = nil;
+  }
+
+  void ShowPanel() {
+    if (!web_contents_ || !delegate_ || delegate_->Requests().empty()) {
+      return;
+    }
+    gfx::NativeWindow native_win = web_contents_->GetTopLevelNativeWindow();
+    parent_window_ = native_win ? native_win.GetNativeNSWindow()
+                                : (NSApp.keyWindow ?: NSApp.mainWindow);
+    if (!parent_window_) {
+      return;
+    }
+
+    const auto& requests = delegate_->Requests();
+    NSString* symbolName =
+        SymbolForPermissionRequest(requests.front()->request_type());
+
+    std::u16string origin_text = url_formatter::FormatUrlForSecurityDisplay(
+        delegate_->GetRequestingOrigin(),
+        url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC);
+    NSString* originStr = base::SysUTF16ToNSString(origin_text);
+    NSString* heading =
+        originStr.length > 0
+            ? [NSString stringWithFormat:@"%@ wants to", originStr]
+            : @"This site wants to";
+
+    bool supports_one_time = true;
+    NSMutableArray<NSString*>* items = [NSMutableArray array];
+    for (const auto& req : requests) {
+      if (!permissions::PermissionUtil::DoesSupportTemporaryGrants(
+              req->GetContentSettingsType())) {
+        supports_one_time = false;
+      }
+      NSString* frag = base::SysUTF16ToNSString(req->GetMessageTextFragment());
+      if (frag.length > 0) {
+        [items addObject:frag];
+      }
+    }
+
+    const CGFloat kWidth = 340.0;
+    const CGFloat kPad = 18.0;
+    CGFloat bodyH = 38.0;
+
+    NSMutableArray<NSTextField*>* itemLabels = [NSMutableArray array];
+    for (NSString* text in items) {
+      NSString* line = items.count > 1
+                           ? [NSString stringWithFormat:@"•  %@", text]
+                           : text;
+      NSTextField* lbl = [NSTextField wrappingLabelWithString:line];
+      lbl.font = [NSFont systemFontOfSize:13.0 weight:NSFontWeightRegular];
+      lbl.textColor = NSColor.labelColor;
+      NSSize fit = [lbl sizeThatFits:NSMakeSize(kWidth - kPad * 2.0, 120.0)];
+      lbl.frame =
+          NSMakeRect(kPad, 0, kWidth - kPad * 2.0, std::ceil(fit.height));
+      bodyH += 8.0 + std::ceil(fit.height);
+      [itemLabels addObject:lbl];
+    }
+
+    const CGFloat kBtnH = 30.0;
+    const CGFloat kBtnGap = 8.0;
+    const CGFloat buttonsH =
+        supports_one_time ? (kBtnH * 2.0 + kBtnGap) : kBtnH;
+    const CGFloat totalH = kPad + bodyH + 14.0 + buttonsH + kPad;
+
+    NSRect pf = parent_window_.frame;
+    NSRect frame = NSMakeRect(std::floor(NSMidX(pf) - kWidth * 0.5),
+                              std::floor(NSMaxY(pf) - totalH - 64.0), kWidth,
+                              totalH);
+
+    LightGlassExtensionInstallPanel* panel =
+        [[LightGlassExtensionInstallPanel alloc]
+            initWithContentRect:frame
+                      styleMask:(NSWindowStyleMaskBorderless |
+                                 NSWindowStyleMaskNonactivatingPanel)
+                        backing:NSBackingStoreBuffered
+                          defer:NO];
+    panel.opaque = NO;
+    panel.backgroundColor = [NSColor clearColor];
+    panel.hasShadow = YES;
+    panel.level = NSFloatingWindowLevel;
+    panel.collectionBehavior = NSWindowCollectionBehaviorMoveToActiveSpace;
+    panel.releasedWhenClosed = NO;
+    panel.autorecalculatesKeyViewLoop = NO;
+    panel_ = panel;
+
+    NSView* root =
+        [[NSView alloc] initWithFrame:NSMakeRect(0, 0, kWidth, totalH)];
+    root.wantsLayer = YES;
+    root.layer.cornerRadius = kModalCornerRadius;
+    root.layer.cornerCurve = kCACornerCurveContinuous;
+    root.layer.masksToBounds = YES;
+    root.layer.borderWidth = 0.0;
+    panel.contentView = root;
+
+    NSView* glass = MakeLiquidGlassBackdrop(NSMakeRect(0, 0, kWidth, totalH),
+                                            kModalCornerRadius, 0.035);
+    panel.adaptiveGlassView = glass;
+    panel.extraGlassTint = 0.035;
+    [root addSubview:glass];
+
+    NSView* content =
+        [[NSView alloc] initWithFrame:NSMakeRect(0, 0, kWidth, totalH)];
+    content.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    [glass addSubview:content];
+
+    CGFloat topY = totalH - kPad;
+
+    NSView* iconBadge = [[NSView alloc]
+        initWithFrame:NSMakeRect(kPad, topY - 32.0, 32.0, 32.0)];
+    iconBadge.wantsLayer = YES;
+    iconBadge.layer.cornerRadius = 9.0;
+    iconBadge.layer.cornerCurve = kCACornerCurveContinuous;
+    iconBadge.layer.backgroundColor =
+        [NSColor.labelColor colorWithAlphaComponent:0.10].CGColor;
+    [content addSubview:iconBadge];
+
+    NSImageView* iconView =
+        [[NSImageView alloc] initWithFrame:NSMakeRect(0, 0, 32.0, 32.0)];
+    NSImage* img = [NSImage imageWithSystemSymbolName:symbolName
+                             accessibilityDescription:nil];
+    if (img) {
+      NSImageSymbolConfiguration* cfg = [NSImageSymbolConfiguration
+          configurationWithPointSize:14.5
+                              weight:NSFontWeightMedium];
+      iconView.image = [img imageWithSymbolConfiguration:cfg];
+    }
+    iconView.contentTintColor = NSColor.labelColor;
+    iconView.imageScaling = NSImageScaleNone;
+    iconView.imageAlignment = NSImageAlignCenter;
+    [iconBadge addSubview:iconView];
+
+    NSTextField* titleField = [NSTextField wrappingLabelWithString:heading];
+    titleField.font =
+        [NSFont systemFontOfSize:14.0 weight:NSFontWeightSemibold];
+    titleField.textColor = NSColor.labelColor;
+    NSSize titleFit =
+        [titleField sizeThatFits:NSMakeSize(kWidth - kPad * 2.0 - 42.0, 44.0)];
+    titleField.frame =
+        NSMakeRect(kPad + 42.0, topY - 16.0 - std::ceil(titleFit.height) * 0.5,
+                   kWidth - kPad * 2.0 - 42.0, std::ceil(titleFit.height));
+    [content addSubview:titleField];
+
+    CGFloat curY = topY - 38.0;
+    for (NSTextField* lbl in itemLabels) {
+      curY -= 8.0 + lbl.frame.size.height;
+      lbl.frame =
+          NSMakeRect(kPad, curY, kWidth - kPad * 2.0, lbl.frame.size.height);
+      [content addSubview:lbl];
+    }
+
+    base::WeakPtr<Delegate> weak_delegate = delegate_;
+    auto invokeAction = ^(int action) {
+      if (!weak_delegate) {
+        return;
+      }
+      PromptOptions opts = std::monostate();
+      if (action == 1) {
+        weak_delegate->Accept(opts);
+      } else if (action == 2) {
+        weak_delegate->AcceptThisTime(opts);
+      } else if (action == 3) {
+        weak_delegate->Deny(opts);
+      } else {
+        weak_delegate->Dismiss(opts);
+      }
+    };
+
+    panel.onCancel = ^{
+      invokeAction(0);
+    };
+    panel.onAccept = ^{
+      invokeAction(1);
+    };
+
+    if (supports_one_time) {
+      CGFloat halfW = (kWidth - kPad * 2.0 - kBtnGap) * 0.5;
+      LightGlassPillButton* denyBtn =
+          [[LightGlassPillButton alloc] initWithTitle:@"Don't allow" primary:NO];
+      denyBtn.frame = NSMakeRect(kPad, kPad, halfW, kBtnH);
+      denyBtn.onClick = ^{
+        invokeAction(3);
+      };
+      [content addSubview:denyBtn];
+
+      LightGlassPillButton* onceBtn =
+          [[LightGlassPillButton alloc] initWithTitle:@"Allow this time"
+                                              primary:NO];
+      onceBtn.frame = NSMakeRect(kPad + halfW + kBtnGap, kPad, halfW, kBtnH);
+      onceBtn.onClick = ^{
+        invokeAction(2);
+      };
+      [content addSubview:onceBtn];
+
+      LightGlassPillButton* allowBtn =
+          [[LightGlassPillButton alloc] initWithTitle:@"Allow while visiting"
+                                              primary:YES];
+      allowBtn.frame =
+          NSMakeRect(kPad, kPad + kBtnH + kBtnGap, kWidth - kPad * 2.0, kBtnH);
+      allowBtn.onClick = ^{
+        invokeAction(1);
+      };
+      [content addSubview:allowBtn];
+    } else {
+      CGFloat halfW = (kWidth - kPad * 2.0 - kBtnGap) * 0.5;
+      LightGlassPillButton* denyBtn =
+          [[LightGlassPillButton alloc] initWithTitle:@"Don't allow" primary:NO];
+      denyBtn.frame = NSMakeRect(kPad, kPad, halfW, kBtnH);
+      denyBtn.onClick = ^{
+        invokeAction(3);
+      };
+      [content addSubview:denyBtn];
+
+      LightGlassPillButton* allowBtn =
+          [[LightGlassPillButton alloc] initWithTitle:@"Allow" primary:YES];
+      allowBtn.frame = NSMakeRect(kPad + halfW + kBtnGap, kPad, halfW, kBtnH);
+      allowBtn.onClick = ^{
+        invokeAction(1);
+      };
+      [content addSubview:allowBtn];
+    }
+
+    [parent_window_ addChildWindow:panel ordered:NSWindowAbove];
+    StripFocusRingsRecursively(panel.contentView);
+    [panel installKeyMonitor];
+    [panel orderFront:nil];
+  }
+
+  raw_ptr<content::WebContents> web_contents_;
+  base::WeakPtr<Delegate> delegate_;
+  NSWindow* __weak parent_window_ = nil;
+  LightGlassExtensionInstallPanel* __strong panel_ = nil;
+};
+
+}  // namespace
+
+std::unique_ptr<permissions::PermissionPrompt> LightCreateGlassPermissionPrompt(
+    content::WebContents* web_contents,
+    permissions::PermissionPrompt::Delegate* delegate) {
+  if (!web_contents || !delegate || delegate->Requests().empty()) {
+    return nullptr;
+  }
+  return std::make_unique<LightGlassPermissionPrompt>(web_contents, delegate);
 }

@@ -91,6 +91,7 @@ BrowserFrameViewMac::BrowserFrameViewMac(BrowserWidget* frame,
   if (auto* const glass_service = GlassFrameService::GetInstance()) {
     SetPaintToLayer();
     is_glass_frame_eligible_ =
+        browser_view->GetIsNormalType() ||
         glass_service->IsBrowserWindowEligible(browser_view->browser());
     layer()->SetFillsBoundsOpaquely(!is_glass_frame_eligible_);
     glass_frame_service_subscription_ =
@@ -99,6 +100,12 @@ BrowserFrameViewMac::BrowserFrameViewMac(BrowserWidget* frame,
             base::BindRepeating(
                 &BrowserFrameViewMac::OnGlassFrameEligibilityChanged,
                 base::Unretained(this)));
+  } else if (browser_view->GetIsNormalType()) {
+    if (@available(macOS 26.0, *)) {
+      SetPaintToLayer();
+      is_glass_frame_eligible_ = true;
+      layer()->SetFillsBoundsOpaquely(false);
+    }
   }
 
   if (web_app::AppBrowserController::IsWebApp(browser_view->browser())) {
@@ -617,6 +624,11 @@ void BrowserFrameViewMac::EmitFullscreenSessionHistograms() {
 }
 
 void BrowserFrameViewMac::OnGlassFrameEligibilityChanged(bool is_eligible) {
+  if (GetBrowserView() && GetBrowserView()->GetIsNormalType()) {
+    if (@available(macOS 26.0, *)) {
+      is_eligible = true;
+    }
+  }
   if (is_eligible == is_glass_frame_eligible_) {
     return;
   }
