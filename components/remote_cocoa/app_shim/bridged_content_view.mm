@@ -411,11 +411,41 @@ SEL EditingActionForKeyEquivalent(NSEvent* event) {
 // NSWindow calls -[contentView hitTest:] to determine the target NSView for
 // mouse up and down events. The default implementation recursively calls
 // hitTest: on each subview until it finds a non-nil target.
+- (void)didAddSubview:(NSView*)subview {
+  [super didAddSubview:subview];
+  if ([subview.identifier isEqualToString:@"LightGlassSidebarOverlay"]) {
+    return;
+  }
+  NSView* topSubview = self.subviews.lastObject;
+  if ([topSubview.identifier isEqualToString:@"LightGlassSidebarOverlay"]) {
+    return;
+  }
+  for (NSView* v in [self.subviews copy]) {
+    if ([v.identifier isEqualToString:@"LightGlassSidebarOverlay"]) {
+      [self addSubview:v positioned:NSWindowAbove relativeTo:nil];
+      break;
+    }
+  }
+}
+
 - (NSView*)hitTest:(NSPoint)point {
   // `point` is in superview's coordinate. Convert it to local coordinate.
   // This is important when the window has a native titlebar, in which case the
   // superview is taller than the contentView.
   NSPoint pointInView = [self convertPoint:point fromView:self.superview];
+
+  // Give Light's native Liquid Glass sidebar overlay first chance at
+  // hit-testing so clicks on the pinned sidebar (where no NativeViewHost sits
+  // beneath it, causing GetHitTestResult to return kRootView or
+  // kDraggableBackground) and floating sidebar always reach sidebar controls.
+  for (NSView* subview in self.subviews.reverseObjectEnumerator) {
+    if ([subview.identifier isEqualToString:@"LightGlassSidebarOverlay"]) {
+      if (NSView* overlayHit = [subview hitTest:pointInView]) {
+        return overlayHit;
+      }
+    }
+  }
+
   gfx::Point flippedPoint(point.x, NSHeight(self.frame) - pointInView.y);
   remote_cocoa::mojom::HitTestResult hitTestResult;
   _bridge->host()->GetHitTestResult(flippedPoint, &hitTestResult);

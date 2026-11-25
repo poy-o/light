@@ -4324,6 +4324,7 @@ class API_AVAILABLE(macos(26.0)) LightGlassSidebarBridgeImpl
   root.layerUsesCoreImageFilters = YES;
 
   _overlayView = [[LightSidebarPassthroughView alloc] initWithFrame:root.bounds];
+  _overlayView.identifier = @"LightGlassSidebarOverlay";
   _overlayView.wantsLayer = YES;
   _overlayView.layerUsesCoreImageFilters = YES;
   _overlayView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
