@@ -26,6 +26,7 @@ import androidx.test.core.app.ApplicationProvider;
 import androidx.test.espresso.contrib.RecyclerViewActions;
 
 import org.junit.Assert;
+import org.junit.rules.ExternalResource;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
 
@@ -36,13 +37,10 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
-import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
+import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.profiles.ProfileManager;
-import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.chrome.test.batch.BlankCTATabInitialStateRule;
 import org.chromium.chrome.test.util.browser.signin.SigninTestRule;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
-import org.chromium.components.feature_engagement.TestTracker;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.signin.base.AccountInfo;
 import org.chromium.components.signin.base.CoreAccountInfo;
@@ -56,17 +54,21 @@ import org.chromium.components.sync.protocol.SyncEntity;
 import org.chromium.components.sync.protocol.WalletMaskedCreditCard;
 import org.chromium.components.trusted_vault.SecurityDomainId;
 import org.chromium.components.trusted_vault.TrustedVaultClient;
+import org.chromium.components.trusted_vault.TrustedVaultKeyAndVersion;
 import org.chromium.components.user_prefs.UserPrefs;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Callable;
 
 /**
- * TestRule for common functionality between sync tests. TODO(crbug.com/40743432): Support batching
- * tests with SyncTestRule.
+ * TestRule for common functionality between sync tests.
+ *
+ * <p>Tests should start ChromeTabbedActivity on about:blank (e.g. via {@code startOnBlankPage()}),
+ * which is not synced as a typed URL that could interfere with test data.
  */
-public class SyncTestRule extends ChromeTabbedActivityTestRule {
+public class SyncTestRule extends ExternalResource {
     /** Simple activity that mimics a trusted vault key retrieval flow that succeeds immediately. */
     public static class FakeKeyRetrievalActivity extends Activity {
         @Override
@@ -94,7 +96,7 @@ public class SyncTestRule extends ChromeTabbedActivityTestRule {
 
     /**
      * A fake implementation of TrustedVaultClient.Backend. Allows to specify keys to be fetched.
-     * Keys aren't populated through fetchKeys() unless startPopulateKeys() is called.
+     * Keys aren't populated through fetchKeysAndVersions() unless startPopulateKeys() is called.
      * startPopulateKeys() is called by FakeKeyRetrievalActivity before its completion to mimic real
      * TrustedVaultClient.Backend implementation.
      *
@@ -106,7 +108,7 @@ public class SyncTestRule extends ChromeTabbedActivityTestRule {
         private static FakeTrustedVaultClientBackend sInstance;
         private boolean mPopulateKeys;
         private boolean mRecoverabilityDegraded;
-        private @Nullable List<byte[]> mKeys;
+        private @Nullable List<TrustedVaultKeyAndVersion> mKeys;
 
         public FakeTrustedVaultClientBackend() {
             mPopulateKeys = false;
@@ -121,7 +123,8 @@ public class SyncTestRule extends ChromeTabbedActivityTestRule {
         }
 
         @Override
-        public Promise<List<byte[]>> fetchKeys(CoreAccountInfo accountInfo) {
+        public Promise<List<TrustedVaultKeyAndVersion>> fetchKeysAndVersions(
+                CoreAccountInfo accountInfo) {
             if (mKeys == null || !mPopulateKeys) {
                 return Promise.rejected();
             }
@@ -185,7 +188,11 @@ public class SyncTestRule extends ChromeTabbedActivityTestRule {
         }
 
         public void setKeys(List<byte[]> keys) {
-            mKeys = Collections.unmodifiableList(keys);
+            List<TrustedVaultKeyAndVersion> keysAndVersions = new ArrayList<>(keys.size());
+            for (int i = 0; i < keys.size(); i++) {
+                keysAndVersions.add(new TrustedVaultKeyAndVersion(keys.get(i), i + 1));
+            }
+            mKeys = Collections.unmodifiableList(keysAndVersions);
         }
 
         public void startPopulateKeys() {
@@ -200,8 +207,9 @@ public class SyncTestRule extends ChromeTabbedActivityTestRule {
     private FakeServerHelper mFakeServerHelper;
     private SyncService mSyncService;
     private final SigninTestRule mSigninTestRule = SigninTestRule.createWithCleanups();
-    private final BlankCTATabInitialStateRule mBlankCTATabRule =
-            new BlankCTATabInitialStateRule(this, false);
+    // Written on the instrumentation thread and read on the UI thread, and vice versa.
+    private volatile boolean mRuleActive;
+    private volatile boolean mSyncInitialized;
 
     public SigninTestRule getSigninTestRule() {
         return mSigninTestRule;
@@ -215,10 +223,16 @@ public class SyncTestRule extends ChromeTabbedActivityTestRule {
     }
 
     public FakeServerHelper getFakeServerHelper() {
+        assert mSyncInitialized
+                : "Sync not initialized; start ChromeTabbedActivity (e.g. startOnBlankPage())"
+                        + " first";
         return mFakeServerHelper;
     }
 
     public SyncService getSyncService() {
+        assert mSyncInitialized
+                : "Sync not initialized; start ChromeTabbedActivity (e.g. startOnBlankPage())"
+                        + " first";
         return mSyncService;
     }
 
@@ -306,45 +320,41 @@ public class SyncTestRule extends ChromeTabbedActivityTestRule {
                 criteria, reason, SyncTestUtil.TIMEOUT_MS, SyncTestUtil.INTERVAL_MS);
     }
 
-    @Override
-    public Statement apply(final Statement base, final Description desc) {
-        final Statement superStatement = super.apply(base, desc);
-
-        // Start the activity by opening about:blank. This URL is ideal because it is not synced as
-        // a typed URL. If another URL is used, it could interfere with test data.
-        final Statement blankCTATabStatement = mBlankCTATabRule.apply(superStatement, desc);
-        return mSigninTestRule.apply(
-                new Statement() {
-                    @Override
-                    public void evaluate() throws Throwable {
-                        // ChromeActivityTestRule disables IPH only after the activity starts.
-                        TrackerFactory.setTrackerForTests(new TestTracker());
-                        blankCTATabStatement.evaluate();
-                    }
-                },
-                desc);
+    private void setUpSync() {
+        ThreadUtils.assertOnUiThread();
+        if (!mRuleActive) return;
+        assert !mSyncInitialized : "Sync already initialized";
+        SyncService syncService = createSyncServiceImpl();
+        if (syncService != null) {
+            SyncServiceFactory.setInstanceForTesting(syncService);
+        }
+        mSyncService = SyncTestUtil.getSyncServiceForLastUsedProfile();
+        mFakeServerHelper = FakeServerHelper.createInstanceAndGet();
+        // Set last so that the getters never observe the flag before the fields are assigned.
+        mSyncInitialized = true;
     }
 
     @Override
-    protected void before() throws Throwable {
-        super.before();
+    public Statement apply(final Statement base, final Description desc) {
+        return mSigninTestRule.apply(super.apply(base, desc), desc);
+    }
+
+    @Override
+    protected void before() {
+        mRuleActive = true;
         TrustedVaultClient.get(SecurityDomainId.CHROME_SYNC)
                 .setBackendForTesting(FakeTrustedVaultClientBackend.get());
-
         ThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    SyncService syncService = createSyncServiceImpl();
-                    if (syncService != null) {
-                        SyncServiceFactory.setInstanceForTesting(syncService);
-                    }
-                    mSyncService = SyncTestUtil.getSyncServiceForLastUsedProfile();
-                    mFakeServerHelper = FakeServerHelper.createInstanceAndGet();
-                });
+                () ->
+                        ChromeBrowserInitializer.getInstance()
+                                .runNowOrAfterFullBrowserStarted(this::setUpSync));
     }
 
     @Override
     protected void after() {
-        super.after();
+        mRuleActive = false;
+        if (!mSyncInitialized) return;
+        mSyncInitialized = false;
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     mSyncService = null;

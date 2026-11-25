@@ -238,18 +238,6 @@ class VIZ_COMMON_EXPORT BeginFrameSource {
       perfetto::EventContext& ctx,
       perfetto::protos::pbzero::BeginFrameSourceStateV2* state) const;
 
-  // Update the display ID for the source. This can change, e.g, as a window
-  // moves across displays.
-  virtual void SetVSyncDisplayID(int64_t display_id, bool force_update) {}
-
-#if BUILDFLAG(IS_MAC)
-  // Notifies the source that it may need to reconnect to a VSync source (e.g.,
-  // DisplayLinkMac) for the specified display. This is typically triggered by
-  // display configuration changes in the browser process.
-  virtual void UpdateVSyncDisplay(int64_t display_id) {}
-
-#endif
-
   virtual void SetUpdateVSyncParametersCallback(
       UpdateVSyncParametersCallback callback) {}
 
@@ -297,12 +285,6 @@ class VIZ_COMMON_EXPORT BeginFrameSource {
   GpuBusyThrottlingState gpu_busy_response_state_ =
       GpuBusyThrottlingState::kIdle;
 
-#if BUILDFLAG(IS_MAC)
-  base::TimeDelta total_delta_;
-  // The frame count since this histogram was recorded last time. It is recorded
-  // every 3600 frames, which is equivalent to every minute on a 60Hz monitors .
-  int frames_since_last_recording_ = 0;
-#endif
   raw_ptr<SchedulerClient> scheduler_client_ = nullptr;
   raw_ptr<InputClient> input_client_ = nullptr;
 };
@@ -499,6 +481,16 @@ class VIZ_COMMON_EXPORT ExternalBeginFrameSource : public BeginFrameSource {
 
   virtual base::flat_set<base::TimeDelta> GetSupportedFrameIntervals(
       base::TimeDelta interval);
+
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+  // Update the display ID for the source. This can change, e.g, as a window
+  // moves across displays.
+  virtual void SetVSyncDisplayID(int64_t display_id, bool force_update) {}
+#endif
+
+#if BUILDFLAG(IS_MAC)
+  virtual int64_t display_id() const;
+#endif
 
  protected:
   // Called on AddObserver and gets missed BeginFrameArgs for the given

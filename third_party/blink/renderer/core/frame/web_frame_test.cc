@@ -98,6 +98,7 @@
 #include "third_party/blink/public/platform/web_runtime_features.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/public/platform/web_url_response.h"
 #include "third_party/blink/public/test/test_web_frame_content_dumper.h"
 #include "third_party/blink/public/web/web_console_message.h"
@@ -108,6 +109,7 @@
 #include "third_party/blink/public/web/web_history_item.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
+#include "third_party/blink/public/web/web_local_frame_metrics_observer.h"
 #include "third_party/blink/public/web/web_local_frame_observer.h"
 #include "third_party/blink/public/web/web_navigation_timings.h"
 #include "third_party/blink/public/web/web_navigation_type.h"
@@ -167,6 +169,7 @@
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/frame/local_frame_mojo_handler.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/remote_frame.h"
 #include "third_party/blink/renderer/core/frame/remote_frame_view.h"
@@ -223,6 +226,8 @@
 #include "third_party/blink/renderer/platform/loader/fetch/raw_resource.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher_properties.h"
+#include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
+#include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
 #include "third_party/blink/renderer/platform/loader/fetch/url_loader/url_loader_client.h"
 #include "third_party/blink/renderer/platform/network/http_names.h"
 #include "third_party/blink/renderer/platform/runtime_feature_state/runtime_feature_state_override_context.h"
@@ -16326,6 +16331,297 @@ TEST_F(WebFrameTest, DidAddMessageToConsole) {
   EXPECT_THAT(
       observer.messages()[1].stack_trace.Utf8(),
       testing::AllOf(testing::HasSubstr("outer"), testing::HasSubstr("inner")));
+
+  web_view_helper.Reset();
+}
+
+namespace {
+
+class ReentrantSubmitObserver : public WebLocalFrameObserver {
+ public:
+  explicit ReentrantSubmitObserver(WebLocalFrame* frame)
+      : WebLocalFrameObserver(frame) {}
+
+  void WillSendSubmitEvent(const WebFormElement&) override {
+    ++submit_count_;
+    GetWebLocalFrame()->AddMessageToConsole(WebConsoleMessage(
+        mojom::ConsoleMessageLevel::kWarning, "reentrant message"));
+  }
+
+  void DidAddMessageToConsole(const WebConsoleMessage& message,
+                              const WebString& source_name,
+                              unsigned source_line,
+                              const WebString& stack_trace) override {
+    messages_.push_back(message.text);
+  }
+
+  void OnFrameDetached() override {}
+
+  int submit_count() const { return submit_count_; }
+  const Vector<String>& messages() const { return messages_; }
+
+ private:
+  int submit_count_ = 0;
+  Vector<String> messages_;
+};
+
+}  // namespace
+
+// Regression test for crbug.com/589719846: reentrant notifications on the
+// WebLocalFrameObserver list (e.g. a console message logged during
+// WillSendSubmitEvent) must be allowed.
+TEST_F(WebFrameTest, ReentrantWebLocalFrameObserverNotification) {
+  frame_test_helpers::WebViewHelper web_view_helper;
+  web_view_helper.Initialize();
+
+  WebLocalFrameImpl* main_frame = web_view_helper.LocalMainFrame();
+  frame_test_helpers::LoadHTMLString(
+      main_frame,
+      "<html><body><form onsubmit='return false;'>"
+      "<button id='btn' type='submit'>Submit</button>"
+      "</form></body></html>",
+      url_test_helpers::ToKURL("http://example.com/"));
+  RunPendingTasks();
+
+  ReentrantSubmitObserver observer(main_frame);
+  ConsoleMessageObserver second_observer(main_frame);
+
+  main_frame->ExecuteScript(
+      WebScriptSource("document.getElementById('btn').click();"));
+  RunPendingTasks();
+
+  EXPECT_EQ(1, observer.submit_count());
+  EXPECT_THAT(observer.messages(), testing::ElementsAre("reentrant message"));
+  ASSERT_EQ(1u, second_observer.messages().size());
+  EXPECT_EQ("reentrant message",
+            second_observer.messages()[0].message.text.Utf8());
+
+  web_view_helper.Reset();
+}
+
+namespace {
+
+class TestWebLocalFrameMetricsObserver : public WebLocalFrameMetricsObserver {
+ public:
+  explicit TestWebLocalFrameMetricsObserver(WebLocalFrame* frame)
+      : WebLocalFrameMetricsObserver(frame) {}
+
+  void OnMainFrameRectangleChanged(const gfx::Rect& main_frame_rect) override {
+    last_main_frame_rect_ = main_frame_rect;
+    ++main_frame_rect_count_;
+  }
+
+  void OnMainFrameViewportRectangleChanged(
+      const gfx::Rect& main_frame_viewport_rect) override {
+    last_main_frame_viewport_rect_ = main_frame_viewport_rect;
+    ++main_frame_viewport_rect_count_;
+  }
+
+  void DidLoadResourceFromMemoryCache(const WebURLRequest& request,
+                                      const WebURLResponse& response) override {
+    last_memory_cache_url_ = request.Url().GetString().Utf8();
+    ++memory_cache_count_;
+  }
+
+  const gfx::Rect& last_main_frame_rect() const {
+    return last_main_frame_rect_;
+  }
+  int main_frame_rect_count() const { return main_frame_rect_count_; }
+
+  const gfx::Rect& last_main_frame_viewport_rect() const {
+    return last_main_frame_viewport_rect_;
+  }
+  int main_frame_viewport_rect_count() const {
+    return main_frame_viewport_rect_count_;
+  }
+
+  const std::string& last_memory_cache_url() const {
+    return last_memory_cache_url_;
+  }
+  int memory_cache_count() const { return memory_cache_count_; }
+
+ private:
+  gfx::Rect last_main_frame_rect_{-1, -1, -1, -1};
+  int main_frame_rect_count_ = 0;
+  gfx::Rect last_main_frame_viewport_rect_{-1, -1, -1, -1};
+  int main_frame_viewport_rect_count_ = 0;
+  std::string last_memory_cache_url_;
+  int memory_cache_count_ = 0;
+};
+
+}  // namespace
+
+TEST_F(WebFrameTest, MainFrameRectRecorded) {
+  frame_test_helpers::WebViewHelper web_view_helper;
+  web_view_helper.Initialize();
+
+  WebLocalFrameImpl* main_frame = web_view_helper.LocalMainFrame();
+  TestWebLocalFrameMetricsObserver observer(main_frame);
+  gfx::Rect main_frame_rect(0, 0, 200, 140);
+  main_frame->OnMainFrameRectangleChanged(main_frame_rect);
+  EXPECT_EQ(observer.last_main_frame_rect(), main_frame_rect);
+  EXPECT_EQ(observer.main_frame_rect_count(), 1);
+
+  // Calling again with the same rect should be deduplicated.
+  main_frame->OnMainFrameRectangleChanged(main_frame_rect);
+  EXPECT_EQ(observer.main_frame_rect_count(), 1);
+
+  // After a navigation, the notification of `main_frame_rect` should be
+  // propagated again for the new document.
+  frame_test_helpers::LoadHTMLString(
+      main_frame, "<html><body></body></html>",
+      url_test_helpers::ToKURL("http://example.com/"));
+  TestWebLocalFrameMetricsObserver observer2(main_frame);
+  main_frame->OnMainFrameRectangleChanged(main_frame_rect);
+  EXPECT_EQ(observer2.last_main_frame_rect(), main_frame_rect);
+  EXPECT_EQ(observer2.main_frame_rect_count(), 1);
+
+  web_view_helper.Reset();
+}
+
+TEST_F(WebFrameTest, MainFrameViewportRectRecorded) {
+  frame_test_helpers::WebViewHelper web_view_helper;
+  web_view_helper.Initialize();
+
+  WebLocalFrameImpl* main_frame = web_view_helper.LocalMainFrame();
+  TestWebLocalFrameMetricsObserver observer(main_frame);
+  gfx::Rect main_frame_viewport_rect(0, 0, 200, 140);
+  main_frame->OnMainFrameViewportRectangleChanged(main_frame_viewport_rect);
+  EXPECT_EQ(observer.last_main_frame_viewport_rect(), main_frame_viewport_rect);
+  EXPECT_EQ(observer.main_frame_viewport_rect_count(), 1);
+
+  // Calling again with the same rect should be deduplicated.
+  main_frame->OnMainFrameViewportRectangleChanged(main_frame_viewport_rect);
+  EXPECT_EQ(observer.main_frame_viewport_rect_count(), 1);
+
+  // After a navigation, the notification of `main_frame_viewport_rect` should
+  // be propagated again for the new document.
+  frame_test_helpers::LoadHTMLString(
+      main_frame, "<html><body></body></html>",
+      url_test_helpers::ToKURL("http://example.com/"));
+  TestWebLocalFrameMetricsObserver observer2(main_frame);
+  main_frame->OnMainFrameViewportRectangleChanged(main_frame_viewport_rect);
+  EXPECT_EQ(observer2.last_main_frame_viewport_rect(),
+            main_frame_viewport_rect);
+  EXPECT_EQ(observer2.main_frame_viewport_rect_count(), 1);
+
+  web_view_helper.Reset();
+}
+
+TEST_F(WebFrameTest, DidLoadResourceFromMemoryCache) {
+  frame_test_helpers::WebViewHelper web_view_helper;
+  web_view_helper.Initialize();
+
+  WebLocalFrameImpl* main_frame = web_view_helper.LocalMainFrame();
+  TestWebLocalFrameMetricsObserver observer(main_frame);
+  const KURL sub_url = url_test_helpers::ToKURL("http://example.com/sub.js");
+  main_frame->DidLoadResourceFromMemoryCache(ResourceRequest(sub_url),
+                                             ResourceResponse(sub_url));
+  EXPECT_EQ(observer.memory_cache_count(), 1);
+  EXPECT_EQ(observer.last_memory_cache_url(), "http://example.com/sub.js");
+
+  web_view_helper.Reset();
+}
+
+namespace {
+
+class StopObserver : public WebLocalFrameObserver {
+ public:
+  explicit StopObserver(WebLocalFrame* frame) : WebLocalFrameObserver(frame) {}
+
+  void OnStop() override { ++stop_count_; }
+  void OnFrameDetached() override {}
+
+  int stop_count() const { return stop_count_; }
+
+ private:
+  int stop_count_ = 0;
+};
+
+}  // namespace
+
+TEST_F(WebFrameTest, OnStop) {
+  frame_test_helpers::WebViewHelper web_view_helper;
+  web_view_helper.Initialize();
+
+  WebLocalFrameImpl* main_frame = web_view_helper.LocalMainFrame();
+  StopObserver observer(main_frame);
+  frame_test_helpers::LoadHTMLString(
+      main_frame, "<html><body></body></html>",
+      url_test_helpers::ToKURL("http://example.com/"));
+  RunPendingTasks();
+
+  EXPECT_EQ(0, observer.stop_count());
+
+  static_cast<mojom::blink::LocalFrame*>(
+      main_frame->GetFrame()->mojo_handler_.Get())
+      ->StopLoading();
+  EXPECT_EQ(1, observer.stop_count());
+
+  web_view_helper.Reset();
+}
+
+namespace {
+
+class MockPrintObserver : public WebLocalFrameObserver {
+ public:
+  explicit MockPrintObserver(WebLocalFrame* frame)
+      : WebLocalFrameObserver(frame) {}
+
+  MOCK_METHOD(void, ScriptedPrint, (bool user_initiated), (override));
+  MOCK_METHOD(void, DidFinishLoadForPrinting, (), (override));
+
+  void OnFrameDetached() override {}
+};
+
+}  // namespace
+
+TEST_F(WebFrameTest, ScriptedPrint) {
+  frame_test_helpers::WebViewHelper web_view_helper;
+  web_view_helper.Initialize();
+
+  WebLocalFrameImpl* main_frame = web_view_helper.LocalMainFrame();
+  testing::StrictMock<MockPrintObserver> observer(main_frame);
+  frame_test_helpers::LoadHTMLString(
+      main_frame, "<html><body></body></html>",
+      url_test_helpers::ToKURL("http://example.com/"));
+  RunPendingTasks();
+
+  EXPECT_CALL(observer, ScriptedPrint(false));
+  main_frame->ExecuteScript(WebScriptSource("window.print();"));
+  Mock::VerifyAndClearExpectations(&observer);
+
+  EXPECT_CALL(observer, ScriptedPrint(true));
+  WebFrameWidget* widget = main_frame->FrameWidgetImpl();
+  widget->SetHandlingInputEvent(true);
+  main_frame->ExecuteScript(WebScriptSource("window.print();"));
+  widget->SetHandlingInputEvent(false);
+  Mock::VerifyAndClearExpectations(&observer);
+
+  web_view_helper.Reset();
+}
+
+TEST_F(WebFrameTest, DidFinishLoadForPrinting) {
+  RegisterMockedHttpURLLoad("white-1x1.png");
+  frame_test_helpers::WebViewHelper web_view_helper;
+  web_view_helper.Initialize();
+
+  WebLocalFrameImpl* main_frame = web_view_helper.LocalMainFrame();
+  testing::StrictMock<MockPrintObserver> observer(main_frame);
+  frame_test_helpers::LoadHTMLString(
+      main_frame,
+      "<html><head><style>"
+      "@media print { body { background-image: url('white-1x1.png'); } }"
+      "</style></head><body></body></html>",
+      url_test_helpers::ToKURL(base_url_));
+  RunPendingTasks();
+
+  EXPECT_TRUE(main_frame->WillPrintSoon());
+
+  EXPECT_CALL(observer, DidFinishLoadForPrinting());
+  url_test_helpers::ServeAsynchronousRequests();
+  RunPendingTasks();
+  Mock::VerifyAndClearExpectations(&observer);
 
   web_view_helper.Reset();
 }

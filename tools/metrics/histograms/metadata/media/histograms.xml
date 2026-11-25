@@ -927,6 +927,21 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Media.Android.MediaCodec.OutputFrame.GetOutputFrameTime"
+    units="microseconds" expires_after="2027-09-01">
+  <owner>philyan@chromium.org</owner>
+  <owner>media-dev-uma@chromium.org</owner>
+  <summary>
+    Time spent in a single MediaCodec.getOutputFrame() call (including JNI) in
+    the GPU process. Recorded on each probed output buffer (the first 3
+    non-empty buffers after codec creation, Flush(), and each non-empty output
+    format change, capped at 15 calls per codec, when
+    Media.Android.MediaCodec.OutputFrame.Eligibility is Eligible), for both
+    successful and failed calls. Only recorded on clients with high-resolution
+    clocks.
+  </summary>
+</histogram>
+
 <histogram name="Media.Android.MediaCodec.OutputFrame.Status.{VideoCodec}"
     enum="MediaCodecOutputFrameStatus" expires_after="2027-09-01">
   <owner>philyan@chromium.org</owner>
@@ -944,7 +959,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Media.Android.MediaCodec.VideoInputExceedsMaxCapacity"
-    enum="Boolean" expires_after="2027-03-24">
+    enum="Boolean" expires_after="2027-05-23">
   <owner>sobek@google.com</owner>
   <owner>media-dev-uma@chromium.org</owner>
   <summary>
@@ -1021,7 +1036,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Media.Audio.Android.AAudio.InputTimestampDiscontinuitySizeV2"
-    units="ms" expires_after="2027-03-14">
+    units="ms" expires_after="2027-05-23">
   <owner>tguilbert@chromium.org</owner>
   <owner>media-dev-uma@chromium.org</owner>
   <summary>
@@ -1477,7 +1492,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Media.Audio.Capture.ProcessingAudioFifo.MaxUsage"
-    units="buffers" expires_after="2027-03-21">
+    units="buffers" expires_after="2027-05-23">
   <owner>tguilbert@chromium.org</owner>
   <owner>olka@chromium.org</owner>
   <owner>fhernqvist@google.com</owner>
@@ -1490,7 +1505,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Media.Audio.Capture.ProcessingAudioFifo.Overruns"
-    units="count" expires_after="2027-03-21">
+    units="count" expires_after="2027-05-23">
   <owner>tguilbert@chromium.org</owner>
   <owner>olka@chromium.org</owner>
   <owner>fhernqvist@google.com</owner>
@@ -1725,7 +1740,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Media.Audio.Capture.Win.InitError.FormatRelated"
-    enum="AudioStreamFormatRelatedInitError" expires_after="2027-03-21">
+    enum="AudioStreamFormatRelatedInitError" expires_after="2027-05-23">
   <owner>fhernqvist@google.com</owner>
   <owner>olka@chromium.org</owner>
   <owner>webrtc-audio-uma@google.com</owner>
@@ -2233,6 +2248,53 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Media.Audio.Output.Win.SessionAttenuation.{Component}"
+    units="dB" expires_after="2027-05-19">
+  <owner>henrika@chromium.org</owner>
+  <owner>olka@chromium.org</owner>
+  <summary>
+    Attenuation in whole dB of one part of the volume of the Windows audio
+    session that a WASAPI output stream belongs to: {Component}. Recorded once
+    each time a shared-mode output stream is opened, only when that part is
+    below 0.99, and whether or not the session is muted (Windows keeps the
+    volumes while muted; mute itself is not included). 0 means less than 0.5 dB;
+    100 means 100 dB or more. A user who opens many streams contributes many
+    samples. See also Media.Audio.Output.Win.SessionVolumeState.
+  </summary>
+  <token key="Component">
+    <variant name="SessionVolume"
+        summary="the session volume (ISimpleAudioVolume, the app's slider in
+                 the Windows volume mixer), -20 * log10(session volume)"/>
+    <variant name="UnequalChannelVolume"
+        summary="the per-channel volumes (IChannelAudioVolume, not shown in
+                 the Windows volume mixer) when they differ by more than
+                 0.005, e.g. a balance setting; -20 * log10(lowest channel
+                 volume)"/>
+    <variant name="UniformChannelVolume"
+        summary="the per-channel volumes (IChannelAudioVolume, not shown in
+                 the Windows volume mixer) when all channels are reduced by
+                 the same amount (within 0.005), or the session is mono; -20
+                 * log10(lowest channel volume)"/>
+  </token>
+</histogram>
+
+<histogram name="Media.Audio.Output.Win.SessionVolumeState"
+    enum="AudioOutputSessionVolumeState" expires_after="2027-05-19">
+  <owner>henrika@chromium.org</owner>
+  <owner>olka@chromium.org</owner>
+  <summary>
+    Which part of the Windows audio session volume reduces the level of a WASAPI
+    output stream: the session volume and mute (ISimpleAudioVolume, shown in the
+    Windows volume mixer) and the per-channel volumes (IChannelAudioVolume, not
+    shown in the mixer). Windows saves these per device, executable path and
+    session, and other applications can change them. Mute is independent of the
+    volumes (Windows keeps the volumes while muted), so each volume state is
+    recorded both unmuted and muted. A volume counts as reduced below 0.99.
+    Recorded once each time a shared-mode output stream is opened, so a user who
+    opens many streams contributes many samples.
+  </summary>
+</histogram>
+
 <histogram name="Media.Audio.Output.Win.{AudioOutputMethod}Error2"
     enum="Hresult" expires_after="2027-05-19">
   <owner>henrika@chromium.org</owner>
@@ -2727,7 +2789,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Media.Audio.Win.CoreAudioUtil.SharedModeInitializeTime"
-    units="ms" expires_after="2027-03-14">
+    units="ms" expires_after="2027-05-23">
   <owner>henrika@chromium.org</owner>
   <owner>olka@chromium.org</owner>
   <owner>media-audio@chromium.org</owner>
@@ -2973,7 +3035,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Media.AudioDuckerWin.UnduckSessionResult"
-    enum="BooleanSuccess" expires_after="2027-03-21">
+    enum="BooleanSuccess" expires_after="2027-05-23">
   <owner>steimel@chromium.org</owner>
   <owner>media-dev-uma@chromium.org</owner>
   <summary>
@@ -3336,7 +3398,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Media.AutoPictureInPicture.EnterPictureInPicture.AutomaticReason.{AutomaticReason}.PromptResultV2"
-    enum="MediaAutoPictureInPicturePromptResult" expires_after="2027-03-14">
+    enum="MediaAutoPictureInPicturePromptResult" expires_after="2027-05-23">
   <owner>bkeen@google.com</owner>
   <owner>media-dev-uma@chromium.org</owner>
   <summary>
@@ -3523,7 +3585,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Media.AutoPictureInPicture.EnterPictureInPicture.AutomaticReasonV2.{AutomaticReason}.TotalTimeForSession"
-    units="ms" expires_after="2027-01-03">
+    units="ms" expires_after="2028-01-03">
   <owner>bkeen@google.com</owner>
   <owner>media-dev-uma@chromium.org</owner>
   <summary>
@@ -3686,7 +3748,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Media.BreakoutBox.Usage" enum="BreakoutBoxUsage"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>guidou@chromium.org</owner>
   <owner>tguilbert@chromium.org</owner>
   <summary>
@@ -5250,6 +5312,71 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Media.FFmpegVideoDecoder.H264.ChromaSubsampling"
+    enum="VideoChromaSampling" expires_after="2027-11-23">
+  <owner>eugene@chromium.org</owner>
+  <owner>media-dev-uma@chromium.org</owner>
+  <summary>
+    Records each distinct H.264 chroma subsampling format (4:2:0, 4:2:2, 4:4:4,
+    or 4:0:0 monochrome) parsed by H264Parser during a conformant
+    FFmpegVideoDecoder session. Recorded when an H.264 FFmpegVideoDecoder
+    session ends (on re-initialization or destruction) if at least one frame was
+    successfully decoded and H264Parser parsed the stream without error.
+  </summary>
+</histogram>
+
+<histogram name="Media.FFmpegVideoDecoder.H264.ColorDepth" units="bits"
+    expires_after="2027-11-23">
+  <owner>eugene@chromium.org</owner>
+  <owner>media-dev-uma@chromium.org</owner>
+  <summary>
+    Records each distinct H.264 color bit depth (e.g., 8, 10, 12) parsed by
+    H264Parser during a conformant FFmpegVideoDecoder session. Recorded when an
+    H.264 FFmpegVideoDecoder session ends (on re-initialization or destruction)
+    if at least one frame was successfully decoded and H264Parser parsed the
+    stream without error.
+  </summary>
+</histogram>
+
+<histogram name="Media.FFmpegVideoDecoder.H264.Conformant" enum="Boolean"
+    expires_after="2027-11-23">
+  <owner>eugene@chromium.org</owner>
+  <owner>media-dev-uma@chromium.org</owner>
+  <summary>
+    Records whether an H.264 stream successfully decoded by FFmpegVideoDecoder
+    could be parsed without error by media::H264Parser (true) or caused a parser
+    error / failed to parse any SPS+slice (false). Recorded once when an H.264
+    FFmpegVideoDecoder session ends (on re-initialization or destruction) if at
+    least one frame was successfully decoded. Used to measure how often FFmpeg
+    decodes non-conformant streams that strict parsers reject.
+  </summary>
+</histogram>
+
+<histogram name="Media.FFmpegVideoDecoder.H264.Interlacing"
+    enum="H264Interlacing" expires_after="2027-11-23">
+  <owner>eugene@chromium.org</owner>
+  <owner>media-dev-uma@chromium.org</owner>
+  <summary>
+    Records the H.264 interlacing mode (progressive, PAFF, MBAFF, or both)
+    parsed by H264Parser during a conformant FFmpegVideoDecoder session.
+    Recorded once when an H.264 FFmpegVideoDecoder session ends (on
+    re-initialization or destruction) if at least one frame was successfully
+    decoded and H264Parser parsed the stream without error.
+  </summary>
+</histogram>
+
+<histogram name="Media.FFmpegVideoDecoder.H264.Profile"
+    enum="VideoCodecProfile" expires_after="2027-11-23">
+  <owner>eugene@chromium.org</owner>
+  <owner>media-dev-uma@chromium.org</owner>
+  <summary>
+    Records each distinct H.264 profile parsed by H264Parser during a conformant
+    FFmpegVideoDecoder session. Recorded when an H.264 FFmpegVideoDecoder
+    session ends (on re-initialization or destruction) if at least one frame was
+    successfully decoded and H264Parser parsed the stream without error.
+  </summary>
+</histogram>
+
 <histogram name="Media.FrameInfo.GuessedInitialCodedSizeSuccess"
     enum="BooleanSuccess" expires_after="2027-04-11">
   <owner>dalecurtis@chromium.org</owner>
@@ -5641,7 +5768,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Media.HLS.InitializationError" enum="HlsDemuxerStatus"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>tmathmeyer@chromium.org</owner>
   <owner>media-dev-uma@chromium.org</owner>
   <summary>
@@ -5650,7 +5777,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Media.HLS.ParserError" units="sparse"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>tmathmeyer@chromium.org</owner>
   <owner>media-dev-uma@chromium.org</owner>
   <summary>
@@ -5660,7 +5787,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Media.HLS.PlaybackError" enum="HlsDemuxerStatus"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>tmathmeyer@chromium.org</owner>
   <owner>media-dev-uma@chromium.org</owner>
   <summary>
@@ -5961,7 +6088,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Media.MediaDevices.GetUserMedia.Result3"
-    enum="UserMediaRequestResult" expires_after="2027-03-21">
+    enum="UserMediaRequestResult" expires_after="2027-05-23">
   <owner>toprice@chromium.org</owner>
   <owner>agpalak@chromium.org</owner>
   <owner>rtc-meet-in-chrome@google.com</owner>
@@ -7143,6 +7270,22 @@ chromium-metrics-reviews@google.com.
     recover from a hardware context reset. Recorded once when either the media
     pipeline is destroyed or we fail to recover from a subsequent error.
   </summary>
+</histogram>
+
+<histogram name="Media.PipelineStatus.SRC.{DemuxerType}" enum="PipelineStatus"
+    expires_after="2027-08-01">
+  <owner>jophba@chromium.org</owner>
+  <owner>media-dev-uma@chromium.org</owner>
+  <summary>
+    Final pipeline status for progressive src= playbacks (excluding MSE, HLS,
+    and MediaStreams) that used {DemuxerType}. Recorded once when
+    MediaMetricsProvider is destroyed at the end of a media player's lifecycle,
+    including playbacks that failed before tracks were discovered.
+  </summary>
+  <token key="DemuxerType">
+    <variant name="FFmpegDemuxer" summary="FFmpegDemuxer"/>
+    <variant name="SymphoniaDemuxer" summary="SymphoniaDemuxer"/>
+  </token>
 </histogram>
 
 <histogram name="Media.PipelineStatus.Start" enum="PipelineStatus"
@@ -10063,6 +10206,17 @@ chromium-metrics-reviews@google.com.
     Records when the GPU context for the MirroringGpuFactoriesFactory instance
     is lost. This should prompt a renegotiation without that hardware encoder
     configuration being offered.
+  </summary>
+</histogram>
+
+<histogram name="MediaRouter.MirroringService.LoweredHardwareFrameRate"
+    enum="VideoCodec" expires_after="2027-08-01">
+  <owner>jophba@chromium.org</owner>
+  <owner>openscreen-eng@google.com</owner>
+  <summary>
+    Records the video codec when a hardware encoder fails above 30 FPS during a
+    mirroring session, prompting an in-place fallback to 30 FPS hardware
+    encoding before denylisting the codec.
   </summary>
 </histogram>
 

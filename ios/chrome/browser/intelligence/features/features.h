@@ -26,12 +26,6 @@ BASE_DECLARE_FEATURE(kEnhancedCalendar);
 // Returns true if enhanced calendar is enabled.
 bool IsEnhancedCalendarEnabled();
 
-// Feature flag controlling the proactive suggestions framework.
-BASE_DECLARE_FEATURE(kProactiveSuggestionsFramework);
-
-// Returns true if the proactive suggestions framework is enabled.
-bool IsProactiveSuggestionsFrameworkEnabled();
-
 // Page action menu feature flag, used to roll out and toggle in chrome://flags.
 BASE_DECLARE_FEATURE(kPageActionMenu);
 
@@ -186,6 +180,14 @@ bool IsGeminiEligibilityAblationEnabled();
 
 // Feature flag for Gemini Live.
 BASE_DECLARE_FEATURE(kGeminiLive);
+
+// Feature flag to allow Gemini Live when `kIOSGeminiBottomSheetMigration` is
+// enabled. This is useful for running Gemini Live experiments excluding
+// `kIOSGeminiBottomSheetMigration` users, or experiments that combine
+// `kIOSGeminiBottomSheetMigration` and Gemini Live.
+BASE_DECLARE_FEATURE(kEnableGeminiLiveInBottomSheet);
+
+// Returns true if Gemini Live is enabled.
 bool IsGeminiLiveEnabled();
 
 // Parameter to skip the Gemini Live FRE intro.
@@ -256,8 +258,19 @@ bool ActorDisablesInputDuringActuation();
 // Feature flag controlling Actor origin gating.
 BASE_DECLARE_FEATURE(kActorOriginGating);
 
+// Feature parameter controlling whether uncached navigation responses prompt
+// the user for confirmation directly.
+extern const char kActorOriginGatingPromptUserForNavigationToNewOriginsParam[];
+BASE_DECLARE_FEATURE_PARAM(
+    bool,
+    kActorOriginGatingPromptUserForNavigationToNewOrigins);
+
 // Returns true if Actor origin gating is enabled.
 bool IsActorOriginGatingEnabled();
+
+// Returns true if uncached navigations to new origins should prompt the user
+// for confirmation.
+bool ShouldPromptUserForActorNavigationToNewOrigins();
 
 extern const char kActorOriginGatingExplicitParam[];
 extern const char kActorOriginGatingImplicitParam[];
@@ -620,5 +633,12 @@ BASE_DECLARE_FEATURE(kGeminiNativeHeader);
 // Returns true if both `kGeminiNativeHeader` and
 // `kIOSGeminiBottomSheetMigration` are enabled.
 bool IsGeminiNativeHeaderEnabled();
+
+// Passes the Model Quality Logging Service (MQLS) client ID to the embedded
+// Gemini iOS SDK for donated logs.
+BASE_DECLARE_FEATURE(kGeminiModelQualityClientID);
+
+// Returns true if `kGeminiModelQualityClientID` is enabled.
+bool IsGeminiModelQualityClientIDEnabled();
 
 #endif  // IOS_CHROME_BROWSER_INTELLIGENCE_FEATURES_FEATURES_H_

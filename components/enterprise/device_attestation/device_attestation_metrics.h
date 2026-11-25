@@ -31,7 +31,9 @@ enum class AttestationBlobResult {
 // once at the start of every request, before any early return, so that it can
 // act as the denominator for the result metric: requests whose callback never
 // runs (e.g. the service is torn down mid-flight) are recorded here but have no
-// corresponding result.
+// corresponding result. Calls for which attestation does not apply at all
+// (e.g. profiles that are not eligible for it on ChromeOS) are not requests and
+// are not recorded, as on platforms without an attestation service.
 void LogAttestationBlobRequested();
 
 // Records the result of an attempted blob generation, along with how long the
@@ -43,6 +45,22 @@ void LogAttestationBlobRequested();
 // across platforms.
 void LogAttestationBlobGenerated(base::TimeTicks start_time,
                                  const BlobGenerationResult& result);
+
+// Records how long an attempted blob generation took, counting only the time
+// during which the app was in the foreground. `foreground_latency` is the time
+// between the request and its result, minus the time the app spent in the
+// background in between.
+//
+// The latency recorded by `LogAttestationBlobGenerated()` is wall-clock time.
+// On platforms where the OS suspends an app that is in the background, it
+// includes the time the app spent suspended while the request was pending,
+// which says nothing about how long the generation takes.
+//
+// Call this in addition to `LogAttestationBlobGenerated()`, not instead of it,
+// and skip calling it for requests that were only pending while the app was in
+// the background. It is currently only called on iOS.
+void LogAttestationBlobForegroundLatency(base::TimeDelta foreground_latency,
+                                         const BlobGenerationResult& result);
 
 // Records that a blob generation could not be attempted because no attestation
 // service was available. Deliberately records no latency: nothing was

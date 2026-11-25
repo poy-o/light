@@ -12,6 +12,7 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
+#include "base/i18n/language_tag.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
@@ -72,7 +73,7 @@ PaymentRequestState::PaymentRequestState(
     const url::Origin& frame_security_origin,
     base::WeakPtr<PaymentRequestSpec> spec,
     base::WeakPtr<Delegate> delegate,
-    const std::string& app_locale,
+    const base::i18n::LanguageTag& app_locale,
     autofill::PersonalDataManager* personal_data_manager,
     base::WeakPtr<ContentPaymentRequestDelegate> payment_request_delegate,
     base::WeakPtr<JourneyLogger> journey_logger,
@@ -385,8 +386,9 @@ void PaymentRequestState::GeneratePaymentResponse() {
 
   // Once the response is ready, will call back into OnPaymentResponseReady.
   response_helper_ = std::make_unique<PaymentResponseHelper>(
-      app_locale_, spec_, selected_app_, payment_request_delegate_,
-      selected_shipping_profile_, selected_contact_profile_, journey_logger_,
+      std::string(app_locale_.tag_string()), spec_, selected_app_,
+      payment_request_delegate_, selected_shipping_profile_,
+      selected_contact_profile_, journey_logger_,
       weak_ptr_factory_.GetWeakPtr());
 }
 
@@ -517,7 +519,7 @@ void PaymentRequestState::SetSelectedApp(base::WeakPtr<PaymentApp> app) {
   UpdateIsReadyToPayAndNotifyObservers();
 }
 
-const std::string& PaymentRequestState::GetApplicationLocale() {
+const base::i18n::LanguageTag& PaymentRequestState::GetApplicationLocale() {
   return app_locale_;
 }
 
@@ -592,8 +594,7 @@ void PaymentRequestState::PopulateProfileCache() {
     return profile->IsHomeAndWorkProfile();
   });
 
-  std::vector<raw_ptr<autofill::AutofillProfile, VectorExperimental>>
-      raw_profiles_for_filtering;
+  std::vector<raw_ptr<autofill::AutofillProfile>> raw_profiles_for_filtering;
   raw_profiles_for_filtering.reserve(profiles.size());
 
   // PaymentRequest may outlive the Profiles returned by the Data Manager.
@@ -708,8 +709,8 @@ void PaymentRequestState::OnAddressNormalized(
     return;
 
   delegate_->OnShippingAddressSelected(
-      data_util::GetPaymentAddressFromAutofillProfile(normalized_profile,
-                                                      app_locale_));
+      data_util::GetPaymentAddressFromAutofillProfile(
+          normalized_profile, std::string(app_locale_.tag_string())));
 }
 
 void PaymentRequestState::OnGetTwaPackageName(

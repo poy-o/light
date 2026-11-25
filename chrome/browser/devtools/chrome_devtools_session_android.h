@@ -8,13 +8,18 @@
 #include <memory>
 
 #include "chrome/browser/devtools/chrome_devtools_session_base.h"
+#include "extensions/buildflags/buildflags.h"
 
 namespace content {
 class DevToolsAgentHostClientChannel;
 }  // namespace content
 
+class AdsHandler;
 class AutofillHandler;
 class BrowserHandlerAndroid;
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+class ExtensionsHandler;
+#endif
 class PageHandler;
 class TargetHandlerAndroid;
 
@@ -32,8 +37,12 @@ class ChromeDevToolsSessionAndroid : public ChromeDevToolsSessionBase {
   TargetHandlerAndroid* target_handler() { return target_handler_.get(); }
 
  private:
+  std::unique_ptr<AdsHandler> ads_handler_;
   std::unique_ptr<AutofillHandler> autofill_handler_;
   std::unique_ptr<BrowserHandlerAndroid> browser_handler_;
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+  std::unique_ptr<ExtensionsHandler> extensions_handler_;
+#endif
   std::unique_ptr<PageHandler> page_handler_;
   std::unique_ptr<TargetHandlerAndroid> target_handler_;
 };

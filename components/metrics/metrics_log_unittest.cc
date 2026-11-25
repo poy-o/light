@@ -48,10 +48,6 @@
 #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
 #endif
 
-#if BUILDFLAG(IS_WIN)
-#include "base/win/current_module.h"
-#endif
-
 #if BUILDFLAG(IS_LINUX)
 #include "base/nix/xdg_util.h"
 #include "base/scoped_environment_variable_override.h"
@@ -262,6 +258,36 @@ TEST_F(MetricsLogTest, ClearSessionIdentifiersMatchesExclude) {
   EXPECT_EQ(excluded.SerializeAsString(), cleared.SerializeAsString());
 }
 
+TEST_F(MetricsLogTest, ClearUmaIdentifiers) {
+  SystemProfileProto system_profile;
+  MetricsLog::RecordCoreSystemProfile(&client_, &system_profile,
+                                      MetricsLog::SessionIdentifiers::kInclude);
+  system_profile.set_client_uuid(kClientId);
+  auto* cloned_install_info = system_profile.mutable_cloned_install_info();
+  cloned_install_info->set_first_timestamp(100);
+  cloned_install_info->set_last_timestamp(200);
+  cloned_install_info->set_cloned_from_client_id(12345);
+  cloned_install_info->set_count(1);
+  system_profile.set_fg_bg_id(1);
+
+  ASSERT_TRUE(system_profile.has_client_uuid());
+  ASSERT_TRUE(system_profile.has_cloned_install_info());
+  ASSERT_TRUE(system_profile.has_session_hash());
+  ASSERT_TRUE(system_profile.has_fg_bg_id());
+
+  MetricsLog::ClearUmaIdentifiers(&system_profile);
+
+  EXPECT_FALSE(system_profile.has_client_uuid());
+  EXPECT_FALSE(system_profile.has_cloned_install_info());
+  EXPECT_FALSE(system_profile.has_session_hash());
+  EXPECT_FALSE(system_profile.has_fg_bg_id());
+
+  EXPECT_EQ(client_.GetVersionString(), system_profile.app_version());
+  EXPECT_EQ(client_.GetChannel(), system_profile.channel());
+  EXPECT_EQ(TestMetricsServiceClient::kBrandForTesting,
+            system_profile.brand_code());
+}
+
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
 TEST_F(MetricsLogTest, FgBgId) {
   MetricsLog log1(kClientId, kSessionId, MetricsLog::ONGOING_LOG, &client_);
@@ -360,9 +386,6 @@ TEST_F(MetricsLogTest, BasicRecord) {
   hardware->set_system_ram_mb(
       base::SysInfo::AmountOfTotalPhysicalMemory().InMiB());
   hardware->set_hardware_class(GetExpectedHardwareClass());
-#if BUILDFLAG(IS_WIN)
-  hardware->set_dll_base(reinterpret_cast<uint64_t>(CURRENT_MODULE()));
-#endif
 
 #if BUILDFLAG(IS_CHROMEOS)
   system_profile->mutable_os()->set_name("CrOS");

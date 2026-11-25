@@ -96,6 +96,9 @@ class AutofillBottomSheetTabHelper
   void AddObserver(autofill::AutofillBottomSheetObserver* observer);
   void RemoveObserver(autofill::AutofillBottomSheetObserver* observer);
 
+  // Returns a weak pointer to this tab helper.
+  base::WeakPtr<AutofillBottomSheetTabHelper> GetWeakPtr();
+
   // Shows the card unmask authentication selection bottom sheet. The
   // `model_controller` are stored and retrieved later by the appropriate
   // coordinator.
@@ -300,10 +303,8 @@ class AutofillBottomSheetTabHelper
   // `params`.
   void MaybeShowPaymentsBottomSheet(const autofill::FormActivityParams& params);
 
-  // Send command to show the Payments Bottom Sheet. Detach all listeners if
-  // `detach`.
-  void ShowPaymentsBottomSheet(const autofill::FormActivityParams& params,
-                               bool detach);
+  // Send command to show the Payments Bottom Sheet.
+  void ShowPaymentsBottomSheet(const autofill::FormActivityParams& params);
 
   // Send command to show the scan save and fill Bottom Sheet.
   void ShowScanCardSaveAndFillBottomSheet(
@@ -386,6 +387,8 @@ class AutofillBottomSheetTabHelper
   base::WeakPtrFactory<AutofillBottomSheetTabHelper>
       suggestion_request_weak_factory_{this};
 
+  // Must remain the last member so weak pointers are invalidated before
+  // `pending_prompt_manager_` and other members are destroyed.
   base::WeakPtrFactory<AutofillBottomSheetTabHelper> weak_factory_{this};
 };
 

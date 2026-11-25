@@ -784,7 +784,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.CBCMRealTimeReportEnqueue"
-    enum="EnterpriseCloudReportingStatusCode" expires_after="2026-12-01">
+    enum="EnterpriseCloudReportingStatusCode" expires_after="2027-12-01">
   <owner>zmin@chromium.org</owner>
   <owner>src/chrome/browser/enterprise/reporting/OWNERS</owner>
   <summary>
@@ -1058,7 +1058,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Enterprise.ClientCertificate.{Level}.CreateCertificate.Success.HasCert"
-    enum="BooleanSuccess" expires_after="2027-03-07">
+    enum="BooleanSuccess" expires_after="2027-05-23">
   <owner>seblalancette@chromium.org</owner>
   <owner>cbe-device-trust-eng@google.com</owner>
   <summary>
@@ -1194,7 +1194,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Enterprise.ClientCertificates.ClankKeySecurityLevel"
     enum="ClankClientCertificatesBrowserKeySecurityLevel"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>eliashomsi@google.com</owner>
   <owner>cbe-device-trust-eng@google.com</owner>
   <summary>
@@ -1205,7 +1205,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.CloudExtensionRequestUpdated"
-    enum="EnterpriseCloudExtensionRequestListUpdate" expires_after="2026-12-01">
+    enum="EnterpriseCloudExtensionRequestListUpdate" expires_after="2027-12-01">
   <owner>zmin@chromium.org</owner>
   <owner>src/chrome/browser/enterprise/reporting/OWNERS</owner>
   <summary>
@@ -1227,7 +1227,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Enterprise.CloudManagementEnrollmentTokenLocation.Mac"
     enum="EnterpriseCloudManagementEnrollmentTokenLocationMac"
-    expires_after="2026-12-01">
+    expires_after="2027-12-01">
   <owner>zmin@chromium.org</owner>
   <owner>igorruvinov@chromium.org</owner>
   <summary>
@@ -1329,7 +1329,7 @@ chromium-metrics-reviews@google.com.
 <histogram name="Enterprise.CloudReportingBasicRequestSize" units="KB"
     expires_after="2027-04-11">
   <owner>zmin@chromium.org</owner>
-  <owner>pastarmovj@chromium.org</owner>
+  <owner>ydago@chromium.org</owner>
   <summary>
     The proto size of the basic Chrome browser cloud management reporting
     request. When a report is separated into multiple requests, all of them
@@ -1373,7 +1373,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Enterprise.CloudReportingReportGenerationError"
     enum="EnterpriseCloudReportingReportGenerationError"
-    expires_after="2027-03-13">
+    expires_after="2027-05-23">
   <owner>hmare@google.com</owner>
   <owner>cbe-eng@google.com</owner>
   <summary>
@@ -1382,9 +1382,9 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.CloudReportingRequestCount" units="requests"
-    expires_after="2026-12-01">
+    expires_after="2027-12-01">
   <owner>zmin@chromium.org</owner>
-  <owner>pastarmovj@chromium.org</owner>
+  <owner>ydago@chromium.org</owner>
   <summary>
     The number of request for one Chrome browser cloud management report. A
     report is separated into multiple requests when it's too large.
@@ -1392,9 +1392,9 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.CloudReportingRequestSize.{ReportType}" units="KB"
-    expires_after="2026-12-01">
+    expires_after="2027-12-01">
   <owner>zmin@chromium.org</owner>
-  <owner>pastarmovj@chromium.org</owner>
+  <owner>ydago@chromium.org</owner>
   <summary>
     The proto size of each Chrome browser cloud management {ReportType}
     reporting request. It includes the requests which are more than 5MB and
@@ -1406,7 +1406,7 @@ chromium-metrics-reviews@google.com.
 <histogram name="Enterprise.CloudReportingResponse"
     enum="EnterpriseCloudReportingResponse" expires_after="2027-04-11">
   <owner>zmin@chromium.org</owner>
-  <owner>pastarmovj@chromium.org</owner>
+  <owner>ydago@chromium.org</owner>
   <summary>
     The upload result for each cloud reporting request. Note that there may be
     multiple requests per report. Also, one request may creates multiple data
@@ -1767,7 +1767,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.DeviceSettings.UpdatedStatus2"
-    enum="DeviceSettingsStatus2" expires_after="2027-03-14">
+    enum="DeviceSettingsStatus2" expires_after="2027-05-23">
   <owner>rbock@google.com</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
   <owner>managed-devices@google.com</owner>
@@ -1787,7 +1787,8 @@ chromium-metrics-reviews@google.com.
     Captures the size, in bytes, of the device attestation blob generated to
     bind a signals report to the device. Recorded once per attestation blob
     generation request, only when the generation was successful. Recorded on all
-    platforms that support device attestation (currently Android and iOS).
+    platforms that support device attestation (currently Android, iOS and
+    ChromeOS).
   </summary>
 </histogram>
 
@@ -1800,7 +1801,9 @@ chromium-metrics-reviews@google.com.
     before any work is done. Acts as the denominator for
     Enterprise.DeviceSignals.Attestation.Result: the difference between the two
     counts is the number of requests that never completed. Recorded on all
-    platforms that support device attestation (currently Android and iOS).
+    platforms that support device attestation (currently Android, iOS and
+    ChromeOS). On ChromeOS, attestation is only requested for affiliated
+    profiles on enterprise-managed devices; other profiles record nothing.
   </summary>
 </histogram>
 
@@ -1815,8 +1818,34 @@ chromium-metrics-reviews@google.com.
     is torn down while generation is in flight, record no result; compare
     against Enterprise.DeviceSignals.Attestation.Requested to measure how often
     that happens. Recorded on all platforms that support device attestation
-    (currently Android and iOS).
+    (currently Android, iOS and ChromeOS).
   </summary>
+</histogram>
+
+<histogram
+    name="Enterprise.DeviceSignals.Attestation.{Outcome}.ForegroundLatency"
+    units="ms" expires_after="2027-09-14">
+  <owner>mickaczmarczyk@google.com</owner>
+  <owner>cbe-device-trust-eng@google.com</owner>
+  <improvement direction="LOWER_IS_BETTER"/>
+  <summary>
+    Captures the time taken to generate the device attestation blob that binds a
+    signals report to the device, counting only the time during which the app
+    was in the foreground. Measured from the moment the blob generation was
+    requested until its result was received, minus the time the app spent in the
+    background in between. Complements
+    Enterprise.DeviceSignals.Attestation.Success.Latency and
+    Enterprise.DeviceSignals.Attestation.Failure.Latency, which measure
+    wall-clock time: the OS suspends an app that is in the background, so for a
+    request that is pending across a background period they include the time the
+    app spent suspended. Recorded once per attestation blob generation request,
+    only when the generation was actually attempted and {Outcome}, and not for a
+    request that was pending only while the app was in the background. The app
+    keeps running for a short time after entering the background, which is not
+    counted either, so for a request that overlaps a background period this is a
+    lower bound of the time the generation took. Recorded on iOS only.
+  </summary>
+  <token key="Outcome" variants="DeviceSignalsOutcome"/>
 </histogram>
 
 <histogram name="Enterprise.DeviceSignals.Attestation.{Outcome}.Latency"
@@ -1832,8 +1861,8 @@ chromium-metrics-reviews@google.com.
     {Outcome}. Requests that could not be attempted at all, because no
     attestation service was available, are excluded and are instead recorded to
     Enterprise.DeviceSignals.Attestation.Result as service unavailable. Recorded
-    on all platforms that support device attestation (currently Android and
-    iOS).
+    on all platforms that support device attestation (currently Android, iOS and
+    ChromeOS).
   </summary>
   <token key="Outcome" variants="DeviceSignalsOutcome"/>
 </histogram>
@@ -2262,7 +2291,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.DeviceTrust.KeyRotationCommand.Error"
-    enum="DTKeyRotationCommandError" expires_after="2027-03-07">
+    enum="DTKeyRotationCommandError" expires_after="2027-05-23">
   <owner>seblalancette@chromium.org</owner>
   <owner>cbe-device-trust-eng@google.com</owner>
   <summary>
@@ -3498,23 +3527,24 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
-<histogram name="Enterprise.ExtensionActorAttribution.Lookup.Download.Result"
+<histogram name="Enterprise.ExtensionActorAttribution.Lookup.Download.Result2"
     enum="ExtensionDownloadAttributionSignal" expires_after="2027-11-10">
   <owner>mingyil@google.com</owner>
   <owner>haihan@google.com</owner>
   <owner>cbe-cep-eng@google.com</owner>
   <summary>
     The strongest signal identifying the extension behind a download, checked in
-    order: the chrome.downloads API, a chrome-extension:// request initiator,
-    then an active extension actor on the originating tab. Only the
-    chrome.downloads signal is currently used to attribute the download; the
-    other two size the downloads that bypass that API. Recorded each time Chrome
-    looks up the extension behind a download for an enterprise security event or
-    a content analysis request, while the kEnterpriseExtensionActorAttribution
-    feature is enabled. The tab's actor is read at lookup time, so it can differ
-    from the actor when the download started. A single download can be looked up
-    more than once, and lookups are recorded for every profile, including
-    profiles where enterprise reporting is off.
+    order: the chrome.downloads API, a chrome-extension:// request initiator on
+    a navigation (other than a reload or back/forward) or renderer-initiated
+    download, then an active extension actor on the originating tab. The
+    built-in PDF Viewer does not count as a request initiator. Recorded each
+    time Chrome looks up the extension behind a download for an enterprise
+    security event or a content analysis request, while the
+    kEnterpriseExtensionActorAttribution feature is enabled. The tab's actor is
+    read at lookup time, so it can differ from the actor when the download
+    started. A single download can be looked up more than once, and lookups are
+    recorded for every profile, including profiles where enterprise reporting is
+    off.
   </summary>
 </histogram>
 
@@ -4026,7 +4056,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Enterprise.MachineLevelUserCloudPolicyEnrollment.DMTokenDeletion"
-    enum="BooleanSuccess" expires_after="2027-02-21">
+    enum="BooleanSuccess" expires_after="2027-12-01">
   <owner>igorruvinov@chromium.org</owner>
   <owner>zmin@chromium.org</owner>
   <summary>
@@ -4037,9 +4067,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Enterprise.MachineLevelUserCloudPolicyEnrollment.RequestSuccessTime"
-    units="ms" expires_after="2026-12-01">
+    units="ms" expires_after="2027-12-01">
   <owner>zmin@chromium.org</owner>
-  <owner>pastarmovj@chromium.org</owner>
+  <owner>ydago@chromium.org</owner>
   <summary>
     Time since the enrollment request was made until a successful enrollment
     response is returned from the server.
@@ -4048,18 +4078,18 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Enterprise.MachineLevelUserCloudPolicyEnrollment.Result"
     enum="MachineLevelUserCloudPolicyEnrollmentResult"
-    expires_after="2026-12-01">
+    expires_after="2027-12-01">
   <owner>zmin@chromium.org</owner>
-  <owner>pastarmovj@chromium.org</owner>
+  <owner>ydago@chromium.org</owner>
   <summary>The result of machine level user cloud policy enrollment.</summary>
 </histogram>
 
 <histogram
     name="Enterprise.MachineLevelUserCloudPolicyEnrollment.StartupDialog"
     enum="MachineLevelUserCloudPolicyEnrollmentStartupDialog"
-    expires_after="2026-12-01">
+    expires_after="2027-12-01">
   <owner>zmin@chromium.org</owner>
-  <owner>pastarmovj@chromium.org</owner>
+  <owner>ydago@chromium.org</owner>
   <summary>
     Records whether the machine level user cloud policy enrollment dialog is
     shown to the user and the action they took.
@@ -4068,9 +4098,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Enterprise.MachineLevelUserCloudPolicyEnrollment.StartupDialogTime"
-    units="ms" expires_after="2026-12-01">
+    units="ms" expires_after="2027-12-01">
   <owner>zmin@chromium.org</owner>
-  <owner>pastarmovj@chromium.org</owner>
+  <owner>ydago@chromium.org</owner>
   <summary>
     The length of time the machine level user cloud policy enrollment dialog was
     visible to the user.
@@ -4079,7 +4109,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Enterprise.MachineLevelUserCloudPolicyEnrollment.UnenrollSuccess"
-    enum="BooleanSuccess" expires_after="2026-12-01">
+    enum="BooleanSuccess" expires_after="2027-12-01">
   <owner>zmin@chromium.org</owner>
   <owner>domfc@chromium.org</owner>
   <summary>
@@ -4290,7 +4320,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.OnBulkDataEntry.DataSize" units="bytes"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>domfc@chromium.org</owner>
   <owner>webprotect-team@google.com</owner>
   <summary>
@@ -4563,9 +4593,9 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.PolicyUpdatePeriod.MachineLevelUser" units="days"
-    expires_after="2026-12-01">
+    expires_after="2027-12-01">
   <owner>zmin@chromium.org</owner>
-  <owner>pastarmovj@chromium.org</owner>
+  <owner>ydago@chromium.org</owner>
   <summary>
     Time since last machine level user policy fetch.. Emitted when policies are
     loaded.
@@ -4805,7 +4835,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.RegisterCloudPolicyService"
-    enum="RegisterCloudPolicyServiceEvent" expires_after="2026-12-01">
+    enum="RegisterCloudPolicyServiceEvent" expires_after="2027-12-01">
   <owner>zmin@chromium.org</owner>
   <owner>ydago@chromium.org</owner>
   <summary>
@@ -5946,7 +5976,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.UserPolicy.Count" units="policies"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>vincb@google.com</owner>
   <owner>ftirelo@chromium.org</owner>
   <summary>
@@ -6231,7 +6261,6 @@ chromium-metrics-reviews@google.com.
     expires_after="2027-04-11">
   <owner>igorruvinov@chromium.org</owner>
   <owner>ydago@chromium.org</owner>
-  <owner>pastarmovj@chromium.org</owner>
   <owner>zmin@chromium.org</owner>
   <summary>
     Time elapsed for checking the Azure AD join status. This is only recorded
@@ -6242,7 +6271,7 @@ chromium-metrics-reviews@google.com.
 <histogram name="EnterpriseCheck.InDomain" enum="BooleanEnabled"
     expires_after="2027-04-11">
   <owner>ydago@chromium.org</owner>
-  <owner>pastarmovj@chromium.org</owner>
+  <owner>zmin@chromium.org</owner>
   <summary>
     Whether the machine is part of an AD domain. This check is performed once at
     start-up on Windows.
@@ -6266,7 +6295,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="EnterpriseCheck.InvalidPolicies" enum="EnterprisePolicies"
     expires_after="2027-04-11">
-  <owner>pastarmovj@chromium.org</owner>
+  <owner>zmin@chromium.org</owner>
   <owner>ydago@chromium.org</owner>
   <summary>
     A set of policy rules that were ignored due to integrity violations while
@@ -6277,8 +6306,8 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="EnterpriseCheck.InvalidPoliciesDetected"
     units="disabled policies" expires_after="2027-04-11">
-  <owner>pastarmovj@chromium.org</owner>
-  <owner>zmin@chomium.org</owner>
+  <owner>ydago@chromium.org</owner>
+  <owner>zmin@chromium.org</owner>
   <summary>
     The number of disabled policy entries on Windows due to integrity violations
     while parsing the policy data which happens on start-up and when the policy
@@ -6288,7 +6317,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="EnterpriseCheck.IsDomainJoined" enum="BooleanEnabled"
     expires_after="2027-04-11">
-  <owner>pastarmovj@chromium.org</owner>
+  <owner>ydago@chromium.org</owner>
   <owner>zmin@chromium.org</owner>
   <summary>
     Whether the machine is joined to an AD domain. This check is performed once
@@ -6298,7 +6327,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="EnterpriseCheck.IsEnterpriseUser" enum="BooleanEnabled"
     expires_after="2027-04-11">
-  <owner>pastarmovj@chromium.org</owner>
+  <owner>ydago@chromium.org</owner>
   <owner>zmin@chromium.org</owner>
   <summary>
     Whether the machine is considered an enterprise user. An enterprise user is
@@ -6333,7 +6362,6 @@ chromium-metrics-reviews@google.com.
     expires_after="2027-04-11">
   <owner>igorruvinov@chromium.org</owner>
   <owner>ydago@chromium.org</owner>
-  <owner>pastarmovj@chromium.org</owner>
   <owner>zmin@chromium.org</owner>
   <summary>
     Whether the machine is joined to an Azure AD domain or the user has added
@@ -6354,9 +6382,9 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="EnterpriseCheck.IsLocalMachine" enum="Boolean"
-    expires_after="2026-12-01">
+    expires_after="2027-12-01">
   <owner>zmin@chromium.org</owner>
-  <owner>pastarmovj@chromium.org</owner>
+  <owner>ydago@chromium.org</owner>
   <summary>
     Whether the full machine name is the same as the short one, identifying a
     local machine. This check is performed once at start-up on Windows.
@@ -6364,9 +6392,9 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="EnterpriseCheck.IsLocalUser" enum="Boolean"
-    expires_after="2026-12-01">
+    expires_after="2027-12-01">
   <owner>zmin@chromium.org</owner>
-  <owner>pastarmovj@chromium.org</owner>
+  <owner>ydago@chromium.org</owner>
   <summary>
     Whether the currently logged in user is a local user or not, based on its
     SAM compatible user name and machine name. This check is performed once at
@@ -6377,7 +6405,7 @@ chromium-metrics-reviews@google.com.
 <histogram name="EnterpriseCheck.IsManaged2" enum="BooleanEnabled"
     expires_after="2027-04-11">
   <owner>zmin@chromium.org</owner>
-  <owner>pastarmovj@chromium.org</owner>
+  <owner>ydago@chromium.org</owner>
   <summary>
     On Windows: Whether the machine is managed via MDM. On macOS: Whether Chrome
     found a file of managed policies to follow. On Android (OS version
@@ -6389,7 +6417,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="EnterpriseCheck.IsManagedOrEnterpriseDevice"
     enum="BooleanEnabled" expires_after="2027-04-11">
-  <owner>pastarmovj@chromium.org</owner>
+  <owner>ydago@chromium.org</owner>
   <owner>zmin@chromium.org</owner>
   <summary>
     Whether the machine is managed or part of an enterprise. This includes
@@ -6434,8 +6462,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="EnterpriseCheck.Mac.IsCurrentUserDomainUser" enum="Boolean"
-    expires_after="2026-12-01">
-  <owner>pastarmovj@chromium.org</owner>
+    expires_after="2027-12-01">
+  <owner>ydago@chromium.org</owner>
   <owner>zmin@chromium.org</owner>
   <summary>
     On the Mac: Whether the current user has an enterprise identity in Open
@@ -6444,8 +6472,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="EnterpriseCheck.Mac.IsDeviceMDMEnrolledNew"
-    enum="EnterpriseMacMDMStatusNew" expires_after="2026-12-01">
-  <owner>pastarmovj@chromium.org</owner>
+    enum="EnterpriseMacMDMStatusNew" expires_after="2027-12-01">
+  <owner>ydago@chromium.org</owner>
   <owner>zmin@chromium.org</owner>
   <summary>
     On the Mac: Whether the machine is managed via MDM, with data obtained via a
@@ -6476,7 +6504,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="NetworkedProfile.Check" enum="NetworkedProfileCheck"
     expires_after="2027-05-09">
-  <owner>pastarmovj@chromium.org</owner>
+  <owner>zmin@chromium.org</owner>
   <owner>grt@chromium.org</owner>
   <summary>
     Tracks events connected with checking whether the user profile is configured

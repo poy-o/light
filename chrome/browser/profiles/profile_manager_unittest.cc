@@ -9,7 +9,9 @@
 #include <sstream>
 #include <string>
 #include <utility>
+#include <vector>
 
+#include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_path_watcher.h"
@@ -20,6 +22,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
+#include "base/scoped_observation.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
@@ -43,6 +46,7 @@
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_destroyer.h"
+#include "chrome/browser/profiles/profile_manager_observer.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
@@ -215,7 +219,6 @@ class ProfileManagerTestBase : public testing::Test {
 
 #if BUILDFLAG(IS_CHROMEOS)
     base::CommandLine::ForCurrentProcess()->AppendSwitch(switches::kTestType);
-    ash::UserImageManagerImpl::SkipDefaultUserImageDownloadForTesting();
     wallpaper_controller_client_ = std::make_unique<
         WallpaperControllerClientImpl>(
         CHECK_DEREF(TestingBrowserProcess::GetGlobal()->local_state()),
@@ -277,7 +280,9 @@ class ProfileManagerTestBase : public testing::Test {
                                const std::string& name,
                                MockObserver* mock_observer) {
     ProfileManager::CreateMultiProfileAsync(
-        base::UTF8ToUTF16(name), /*icon_index=*/0, /*is_hidden=*/false,
+        base::UTF8ToUTF16(name),
+        /*icon_index=*/profiles::GetPlaceholderAvatarIndex(),
+        /*is_hidden=*/false,
         base::BindOnce(&MockObserver::OnProfileInitialized,
                        base::Unretained(mock_observer)),
         base::BindOnce(&MockObserver::OnProfileCreated,
@@ -411,6 +416,8 @@ class ProfileManagerTestBase : public testing::Test {
   std::unique_ptr<WallpaperControllerClientImpl> wallpaper_controller_client_;
   TestWallpaperController test_wallpaper_controller_;
   ash::system::ScopedFakeStatisticsProvider fake_statistics_provider_;
+  base::AutoReset<bool> skip_default_user_image_download_ =
+      ash::UserImageManagerImpl::SkipDefaultUserImageDownloadForTesting();
 #endif
 };
 
@@ -783,6 +790,74 @@ TEST_F(ProfileManagerTest, CreateProfileAsyncRace_MultipleCreations) {
   content::RunAllTasksUntilIdle();
 }
 
+class ProfileCreationStartedObserver : public ProfileManagerObserver {
+ public:
+  explicit ProfileCreationStartedObserver(
+      base::RepeatingClosure on_creation_started)
+      : on_creation_started_(std::move(on_creation_started)) {}
+
+  void OnProfileCreationStarted(Profile* profile) override {
+    on_creation_started_.Run();
+  }
+
+ private:
+  base::RepeatingClosure on_creation_started_;
+};
+
+// Checks that a profile creation deferred by a pending destruction starts only
+// after the file operations posted by the destroyed profile.
+TEST_F(ProfileManagerTest, CreateProfileAsyncRace_WaitsForFileOperations) {
+  if (!base::FeatureList::IsEnabled(features::kDestroyProfileOnBrowserClose)) {
+    GTEST_SKIP() << "Profile keep-alives are not supported on this platform.";
+  }
+
+  const base::FilePath profile_path =
+      temp_dir_.GetPath().AppendASCII("New Profile");
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+
+  MockObserver mock_observer;
+  EXPECT_CALL(mock_observer, OnProfileInitialized(testing::NotNull()));
+  EXPECT_CALL(mock_observer, OnProfileCreated(testing::NotNull()));
+  CreateProfileAsync(profile_manager, profile_path, &mock_observer);
+  content::RunAllTasksUntilIdle();
+
+  auto* profile =
+      static_cast<TestingProfile*>(profile_manager->GetProfile(profile_path));
+  ASSERT_TRUE(profile);
+
+  // Simulate a file write posted by the profile while it is destroyed.
+  std::vector<std::string> events;
+  profile->SetProfileDestructionObserver(base::BindLambdaForTesting(
+      [&events, io_task_runner = profile->GetIOTaskRunner()] {
+        io_task_runner->PostTask(FROM_HERE,
+                                 base::BindLambdaForTesting(
+                                     [&events] { events.push_back("write"); }));
+      }));
+
+  auto keep_alive_rph = std::make_unique<KeepAliveRenderProcessHost>(profile);
+  ProfileDestroyer::SetDestroyProfileTimeoutForTesting(base::Days(1));
+  profile_manager->ClearFirstBrowserWindowKeepAlive(profile);
+  ASSERT_FALSE(profile_manager->GetProfileByPath(profile_path));
+
+  ProfileCreationStartedObserver creation_observer(base::BindLambdaForTesting(
+      [&events] { events.push_back("creation started"); }));
+  base::ScopedObservation<ProfileManager, ProfileManagerObserver> observation(
+      &creation_observer);
+  observation.Observe(profile_manager);
+
+  MockObserver race_observer;
+  EXPECT_CALL(race_observer, OnProfileInitialized(testing::NotNull()));
+  EXPECT_CALL(race_observer, OnProfileCreated(testing::NotNull()));
+  CreateProfileAsync(profile_manager, profile_path, &race_observer);
+  content::RunAllTasksUntilIdle();
+  EXPECT_TRUE(events.empty());
+
+  keep_alive_rph.reset();
+  content::RunAllTasksUntilIdle();
+
+  EXPECT_THAT(events, testing::ElementsAre("write", "creation started"));
+}
+
 TEST_F(ProfileManagerTest, CreateProfilesAsync) {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
 
@@ -842,7 +917,8 @@ class ProfileManagerMultiProfileTest : public ProfileManagerTest {
 #if BUILDFLAG(IS_ANDROID)
  private:
   base::test::ScopedFeatureList feature_list_{
-      chrome::android::kAndroidMultiprofile};
+      { chrome::android::kAndroidMultiprofile,
+        features::kAndroidMultiprofileStartupData }};
 #endif  // BUILDFLAG(IS_ANDROID)
 };
 
@@ -1028,7 +1104,8 @@ TEST_F(ProfileManagerMultiProfileTest, CreateHiddenProfileAsync) {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
 
   profile_manager->CreateMultiProfileAsync(
-      u"New Profile", 0, /*is_hidden=*/true,
+      u"New Profile", profiles::GetPlaceholderAvatarIndex(),
+      /*is_hidden=*/true,
       base::BindOnce(&MockObserver::OnProfileInitialized,
                      base::Unretained(&mock_observer)),
       base::BindOnce(&MockObserver::OnProfileCreated,
@@ -1492,6 +1569,29 @@ TEST_F(ProfileManagerTest, SetProfileAsLastUsedRecordsProfileWhenUnset) {
             local_state->GetString(prefs::kProfileLastUsed));
 }
 
+TEST_F(ProfileManagerTest, IsAllowedProfilePath) {
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  const base::FilePath& user_data_dir = temp_dir_.GetPath();
+
+  EXPECT_TRUE(profile_manager->IsAllowedProfilePath(
+      user_data_dir.AppendASCII(chrome::kInitialProfile)));
+  EXPECT_TRUE(profile_manager->IsAllowedProfilePath(
+      user_data_dir.Append(chrome::kSystemProfileDir)));
+  EXPECT_TRUE(profile_manager->IsAllowedProfilePath(
+      user_data_dir.Append(chrome::kGuestProfileDir)));
+
+  EXPECT_FALSE(profile_manager->IsAllowedProfilePath(user_data_dir));
+  EXPECT_FALSE(profile_manager->IsAllowedProfilePath(
+      user_data_dir.AppendASCII(chrome::kInitialProfile)
+          .AsEndingWithSeparator()));
+  EXPECT_FALSE(profile_manager->IsAllowedProfilePath(
+      user_data_dir.AppendASCII("a").AppendASCII("b")));
+  EXPECT_FALSE(profile_manager->IsAllowedProfilePath(
+      user_data_dir.Append(base::FilePath::kCurrentDirectory)));
+  EXPECT_FALSE(profile_manager->IsAllowedProfilePath(
+      user_data_dir.Append(base::FilePath::kParentDirectory)));
+}
+
 #if BUILDFLAG(IS_ANDROID)
 TEST_F(ProfileManagerTest, SetProfileAsLastUsedOverwritesStaleLastUsedProfile) {
   base::test::ScopedFeatureList feature_list(
@@ -1602,6 +1702,67 @@ TEST_F(ProfileManagerAndroidStartupDataTest,
 
   EXPECT_EQ(base::FilePath::FromASCII(chrome::kInitialProfile),
             ProfileManager::GetInitialProfileDir());
+}
+
+TEST_F(ProfileManagerAndroidStartupDataTest,
+       CreateInitialProfileUpdatesSharedPrefsForNewLastUsedProfile) {
+  base::test::ScopedFeatureList feature_list(
+      features::kAndroidMultiprofileStartupData);
+  base::FilePath startup_profile_path =
+      temp_dir_.GetPath().AppendASCII("Profile 1");
+  startup_data_.SetProfilePathForTesting(startup_profile_path);
+  profiles::SetLastUsedProfile(startup_profile_path.BaseName());
+  ASSERT_EQ(chrome::kInitialProfile,
+            GetSharedPrefs().ReadString(
+                profiles::kLastUsedProfileBaseNameSharedPreferenceKey,
+                std::string()));
+
+  Profile* profile = ProfileManager::CreateInitialProfile();
+
+  ASSERT_TRUE(profile);
+  EXPECT_EQ("Profile 1",
+            GetSharedPrefs().ReadString(
+                profiles::kLastUsedProfileBaseNameSharedPreferenceKey,
+                std::string()));
+}
+
+TEST_F(ProfileManagerAndroidStartupDataTest,
+       UnrelatedProfileAddedLeavesSharedPrefsUntouched) {
+  base::test::ScopedFeatureList feature_list(
+      features::kAndroidMultiprofileStartupData);
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  const std::string stale_base_name = "StaleProfile";
+  profiles::SetLastUsedProfile(base::FilePath::FromASCII("Profile 1"));
+  GetSharedPrefs().WriteString(
+      profiles::kLastUsedProfileBaseNameSharedPreferenceKey, stale_base_name);
+
+  Profile* profile =
+      profile_manager->GetProfile(temp_dir_.GetPath().AppendASCII("Profile 2"));
+
+  ASSERT_TRUE(profile);
+  EXPECT_EQ(stale_base_name,
+            GetSharedPrefs().ReadString(
+                profiles::kLastUsedProfileBaseNameSharedPreferenceKey,
+                std::string()));
+}
+
+TEST_F(ProfileManagerAndroidStartupDataTest,
+       CreateInitialProfileLeavesSharedPrefsUntouchedWhenDisabled) {
+  base::test::ScopedFeatureList disabled;
+  disabled.InitAndDisableFeature(features::kAndroidMultiprofileStartupData);
+  const std::string stale_base_name = "StaleProfile";
+  profiles::SetLastUsedProfile(
+      base::FilePath::FromASCII(chrome::kInitialProfile));
+  GetSharedPrefs().WriteString(
+      profiles::kLastUsedProfileBaseNameSharedPreferenceKey, stale_base_name);
+
+  Profile* profile = ProfileManager::CreateInitialProfile();
+
+  ASSERT_TRUE(profile);
+  EXPECT_EQ(stale_base_name,
+            GetSharedPrefs().ReadString(
+                profiles::kLastUsedProfileBaseNameSharedPreferenceKey,
+                std::string()));
 }
 
 void ProfileManagerAndroidStartupDataTest::TestCreateInitialProfileImpl(
@@ -2232,7 +2393,7 @@ TEST_F(ProfileManagerTest, ActiveProfileDeletedNextProfileDeletedToo) {
   params2.gaia_id = GaiaId("23456");
   params2.user_name = ASCIIToUTF16(profile_basename2);
   params2.is_consented_primary_account = true;
-  params2.icon_index = 1;
+  params2.icon_index = profiles::GetModernAvatarIconStartIndex();
   storage.AddProfile(std::move(params2));
   ProfileAttributesInitParams params3;
   params3.profile_path = profile_path3;
@@ -2240,7 +2401,7 @@ TEST_F(ProfileManagerTest, ActiveProfileDeletedNextProfileDeletedToo) {
   params3.gaia_id = GaiaId("34567");
   params3.user_name = ASCIIToUTF16(profile_basename3);
   params3.is_consented_primary_account = true;
-  params3.icon_index = 2;
+  params3.icon_index = profiles::GetModernAvatarIconStartIndex() + 1;
   storage.AddProfile(std::move(params3));
 
   content::RunAllTasksUntilIdle();
@@ -2515,19 +2676,21 @@ TEST_F(ProfileManagerTest, ProfileAvatarRecordedAtProfileInit) {
   EXPECT_THAT(histogram_tester.GetAllSamples(kHistogramName),
               BucketsAre(Bucket(ProfileMetrics::AVATAR_PLACEHOLDER, 1)));
 
+#if !BUILDFLAG(IS_CHROMEOS)
   // 3. Regular profile initialized with a custom avatar index
-  // (AVATAR_GENERIC_PURPLE).
+  // (AVATAR_ORIGAMI_CAT). Only the placeholder avatar is available on ChromeOS.
   base::FilePath path_2 = dest_path.Append(FILE_PATH_LITERAL("Profile 2"));
   ProfileAttributesInitParams params_2;
   params_2.profile_path = path_2;
   params_2.profile_name = u"Profile 2";
-  params_2.icon_index = ProfileMetrics::AVATAR_GENERIC_PURPLE;
+  params_2.icon_index = profiles::GetModernAvatarIconStartIndex();
   profile_manager->GetProfileAttributesStorage().AddProfile(
       std::move(params_2));
   profile_manager->GetProfile(path_2);
   EXPECT_THAT(histogram_tester.GetAllSamples(kHistogramName),
-              BucketsAre(Bucket(ProfileMetrics::AVATAR_GENERIC_PURPLE, 1),
+              BucketsAre(Bucket(ProfileMetrics::AVATAR_ORIGAMI_CAT, 1),
                          Bucket(ProfileMetrics::AVATAR_PLACEHOLDER, 1)));
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
   // 4. Regular profile using GAIA avatar (AVATAR_GAIA).
   base::FilePath path_3 = dest_path.Append(FILE_PATH_LITERAL("Profile 3"));
@@ -2543,9 +2706,12 @@ TEST_F(ProfileManagerTest, ProfileAvatarRecordedAtProfileInit) {
   entry_3->SetIsUsingGAIAPicture(true);
   profile_manager->GetProfile(path_3);
   EXPECT_THAT(histogram_tester.GetAllSamples(kHistogramName),
-              BucketsAre(Bucket(ProfileMetrics::AVATAR_GENERIC_PURPLE, 1),
-                         Bucket(ProfileMetrics::AVATAR_PLACEHOLDER, 1),
-                         Bucket(ProfileMetrics::AVATAR_GAIA, 1)));
+              BucketsAre(
+#if !BUILDFLAG(IS_CHROMEOS)
+                  Bucket(ProfileMetrics::AVATAR_ORIGAMI_CAT, 1),
+#endif  // !BUILDFLAG(IS_CHROMEOS)
+                  Bucket(ProfileMetrics::AVATAR_PLACEHOLDER, 1),
+                  Bucket(ProfileMetrics::AVATAR_GAIA, 1)));
 }
 #endif  // !BUILDFLAG(IS_ANDROID)
 

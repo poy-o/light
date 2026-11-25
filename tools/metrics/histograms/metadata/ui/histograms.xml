@@ -38,6 +38,8 @@ chromium-metrics-reviews@google.com.
 
 <!-- LINT.IfChange(CreationSource) -->
 
+<!-- Note: kUnknown and kTest are not recorded as histogram variants. -->
+
 <variants name="CreationSource">
   <variant name=".AllSources" summary="Aggregated across all sources"/>
   <variant name=".DragToNewWindow"
@@ -648,7 +650,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="InitialWebUI.NewWindow{CreationSource}.{ExistingWindow}.BrowserWindow.FirstPaint.{StartPoint}{Version}"
-    units="ms" expires_after="2027-03-14">
+    units="ms" expires_after="2027-05-23">
   <owner>mych@chromium.org</owner>
   <owner>chrome-webium-product-eng@google.com</owner>
   <summary>
@@ -710,7 +712,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="InitialWebUI.NewWindow{CreationSource}.{ExistingWindow}.ReloadButton.{PaintType}.{StartPoint}{Version}"
-    units="ms" expires_after="2027-03-14">
+    units="ms" expires_after="2027-05-23">
   <owner>mych@chromium.org</owner>
   <owner>chrome-webium-product-eng@google.com</owner>
   <summary>
@@ -755,7 +757,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InitialWebUI.ReloadButton.InputCount"
-    enum="ReloadButtonInputType" expires_after="2027-03-21">
+    enum="ReloadButtonInputType" expires_after="2027-05-23">
   <owner>mych@chromium.org</owner>
   <owner>chrome-webium-product-eng@google.com</owner>
   <summary>
@@ -1024,7 +1026,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="InitialWebUI.Toolbar.ProcessAlreadyExistsForTheSameProfileOnCreation"
-    enum="Boolean" expires_after="2027-03-21">
+    enum="Boolean" expires_after="2027-05-23">
   <owner>leimy@chromium.org</owner>
   <owner>chrome-webium-product-eng@google.com</owner>
   <summary>
@@ -1100,7 +1102,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="RenderTextHarfBuzz.GetFallbackFontsTime" units="ms"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>dayeung@chromium.org</owner>
   <owner>etienneb@chromium.org</owner>
   <summary>
@@ -1111,7 +1113,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="RenderTextHarfBuzz.GetFallbackFontTime" units="ms"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>dayeung@chromium.org</owner>
   <owner>etienneb@chromium.org</owner>
   <summary>
@@ -1129,7 +1131,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="RenderTextHarfBuzz.ShapeRunsFallback" enum="ShapeRunFallback"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>dayeung@chromium.org</owner>
   <owner>etienneb@chromium.org</owner>
   <summary>
@@ -1139,7 +1141,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="RenderTextHarfBuzz.ShapeRunsWithFallbackFontsTime" units="ms"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>dayeung@chromium.org</owner>
   <owner>etienneb@chromium.org</owner>
   <summary>
@@ -1200,7 +1202,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Snackbar.QueueDepthAtInsertion" units="Snackbars"
-    expires_after="2026-12-31">
+    expires_after="2027-11-23">
   <owner>vpasupathy@google.com</owner>
   <owner>chrome-ui-security-bugs@google.com</owner>
   <summary>
@@ -1221,7 +1223,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Snackbar.TimerDrift" units="ms" expires_after="2026-12-31">
+<histogram name="Snackbar.TimerDrift" units="ms" expires_after="2027-11-23">
   <owner>vpasupathy@google.com</owner>
   <owner>chrome-ui-security-bugs@google.com</owner>
   <summary>
@@ -1460,7 +1462,7 @@ features through Chrome Labs. -->
 </histogram>
 
 <histogram name="WebUI.Settings.PathVisited" enum="WebUISettingsPathHashes"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>dschuyler@chromium.org</owner>
   <owner>tbuckley@chromium.org</owner>
   <owner>bettes@chromium.org</owner>
@@ -1501,8 +1503,9 @@ features through Chrome Labs. -->
     chrome://webui-toolbar.top-chrome). Not recorded directly: when the
     WebiumMetricsMapping feature is enabled, SubprocessMetricsProvider renames
     those samples to this histogram as it merges histograms from top-chrome
-    WebUI renderers, per the Finch-provided MetricsNameMappingConfiguration.
-    Those samples then no longer count toward
+    WebUI renderers, per Chrome's built-in top-chrome mapping rule, which
+    overrides the Finch-provided MetricsNameMappingConfiguration. Those samples
+    then no longer count toward
     Graphics.Smoothness.PercentDroppedFrames3.AllSequences, which separates jank
     in top-chrome WebUI from jank in web content.
   </summary>
@@ -1581,7 +1584,7 @@ features through Chrome Labs. -->
 </histogram>
 
 <histogram name="WrenchMenu.MenuAction" enum="WrenchMenuAction"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>ainslie@chromium.org</owner>
   <owner>edwardjung@chromium.org</owner>
   <summary>Number of times that each menu item is clicked.</summary>

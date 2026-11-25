@@ -82,6 +82,7 @@ component("gtk") {
     "gtk_ui_factory.h",
     "gtk_ui_platform_stub.h",
     "gtk_util.h",
+    "input_method_context_impl_gtk.h",
     "native_theme_gtk.h",
     "nav_button_provider_gtk.h",
     "os_settings_provider_gtk.h",
@@ -154,8 +155,6 @@ component("gtk") {
     "//ui/color:mixers",
     "//ui/display",
     "//ui/events",
-    "//ui/events:dom_keyboard_layout",
-    "//ui/events:dom_keycode_converter",
     "//ui/gfx",
     "//ui/gfx:native_ui_types",
     "//ui/gfx/geometry",
@@ -177,11 +176,11 @@ component("gtk") {
   }
 
   if (ozone_platform_x11) {
+    public += [ "x/gtk_ui_platform_x11.h" ]
     sources += [
       "x/gtk_event_loop_x11.cc",
       "x/gtk_event_loop_x11.h",
       "x/gtk_ui_platform_x11.cc",
-      "x/gtk_ui_platform_x11.h",
     ]
     deps += [
       "//ui/base/x",
@@ -234,6 +233,19 @@ if (use_gtk) {
       "//ui/native_theme",
       "//ui/shell_dialogs",
     ]
+
+    if (ozone_platform_x11) {
+      sources += [
+        "input_method_context_impl_gtk_unittest.cc",
+        "x/gtk_ui_platform_x11_unittest.cc",
+      ]
+      deps += [
+        "//ui/base/ime",
+        "//ui/base/ime/linux",
+        "//ui/events:dom_keycode_converter",
+        "//ui/gfx/x",
+      ]
+    }
 
     if (ozone_platform_wayland) {
       sources += [ "wayland/gtk_ui_platform_wayland_unittest.cc" ]

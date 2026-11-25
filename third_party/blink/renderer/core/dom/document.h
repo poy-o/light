@@ -215,6 +215,7 @@ class HTMLBodyElement;
 class HTMLCollection;
 class HTMLDialogElement;
 class HTMLElement;
+class HTMLFormControlElementWithState;
 class HTMLFrameOwnerElement;
 class HTMLHeadElement;
 class HTMLImageElement;
@@ -1325,6 +1326,12 @@ class CORE_EXPORT Document : public ContainerNode,
   void AddMutationObserverTypes(MutationType types) {
     mutation_observer_types_ |= types;
   }
+  bool MayHaveActiveTemplateMutationObservers() const {
+    return may_have_active_template_mutation_observers_;
+  }
+  void SetMayHaveActiveTemplateMutationObservers() {
+    may_have_active_template_mutation_observers_ = true;
+  }
   // The target of the outermost active ChildListMutationScope in this
   // document that found no interested observer, if any. See
   // ChildListMutationScope.
@@ -2011,6 +2018,18 @@ class CORE_EXPORT Document : public ContainerNode,
   bool IsSlotAssignmentRecalcForbidden() const {
     return slot_assignment_recalc_forbidden_recursion_depth_ > 0;
   }
+
+  // Queues `control` to have its suggested (autofill preview) value cleared,
+  // because it entered a canvas subtree. That can run script, so it can't be
+  // done where controls enter a canvas subtree (e.g. during slot assignment
+  // recalc). See HTMLFormControlElementWithState::
+  // ScheduleClearSuggestedValueForCanvas().
+  void ScheduleClearSuggestedValueForCanvas(HTMLFormControlElementWithState&);
+  void UnscheduleClearSuggestedValueForCanvas(HTMLFormControlElementWithState&);
+  // Clears the suggested values queued above. Can run script. Returns true if
+  // any control's suggested value or autofill state actually changed. Called
+  // from the document lifecycle, before paint.
+  bool ClearScheduledSuggestedValuesForCanvas();
 
 #if EXPENSIVE_DCHECKS_ARE_ON()
   void AssertLayoutTreeUpdatedAfterLayout();
@@ -2905,6 +2924,7 @@ class CORE_EXPORT Document : public ContainerNode,
   uint32_t event_listener_counts_ = 0;
 
   MutationObserverOptions mutation_observer_types_ = 0;
+  bool may_have_active_template_mutation_observers_ = false;
   Member<Node> unobserved_child_list_mutation_target_;
 
   Member<ElementIntersectionObserverData>
@@ -3202,6 +3222,10 @@ class CORE_EXPORT Document : public ContainerNode,
   Member<DOMFeaturePolicy> policy_;
 
   Member<SlotAssignmentEngine> slot_assignment_engine_;
+
+  // See ScheduleClearSuggestedValueForCanvas().
+  HeapHashSet<WeakMember<HTMLFormControlElementWithState>>
+      form_controls_needing_suggested_value_clear_;
 
   // TODO(tkent): Should it be moved to LocalFrame or LocalFrameView?
   Member<ViewportData> viewport_data_;

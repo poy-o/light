@@ -5,8 +5,10 @@
 #import "ios/chrome/browser/autofill/autofill_ai/coordinator/autofill_ai_save_entity_mediator.h"
 
 #import <algorithm>
+#import <optional>
 
 #import "base/check.h"
+#import "base/i18n/language_tag.h"
 #import "base/memory/raw_ptr.h"
 #import "base/memory/weak_ptr.h"
 #import "base/timer/timer.h"
@@ -30,9 +32,10 @@
 @end
 
 @implementation AutofillAISaveEntityMediator {
-  raw_ptr<AutofillBottomSheetTabHelper> _tabHelper;
+  base::WeakPtr<AutofillBottomSheetTabHelper> _tabHelper;
   std::optional<autofill::SaveEntityParams> _params;
   raw_ptr<autofill::EntityDataManager> _entityDataManager;
+  std::optional<base::i18n::LanguageTag> _appLocale;
   // Timer that controls auto dismissal of the view controller after success
   // confirmation is shown.
   base::OneShotTimer _autoDismissConfirmationTimer;
@@ -52,12 +55,14 @@
 
 - (instancetype)initWithTabHelper:(AutofillBottomSheetTabHelper*)tabHelper
                 entityDataManager:
-                    (autofill::EntityDataManager*)entityDataManager {
+                    (autofill::EntityDataManager*)entityDataManager
+                        appLocale:(const base::i18n::LanguageTag&)appLocale {
   self = [super init];
   if (self) {
     CHECK(tabHelper);
-    _tabHelper = tabHelper;
+    _tabHelper = tabHelper->GetWeakPtr();
     _entityDataManager = entityDataManager;
+    _appLocale = appLocale;
     if (_entityDataManager) {
       _entityDataManagerObserver = std::make_unique<
           autofill::IOSAutofillEntityDataManagerObserverBridge>(
@@ -68,11 +73,13 @@
 }
 
 - (instancetype)initWithParams:(autofill::SaveEntityParams)params
-             entityDataManager:(autofill::EntityDataManager*)entityDataManager {
+             entityDataManager:(autofill::EntityDataManager*)entityDataManager
+                     appLocale:(const base::i18n::LanguageTag&)appLocale {
   self = [super init];
   if (self) {
     _params = std::move(params);
     _entityDataManager = entityDataManager;
+    _appLocale = appLocale;
     if (_entityDataManager) {
       _entityDataManagerObserver = std::make_unique<
           autofill::IOSAutofillEntityDataManagerObserverBridge>(
@@ -110,14 +117,24 @@
   }
   _entityDataManagerObserver.reset();
   _entityDataManager = nullptr;
-  _tabHelper = nullptr;
+  _tabHelper.reset();
 }
 
 #pragma mark - AutofillAISaveEntityMutator
 
 - (void)acceptSaving {
   const autofill::SaveEntityParams* params = [self params];
-  CHECK(params);
+  if (base::FeatureList::IsEnabled(kAutofillReshowSavePromptOnTabReturn)) {
+    if (!params) {
+      // The WebState/tab helper may have been destroyed or the pending prompt
+      // model may have already been consumed or expired before the tap was
+      // handled. Dismiss cleanly instead of crashing.
+      [self.autofillHandler dismissSaveEntityDialog];
+      return;
+    }
+  } else {
+    CHECK(params);
+  }
 
   // When `save_is_synchronous` is true, the profile is saved immediately.
   // Otherwise, the view enters the loading state and does an async call.
@@ -138,7 +155,8 @@
 - (void)cancelSaving {
   if (base::FeatureList::IsEnabled(kAutofillReshowSavePromptOnTabReturn)) {
     std::unique_ptr<AutofillAiSaveEntityPromptModel> model =
-        _tabHelper->TakeAutofillAiSaveEntityPromptModel();
+        _tabHelper ? _tabHelper->TakeAutofillAiSaveEntityPromptModel()
+                   : nullptr;
     if (model) {
       model->OnCanceled();
     }
@@ -155,7 +173,8 @@
 - (void)dismissSaving {
   if (base::FeatureList::IsEnabled(kAutofillReshowSavePromptOnTabReturn)) {
     std::unique_ptr<AutofillAiSaveEntityPromptModel> model =
-        _tabHelper->TakeAutofillAiSaveEntityPromptModel();
+        _tabHelper ? _tabHelper->TakeAutofillAiSaveEntityPromptModel()
+                   : nullptr;
     if (model) {
       model->OnClosed();
     }
@@ -183,7 +202,7 @@
 - (const autofill::SaveEntityParams*)params {
   if (base::FeatureList::IsEnabled(kAutofillReshowSavePromptOnTabReturn)) {
     AutofillAiSaveEntityPromptModel* model =
-        _tabHelper->GetAutofillAiSaveEntityPromptModel();
+        _tabHelper ? _tabHelper->GetAutofillAiSaveEntityPromptModel() : nullptr;
     return model ? &model->params() : nullptr;
   }
   return _params ? &*_params : nullptr;
@@ -201,7 +220,8 @@
 
   [_consumer setNewEntity:params->new_entity
                 oldEntity:params->old_entity
-        saveIsSynchronous:params->save_is_synchronous];
+        saveIsSynchronous:params->save_is_synchronous
+                appLocale:*_appLocale];
 
   NSArray<AutofillLegalMessageLine*>* legalMessages =
       [AutofillLegalMessageLine convertFrom:params->public_passes_notice];
@@ -240,9 +260,9 @@
           : autofill::AutofillClient::EntityImportUIContext{};
 
   if (base::FeatureList::IsEnabled(kAutofillReshowSavePromptOnTabReturn)) {
-    CHECK([self params]);
     std::unique_ptr<AutofillAiSaveEntityPromptModel> model =
-        _tabHelper->TakeAutofillAiSaveEntityPromptModel();
+        _tabHelper ? _tabHelper->TakeAutofillAiSaveEntityPromptModel()
+                   : nullptr;
     if (model) {
       model->OnAccepted(UIContext);
     }

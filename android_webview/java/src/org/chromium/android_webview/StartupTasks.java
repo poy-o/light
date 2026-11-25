@@ -8,8 +8,6 @@ import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Build;
-import android.os.SystemClock;
-import android.os.storage.StorageManager;
 
 import org.chromium.android_webview.accessibility.AwAccessibilityStateVisibilityManager;
 import org.chromium.android_webview.common.AwFeatureMap;
@@ -19,6 +17,7 @@ import org.chromium.android_webview.common.PlatformServiceBridge;
 import org.chromium.android_webview.common.WebViewCachedFlags;
 import org.chromium.android_webview.common.crash.AwCrashReporterClient;
 import org.chromium.android_webview.gfx.AwDrawFnImpl;
+import org.chromium.android_webview.metrics.AwCacheQuotaMetrics;
 import org.chromium.android_webview.metrics.AwMetricsLogUploader;
 import org.chromium.android_webview.metrics.TrackExitReasons;
 import org.chromium.android_webview.policy.AwPolicyProvider;
@@ -43,7 +42,6 @@ import org.chromium.content_public.browser.ChildProcessLauncherHelper;
 import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.ui.display.DisplayAndroidManager;
 
-import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 
 /**
@@ -144,7 +142,37 @@ public final class StartupTasks {
         ThreadUtils.assertOnUiThread();
         try (DualTraceEvent e1 =
                 DualTraceEvent.scoped("StartupTasks.postBrowserProcessStartStepOne")) {
-            finishBrowserProcessStart();
+            try (DualTraceEvent e2 =
+                    DualTraceEvent.scoped("StartupTasks.finishBrowserProcessStart")) {
+                if (!BrowserStartupController.getInstance().isFullBrowserStarted()) {
+                    BrowserStartupController.getInstance()
+                            .startBrowserProcessesSync(
+                                    LibraryProcessType.PROCESS_WEBVIEW,
+                                    !isMultiProcess(),
+                                    /* startGpuProcess= */ false);
+                }
+                try (DualTraceEvent ignored =
+                        DualTraceEvent.scoped(
+                                "StartupTasks.finishBrowserProcessStart.createPowerMonitor")) {
+                    PowerMonitor.create();
+                }
+                try (DualTraceEvent ignored =
+                        DualTraceEvent.scoped(
+                                "StartupTasks.finishBrowserProcessStart.setSafeBrowsingHandler")) {
+                    PlatformServiceBridge.getInstance().setSafeBrowsingHandler();
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    AwContentsLifecycleNotifier.initialize();
+                }
+
+                PostTask.postTask(
+                        TaskTraits.BEST_EFFORT,
+                        () -> {
+                            RecordHistogram.recordSparseHistogram(
+                                    "Android.PlayServices.Version",
+                                    PlatformServiceBridge.getInstance().getGmsVersionCode());
+                        });
+            }
 
             // TODO(crbug.com/332706093): See if this can be moved before loading native.
             if (!WebViewCachedFlags.get()
@@ -189,7 +217,27 @@ public final class StartupTasks {
         AwAccessibilityStateVisibilityManager.initializeOnStartup();
         AwTracingController.getInstance();
 
-        postBackgroundTasks();
+        if (CommandLine.getInstance().hasSwitch(AwSwitches.WEBVIEW_VERBOSE_LOGGING)) {
+            // Log extra information, for debugging purposes.
+            PostTask.postTask(
+                    TaskTraits.BEST_EFFORT,
+                    () -> {
+                        // TODO(ntfschr): CommandLine can change at any time. For simplicity, only
+                        // log it once during startup.
+                        AwContentsStatics.logCommandLineForDebugging();
+                        // Field trials can be activated at any time. We'll continue logging them as
+                        // they're activated.
+                        FieldTrialList.logActiveTrials();
+                    });
+        }
+
+        PostTask.postTask(
+                TaskTraits.BEST_EFFORT, () -> WebViewCachedFlags.get().onStartupCompleted());
+
+        if (AwFeatureMap.isEnabled(AwFeatures.WEBVIEW_RECORD_APP_CACHE_HISTOGRAMS)) {
+            PostTask.postDelayedTask(
+                    TaskTraits.BEST_EFFORT_MAY_BLOCK, AwCacheQuotaMetrics::record, 5000);
+        }
 
         AwContentsStatics.setSelectionActionMenuClient(delegate.getSelectionActionMenuClient());
 
@@ -220,136 +268,12 @@ public final class StartupTasks {
         }
     }
 
-    // TODO(crbug.com/544990736): This is only a separate package-private method because it is used
-    // by AwBrowserProcess.startForTesting(). Inline this into postBrowserProcessStartStepOne once
-    // test startup is migrated.
-    /* package */ static void finishBrowserProcessStart() {
-        ThreadUtils.assertOnUiThread();
-        try (DualTraceEvent e1 = DualTraceEvent.scoped("StartupTasks.finishBrowserProcessStart")) {
-            if (!BrowserStartupController.getInstance().isFullBrowserStarted()) {
-                BrowserStartupController.getInstance()
-                        .startBrowserProcessesSync(
-                                LibraryProcessType.PROCESS_WEBVIEW,
-                                !isMultiProcess(),
-                                /* startGpuProcess= */ false);
-            }
-            try (DualTraceEvent ignored =
-                    DualTraceEvent.scoped(
-                            "StartupTasks.finishBrowserProcessStart.createPowerMonitor")) {
-                PowerMonitor.create();
-            }
-            try (DualTraceEvent ignored =
-                    DualTraceEvent.scoped(
-                            "StartupTasks.finishBrowserProcessStart.setSafeBrowsingHandler")) {
-                PlatformServiceBridge.getInstance().setSafeBrowsingHandler();
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                AwContentsLifecycleNotifier.initialize();
-            }
-
-            PostTask.postTask(
-                    TaskTraits.BEST_EFFORT,
-                    () -> {
-                        RecordHistogram.recordSparseHistogram(
-                                "Android.PlayServices.Version",
-                                PlatformServiceBridge.getInstance().getGmsVersionCode());
-                    });
-        }
-    }
-
     private static void waitForNonUiThreadCapableStartupTasks() {
         try (DualTraceEvent e2 =
                 DualTraceEvent.scoped("StartupTasks.waitForNonUiThreadCapableStartupTasks")) {
             sNonUiThreadCapableStartupTasksLatch.await();
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
-        }
-    }
-
-    // TODO(crbug.com/544990736): StartupTasks should only contain top-level scheduling-unit methods
-    // queued to StartupTasksRunner. Move the StorageManager cache quota metrics to a dedicated
-    // metrics helper class and inline the remaining PostTask calls into
-    // postBrowserProcessStartStepTwo().
-    private static void postBackgroundTasks() {
-        if (CommandLine.getInstance().hasSwitch(AwSwitches.WEBVIEW_VERBOSE_LOGGING)) {
-            // Log extra information, for debugging purposes.
-            PostTask.postTask(
-                    TaskTraits.BEST_EFFORT,
-                    () -> {
-                        // TODO(ntfschr): CommandLine can change at any time. For simplicity, only
-                        // log it once during startup.
-                        AwContentsStatics.logCommandLineForDebugging();
-                        // Field trials can be activated at any time. We'll continue logging them as
-                        // they're activated.
-                        FieldTrialList.logActiveTrials();
-                    });
-        }
-
-        PostTask.postTask(
-                TaskTraits.BEST_EFFORT,
-                () -> {
-                    WebViewCachedFlags.get().onStartupCompleted();
-                });
-
-        if (AwFeatureMap.isEnabled(AwFeatures.WEBVIEW_RECORD_APP_CACHE_HISTOGRAMS)) {
-            PostTask.postDelayedTask(
-                    TaskTraits.BEST_EFFORT_MAY_BLOCK,
-                    () -> {
-                        StorageManager storageManager =
-                                (StorageManager)
-                                        ContextUtils.getApplicationContext()
-                                                .getSystemService(Context.STORAGE_SERVICE);
-                        UUID storageUuid =
-                                ContextUtils.getApplicationContext()
-                                        .getApplicationInfo()
-                                        .storageUuid;
-                        long startTimeGetCacheQuotaMs = SystemClock.uptimeMillis();
-                        long cacheQuotaKiloBytes = -1;
-                        try {
-                            // This can throw `SecurityException` if the app doesn't
-                            // have sufficient privileges.
-                            // See crbug.com/422174715
-                            cacheQuotaKiloBytes =
-                                    storageManager.getCacheQuotaBytes(storageUuid) / 1024;
-                            RecordHistogram.recordCount1MHistogram(
-                                    "Android.WebView.CacheQuotaSize", (int) cacheQuotaKiloBytes);
-                        } catch (Exception e) {
-                        } finally {
-                            RecordHistogram.recordTimesHistogram(
-                                    "Android.WebView.GetCacheQuotaSizeTime",
-                                    SystemClock.uptimeMillis() - startTimeGetCacheQuotaMs);
-                        }
-
-                        long startTimeGetCacheSizeMs = SystemClock.uptimeMillis();
-                        long cacheSizeKiloBytes = -1;
-                        try {
-                            // This can throw `SecurityException` if the app doesn't
-                            // have sufficient privileges.
-                            // See crbug.com/422174715
-                            cacheSizeKiloBytes =
-                                    storageManager.getCacheSizeBytes(storageUuid) / 1024;
-                            RecordHistogram.recordCount1MHistogram(
-                                    "Android.WebView.CacheSize", (int) cacheSizeKiloBytes);
-                        } catch (Exception e) {
-                        } finally {
-                            RecordHistogram.recordTimesHistogram(
-                                    "Android.WebView.GetCacheSizeTime",
-                                    SystemClock.uptimeMillis() - startTimeGetCacheSizeMs);
-                        }
-                        if (cacheQuotaKiloBytes != -1 && cacheSizeKiloBytes != -1) {
-                            long quotaRemainingKiloBytes = cacheQuotaKiloBytes - cacheSizeKiloBytes;
-                            if (quotaRemainingKiloBytes >= 0) {
-                                RecordHistogram.recordCount1MHistogram(
-                                        "Android.WebView.CacheSizeWithinQuota",
-                                        (int) quotaRemainingKiloBytes);
-                            } else {
-                                RecordHistogram.recordCount1MHistogram(
-                                        "Android.WebView.CacheSizeExceedsQuota",
-                                        -1 * (int) quotaRemainingKiloBytes);
-                            }
-                        }
-                    },
-                    5000);
         }
     }
 

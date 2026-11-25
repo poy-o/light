@@ -14,6 +14,7 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/compiler_specific.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/scoped_refptr.h"
 #include "components/gcm_driver/gcm_driver.h"
 #include "components/gcm_driver/gcm_stats_recorder_android.h"
@@ -29,9 +30,12 @@ namespace gcm {
 class GCMDriverAndroid : public GCMDriver,
                          public GCMStatsRecorderAndroid::Delegate {
  public:
+  // When `enabled` is false, skips creating the Java GCMDriver bridge and
+  // returns GCMClient::GCM_DISABLED from EnsureStarted().
   GCMDriverAndroid(
       const base::FilePath& store_path,
-      const scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner);
+      const scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner,
+      bool enabled);
 
   GCMDriverAndroid(const GCMDriverAndroid&) = delete;
   GCMDriverAndroid& operator=(const GCMDriverAndroid&) = delete;
@@ -68,6 +72,7 @@ class GCMDriverAndroid : public GCMDriver,
   InstanceIDHandler* GetInstanceIDHandlerInternal() override;
   void AddAppHandler(const std::string& app_id,
                      GCMAppHandler* handler) override;
+  void WaitForInitialConnectionReady(base::OnceClosure callback) override;
 
   // GCMStatsRecorder::Delegate implementation:
   void OnActivityRecorded() override;

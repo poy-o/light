@@ -428,6 +428,11 @@ void CreditCardSaveManager::AttemptToOfferCardUploadSave(
   if (!payments_network_interface) {
     return;
   }
+  // Drop any pending `GetCardUploadDetails()` response from an earlier
+  // attempt. This attempt resets the upload state below and may return before
+  // issuing its own request, so running the older response would offer upload
+  // save with the state of this attempt.
+  upload_details_weak_ptr_factory_.InvalidateWeakPtrs();
   upload_request_ = payments::UploadCardRequestDetails();
   upload_request_.card = card;
   uploading_local_card_ = uploading_local_card;
@@ -671,10 +676,10 @@ void CreditCardSaveManager::AttemptToOfferCardUploadSave(
 
   payments_network_interface->GetCardUploadDetails(
       country_only_profiles, upload_request_.detected_values,
-      upload_request_.client_behavior_signals,
-      std::string(client_->GetAppLocale().tag_string()),
+      upload_request_.client_behavior_signals, client_->GetAppLocale(),
       base::BindOnce(&CreditCardSaveManager::OnDidGetUploadDetails,
-                     weak_ptr_factory_.GetWeakPtr(), ukm_source_id),
+                     upload_details_weak_ptr_factory_.GetWeakPtr(),
+                     ukm_source_id),
       payments::kUploadPaymentMethodBillableServiceNumber,
       payments::GetBillingCustomerId(payments_data_manager()),
       payments::UploadCardSource::kUpstreamCheckoutFlow);
@@ -754,7 +759,7 @@ bool CreditCardSaveManager::AttemptToOfferCardholderNameUpdate(
   }
 
   payments::GetDetailsForUpdateCardRequestDetails request_details;
-  request_details.app_locale = client_->GetAppLocale().tag_string();
+  request_details.app_locale = client_->GetAppLocale();
   request_details.billing_customer_number =
       payments::GetBillingCustomerId(payments_data_manager());
   request_details.instrument_id = card.instrument_id();
@@ -878,6 +883,16 @@ void CreditCardSaveManager::InitVirtualCardEnroll(
 
   if (auto* virtual_card_enrollment_manager =
           payments_autofill_client().GetVirtualCardEnrollmentManager()) {
+    // `card_unmasked_from_cache` is left unset as it only applies to
+    // downstream enrollment.
+    if (base::FeatureList::IsEnabled(
+            features::kAutofillFixVcnStrikeDatabaseFallback) &&
+        !virtual_card_enrollment_manager->ShouldOfferVirtualCardEnrollment(
+            credit_card, /*card_instrument_id=*/credit_card.instrument_id(),
+            /*card_unmasked_from_cache=*/std::nullopt,
+            VirtualCardEnrollmentSource::kUpstream)) {
+      return;
+    }
     virtual_card_enrollment_manager->InitVirtualCardEnroll(
         credit_card, VirtualCardEnrollmentSource::kUpstream,
         base::BindOnce(
@@ -1691,8 +1706,7 @@ void CreditCardSaveManager::SendUpdateCardRequest() {
     return;
   }
 
-  update_card_request_details_.app_locale =
-      client_->GetAppLocale().tag_string();
+  update_card_request_details_.app_locale = client_->GetAppLocale();
   update_card_request_details_.billing_customer_number =
       payments::GetBillingCustomerId(payments_data_manager());
   multiple_request_payments_network_interface->UpdateCard(
@@ -1816,7 +1830,7 @@ void CreditCardSaveManager::SendUploadCardRequest() {
   if (observer_for_testing_) {
     observer_for_testing_->OnSentUploadCardRequest();
   }
-  upload_request_.app_locale = client_->GetAppLocale().tag_string();
+  upload_request_.app_locale = client_->GetAppLocale();
   upload_request_.billing_customer_number =
       payments::GetBillingCustomerId(payments_data_manager());
 

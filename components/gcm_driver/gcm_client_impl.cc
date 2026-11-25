@@ -6,26 +6,26 @@
 
 #include <stddef.h>
 
+#include <map>
 #include <memory>
 #include <string_view>
 #include <tuple>
 #include <utility>
 
+#include "base/check_op.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/strings/string_split.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/default_clock.h"
 #include "base/timer/timer.h"
-#include "components/crx_file/id_util.h"
 #include "components/fcm/base/fcm_backoff_policy.h"
 #include "components/fcm/crypto/fcm_decryption_result.h"
 #include "components/gcm_driver/gcm_registration_manager_impl.h"
@@ -39,7 +39,6 @@
 #include "google_apis/gcm/engine/gcm_store_impl.h"
 #include "google_apis/gcm/engine/gcm_unregistration_request_handler.h"
 #include "google_apis/gcm/engine/instance_id_delete_token_request_handler.h"
-#include "google_apis/gcm/engine/instance_id_get_token_request_handler.h"
 #include "google_apis/gcm/monitoring/gcm_stats_recorder.h"
 #include "google_apis/gcm/protocol/checkin.pb.h"
 #include "google_apis/gcm/protocol/mcs.pb.h"
@@ -58,7 +57,6 @@ enum MessageType {
   SEND_ERROR,        // Error sending a message.
 };
 
-const int kMaxRegistrationRetries = 5;
 const int kMaxUnregistrationRetries = 5;
 const char kMessageTypeDataMessage[] = "gcm";
 const char kMessageTypeDeletedMessagesKey[] = "deleted_messages";
@@ -100,23 +98,6 @@ MessageType DecodeMessageType(const std::string& value) {
   return UNKNOWN;
 }
 
-int ConstructGCMVersion(const std::string& chrome_version) {
-  // Major Chrome version is passed as GCM version.
-  auto parts = base::SplitStringOnce(chrome_version, '.');
-  if (!parts) {
-    NOTREACHED();
-  }
-
-  int gcm_version = 0;
-  base::StringToInt(parts->first, &gcm_version);
-  return gcm_version;
-}
-
-bool InstanceIDUsesSubtypeForAppId(const std::string& app_id) {
-  // Always use subtypes with Instance ID, except for Chrome Apps/Extensions.
-  return !crx_file::id_util::IdIsValid(app_id);
-}
-
 }  // namespace
 
 GCMClientImpl::GCMClientImpl(
@@ -151,8 +132,9 @@ void GCMClientImpl::Initialize(
   chrome_build_info_ = chrome_build_info;
   gcm_store_ = std::make_unique<GCMStoreImpl>(path, blocking_task_runner,
                                               std::move(encryptor));
-  registration_manager_ =
-      std::make_unique<GCMRegistrationManagerImpl>(*gcm_store_, *clock_);
+  registration_manager_ = std::make_unique<GCMRegistrationManagerImpl>(
+      *gcm_store_, *clock_, chrome_build_info, url_loader_factory,
+      io_task_runner, recorder_);
   io_task_runner_ = std::move(io_task_runner);
   recorder_.SetDelegate(this);
   state_ = INITIALIZED;
@@ -237,6 +219,8 @@ void GCMClientImpl::OnLoadCompleted(
   gservices_settings_.UpdateFromLoadResult(*result);
 
   CHECK(registration_manager_);
+  registration_manager_->SetDeviceCheckinInfo(device_checkin_info_);
+  registration_manager_->SetGServicesSettings(gservices_settings_);
   registration_manager_->OnRegistrationDataLoaded(*result);
 
   load_result_ = std::move(result);
@@ -278,6 +262,8 @@ void GCMClientImpl::StartGCM() {
 
   state_ = INITIAL_DEVICE_CHECKIN;
   device_checkin_info_.Reset();
+  CHECK(registration_manager_);
+  registration_manager_->SetDeviceCheckinInfo(device_checkin_info_);
 
   DVLOG(1) << "Starting initial GCM checkin.";
   StartCheckin();
@@ -299,12 +285,7 @@ void GCMClientImpl::InitializeMCSClient() {
       chrome_build_info_.version, clock_, connection_factory_.get(),
       gcm_store_.get(), io_task_runner_, &recorder_);
 
-  mcs_client_->Initialize(
-      base::BindRepeating(&GCMClientImpl::OnMessageReceivedFromMCS,
-                          weak_ptr_factory_.GetWeakPtr()),
-      base::BindRepeating(&GCMClientImpl::OnMessageSentToMCS,
-                          weak_ptr_factory_.GetWeakPtr()),
-      std::move(load_result_));
+  mcs_client_->Initialize(/*delegate=*/this, std::move(load_result_));
 }
 
 void GCMClientImpl::OnFirstTimeDeviceCheckinCompleted(
@@ -313,6 +294,8 @@ void GCMClientImpl::OnFirstTimeDeviceCheckinCompleted(
 
   device_checkin_info_.set_android_id(checkin_info.android_id());
   device_checkin_info_.set_secret(checkin_info.secret());
+  CHECK(registration_manager_);
+  registration_manager_->SetDeviceCheckinInfo(device_checkin_info_);
   gcm_store_->SetDeviceCredentials(
       checkin_info.android_id(), checkin_info.secret(),
       base::BindOnce(&GCMClientImpl::SetDeviceCredentialsCallback,
@@ -382,6 +365,76 @@ void GCMClientImpl::GetInstanceIDData(const std::string& app_id,
       registration_manager_->GetInstanceIDData(app_id);
 }
 
+void GCMClientImpl::GetToken(scoped_refptr<InstanceIDTokenInfo> token_info,
+                             GetTokenCallback callback) {
+  // TODO(crbug.com/589587357): Upgrade to `CHECK_EQ` once
+  // `GCMDriverDesktop::OnStoreReset()` re-gates `delayed_task_controller_`.
+  DCHECK_EQ(state_, READY);
+  DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
+  CHECK(registration_manager_);
+  registration_manager_->GetToken(std::move(token_info), std::move(callback));
+}
+
+void GCMClientImpl::DeleteToken(scoped_refptr<InstanceIDTokenInfo> token_info,
+                                DeleteTokenCallback callback) {
+  // TODO(crbug.com/589587357): Upgrade to `CHECK_EQ` once
+  // `GCMDriverDesktop::OnStoreReset()` re-gates `delayed_task_controller_`.
+  DCHECK_EQ(state_, READY);
+  DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
+  CHECK(token_info);
+  CHECK(callback);
+  CHECK(registration_manager_);
+
+  auto instance_id_iter =
+      registration_manager_->instance_id_data().find(token_info->app_id);
+  // Tokens must not be deleted when an InstanceID has not been created yet.
+  CHECK(instance_id_iter != registration_manager_->instance_id_data().end());
+
+  // Remove the token(s) from the cache and the store.
+  // TODO(crbug.com/589661362): Remove it only when the request is successful.
+  if (token_info->authorized_entity == "*" && token_info->scope == "*") {
+    // If no token is found for the Instance ID, don't need to unregister since
+    // the Instance ID is not sent to the server yet.
+    if (!RemoveAllCachedInstanceIDTokens(token_info->app_id)) {
+      std::move(callback).Run(SUCCESS);
+      return;
+    }
+  } else if (!RemoveCachedRegistration(token_info)) {
+    std::move(callback).Run(INVALID_PARAMETER);
+    return;
+  }
+
+  auto request_handler = std::make_unique<InstanceIDDeleteTokenRequestHandler>(
+      instance_id_iter->second.first, token_info->authorized_entity,
+      token_info->scope,
+      GCMRegistrationManagerImpl::ConstructGCMVersion(
+          chrome_build_info_.version));
+  std::string source_to_record =
+      token_info->authorized_entity + "/" + token_info->scope;
+
+  bool use_subtype = GCMRegistrationManagerImpl::InstanceIDUsesSubtypeForAppId(
+      token_info->app_id);
+  std::string category = use_subtype
+                             ? chrome_build_info_.product_category_for_subtypes
+                             : token_info->app_id;
+  std::string subtype = use_subtype ? token_info->app_id : std::string();
+
+  StartUnregistrationRequest(std::move(token_info), category, subtype,
+                             std::move(request_handler), source_to_record,
+                             std::move(callback));
+}
+
+void GCMClientImpl::WaitForInitialConnectionReady(base::OnceClosure callback) {
+  DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
+  // TODO(crbug.com/589587357): Upgrade to `CHECK_EQ(state_, READY)` once
+  // `GCMDriverDesktop::OnStoreReset()` re-gates `delayed_task_controller_`.
+  if (state_ != READY) {
+    return;
+  }
+  CHECK(mcs_client_);
+  mcs_client_->WaitForInitialConnectionReady(std::move(callback));
+}
+
 void GCMClientImpl::StartCheckin() {
   DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
 
@@ -438,6 +491,8 @@ void GCMClientImpl::OnCheckinCompleted(
   if (device_checkin_info_.IsValid()) {
     // First update G-services settings, as something might have changed.
     if (gservices_settings_.UpdateFromCheckinResponse(checkin_response)) {
+      CHECK(registration_manager_);
+      registration_manager_->SetGServicesSettings(gservices_settings_);
       gcm_store_->SetGServicesSettings(
           gservices_settings_.settings_map(), gservices_settings_.digest(),
           base::BindOnce(&GCMClientImpl::SetGServicesSettingsCallback,
@@ -553,98 +608,57 @@ void GCMClientImpl::ResetCache() {
   checkin_request_.reset();
   // Delete all of the pending registration and unregistration requests.
   if (registration_manager_) {
+    registration_manager_->SetDeviceCheckinInfo(device_checkin_info_);
     registration_manager_->CancelPendingRequests();
   }
   pending_unregistration_requests_.clear();
 }
 
 void GCMClientImpl::Register(
-    scoped_refptr<RegistrationInfo> registration_info) {
+    scoped_refptr<GCMRegistrationInfo> gcm_registration_info) {
   DCHECK_EQ(state_, READY);
   DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
+  CHECK(gcm_registration_info);
   CHECK(registration_manager_);
 
   // Registrations should never pass as an app_id the special category used
   // internally when registering with a subtype. See security note in
   // GCMClientImpl::HandleIncomingMessage.
-  CHECK_NE(registration_info->app_id,
+  CHECK_NE(gcm_registration_info->app_id,
            chrome_build_info_.product_category_for_subtypes);
 
   if (std::optional<std::string> cached_registration_id =
-          registration_manager_->GetCachedRegistrationId(registration_info)) {
-    observers_.Notify(&Observer::OnRegisterFinished, registration_info,
+          registration_manager_->GetCachedRegistrationId(
+              gcm_registration_info)) {
+    observers_.Notify(&Observer::OnRegisterFinished, gcm_registration_info,
                       *cached_registration_id, SUCCESS);
     return;
   }
 
-  std::unique_ptr<RegistrationRequest::CustomRequestHandler> request_handler;
-  std::string source_to_record;
-
-  const GCMRegistrationInfo* gcm_registration_info =
-      GCMRegistrationInfo::FromRegistrationInfo(registration_info.get());
-  if (gcm_registration_info) {
-    std::string senders;
-    for (const auto& kv : gcm_registration_info->sender_ids) {
-      if (!senders.empty()) {
-        senders.append(",");
-      }
-      senders.append(kv);
+  std::string senders;
+  for (const auto& kv : gcm_registration_info->sender_ids) {
+    if (!senders.empty()) {
+      senders.append(",");
     }
-    request_handler = std::make_unique<GCMRegistrationRequestHandler>(senders);
-    source_to_record = senders;
+    senders.append(kv);
   }
+  auto request_handler =
+      std::make_unique<GCMRegistrationRequestHandler>(senders);
 
-  const InstanceIDTokenInfo* instance_id_token_info =
-      InstanceIDTokenInfo::FromRegistrationInfo(registration_info.get());
-  if (instance_id_token_info) {
-    CHECK(registration_manager_);
-    auto instance_id_iter = registration_manager_->instance_id_data().find(
-        registration_info->app_id);
-    CHECK(instance_id_iter != registration_manager_->instance_id_data().end());
-
-    request_handler = std::make_unique<InstanceIDGetTokenRequestHandler>(
-        instance_id_iter->second.first,
-        instance_id_token_info->authorized_entity,
-        instance_id_token_info->scope,
-        ConstructGCMVersion(chrome_build_info_.version),
-        instance_id_token_info->time_to_live);
-    source_to_record = instance_id_token_info->authorized_entity + "/" +
-                       instance_id_token_info->scope;
-  }
-
-  bool use_subtype = instance_id_token_info &&
-                     InstanceIDUsesSubtypeForAppId(registration_info->app_id);
-  std::string category = use_subtype
-                             ? chrome_build_info_.product_category_for_subtypes
-                             : registration_info->app_id;
-  std::string subtype = use_subtype ? registration_info->app_id : std::string();
-  RegistrationRequest::RequestInfo request_info(
-      device_checkin_info_.android_id(), device_checkin_info_.secret(),
-      category, subtype);
-
-  std::unique_ptr<RegistrationRequest> registration_request(
-      new RegistrationRequest(
-          gservices_settings_.GetRegistrationURL(), request_info,
-          std::move(request_handler), fcm::GetBackoffPolicy(),
-          base::BindOnce(&GCMRegistrationManagerImpl::OnRegisterCompleted,
-                         registration_manager_->GetPendingRequestWeakPtr(),
-                         registration_info,
-                         base::BindOnce(&GCMClientImpl::OnRegisterFinished,
-                                        weak_ptr_factory_.GetWeakPtr(),
-                                        registration_info)),
-          kMaxRegistrationRetries, url_loader_factory_, io_task_runner_,
-          &recorder_, source_to_record));
-  registration_request->Start();
-  registration_manager_->AddPendingRegistrationRequest(
-      std::move(registration_info), std::move(registration_request));
+  registration_manager_->StartRegistrationRequest(
+      gcm_registration_info, /*category=*/gcm_registration_info->app_id,
+      /*subtype=*/std::string(), std::move(request_handler),
+      /*source_to_record=*/senders,
+      base::BindOnce(&GCMClientImpl::OnRegisterFinished,
+                     weak_ptr_factory_.GetWeakPtr(), gcm_registration_info));
 }
 
 void GCMClientImpl::OnRegisterFinished(
-    scoped_refptr<RegistrationInfo> registration_info,
+    scoped_refptr<GCMRegistrationInfo> gcm_registration_info,
     const std::string& registration_id,
     Result result) {
-  observers_.Notify(&Observer::OnRegisterFinished, std::move(registration_info),
-                    registration_id, result);
+  observers_.Notify(&Observer::OnRegisterFinished,
+                    std::move(gcm_registration_info), registration_id, result);
 }
 
 bool GCMClientImpl::ValidateRegistration(
@@ -658,115 +672,104 @@ bool GCMClientImpl::ValidateRegistration(
 }
 
 void GCMClientImpl::Unregister(
-    scoped_refptr<RegistrationInfo> registration_info) {
+    scoped_refptr<GCMRegistrationInfo> gcm_registration_info) {
   DCHECK_EQ(state_, READY);
   DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
-
-  std::unique_ptr<UnregistrationRequest::CustomRequestHandler> request_handler;
-  std::string source_to_record;
-
-  const GCMRegistrationInfo* gcm_registration_info =
-      GCMRegistrationInfo::FromRegistrationInfo(registration_info.get());
-  if (gcm_registration_info) {
-    request_handler = std::make_unique<GCMUnregistrationRequestHandler>(
-        registration_info->app_id);
-  }
-
-  const InstanceIDTokenInfo* instance_id_token_info =
-      InstanceIDTokenInfo::FromRegistrationInfo(registration_info.get());
-  if (instance_id_token_info) {
-    CHECK(registration_manager_);
-    auto instance_id_iter = registration_manager_->instance_id_data().find(
-        registration_info->app_id);
-    if (instance_id_iter == registration_manager_->instance_id_data().end()) {
-      // This should not be reached since we should not delete tokens when
-      // an InstanceID has not been created yet.
-      NOTREACHED();
-    }
-
-    request_handler = std::make_unique<InstanceIDDeleteTokenRequestHandler>(
-        instance_id_iter->second.first,
-        instance_id_token_info->authorized_entity,
-        instance_id_token_info->scope,
-        ConstructGCMVersion(chrome_build_info_.version));
-    source_to_record = instance_id_token_info->authorized_entity + "/" +
-                       instance_id_token_info->scope;
-  }
-
+  CHECK(gcm_registration_info);
   CHECK(registration_manager_);
-  // Remove the registration/token(s) from the cache and the store.
-  // TODO(jianli): Remove it only when the request is successful.
-  if (instance_id_token_info &&
-      instance_id_token_info->authorized_entity == "*" &&
-      instance_id_token_info->scope == "*") {
-    // If authorized_entity and scope are '*', find and remove all associated
-    // tokens.
-    bool token_found = false;
-    for (auto iter = registration_manager_->mutable_registrations().begin();
-         iter != registration_manager_->mutable_registrations().end();) {
-      InstanceIDTokenInfo* cached_instance_id_token_info =
-          InstanceIDTokenInfo::FromRegistrationInfo(iter->first.get());
-      if (cached_instance_id_token_info &&
-          cached_instance_id_token_info->app_id == registration_info->app_id) {
-        token_found = true;
+
+  // Remove the registration from the cache and the store.
+  // TODO(crbug.com/589661362): Remove it only when the request is successful.
+  if (!RemoveCachedRegistration(gcm_registration_info)) {
+    NotifyUnregisterFinished(std::move(gcm_registration_info),
+                             INVALID_PARAMETER);
+    return;
+  }
+
+  auto request_handler = std::make_unique<GCMUnregistrationRequestHandler>(
+      gcm_registration_info->app_id);
+
+  StartUnregistrationRequest(
+      gcm_registration_info, /*category=*/gcm_registration_info->app_id,
+      /*subtype=*/std::string(), std::move(request_handler),
+      /*source_to_record=*/std::string(),
+      base::BindOnce(&GCMClientImpl::NotifyUnregisterFinished,
+                     weak_ptr_factory_.GetWeakPtr(), gcm_registration_info));
+}
+
+bool GCMClientImpl::RemoveCachedRegistration(
+    const scoped_refptr<RegistrationInfo>& registration_info) {
+  DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
+  CHECK(registration_manager_);
+
+  RegistrationInfoMap& registrations =
+      registration_manager_->mutable_registrations();
+  auto iter = registrations.find(registration_info);
+  if (iter == registrations.end()) {
+    return false;
+  }
+  registrations.erase(iter);
+
+  gcm_store_->RemoveRegistration(
+      registration_info->GetSerializedKey(),
+      base::BindOnce(&GCMClientImpl::UpdateRegistrationCallback,
+                     weak_ptr_factory_.GetWeakPtr()));
+  return true;
+}
+
+bool GCMClientImpl::RemoveAllCachedInstanceIDTokens(const std::string& app_id) {
+  DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
+  CHECK(registration_manager_);
+
+  size_t removed_count = std::erase_if(
+      registration_manager_->mutable_registrations(),
+      [this, &app_id](const auto& entry) {
+        const InstanceIDTokenInfo* cached_token_info =
+            InstanceIDTokenInfo::FromRegistrationInfo(entry.first.get());
+        if (!cached_token_info || cached_token_info->app_id != app_id) {
+          return false;
+        }
         gcm_store_->RemoveRegistration(
-            cached_instance_id_token_info->GetSerializedKey(),
+            cached_token_info->GetSerializedKey(),
             base::BindOnce(&GCMClientImpl::UpdateRegistrationCallback,
                            weak_ptr_factory_.GetWeakPtr()));
-        registration_manager_->mutable_registrations().erase(iter++);
-      } else {
-        ++iter;
-      }
-    }
+        return true;
+      });
+  return removed_count > 0;
+}
 
-    // If no token is found for the Instance ID, don't need to unregister
-    // since the Instance ID is not sent to the server yet.
-    if (!token_found) {
-      OnUnregisterCompleted(registration_info, UnregistrationRequest::SUCCESS);
-      return;
-    }
-  } else {
-    auto iter =
-        registration_manager_->mutable_registrations().find(registration_info);
-    if (iter == registration_manager_->mutable_registrations().end()) {
-      observers_.Notify(&Observer::OnUnregisterFinished, registration_info,
-                        INVALID_PARAMETER);
-      return;
-    }
-    registration_manager_->mutable_registrations().erase(iter);
+void GCMClientImpl::StartUnregistrationRequest(
+    scoped_refptr<RegistrationInfo> registration_info,
+    const std::string& category,
+    const std::string& subtype,
+    std::unique_ptr<UnregistrationRequest::CustomRequestHandler>
+        request_handler,
+    const std::string& source_to_record,
+    base::OnceCallback<void(Result result)> callback) {
+  DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
 
-    gcm_store_->RemoveRegistration(
-        registration_info->GetSerializedKey(),
-        base::BindOnce(&GCMClientImpl::UpdateRegistrationCallback,
-                       weak_ptr_factory_.GetWeakPtr()));
-  }
-
-  bool use_subtype = instance_id_token_info &&
-                     InstanceIDUsesSubtypeForAppId(registration_info->app_id);
-  std::string category = use_subtype
-                             ? chrome_build_info_.product_category_for_subtypes
-                             : registration_info->app_id;
-  std::string subtype = use_subtype ? registration_info->app_id : std::string();
   UnregistrationRequest::RequestInfo request_info(
       device_checkin_info_.android_id(), device_checkin_info_.secret(),
       category, subtype);
 
-  std::unique_ptr<UnregistrationRequest> unregistration_request(
-      new UnregistrationRequest(
-          gservices_settings_.GetRegistrationURL(), request_info,
-          std::move(request_handler), fcm::GetBackoffPolicy(),
-          base::BindOnce(&GCMClientImpl::OnUnregisterCompleted,
-                         weak_ptr_factory_.GetWeakPtr(), registration_info),
-          kMaxUnregistrationRetries, url_loader_factory_, io_task_runner_,
-          &recorder_, source_to_record));
+  auto unregistration_request = std::make_unique<UnregistrationRequest>(
+      gservices_settings_.GetRegistrationURL(), request_info,
+      std::move(request_handler), fcm::GetBackoffPolicy(),
+      base::BindOnce(&GCMClientImpl::OnUnregistrationRequestCompleted,
+                     weak_ptr_factory_.GetWeakPtr(), registration_info,
+                     std::move(callback)),
+      kMaxUnregistrationRetries, url_loader_factory_, io_task_runner_,
+      &recorder_, source_to_record);
   unregistration_request->Start();
-  pending_unregistration_requests_.insert(
-      std::make_pair(registration_info, std::move(unregistration_request)));
+  pending_unregistration_requests_.emplace(std::move(registration_info),
+                                           std::move(unregistration_request));
 }
 
-void GCMClientImpl::OnUnregisterCompleted(
+void GCMClientImpl::OnUnregistrationRequestCompleted(
     scoped_refptr<RegistrationInfo> registration_info,
+    base::OnceCallback<void(Result result)> callback,
     UnregistrationRequest::Status status) {
+  DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
   DVLOG(1) << "Unregister completed for app: " << registration_info->app_id
            << " with " << (status ? "success." : "failure.");
 
@@ -784,9 +787,17 @@ void GCMClientImpl::OnUnregisterCompleted(
       result = SERVER_ERROR;
       break;
   }
-  observers_.Notify(&Observer::OnUnregisterFinished, registration_info, result);
+  std::move(callback).Run(result);
 
   pending_unregistration_requests_.erase(registration_info);
+}
+
+void GCMClientImpl::NotifyUnregisterFinished(
+    scoped_refptr<GCMRegistrationInfo> gcm_registration_info,
+    Result result) {
+  DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
+  observers_.Notify(&Observer::OnUnregisterFinished,
+                    std::move(gcm_registration_info), result);
 }
 
 void GCMClientImpl::Send(const std::string& app_id,

@@ -34,6 +34,7 @@ import static org.chromium.chrome.browser.autofill.editors.common.field.FieldPro
 import static org.chromium.chrome.browser.autofill.editors.common.field.FieldProperties.VALUE_CHANGED_CALLBACK;
 import static org.chromium.chrome.browser.autofill.editors.common.text_field.TextFieldProperties.TEXT_FIELD_TYPE;
 import static org.chromium.chrome.browser.autofill.editors.utils.TestUtils.setDropdownValue;
+import static org.chromium.components.autofill.autofill_ai.utils.TestUtils.getSaveWalletSourceNotice;
 
 import android.app.Activity;
 import android.graphics.drawable.ColorDrawable;
@@ -69,6 +70,9 @@ import org.chromium.chrome.browser.autofill.AutofillProfileBridge;
 import org.chromium.chrome.browser.autofill.AutofillProfileBridgeJni;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill.PersonalDataManagerFactory;
+import org.chromium.chrome.browser.autofill.autofill_ai.EntityDataManager;
+import org.chromium.chrome.browser.autofill.autofill_ai.EntityDataManager.WalletSourceNotice;
+import org.chromium.chrome.browser.autofill.autofill_ai.EntityDataManagerJni;
 import org.chromium.chrome.browser.autofill.editors.autofill_ai.EntityEditorCoordinator.Delegate;
 import org.chromium.chrome.browser.autofill.editors.common.EditorComponentsProperties.EditorItem;
 import org.chromium.chrome.browser.autofill.editors.common.EditorComponentsProperties.ItemType;
@@ -94,6 +98,7 @@ import org.chromium.components.autofill.autofill_ai.EntityInstance;
 import org.chromium.components.autofill.autofill_ai.EntityType;
 import org.chromium.components.autofill.autofill_ai.EntityTypeName;
 import org.chromium.components.autofill.autofill_ai.RecordType;
+import org.chromium.components.autofill.autofill_ai.utils.TestUtils;
 import org.chromium.components.autofill.payments.LegalMessageLine;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.signin.base.AccountInfo;
@@ -116,6 +121,7 @@ import java.util.List;
 })
 public class EntityEditorModuleTest {
     private static final String USER_EMAIL = "example@gmail.com";
+    private static final int[] WALLET_SOURCE_NOTICE_STRING_IDS = new int[] {101, 102, 103};
     private static final AttributeType PASSPORT_NAME_ATTRIBUTE_TYPE =
             new AttributeType(
                     /* typeName= */ AttributeTypeName.PASSPORT_NAME,
@@ -310,10 +316,12 @@ public class EntityEditorModuleTest {
 
     @Mock private PersonalDataManager mPersonalDataManager;
     @Mock private AutofillProfileBridge.Natives mAutofillProfileBridgeJni;
+    @Mock private EntityDataManager.Natives mEntityDataManagerJni;
 
     @Captor private ArgumentCaptor<EntityInstance> mEntityInstanceCaptor;
 
     private TestActivity mActivity;
+    private String mWalletSourceNoticeText;
     private EntityEditorCoordinator mCoordinator;
     private View mContainerView;
 
@@ -322,10 +330,18 @@ public class EntityEditorModuleTest {
         IdentityServicesProvider.setIdentityManagerForTesting(mIdentityManager);
         when(mAutofillProfileBridgeJni.getSupportedCountries()).thenReturn(mSupportedCountries);
         AutofillProfileBridgeJni.setInstanceForTesting(mAutofillProfileBridgeJni);
+        EntityDataManagerJni.setInstanceForTesting(mEntityDataManagerJni);
         PersonalDataManagerFactory.setInstanceForTesting(mPersonalDataManager);
         HelpAndFeedbackLauncherFactory.setInstanceForTesting(mHelpAndFeedbackLauncher);
 
         mActivity = Robolectric.buildActivity(TestActivity.class).setup().get();
+        mWalletSourceNoticeText =
+                getSaveWalletSourceNotice(
+                        mActivity.getString(R.string.autofill_google_wallet_title), USER_EMAIL);
+        when(mEntityDataManagerJni.getWalletSaveEntityNotice(anyInt(), any()))
+                .thenReturn(
+                        new WalletSourceNotice(
+                                mWalletSourceNoticeText, WALLET_SOURCE_NOTICE_STRING_IDS));
     }
 
     @Test
@@ -549,18 +565,13 @@ public class EntityEditorModuleTest {
         when(mIdentityManager.getPrimaryAccountInfo()).thenReturn(mAccountInfo);
         showEditorDialog(WALLET_PASSPORT);
 
-        String walletTitle = mActivity.getString(R.string.autofill_google_wallet_title);
         String expectedNoticeText =
-                mActivity
-                        .getString(R.string.autofill_ai_save_entity_in_wallet_source_notice)
-                        .replace("$1", walletTitle)
-                        .replace("$2", walletTitle)
-                        .replace("$3", USER_EMAIL)
-                        .replace("<link>", "")
-                        .replace("</link>", "");
+                mWalletSourceNoticeText.replace("<link>", "").replace("</link>", "");
 
         PropertyModel model = mCoordinator.getEditorModelForTest();
         verifySourceNotice(model.get(EntityEditorProperties.EDITOR_FIELDS), expectedNoticeText);
+        verify(mEntityDataManagerJni)
+                .getWalletSaveEntityNotice(EntityTypeName.PASSPORT, USER_EMAIL);
     }
 
     @Test
@@ -580,15 +591,8 @@ public class EntityEditorModuleTest {
         showEditorDialog(NEW_WALLET_VEHICLE, response);
         shownWatcher.assertExpected();
 
-        String walletTitle = mActivity.getString(R.string.autofill_google_wallet_title);
         String expectedSourceNotice =
-                mActivity
-                        .getString(R.string.autofill_ai_save_entity_in_wallet_source_notice)
-                        .replace("$1", walletTitle)
-                        .replace("$2", walletTitle)
-                        .replace("$3", USER_EMAIL)
-                        .replace("<link>", "")
-                        .replace("</link>", "");
+                mWalletSourceNoticeText.replace("<link>", "").replace("</link>", "");
 
         String expectedFullText = expectedSourceNotice + "\n\nLegal disclaimer with link.";
         PropertyModel model = mCoordinator.getEditorModelForTest();
@@ -629,7 +633,7 @@ public class EntityEditorModuleTest {
         verify(mDelegate)
                 .onDone(
                         mEntityInstanceCaptor.capture(),
-                        eq(new int[] {R.string.autofill_ai_save_entity_in_wallet_source_notice}),
+                        eq(WALLET_SOURCE_NOTICE_STRING_IDS),
                         eq(R.string.done),
                         eq(legalMessageToken));
         histogramWatcher.assertExpected();
@@ -658,7 +662,7 @@ public class EntityEditorModuleTest {
         verify(mDelegate)
                 .onDone(
                         mEntityInstanceCaptor.capture(),
-                        eq(new int[] {R.string.autofill_ai_save_entity_in_wallet_source_notice}),
+                        eq(WALLET_SOURCE_NOTICE_STRING_IDS),
                         eq(R.string.done),
                         eq(null));
         histogramWatcher.assertExpected();
@@ -686,6 +690,48 @@ public class EntityEditorModuleTest {
 
         clickSourceNoticeLink();
         verify(mDelegate).onOpenGoogleWallet(true);
+    }
+
+    // Tests that a Wallet notice with `<privacy_link>` renders both links and routes clicks.
+    @Test
+    public void testWalletEntitySourceNotice_WithPrivacyPolicyLink() {
+        when(mIdentityManager.getPrimaryAccountInfo()).thenReturn(mAccountInfo);
+        String walletTitle = mActivity.getString(R.string.autofill_google_wallet_title);
+        String rawNotice = TestUtils.getPrivatePassSaveWalletSourceNotice(walletTitle, USER_EMAIL);
+        when(mEntityDataManagerJni.getWalletSaveEntityNotice(EntityTypeName.PASSPORT, USER_EMAIL))
+                .thenReturn(new WalletSourceNotice(rawNotice, WALLET_SOURCE_NOTICE_STRING_IDS));
+        showEditorDialog(PRIVATE_WALLET_PASSPORT);
+
+        ListModel<EditorItem> editorFields =
+                mCoordinator.getEditorModelForTest().get(EntityEditorProperties.EDITOR_FIELDS);
+        verifySourceNotice(
+                editorFields,
+                rawNotice
+                        .replace("<link>", "")
+                        .replace("</link>", "")
+                        .replace("<privacy_link>", "")
+                        .replace("</privacy_link>", ""));
+
+        Spanned noticeText = (Spanned) getSourceNoticeText(editorFields);
+        ClickableSpan[] spans = noticeText.getSpans(0, noticeText.length(), ClickableSpan.class);
+        assertEquals(2, spans.length);
+        assertEquals(
+                "how this info is used across Google",
+                noticeText
+                        .subSequence(
+                                noticeText.getSpanStart(spans[0]), noticeText.getSpanEnd(spans[0]))
+                        .toString());
+        assertEquals(
+                "Privacy Policy",
+                noticeText
+                        .subSequence(
+                                noticeText.getSpanStart(spans[1]), noticeText.getSpanEnd(spans[1]))
+                        .toString());
+
+        spans[0].onClick(null);
+        verify(mDelegate).onOpenGoogleWallet(true);
+        spans[1].onClick(null);
+        verify(mDelegate).onOpenPrivacyPolicy();
     }
 
     @Test
@@ -1267,17 +1313,18 @@ public class EntityEditorModuleTest {
         spans[0].onClick(null);
     }
 
-    private void clickSourceNoticeLink() {
-        PropertyModel model = mCoordinator.getEditorModelForTest();
-        ListModel<EditorItem> editorFields = model.get(EntityEditorProperties.EDITOR_FIELDS);
-
+    private CharSequence getSourceNoticeText(ListModel<EditorItem> editorFields) {
         for (EditorItem item : editorFields) {
             if (item.type == NOTICE && item.model.get(SHOW_BACKGROUND)) {
-                CharSequence noticeText = item.model.get(NOTICE_TEXT);
-                clickClickableSpan(noticeText);
-                return;
+                return item.model.get(NOTICE_TEXT);
             }
         }
         fail("Source notice not found");
+        return "";
+    }
+
+    private void clickSourceNoticeLink() {
+        PropertyModel model = mCoordinator.getEditorModelForTest();
+        clickClickableSpan(getSourceNoticeText(model.get(EntityEditorProperties.EDITOR_FIELDS)));
     }
 }

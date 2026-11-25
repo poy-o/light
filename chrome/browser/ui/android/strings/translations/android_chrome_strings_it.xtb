@@ -150,7 +150,6 @@ Per altre impostazioni che utilizzano i dati per migliorare la tua esperienza co
 <translation id="1543035591122163372">Accedi per trovare le password e altri dati del <ph name="DEVICE_TYPE" /></translation>
 <translation id="1544084554881119930">I metodi di pagamento e gli indirizzi non verranno criptati. La cronologia di navigazione di Chrome non verrà sincronizzata.
 Solo chi conosce la tua passphrase può leggere i tuoi dati criptati. La passphrase non viene inviata a Google o memorizzata da Google. Se dimentichi la passphrase o vuoi modificare questa impostazione, <ph name="BEGIN_LINK" />cancella i dati di Chrome nel tuo account<ph name="END_LINK" />.</translation>
-<translation id="1544826120773021464">Per gestire il tuo Account Google, tocca il pulsante "Gestisci account"</translation>
 <translation id="1549000191223877751">Passa a un'altra finestra</translation>
 <translation id="1553358976309200471">Aggiorna Chrome</translation>
 <translation id="1554352084785952638"><ph name="SEARCH_ENGINE" />: "<ph name="SEARCH_TERMS" />"</translation>
@@ -167,7 +166,6 @@ Solo chi conosce la tua passphrase può leggere i tuoi dati criptati. La passphr
 <translation id="1600756129506222718"><ph name="TAB_TITLE" />, scheda condivisa</translation>
 <translation id="1601378265092360672">I dati di navigazione includono la cronologia di navigazione, i cookie e altri dati dei siti, le immagini e i file memorizzati nella cache e le schede aperte</translation>
 <translation id="160275202205869636">Quando l'opzione è attiva, utilizza e salva i dati nel tuo Account Google. Se è disattivata, i dati vengono salvati solo su questo dispositivo.</translation>
-<translation id="160403827062749147">Ti diamo il benvenuto in Google Chrome, il browser più sicuro al mondo</translation>
 <translation id="1628019612362412531">{NUM_SELECTED,plural, =1{Rimuovi 1 elemento selezionato}other{Rimuovi # elementi selezionati}}</translation>
 <translation id="1639239467298939599">Caricamento</translation>
 <translation id="1641113438599504367">Navigazione sicura</translation>
@@ -283,6 +281,7 @@ Solo chi conosce la tua passphrase può leggere i tuoi dati criptati. La passphr
 <translation id="2122601567107267586">Impossibile aprire l'app</translation>
 <translation id="2128579426409352593"><ph name="TAB_TITLE" />, schede condivise fissate selezionate</translation>
 <translation id="213279576345780926">La scheda <ph name="TAB_TITLE" /> è stata chiusa</translation>
+<translation id="2133857665503360653">Riprova l'azione per il file <ph name="FILE_NAME" /></translation>
 <translation id="2138283760993967204">Icona Gestisci</translation>
 <translation id="2138632817776076519"><ph name="TAB_TITLE" />, scheda con registrazione selezionata</translation>
 <translation id="2141396931810938595">In base al tuo utilizzo</translation>
@@ -386,6 +385,7 @@ Solo chi conosce la tua passphrase può leggere i tuoi dati criptati. La passphr
 <translation id="2496180316473517155">Cronologia di navigazione</translation>
 <translation id="250020030759455918">Troverai lo stato di accesso a <ph name="SITE_NAME" />, i dati di navigazione e i dati relativi al sito in Chrome</translation>
 <translation id="2501278716633472235">Indietro</translation>
+<translation id="2505742559092758182">{COUNT,plural, =1{# download in corso}other{# download in corso}}</translation>
 <translation id="2510106555128151389">Installazione di <ph name="WEBAPK_NAME" /> in corso…</translation>
 <translation id="2512234228327349533">Cerca opzioni di acquisto</translation>
 <translation id="2513403576141822879">Per altre impostazioni relative a privacy, sicurezza e raccolta dei dati, consulta la sezione <ph name="BEGIN_LINK" />Sincronizzazione e servizi Google<ph name="END_LINK" /></translation>
@@ -449,6 +449,7 @@ Solo chi conosce la tua passphrase può leggere i tuoi dati criptati. La passphr
 <translation id="2762000892062317888">in questo istante</translation>
 <translation id="276378135349383280">Mostra Gemini nella barra sotto</translation>
 <translation id="276969039800130567">Accesso eseguito come <ph name="USER_EMAIL_ADDRESS" />.</translation>
+<translation id="2770082596325051055">Metti in pausa <ph name="FILE_NAME" /></translation>
 <translation id="2777555524387840389"><ph name="SECONDS" /> sec rimanenti</translation>
 <translation id="2779651927720337254">non riuscito</translation>
 <translation id="2781151931089541271">1 sec rimanente</translation>
@@ -697,6 +698,7 @@ Solo chi conosce la tua passphrase può leggere i tuoi dati criptati. La passphr
 <translation id="3740290940447881599">Assicurati che il sito sia attendibile</translation>
 <translation id="3740525748616366977">Ricerca vocale non disponibile su questo dispositivo</translation>
 <translation id="3749289110408117711">Nome file</translation>
+<translation id="3751708358601675711">Modifica monitoraggio del prezzo</translation>
 <translation id="3756823472711156529">Ripristina gruppo</translation>
 <translation id="3759306015475526475">Gestisci le impostazioni dei dati sull'utilizzo e sugli arresti anomali</translation>
 <translation id="3763110477555836428">Quando effettui un pagamento con questa carta, verrà inserito un numero di carta virtuale per proteggere i tuoi dati effettivi. Gestisci in Google Wallet. <ph name="BEGIN_LINK1" />Scopri di più sulle carte virtuali<ph name="END_LINK1" /></translation>
@@ -789,6 +791,7 @@ Solo chi conosce la tua passphrase può leggere i tuoi dati criptati. La passphr
 <translation id="4121654769234887259">Non dovrai ricordare questa password perché verrà salvata in Gestore delle password di Google per <ph name="USERNAME" />.</translation>
 <translation id="4128312955780560730">Blocca le schede Incognito</translation>
 <translation id="4132137475637520539">Consenti a chiunque abbia il link di partecipare</translation>
+<translation id="4132969033912447558">Riprendi <ph name="FILE_NAME" /></translation>
 <translation id="4136632885151622181"><ph name="TAB_TITLE" />, schede con registrazione fissate selezionate</translation>
 <translation id="4137746084635924146">Lingua attuale del dispositivo</translation>
 <translation id="414128724510021958">Siti desktop richiesti per impostazione predefinita</translation>
@@ -864,7 +867,6 @@ Solo chi conosce la tua passphrase può leggere i tuoi dati criptati. La passphr
 <translation id="4374192654218566997">\n\nPuoi anche rimuovere questi dati dal dispositivo:</translation>
 <translation id="4378154925671717803">Telefono</translation>
 <translation id="4380055775103003110">Se il problema persiste, puoi provare altri metodi per continuare su <ph name="SITE_ETLD_PLUS_ONE" />.</translation>
-<translation id="4381351546374507910">Accedi per avere a disposizione i preferiti, le password e i dati di Compilazione automatica su tutti i tuoi dispositivi.</translation>
 <translation id="4384468725000734951">Sogou in uso per la ricerca</translation>
 <translation id="4387647248986092471">Crea un blocco del profilo dell'auto</translation>
 <translation id="4387817230000841154">Apri Download</translation>
@@ -1891,6 +1893,7 @@ Per modificare questa impostazione, <ph name="BEGIN_LINK" />elimina i dati di Ch
 <translation id="8152331954420209374">Vai a Lens</translation>
 <translation id="8153206878708357851">Attiva/disattiva la navigazione con cursore</translation>
 <translation id="8154784523622173959">Personalizza lo sfondo di questa pagina</translation>
+<translation id="8161480780962562636">Assicurati che le tue password siano al sicuro, scopri se sono state compromesse e ricevi consigli per proteggerti online</translation>
 <translation id="8163820386638255770">Verifica la tua identità per usare e salvare le password nel tuo Account Google</translation>
 <translation id="8174047975335711832">Informazioni del dispositivo</translation>
 <translation id="8175940240143658258">{ARCHIVED_TAB_COUNT,plural, =1{(1) elemento non attivo}other{(#) elementi non attivi}}</translation>
@@ -1905,7 +1908,6 @@ Per modificare questa impostazione, <ph name="BEGIN_LINK" />elimina i dati di Ch
 <translation id="8210770465353466621">Qui troverai le tue schede</translation>
 <translation id="8212799748012101103">Apri ricerca di schede</translation>
 <translation id="8215740705341534369">Riquadro laterale</translation>
-<translation id="8218622182176210845">Gestisci il tuo account</translation>
 <translation id="8221985041778490865">Eliminazione dei dati di navigazione in corso…</translation>
 <translation id="8223642481677794647">Menu scheda feed</translation>
 <translation id="82296173028782770">Modifica query di ricerca: <ph name="SEARCH_QUERY" /></translation>
@@ -2036,6 +2038,7 @@ Per modificare questa impostazione, <ph name="BEGIN_LINK" />elimina i dati di Ch
 <translation id="8676789164135894283">Verifiche degli accessi</translation>
 <translation id="867914734596684889">Mostra o nascondi la barra dei preferiti</translation>
 <translation id="8683039184091909753">immagine</translation>
+<translation id="8687103160920393343">Cancella <ph name="FILE_NAME" /></translation>
 <translation id="8688183792442786085"><ph name="TAB_TITLE" />, scheda selezionata</translation>
 <translation id="8694622119922491927"><ph name="APP_NAME" /> ha bisogno dell'autorizzazione per accedere ai dispositivi HID (Human Interface Device) per questo sito. Puoi modificare questa impostazione in un secondo momento in Impostazioni &gt; App &gt; Accesso speciale per le app.</translation>
 <translation id="8696297579102085705">Invia al tuo dispositivo</translation>

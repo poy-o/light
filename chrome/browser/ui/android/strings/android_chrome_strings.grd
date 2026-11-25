@@ -2846,6 +2846,18 @@ To change this setting, <ph name="BEGIN_LINK">BEGIN_LINK</ph>delete the Chrome d
       <message name="IDS_DOWNLOAD_TRAY_FULL_HISTORY" desc="Label in the download tray for the button that opens a full list of download history.">
         Full download history
       </message>
+      <message name="IDS_DOWNLOAD_TRAY_ITEM_PAUSE_ACCESSIBILITY" desc="Accessibility label for the button in the download tray that pauses a download.">
+        Pause <ph name="FILE_NAME">%1$s<ex>report.pdf</ex></ph>
+      </message>
+      <message name="IDS_DOWNLOAD_TRAY_ITEM_RESUME_ACCESSIBILITY" desc="Accessibility label for the button in the download tray that resumes a paused download.">
+        Resume <ph name="FILE_NAME">%1$s<ex>report.pdf</ex></ph>
+      </message>
+      <message name="IDS_DOWNLOAD_TRAY_ITEM_RETRY_ACCESSIBILITY" desc="Accessibility label for the button in the download tray that retries a download that failed.">
+        Retry <ph name="FILE_NAME">%1$s<ex>report.pdf</ex></ph>
+      </message>
+      <message name="IDS_DOWNLOAD_TRAY_ITEM_CANCEL_ACCESSIBILITY" desc="Accessibility label for the button in the download tray that cancels a download.">
+        Cancel <ph name="FILE_NAME">%1$s<ex>report.pdf</ex></ph>
+      </message>
       <message name="IDS_DOWNLOAD_BUTTON_TOOLTIP_IN_PROGRESS_COUNT" desc="Tooltip and accessibility text for the download toolbar button, displayed when there are one or more downloads in progress. [ICU Syntax]">
         {COUNT, plural, =1 {# download in progress} other {# downloads in progress}}
       </message>
@@ -3808,8 +3820,8 @@ To change this setting, <ph name="BEGIN_LINK">BEGIN_LINK</ph>delete the Chrome d
       <message name="IDS_SIGNIN_FRE_PERSONALIZED_SUBTITLE" desc="This string is the body of a promotion about signing in to Chrome with the user's Google Account, explaining that signing in provides access to bookmarks, passwords, and more on all devices. We want users to understand why signing in is beneficial, and click 'Continue as name' to sign in to their Google Account. The tone should be informative and lightweight.">
         Sign in to get your bookmarks, passwords, and more on all your devices.
       </message>
-      <message name="IDS_SIGNIN_FRE_SAFETY_TITLE" desc="This string is the title of a promotion about signing in to Chrome with the user's Google Account, welcoming the user to Google Chrome and highlighting Chrome's safety. We want users to understand why signing in is beneficial, and click 'Continue as name' to sign in to their Google Account. The tone should be informative and lightweight.">
-        Welcome to Google Chrome, the world’s safest browser
+      <message name="IDS_SIGNIN_FRE_SAFETY_TITLE" desc="This string is the title of a promotion about signing in to Chrome with the user's Google Account, highlighting Chrome's safety so users can browse confidently. We want users to understand why signing in is beneficial, and click 'Continue as name' to sign in to their Google Account. The tone should be informative and lightweight.">
+        Built for safety so you can browse confidently
       </message>
       <message name="IDS_SIGNIN_FRE_SAFETY_SUBTITLE" desc="This string is the body of a promotion about signing in to Chrome with the user's Google Account, explaining that signing in provides access to data across devices and personalizes the experience. We want users to understand why signing in is beneficial, and click 'Continue as name' to sign in to their Google Account. The tone should be informative and lightweight.">
         Sign in to get your data across your devices and personalize your experience.
@@ -3817,8 +3829,8 @@ To change this setting, <ph name="BEGIN_LINK">BEGIN_LINK</ph>delete the Chrome d
       <message name="IDS_SIGNIN_FRE_SEAMLESSNESS_TITLE" desc="This string is the title of a promotion about signing in to Chrome with the user's Google Account, emphasizing seamless continuity across devices. We want users to understand why signing in is beneficial, and click 'Continue as name' to sign in to their Google Account. The tone should be informative and lightweight.">
         Pick up where you left off
       </message>
-      <message name="IDS_SIGNIN_FRE_SEAMLESSNESS_SUBTITLE" desc="This string is the body of a promotion about signing in to Chrome with the user's Google Account, explaining that signing in provides access to bookmarks, passwords, and Autofill information across all devices. We want users to understand why signing in is beneficial, and click 'Continue as name' to sign in to their Google Account. The tone should be informative and lightweight.">
-        Sign in to get your bookmarks, passwords, and Autofill information across all your devices.
+      <message name="IDS_SIGNIN_FRE_SEAMLESSNESS_SUBTITLE" desc="This string is the body of a promotion about signing in to Chrome with the user's Google Account, explaining that signing in provides access to bookmarks, passwords, Autofill information, and more across all devices. We want users to understand why signing in is beneficial, and click 'Continue as name' to sign in to their Google Account. The tone should be informative and lightweight.">
+        Sign in to get your bookmarks, passwords, Autofill information, and more across all your devices.
       </message>
       <message name="IDS_SIGNED_IN_FRE_TITLE" desc="Title welcoming signed-in user to Chrome.">
         Welcome back, <ph name="USER_NAME">%s<ex>Alice</ex></ph>!
@@ -6516,17 +6528,11 @@ To change this setting, <ph name="BEGIN_LINK">BEGIN_LINK</ph>delete the Chrome d
       <message name="IDS_IPH_DOWNLOAD_INDICATOR_TEXT" desc="The in-product-help message to open download home, which is shown alongside the offline indicator when the device goes offline.">
         See your offline files
       </message>
-      <message name="IDS_IPH_IDENTITY_DISC_TEXT" desc="The in-product-help text prompting the user that tapping identity disc will navigate to 'Sync and Google services' settings page.">
-        Manage your account
-      </message>
       <message name="IDS_IPH_INSTANCE_SWITCHER_TEXT" desc="The in-product-help text prompting the user that app menu has a menu for managing multiple Chrome windows with instance switcher.">
         You can manage your windows in Chrome's Window Manager
       </message>
       <message name="IDS_IPH_RECENT_TABS_TEXT" desc="The in-product-help text prompting the user that they can find their recently closed tabs and windows in the 'Recent tabs' surface.">
         Find your recently closed tabs and windows here
-      </message>
-      <message name="IDS_IPH_IDENTITY_DISC_ACCESSIBILITY_TEXT" desc="The in-product-help accessibility text prompting the user that tapping identity disc will navigate to 'Sync and Google services' settings page.">
-        To manage your Google account, tap the "Manage account" button
       </message>
       <message name="IDS_IPH_TAB_SWITCHER_TEXT" desc="The in-product-help message to open the tab switcher.">
         Open tabs to visit different pages at the same time
@@ -8414,6 +8420,9 @@ To change this setting, <ph name="BEGIN_LINK">BEGIN_LINK</ph>delete the Chrome d
       </message>
       <message name="IDS_ENTERPRISE_SIGNALS_DISCLAIMER_SHEET_CLOSED" desc="Accessibility string read when the Enterprise Signals Disclaimer bottom sheet is closed.">
         Enterprise signals disclaimer bottom sheet is closed
+      </message>
+      <message name="IDS_ENTERPRISE_SIGNALS_DISCLAIMER_LOADING" desc="Accessibility string read when the enterprise signals disclaimer enters the loading state after the user accepts it. In this state, the disclaimer buttons are disabled and the text of the accept button is replaced with a loading spinner while Chrome processes the user's decision.">
+        Loading
       </message>
 
       <!-- Loading modal dialog strings -->

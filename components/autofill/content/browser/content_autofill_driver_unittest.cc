@@ -82,11 +82,9 @@ namespace {
 
 using ::autofill::test::LazyRef;
 using ::autofill::test::SaveArgPtr;
-using ::base::test::RunClosure;
 using ::base::test::RunOnceCallback;
 using ::testing::_;
 using ::testing::AllOf;
-using ::testing::DoAll;
 using ::testing::ElementsAre;
 using ::testing::Eq;
 using ::testing::Field;
@@ -471,7 +469,7 @@ class ContentAutofillDriverTest : public content::RenderViewHostTestHarness {
   // `source_rfh` represents the render frame the form comes from.
   // `target_rfh` is the frame the form is routed to by AutofillDriverRouter,
   // i.e., it's either `source_rfh` itself (or `nullptr` as a shorthand) or an
-  // ancester of `source_rfh`.
+  // ancestor of `source_rfh`.
   FormData SeeForm(content::RenderFrameHost* source_rfh,
                    FormData form,
                    content::RenderFrameHost* target_rfh = nullptr) {
@@ -1039,15 +1037,16 @@ TEST_F(ContentAutofillDriverTest, ExtractLabeledTextNodeValue_Success) {
 }
 
 // Tests that `LoadCustomFormControlScript()` forwards the script to the main
-// frame's `CustomFormControlAgent`.
+// frame's `CustomFormControlAgent` and forwards the agent's reply.
 TEST_F(ContentAutofillDriverTest, LoadCustomFormControlScript) {
-  base::RunLoop run_loop;
+  base::test::TestFuture<bool> loaded;
   EXPECT_CALL(custom_form_control_agent(main_frame()),
               LoadUnsafeScript(main_frame()->GetDocumentToken(), "script1", _))
-      .WillOnce(
-          DoAll(RunClosure(run_loop.QuitClosure()), RunOnceCallback<2>(true)));
-  driver(main_frame()).browser_events().LoadCustomFormControlScript("script1");
-  run_loop.Run();
+      .WillOnce(RunOnceCallback<2>(true));
+  driver(main_frame())
+      .browser_events()
+      .LoadCustomFormControlScript("script1", loaded.GetCallback());
+  EXPECT_TRUE(loaded.Get());
 }
 
 class MockAutofillVisibilityObserver

@@ -2403,6 +2403,13 @@ Bu politika, özelliği kontrol etmek için geçici bir çözüm olup M154 sür�
 <translation id="2467181864598429837">Varsayılan tarayıcı davranışı</translation>
 <translation id="2467896267442150508">En fazla bir haftayı kapsayan zaman aralığı. Başlangıç zamanı bitiş zamanından sonra olursa aralık başa döner.</translation>
 <translation id="2476249479201711962">Varsayılan arama sağlayıcısı içerik menüsüne erişimi etkinleştir</translation>
+<translation id="247659494993692492">Politikanın ayarlanması, entegre kimlik doğrulama için hangi sunuculara izin verileceğini belirtir. Entegre kimlik doğrulaması yalnızca <ph name="PRODUCT_NAME" /> bir proxy veya söz konusu izin verilenler listesindeki bir sunucudan kimlik doğrulaması daveti aldığında etkinleşir.
+
+      Politika ayarlanmadan bırakılırsa <ph name="PRODUCT_NAME" />, sunucunun intranette olup olmadığını saptamaya çalışır. Yalnızca intranetteyse IWA isteklerini yanıtlar. Sunucunun internette olduğu saptanırsa sunucudan gelen IWA istekleri <ph name="PRODUCT_NAME" /> tarafından yok sayılır.
+
+      Not: Birden fazla sunucu adını virgülle ayırın. Joker karakterlere (<ph name="WILDCARD_VALUE" />) izin verilir.
+
+      <ph name="LINUX_OS_NAME" />, <ph name="MAC_OS_NAME" /> ve <ph name="PRODUCT_OS_NAME" /> üzerinde sistem GSSAPI/Kerberos kitaplığı, bir sunucu ana makine adını farklı bir hizmet sorumlusu ana makinesine dönüştürebilir (örneğin, DNS CNAME veya ters DNS PTR aramalarıyla). Bu durumda, ana makineye bu politika tarafından da izin verilmediği sürece Negotiate kimlik doğrulaması başarısız olur.</translation>
 <translation id="2478756867046106663">Kötüye kullanım deneyimi yaşatan sitelerin yeni pencere veya sekme açmasına izin ver</translation>
 <translation id="2479760962196319822">Bu politika, <ph name="PRODUCT_OS_NAME" /> kullanıcılarının yerel olarak veri depolayıp depolayamayacağını kontrol eder.
       Bu politika Yanlış değerine ayarlanırsa <ph name="PRODUCT_OS_NAME" /> sisteminde yerel depolama engellenir. Dolayısıyla, kullanıcılar yerel olarak veri depolayamaz ve yerel dizinlere erişemez.
@@ -4799,6 +4806,11 @@ Politika, <ph name="POLICY_CLOUD_POLICY_OVERRIDES_PLATFORM_POLICY_POLICY_NAME" /
 
       Not: Bu politika, <ph name="REMOTE_ACCESS_HOST_TOKEN_VALIDATION_URL_POLICY_NAME" /> politikası ile birlikte kullanılmalıdır.</translation>
 <translation id="3918339829588313389">Kullanıcıların zayıf bir PIN belirlemesine izin ver</translation>
+<translation id="3920151704940430728">Politika Etkin değerine ayarlanırsa CNAME araması atlanır. Kerberos SPN oluşturulurken sunucu adı girildiği şekliyle kullanılır.
+
+Politika Devre dışı değerine ayarlanır veya ayarlanmadan bırakılırsa CNAME araması, Kerberos SPN'i oluşturulurken sunucunun standart adını belirler.
+
+Not: <ph name="LINUX_OS_NAME" />, <ph name="MAC_OS_NAME" /> ve <ph name="PRODUCT_OS_NAME" /> üzerinde bu politika etkinleştirildiğinde <ph name="PRODUCT_NAME" /> tarafından yapılan CNAME araması atlanır ancak sistem GSSAPI/Kerberos kitaplığı, hizmet sorumlusu ana makinesini standartlaştırmaya devam edebilir (örneğin, <ph name="KRB5_CONFIG" /> DNS ayarları aracılığıyla). Bu durumda, ana makineye <ph name="AUTH_SERVER_ALLOWLIST_POLICY_NAME" /> tarafından izin verilmediği sürece Negotiate kimlik doğrulaması başarısız olur ve <ph name="AUTH_NEGOTIATE_DELEGATE_ALLOWLIST_POLICY_NAME" /> tarafından da izin verilmediği sürece yetki devri yapılmaz.</translation>
 <translation id="392227823425989489">Tüm sistem kısayolları her zaman beklendiği gibi etkinleştirilir.</translation>
 <translation id="3924506460382372403">Cihaz grafik durumu raporlamasını devre dışı bırak</translation>
 <translation id="3925377537407648234">Ekran çözünürlüğünü ve ölçek faktörünü ayarlama</translation>
@@ -6539,6 +6551,13 @@ Politika, boş bir dizeye ayarlanır veya ayarlanmadan bırakılırsa hiçbir be
 
 Not: Bu politikanın desteği sonlandırıldı. Bu politika yerine <ph name="ISOLATE_ORIGINS_POLICY_NAME" /> (yüksek performanslı cihazlar için) veya <ph name="ISOLATE_ORIGINS_SHORTLIST_POLICY_NAME" /> politikalarını kullanın. Bu politika yalnızca, herhangi bir işlem izolasyonunun özel olarak yapılandırılması önerilmeyen ve kesinlikle 1 GB'tan fazla RAM'i bulunan cihazlarda çalışan <ph name="ANDROID_NAME" /> üzerindeki Chrome için geçerlidir.</translation>
 <translation id="4991786313466977061">Kurumsal rozetlerin görünürlüğünü kontrol et</translation>
+<translation id="4991886408515766724">Politikayı ayarlamak, kullanıcılardan bir USB cihazına erişme izni vermelerini isteyebilen siteleri belirten URL kalıpları için bir liste yapmanıza olanak tanır.
+
+      Politika etkinleştirilir ve ayarlanmadan bırakılırsa <ph name="DEFAULT_WEB_USB_GUARD_SETTING_POLICY_NAME" /> bütün siteler için geçerli olur. Etkin değilse kullanıcının ayarları geçerlidir.
+
+      URL kalıpları, <ph name="WEB_USB_BLOCKED_FOR_URLS_POLICY_NAME" /> ile çakışmamalıdır. Bir URL her ikisiyle de eşleşirse politikaların ikisinin de diğeri üzerinde önceliği olmaz.
+
+      Geçerli <ph name="URL_LABEL" /> kalıpları hakkında ayrıntılı bilgi için https://chromeenterprise.google/policies/url-patterns adresine bakabilirsiniz. <ph name="WILDCARD_VALUE" />, bu politikada kabul edilen bir değer değildir.</translation>
 <translation id="4995123966071996433">Linux sanal makinelerine bağlantı noktası yönlendirmeye izin verme</translation>
 <translation id="4996068111491152684">Ağ kimlik doğrulaması için <ph name="PRODUCT_OS_NAME" /> giriş kimlik bilgilerini kullanma.</translation>
 <translation id="4996086761250834365"><ph name="PLUGIN_VM_NAME" /> Ürün Analizine izin verin.</translation>
@@ -6889,6 +6908,13 @@ Bu politika dinamik yenilemeyi destekler.
 Bu politika geçici bir çözüm olup gelecekteki <ph name="PRODUCT_NAME" /> sürümlerinden kaldırılacaktır.</translation>
 <translation id="5212810195096589189">Sanal makine KSA izinlerini belirleme</translation>
 <translation id="5213038356678567351">Hiçbir zaman başka bir tarayıcıya geçişi tetiklememesi gereken web siteleri.</translation>
+<translation id="5213420013031914763">Politika, Etkin değerine ayarlandığında klavye kısayolları veya uzantı API'leriyle ekran görüntüsü alınmasına izin verilmez. Politika, Devre Dışı değerine ayarlanır veya ayarlanmadan bırakılırsa ekran görüntülerine izin verilir.
+
+<ph name="PRODUCT_NAME" /> 155 ila 158 sürümlerinde bu politikanın etkinleştirilmesi, uzantıların "chrome.debugger.attach()" aracılığıyla hata ayıklayıcı eklemesini de engelleyebilir. Örneğin, <ph name="CHROME_VARIATIONS_POLICY_NAME" /> Politikası tüm varyasyonları devre dışı bıraktığında bu durum geçerlidir.
+
+Bu politikanın <ph name="MS_WIN_NAME" />, <ph name="MAC_OS_NAME" /> ve <ph name="LINUX_OS_NAME" /> üzerinde işletim sistemi veya üçüncü taraf uygulamalarıyla alınan ekran görüntülerini engellemediğini unutmayın.
+
+<ph name="IOS_NAME" /> üzerinde politika Etkin değerine ayarlanırsa sistem ekran görüntülerinde ve ekran kayıtlarında <ph name="PRODUCT_NAME" /> pencereleri gizlenir ve Tam Sayfa ekran görüntüleri kullanılamaz.</translation>
 <translation id="5216710229085956333">Krisp gürültü giderme özelliğini etkinleştir</translation>
 <translation id="5216815237712190041">Henüz cihazda oturum açmış kullanıcı yoksa giriş ekranında gösterilecek cihaz düzeyinde duvar kağıdı resmini yapılandırın. Politikayı ayarlamak için ChromeOS cihazın, duvar kağıdı resmini hangi URL'den indireceği ve indirme işleminin bütünlüğünü doğrulamak için kullanılacak şifreleme karması belirtilmelidir. Resim JPEG biçiminde olmalı, dosya boyutu 16 MB'tan fazla olmamalıdır. URL'ye kimlik doğrulaması yapmadan erişilebilmelidir. Duvar kağıdı resmi indirilir ve önbelleğe alınır. URL veya karma her değiştiğinde bu tekrar indirilir.
 
@@ -8040,15 +8066,6 @@ Bu politika yalnızca bulut kullanıcı politikası olarak ayarlanabilir.</trans
 <translation id="5899751601113377553">Kullanıcıların <ph name="LACROS_NAME" /> tarayıcısını kullanmasını engelle</translation>
 <translation id="5900919753933009463">Ağ yapılandırmasını raporla</translation>
 <translation id="5901427587865226597">Yalnızca dupleks yazdır</translation>
-<translation id="5903484826174648217">Politika, Etkin değerine ayarlanırsa Güvenli Tarama, belirttiğiniz alan adlarına güvenir. Bu alan adlarında kimlik avı, kötü amaçlı yazılım veya istenmeyen yazılım gibi tehlikeli kaynakların bulunup bulunmadığı kontrol edilmez. Güvenli Tarama'nın indirme koruma hizmeti, bu alan adlarında barındırılan indirmeleri kontrol etmez. Şifre koruma hizmeti, şifre yeniden kullanımını kontrol etmez.
-
-Politika ayarlanmadan bırakılırsa varsayılan Güvenli Tarama koruması tüm kaynaklar için geçerli olur.
-
-Bu politika normal ifadeleri desteklemez ancak belirli bir alanın alt alan adları, izin verilenler listesine alınır. Tam etki alan adları (FQDN'ler) gerekli değildir.
-
-<ph name="MS_WIN_NAME" /> işletim sisteminde bu politika yalnızca bir <ph name="MS_AD_NAME" /> veya <ph name="MS_AAD_NAME" /> alan adına katılmış ya da <ph name="CHROME_ENTERPRISE_CORE_NAME" /> öğesine kaydolmuş örneklerde kullanılabilir.
-
-<ph name="MAC_OS_NAME" /> işletim sisteminde bu politika yalnızca MDM ile çalışan, MCX aracılığıyla bir alan adına katılmış veya <ph name="CHROME_ENTERPRISE_CORE_NAME" /> öğesine kaydolmuş örneklerde kullanılabilir.</translation>
 <translation id="5905114360004248993">Bu sitelerde pop-up'lara izin ver</translation>
 <translation id="5905473632148429217">Online OCSP/CRL denetimlerini etkinleştir</translation>
 <translation id="590591187943862671">Bu politika ayarlanırsa kullanıcılardan ana makine işletim sisteminin dosya sisteminde bulunan dosya veya dizinlere File System API üzerinden okuma erişimi vermelerini isteyebilecek sitelerin belirtildiği URL kalıpları listesini oluşturabilirsiniz.
@@ -9448,9 +9465,6 @@ Politika, Yanlış değerine ayarlanırsa veya ayarlanmadan bırakılırsa varsa
 Politika ayarlanmadan bırakılırsa davranışı <ph name="GEN_AI_DEFAULT_SETTINGS_POLICY_NAME" /> politikasına göre belirlenir.
 
 Üretken yapay zeka özelliklerinde verilerin nasıl işlendiği hakkında daha fazla bilgi için lütfen https://support.google.com/chrome/a?p=generative_ai_settings adresine göz atın.</translation>
-<translation id="6752711782954612641"><ph name="DEFAULT_SEARCH_PROVIDER_ENABLED_POLICY_NAME" /> açıksa <ph name="DEFAULT_SEARCH_PROVIDER_SEARCH_URL_POST_PARAMS_POLICY_NAME" /> protokolünün ayarlanması, POST ile URL ararken parametreleri belirtir. Virgülle ayrılmış ad-değer çiftlerini içerir. Değer, <ph name="SEARCH_TERM_MARKER" /> gibi bir şablon parametresi ise gerçek arama terimleri verisiyle değiştirilir.
-
-      <ph name="DEFAULT_SEARCH_PROVIDER_SEARCH_URL_POST_PARAMS_POLICY_NAME" /> politikası ayarlanmadan bırakılırsa istekler GET yöntemi kullanılarak gönderilir.</translation>
 <translation id="6757413365906304125">Bu politika, "tuşları yeniden eşleme" alt sayfasındaki PageUp/PageDown
 tuşlarının yeniden eşlenme davranışını belirler. "Tuşları yeniden eşleme" alt sayfası, kullanıcıların klavye
 tuşlarını özelleştirmesine olanak tanır. Bu politika, etkinleştirildiği takdirde kullanıcıların bu belirli
@@ -11468,6 +11482,11 @@ Bu politika, <ph name="DEFAULT_SUB_APPS_WITHOUT_PROMPTS_SETTING_POLICY_NAME" /> 
           Politika değeri milisaniye olarak belirtilmelidir. Değerler boşta kalma gecikmesinin altında veya o gecikmeye eşit olacak şekilde ayarlanır.</translation>
 <translation id="7992613144342460685">Bu sitelere pencere yerleşimi izni ver</translation>
 <translation id="7995610550667275367">Tarama (87 sürümünden itibaren desteklenir)</translation>
+<translation id="7997288303774758253">Politikanın ayarlanması, cihaz yönetimi hizmetinin kullanıcı politikası bilgileri için sorgulandığı süreyi milisaniye olarak belirtir. Geçerli değerler, 1.800.000 (30 dakika) ile 86.400.000 (1 gün) aralığındadır. Bu aralığın dışındaki değerler ilgili sınıra sabitlenir. Android ve iOS'te ise bu aralığın üzerindeki değerler 604.800.000 (1 hafta) değerine sabitlenir.
+
+      Politika ayarlanmazsa varsayılan olarak 3 saat, Android ve iOS'te ise 1 gün kullanılır.
+
+      Not: Politika bildirimleri, politika değiştiğinde yenileme yapılmasını zorlar, böylece sık sık yenileme yapılması gerekmez. Dolayısıyla, platform bu bildirimleri destekliyorsa yenileme gecikmesi 24 saat olarak ayarlanır (varsayılanlar ve bu politikanın değeri yok sayılır).</translation>
 <translation id="7999023147219236247">Uygulamalar için yapılan izin istekleriyle ilgili politika. PERMISSION_POLICY_UNSPECIFIED: Politika belirtilmemiştir. Herhangi bir düzeyde bir izin için politika belirtilmemişse varsayılan olarak "PROMPT" davranışı kullanılır. PROMPT: Kullanıcıdan izin vermesi istenir. GRANT: Otomatik olarak izin verilir. DENY: İzin isteği otomatik olarak reddedilir.</translation>
 <translation id="7999336306414770162">Cihazın VPD bilgileri raporlamasını devre dışı bırak</translation>
 <translation id="7999818120028621358">Veri sızıntısı önleme etkinliklerinin raporlanmasını etkinleştir</translation>
@@ -11564,6 +11583,11 @@ Yerel cihaza yönelik istekleri etkileyen ve içinde kaynakların listelendiği 
 <translation id="8062485064082966327">Etiketlenmemiş resimlere otomatik olarak açıklama sağlamak için anonim bir Google hizmeti kullan</translation>
 <translation id="8064875716442437829">Oluşturucu erişilebilirliğini etkinleştirme</translation>
 <translation id="8066428282805800713">ChromeOS Flex'te ek donanım verisi gönder</translation>
+<translation id="8070654368411601340">Politikayı ayarlamak <ph name="PRODUCT_NAME" /> ürününün yetki verebileceği sunucular atar. Birden fazla sunucu adını virgülle ayırın. Joker karakterlere (<ph name="WILDCARD_VALUE" />) izin verilir.
+
+      Politika ayarlanmadan bırakılırsa bir sunucunun intranet olduğu belirlense dahi <ph name="PRODUCT_NAME" />, kullanıcı kimlik bilgilerine yeki vermez.
+
+      <ph name="LINUX_OS_NAME" />, <ph name="MAC_OS_NAME" /> ve <ph name="PRODUCT_OS_NAME" /> üzerinde bu politika bir sunucuya yetki devrine izin verdiğinde sistem GSSAPI/Kerberos kitaplığı, sunucunun ana makine adını farklı bir hizmet sorumlusu ana makinesine standartlaştırabilir (örneğin, DNS CNAME veya ters DNS PTR aramalarıyla). Bu ana makineye de politika tarafından izin verilmediği sürece <ph name="PRODUCT_NAME" /> söz konusu hizmet sorumlusuna yetki devretmez.</translation>
 <translation id="8071371098891664137"><ph name="PRINTERS_BULK_ACCESS_MODE_POLICY_NAME" /> için <ph name="PRINTERS_BLOCKLIST" /> seçiliyken <ph name="PRINTERS_BULK_BLOCKLIST_POLICY_NAME" /> politikası ayarlanırsa kullanıcıların hangi yazıcıları kullanamayacağı belirlenir. Bu politikada listelenen kimlikler dışında kalan tüm yazıcılar kullanıcıya sağlanır. Kimliklerin, <ph name="PRINTERS_BULK_CONFIGURATION_POLICY_NAME" /> politikasında belirtilen dosyadaki <ph name="ID_FIELD" /> veya <ph name="GUID_FIELD" /> alanlarına karşılık gelmesi gerekir.</translation>
 <translation id="8076539570602616846"><ph name="PRODUCT_NAME" /> PDF görüntüleyicideki PDF dosyalarını Google Drive'a kaydetmeye uygun Google Hesaplarını kısıtla</translation>
 <translation id="8078224178125125527">Politika ayarlandığında <ph name="AUTH_SCHEMES_POLICY_NAME" /> politikasından bağımsız olarak hangi proxy sunucuları için <ph name="PRODUCT_NAME" /> tarafından desteklenen tüm HTTP kimlik doğrulama şemalarına izin verileceğini belirtir.
@@ -12003,9 +12027,6 @@ Bu politika ayarlanmadan bırakılırsa yüzle kumanda başlangıçta devre dı�
       Bu politika etkinleştirilirse oluşturucu süreci çalışırken diğer tüm süreçler aynı CPU çekirdeğinde planlanmaz.
       Bu politika devre dışı bırakılırsa bir oluşturucu süreci o çekirdekte çalışıyorsa aynı CPU çekirdeğinde diğer tüm süreçler planlanabilir.
       Bu politika ayarlanmazsa bir oluşturucu süreci o çekirdekte çalışıyorsa aynı CPU çekirdeğinde diğer tüm süreçler planlanabilir. Bu yapılandırma <ph name="PRODUCT_NAME" /> sürümüne, mevcut saha denemelerine ve platforma bağlı olarak değişebilir.</translation>
-<translation id="8337114537412769126"><ph name="DEFAULT_SEARCH_PROVIDER_ENABLED_POLICY_NAME" /> açıksa <ph name="DEFAULT_SEARCH_PROVIDER_SUGGEST_URL_POST_PARAMS_POLICY_NAME" /> protokolünün ayarlanması, POST ile öneri araması yaparken parametreleri belirtir. Virgülle ayrılmış ad-değer çiftlerini içerir. Değer, <ph name="SEARCH_TERM_MARKER" /> gibi bir şablon parametresi ise gerçek arama terimleri verisiyle değiştirilir.
-
-      <ph name="DEFAULT_SEARCH_PROVIDER_SUGGEST_URL_POST_PARAMS_POLICY_NAME" /> politikası ayarlanmadan bırakılırsa öneri araması istekleri GET yöntemi kullanılarak gönderilir.</translation>
 <translation id="8337200442224446773">Proxy'ler için yuva havuzunu rastgele hale getirmeyi engelle</translation>
 <translation id="8337961007759352651">Çalışanlar (Web Çalışanları, Hizmet Çalışanları vb.) için komut dosyalarında <ph name="MIMETYPE_TEXT_JAVASCRIPT" /> gibi bir JavaScript MIME türü gerekir. <ph name="MIMETYPE_TEXT_ASCII" /> gibi eski MIME türlerine sahip çalışan komut dosyaları reddedilir.</translation>
 <translation id="8339089771335211509">WebRTC, yalnızca herkese açık internete bağlanırken arayüzü kullanıp özel IP adresleri kullanarak bağlanmaz.</translation>

@@ -132,11 +132,6 @@ IndigoPageActionController::IndigoPageActionController(
 
   RegisterAsPageActionObserver(page_action_controller);
 
-  if (optimization_guide_) {
-    optimization_guide_->RegisterOptimizationTypes(
-        {optimization_guide::proto::OptimizationType::INDIGO});
-  }
-
   if (indigo_service_) {
     indigo_service_subscription_ =
         indigo_service_->RegisterLocalEligibilityChangedCallback(
@@ -598,6 +593,9 @@ void IndigoPageActionController::DidFinishNavigation(
   if (navigation_handle->IsSameDocument()) {
     Reset(ResetType::kResetReplacementsAndContentScript);
   } else {
+    last_tracked_element_rects_.reset();
+    last_device_scale_factor_ = 1.0f;
+    tracked_bounds_ = std::nullopt;
     DestroyToolbar();
   }
 
@@ -611,9 +609,21 @@ void IndigoPageActionController::DidFinishNavigation(
     AbortContextMenuSnoozeIph();
   }
 
+  // The Indigo optimization type is only registered in supported regions (see
+  // IndigoService). There, query even if the profile isn't locally eligible
+  // yet, since hints are fetched during navigation and the decision can be
+  // used if the profile becomes eligible later (e.g., once the component is
+  // ready, or the user signs in). Otherwise, there won't be a decision to wait
+  // for.
+  const bool query_optimization_guide =
+      optimization_guide_ && indigo_service_ &&
+      indigo_service_->IsOptimizationTypeRegistered();
+
   last_evaluated_url_ = navigation_handle->GetURL();
   optimization_guide_decision_ =
-      optimization_guide::OptimizationGuideDecision::kUnknown;
+      query_optimization_guide
+          ? optimization_guide::OptimizationGuideDecision::kUnknown
+          : optimization_guide::OptimizationGuideDecision::kFalse;
   metadata_classifier_.OnNavigationCommitted(
       tab().GetContents(), navigation_handle->IsSameDocument());
   last_anchored_message_priority_ = std::nullopt;
@@ -643,7 +653,7 @@ void IndigoPageActionController::DidFinishNavigation(
   context_menu_snooze_iph_attempted_on_current_page_ = false;
   UpdateEntryPointsState();
 
-  if (optimization_guide_) {
+  if (query_optimization_guide) {
     const GURL& url = navigation_handle->GetURL();
     optimization_guide_->CanApplyOptimization(
         url, optimization_guide::proto::OptimizationType::INDIGO,
@@ -949,6 +959,9 @@ void IndigoPageActionController::OnOnboardingDialogClosed(
 
 void IndigoPageActionController::OnLocalEligibilityChanged(
     LocalEligibility state) {
+  // If the current page was skipped while the profile was ineligible, it may
+  // be worth evaluating now.
+  metadata_classifier_.OnLocalEligibilityChanged();
   UpdateEntryPointsState();
 }
 
@@ -1038,8 +1051,8 @@ void IndigoPageActionController::ShowAnchoredMessage(
         std::make_unique<IndigoMenuModel>(profile, GetWeakPtr()));
   }
 
-  page_action_controller_->ShowAnchoredMessage(kActionIndigo,
-                                               {.priority = priority});
+  page_action_controller_->ShowAnchoredMessage(
+      kActionIndigo, page_actions::AnchoredMessageConfig(priority));
 }
 
 bool IndigoPageActionController::ShouldOfferContextMenuSnoozeIph() const {
@@ -1204,6 +1217,8 @@ void IndigoPageActionController::RegisterObserverWithHost(
   if (current_host_ == host) {
     return;
   }
+  last_tracked_element_rects_.reset();
+  last_device_scale_factor_ = 1.0f;
   UnregisterObserverFromHost(current_host_);
   current_host_ = host;
   if (current_host_) {
@@ -1237,6 +1252,16 @@ void IndigoPageActionController::OnDiscardContents(
 void IndigoPageActionController::OnTrackedElementRectsChanged(
     const viz::TrackedElementRects& rects,
     float device_scale_factor) {
+  last_tracked_element_rects_ = rects;
+  last_device_scale_factor_ = device_scale_factor;
+  RefreshTrackedBounds();
+}
+
+void IndigoPageActionController::RefreshTrackedBounds() {
+  if (!last_tracked_element_rects_) {
+    return;
+  }
+
   content::WebContents* web_contents = tab().GetContents();
   if (!web_contents) {
     return;
@@ -1254,8 +1279,8 @@ void IndigoPageActionController::OnTrackedElementRectsChanged(
   const auto feature_id = static_cast<viz::TrackedElementFeature>(
       page_content_annotations::TrackedElementFeature::kIndigoImageReplacement);
 
-  auto it = rects.find(feature_id);
-  if (it == rects.end()) {
+  auto it = last_tracked_element_rects_->find(feature_id);
+  if (it == last_tracked_element_rects_->end()) {
     SetTrackedBounds(std::nullopt);
     return;
   }
@@ -1263,7 +1288,8 @@ void IndigoPageActionController::OnTrackedElementRectsChanged(
   const viz::TrackedElementRect* anchor = nullptr;
   if (base::FeatureList::IsEnabled(
           features::kIndigoToolbarFollowsReplacedImage)) {
-    anchor = SelectToolbarAnchor(it->second, primary_token, device_scale_factor,
+    anchor = SelectToolbarAnchor(it->second, primary_token,
+                                 last_device_scale_factor_,
                                  manager->GetTrackedReplacementIds());
   } else if (primary_token) {
     auto primary = std::ranges::find(it->second, *primary_token,
@@ -1277,7 +1303,7 @@ void IndigoPageActionController::OnTrackedElementRectsChanged(
     return;
   }
 
-  float dip_scale = 1.0f / device_scale_factor;
+  float dip_scale = 1.0f / last_device_scale_factor_;
   SetTrackedBounds(gfx::ScaleToRoundedRect(anchor->visible_bounds, dip_scale));
 }
 

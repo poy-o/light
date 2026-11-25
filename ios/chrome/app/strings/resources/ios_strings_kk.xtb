@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">Құпия сөздерді бөлісу</translation>
 <translation id="1554043146674176775">AI режимін өшіру</translation>
 <translation id="1554477036522844996">Жаңа терезе</translation>
+<translation id="1555014818414775661">Суреттер қосу</translation>
 <translation id="1557806604681757705">компьютеріңізден</translation>
 <translation id="1558391695376153246">Инкогнито қойындыларын жабу</translation>
 <translation id="1560153516220021659">Жиылған қосымша құралдар тақтасының түймесі</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832"><ph name="BEGIN_BOLD" />Safari параметрлерін<ph name="END_BOLD" /> ашыңыз.</translation>
 <translation id="3858860766373142691">Аты</translation>
 <translation id="386224966259596343">Келесі жолы тиісті үлгіні толтырған кезде, бұл ақпаратты Wallet-ке сақтау мүмкіндігіне ие боласыз.</translation>
-<translation id="3868495844258915202">Толық URL мекенжайын көрсету</translation>
 <translation id="3870931306085184145"><ph name="DOMAIN" /> үшін бірде-бір құпия сөз сақталмаған</translation>
 <translation id="3875783148670536197">Орындалуын көру</translation>
 <translation id="3878657761594430423">Парақ қысқышы</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">Баға бақылау туралы хабарландырулар алу үшін iOS параметрлерінде хабарландыруларды қосыңыз.</translation>
 <translation id="528857768909044842">Қойындылар топтары осы жерде сақталады</translation>
 <translation id="5294624619177114121">Мобильдік хабарландырулар</translation>
-<translation id="5295239312320826323"><ph name="USER_EMAIL" /> аккаунты жойылсын ба?</translation>
 <translation id="5300589172476337783">Көрсету</translation>
 <translation id="5311061401280561833">Камера мен микрофонды пайдалану рұқсаты бар.</translation>
 <translation id="5313967007315987356">Сайт қосу</translation>
@@ -1788,6 +1787,7 @@ Handoff функциясы параметрлердің жалпы бөлімі�
 <translation id="6504541289630702018">Компьютердегі қойындылар тобына оңай кіріңіз</translation>
 <translation id="6505334220040167806">Қойындылар тобын жию.</translation>
 <translation id="6506996418997555004">"<ph name="GROUP_NAME" />" қойындылар тобын бөлісу</translation>
+<translation id="650770261448122895">Lens-де көрген нәрсеңізді іздеңіз.</translation>
 <translation id="6507973708545996744">Барлық құрылғыңыздағы оқу тізімін алу үшін кіріңіз.</translation>
 <translation id="6518133107902771759">Растау</translation>
 <translation id="6523575793810663688">Орындалуын көру</translation>
@@ -2147,7 +2147,6 @@ Handoff функциясы параметрлердің жалпы бөлімі�
 <translation id="7603852183842204213">Қалқымалы терезелерге тыйым салынды (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Синхрондау жұмыс істемейді</translation>
 <translation id="760667371114328991">Қауіпсіздік тексерісінің хабарландыруларын өшіру</translation>
-<translation id="7612619742409846846">Google жүйесіне келесі пайдаланушы атымен кірген:</translation>
 <translation id="7612849887607288481">"AI прототипі" мәзірін ашу</translation>
 <translation id="7618220760967055820">Құралдар тақтасында қандай түйме көрсетілетінін таңдаңыз</translation>
 <translation id="7620522820075868385">Бас тарту</translation>
@@ -2430,6 +2429,7 @@ Handoff функциясы параметрлердің жалпы бөлімі�
 <translation id="8439758443371991593">"Оқу тізіміне қосу" опциясын жасыру</translation>
 <translation id="8443986842926457191">URL мекенжайының ұзындығы 2048 таңба шегінен асып кеткен.</translation>
 <translation id="8449869326050867919">Құпия сөз жіберілді</translation>
+<translation id="8473367210869452063">Бұл сайтпен әрекеттесу үшін қазіргі тапсырманы тоқтатыңыз немесе Gemini-дың жұмысы аяқталғанын күтіңіз.</translation>
 <translation id="8473815223723723001">Суретті Gemini көмегімен өзгерту</translation>
 <translation id="8473863474539038330">Мекенжайлар және басқа ақпарат</translation>
 <translation id="8474378002946546633">Хабарландыруларға рұқсат беру</translation>

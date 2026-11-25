@@ -8,6 +8,7 @@
 #import <UIKit/UIKit.h>
 
 @class ActorFormSuggestion;
+@class IntelligenceHeaderItem;
 
 // Supported layout styles for the actuation worklog item.
 enum class ActuationWorklogItemStyle {
@@ -156,6 +157,8 @@ enum class ActuationInterventionType {
 enum class InterventionActionIdentifier : NSInteger {
   // Continue the current task.
   kContinue,
+  // Decline the proposed action.
+  kDecline,
   // "Allow this suggestion" action.
   kAllow,
   // "Manually enter" or "Manual sign in" action.
@@ -217,15 +220,8 @@ enum class InterventionActionIdentifier : NSInteger {
 
 @end
 
-// Action of the header's primary button.
-enum class ActuationHeaderPrimaryAction {
-  // Pauses the running task.
-  kPause,
-  // Stops the task.
-  kStop,
-};
-
-// View data object describing the text displayed in the actuation header.
+// View data object describing the content and primary button displayed in the
+// actuation header.
 @interface ActuationHeaderContent : NSObject
 
 // Main title text.
@@ -234,9 +230,14 @@ enum class ActuationHeaderPrimaryAction {
 // Optional subtitle text displayed below `title`.
 @property(nonatomic, copy, readonly) NSString* subtitle;
 
+// Primary button of the header, if any.
+@property(nonatomic, strong, readonly) IntelligenceHeaderItem* primaryItem;
+
 // Designated initializer.
 - (instancetype)initWithTitle:(NSString*)title
-                     subtitle:(NSString*)subtitle NS_DESIGNATED_INITIALIZER;
+                     subtitle:(NSString*)subtitle
+                  primaryItem:(IntelligenceHeaderItem*)primaryItem
+    NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;
 
@@ -288,10 +289,6 @@ enum class ActuationHeaderPrimaryAction {
 @property(nonatomic, assign, readonly, getter=isActuationActive)
     BOOL actuationActive;
 
-// Action of the header's primary button.
-@property(nonatomic, assign, readonly)
-    ActuationHeaderPrimaryAction headerPrimaryAction;
-
 // Header content to display in each display mode.
 @property(nonatomic, strong, readonly)
     ActuationHeaderContentVariants* headerContent;
@@ -304,22 +301,28 @@ enum class ActuationHeaderPrimaryAction {
 
 // Suggestions selectable for `suggestionsEntry`, if any.
 // TODO(crbug.com/584701116): Replace `ActorFormSuggestion` with a UI-layer
-// view data type so this header doesn't depend on `actor/tools/model/`.
+// view data type so this header doesn't depend on `actor/tools/model/`. Also
+// consolidate with `selectedSuggestionIndex`.
 @property(nonatomic, copy, readonly) NSArray<ActorFormSuggestion*>* suggestions;
+
+// Index of the currently selected suggestion in `suggestions`, or `NSNotFound`
+// if `suggestions` is `nil`.
+@property(nonatomic, assign, readonly) NSInteger selectedSuggestionIndex;
 
 // Entry for which `suggestions` are selectable. `nil` if `suggestions` is.
 @property(nonatomic, strong, readonly) ActuationWorklogEntry* suggestionsEntry;
 
 // Designated initializer. `headerContent` and `entries` must be set.
-// `suggestions` and `suggestionsEntry` must both be `nil` or both be set, and
-// `suggestions` must not be empty.
+// `suggestions` and `suggestionsEntry` must both be `nil` or both be set,
+// `suggestions` must not be empty, and `selectedSuggestionIndex` must be a
+// valid index in `suggestions` when set or `NSNotFound` when `nil`.
 - (instancetype)
     initWithActuationActive:(BOOL)actuationActive
-        headerPrimaryAction:(ActuationHeaderPrimaryAction)headerPrimaryAction
               headerContent:(ActuationHeaderContentVariants*)headerContent
                     entries:(NSArray<ActuationWorklogEntry*>*)entries
                intervention:(ActuationInterventionData*)intervention
                 suggestions:(NSArray<ActorFormSuggestion*>*)suggestions
+    selectedSuggestionIndex:(NSInteger)selectedSuggestionIndex
            suggestionsEntry:(ActuationWorklogEntry*)suggestionsEntry
     NS_DESIGNATED_INITIALIZER;
 

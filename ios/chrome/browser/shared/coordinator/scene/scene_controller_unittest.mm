@@ -654,7 +654,7 @@ TEST_F(SceneControllerTest,
   OCMStub([partial_scene_controller
       dismissModalDialogsWithCompletion:[OCMArg invokeBlock]
                          dismissOmnibox:YES
-                          dismissGemini:YES]);
+                geminiDismissalBehavior:GeminiDismissalBehavior::kDefault]);
 
   [[[mock_scene_handler_ expect] ignoringNonObjectArgs]
       showRemoteActorCredentialBottomSheetWithRequest:*actor_request.request];
@@ -770,5 +770,93 @@ TEST_F(SceneControllerTest,
       nil, kRemoteActorKeychainAccount, kRemoteActorKeychainService);
   FirstRun::RemoveSentinel();
   FirstRun::ClearStateForTesting();
+}
+
+// Tests that no NTP is opened on activation when the scene was opened with an
+// external intent in the new startup flow.
+TEST_F(SceneControllerTest, NoNTPOnActivationWithExternalIntentInNewFlow) {
+  scoped_feature_list_.Reset();
+  scoped_feature_list_.InitAndEnableFeature(kEnableNewStartupFlow);
+  SaveEnableNewStartupFlowForNextStart();
+  ResetEnableNewStartupFlowEnabledForTesting();
+
+  EXPECT_TRUE(
+      [scene_controller_ shouldOpenNTPTabOnActivationOfBrowser:browser_.get()]);
+  scene_state_.startupHadExternalIntent = YES;
+  EXPECT_FALSE(
+      [scene_controller_ shouldOpenNTPTabOnActivationOfBrowser:browser_.get()]);
+
+  // Restores the legacy startup flow for the next tests.
+  scoped_feature_list_.Reset();
+  scoped_feature_list_.InitAndDisableFeature(kEnableNewStartupFlow);
+  SaveEnableNewStartupFlowForNextStart();
+}
+
+// Tests that `dismissModalsAndMaybeOpenSelectedTabInMode:` uses
+// `GeminiDismissalBehavior::kDefault` by default.
+TEST_F(SceneControllerTest, TestDismissModalsForTabOpeningUsesDefaultGemini) {
+  scene_controller_.simulateTabOpening = YES;
+
+  OCMExpect([mock_scene_handler_
+      dismissModalDialogsWithCompletion:[OCMArg any]
+                         dismissOmnibox:YES
+                       dismissSnackbars:YES
+                geminiDismissalBehavior:GeminiDismissalBehavior::kDefault]);
+  [scene_controller_
+      dismissModalsAndMaybeOpenSelectedTabInMode:ApplicationModeForTabOpening::
+                                                     NORMAL
+                               withUrlLoadParams:UrlLoadParams::InNewTab(GURL(
+                                                     "https://example.com"))
+                                  dismissOmnibox:YES
+                                      completion:nil];
+  EXPECT_OCMOCK_VERIFY(mock_scene_handler_);
+}
+
+// Tests that `dismissModalsAndMaybeOpenSelectedTabInMode:` preserves Gemini
+// (`GeminiDismissalBehavior::kNone`) when opening a tab with
+// `START_GEMINI_AI_SUMMARIZATION`.
+TEST_F(SceneControllerTest,
+       TestDismissModalsForTabOpeningPreservesGeminiForSummarization) {
+  scene_controller_.simulateTabOpening = YES;
+
+  AppStartupParameters* startup_params = [[AppStartupParameters alloc]
+       initWithExternalURL:GURL()
+               completeURL:GURL()
+           applicationMode:ApplicationModeForTabOpening::UNDETERMINED
+      forceApplicationMode:NO];
+  startup_params.postOpeningAction = START_GEMINI_AI_SUMMARIZATION;
+  [connection_information_ setStartupParameters:startup_params];
+
+  OCMExpect([mock_scene_handler_
+      dismissModalDialogsWithCompletion:[OCMArg any]
+                         dismissOmnibox:YES
+                       dismissSnackbars:YES
+                geminiDismissalBehavior:GeminiDismissalBehavior::kNone]);
+  [scene_controller_
+      dismissModalsAndMaybeOpenSelectedTabInMode:ApplicationModeForTabOpening::
+                                                     NORMAL
+                               withUrlLoadParams:UrlLoadParams::InNewTab(GURL(
+                                                     "https://example.com"))
+                                  dismissOmnibox:YES
+                                      completion:nil];
+  EXPECT_OCMOCK_VERIFY(mock_scene_handler_);
+}
+
+// Tests that `dismissModalsAndOpenMultipleTabsWithURLs:` uses
+// `GeminiDismissalBehavior::kDefault` by default.
+TEST_F(SceneControllerTest,
+       TestDismissModalsAndOpenMultipleTabsUsesDefaultGemini) {
+  std::vector<GURL> urls = {GURL("https://example.com")};
+
+  OCMExpect([mock_scene_handler_
+      dismissModalDialogsWithCompletion:[OCMArg any]
+                         dismissOmnibox:YES
+                       dismissSnackbars:YES
+                geminiDismissalBehavior:GeminiDismissalBehavior::kDefault]);
+  [scene_controller_ dismissModalsAndOpenMultipleTabsWithURLs:urls
+                                              inIncognitoMode:NO
+                                               dismissOmnibox:YES
+                                                   completion:nil];
+  EXPECT_OCMOCK_VERIFY(mock_scene_handler_);
 }
 }  // namespace

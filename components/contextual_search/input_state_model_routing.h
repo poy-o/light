@@ -12,13 +12,9 @@
 #include <string_view>
 #include <vector>
 
-#include "third_party/omnibox_proto/model_mode.pb.h"
+#include "components/omnibox/common/input_state.h"
 
 class GURL;
-
-namespace omnibox {
-struct InputState;
-}  // namespace omnibox
 
 // Routes a composebox query to AI Mode (AIM) or the Search results page (SRP)
 // when `omnibox::kDynamicAimFulfillment` is enabled.
@@ -95,7 +91,7 @@ struct FulfillmentDecision {
   // Defaults to AIM, today's behavior for every query.
   bool will_fulfill_in_aim = true;
   // Model to show; unspecified for SRP.
-  omnibox::ModelMode model = omnibox::ModelMode::MODEL_MODE_UNSPECIFIED;
+  omnibox::ModelKey model = omnibox::kUnspecifiedModelKey;
   // Params for the search URL.
   UrlParams url_params;
 };
@@ -110,11 +106,10 @@ bool AttachmentsCanGoToSrp(const AttachmentCounts& attachments,
                            const SrpEligibleAttachments& eligible);
 
 // Routes to AIM if AI Mode is on, there's no server config yet, the tool's
-// params include `udm=50` or `nem` (or it has no config), a tool is used with
-// attachments (not covered by the SRP input modes), or the attachments can't go
-// to SRP. Otherwise routes to SRP with the tool's params. For AIM, adds the
-// active (or default) model's params unless the active tool disables active
-// model selection, with `nem` replacing `udm`.
+// params include `udm=50` or `nem` (or it has no config), or the attachments
+// can't go to SRP. Otherwise routes to SRP with the tool's params. For AIM,
+// adds the active (or default) model's params unless the active tool disables
+// active model selection, with `nem` replacing `udm`.
 FulfillmentDecision ComputeFulfillment(const omnibox::InputState& state,
                                        bool aim_mode_active,
                                        const AttachmentCounts& attachments,

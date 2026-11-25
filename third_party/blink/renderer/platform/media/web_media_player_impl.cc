@@ -2017,10 +2017,6 @@ void WebMediaPlayerImpl::StopForDemuxerReset() {
                                  std::move(media_thread_mem_dumper_));
 }
 
-void WebMediaPlayerImpl::UpdateLoadedUrl(const GURL& url) {
-  demuxer_manager_->SetLoadedUrl(url);
-}
-
 void WebMediaPlayerImpl::DemuxerRequestsSeek(base::TimeDelta seek_time) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   DoSeek(seek_time, true);
@@ -3916,6 +3912,14 @@ void WebMediaPlayerImpl::SwitchToRemoteRenderer(
   if (client_) {
     client_->MediaRemotingStarted(
         WebString::FromUtf8(remote_device_friendly_name));
+  }
+}
+
+void WebMediaPlayerImpl::SetMediaRedirectionTargetId(
+    const base::Token& tracked_element_id) {
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
+  if (client_) {
+    client_->SetMediaRedirectionTargetId(tracked_element_id);
   }
 }
 

@@ -1240,6 +1240,13 @@ inline constexpr char
         "When enabled, shows the Wallet Reminder Notice prompt or bottom sheet "
         "after submitting a form with a public pass.";
 
+inline constexpr char kAutofillFixVcnStrikeDatabaseFallbackName[] =
+    "Fix Autofill virtual card enrollment strike database fallback";
+inline constexpr char kAutofillFixVcnStrikeDatabaseFallbackDescription[] =
+    "When enabled, the virtual card enrollment strike database is checked "
+    "when deciding whether to offer virtual card enrollment, allowing other "
+    "flows to be offered if enrollment is blocked by strikes.";
+
 inline constexpr char
     kAutofillIgnorePaymentsChurnedUsersStrikesForTestingName[] =
         "Ignore payments churned users strikes for testing";
@@ -1920,7 +1927,7 @@ inline constexpr char kActorPageStabilityName[] = "Actor page stability";
 inline constexpr char kActorPageStabilityDescription[] =
     "Overrides how long the actor waits for the page to stabilize after an "
     "action: the minimum wait and the initial and subsequent paint timeouts. "
-    "Each defaults to 1s.";
+    "Each defaults to 500ms.";
 
 inline constexpr char kActorScriptToolSkipScreenshotName[] =
     "Actor script tool skip screenshot";
@@ -1954,8 +1961,8 @@ inline constexpr char kActorTypeToolObservationStartDelayName[] =
     "Actor type tool observation start delay";
 inline constexpr char kActorTypeToolObservationStartDelayDescription[] =
     "Controls how long the actor waits after a type action before it starts "
-    "waiting for the page to stabilize. Defaults to 1s; Disabled removes the "
-    "delay.";
+    "waiting for the page to stabilize. Defaults to 500ms; Disabled removes "
+    "the delay.";
 
 inline constexpr char kGlicCaptureRegionDescription[] =
     "Enables Glic to capture a region of the screen.";
@@ -2175,6 +2182,12 @@ inline constexpr char kImageDescriptionsAlternateRoutingDescription[] =
     "When adding automatic captions to images, use a different route to "
     "acquire descriptions.";
 
+inline constexpr char kEnableAccountMenuName[] = "Enable Account Menu";
+inline constexpr char kEnableAccountMenuDescription[] =
+    "For testing purposes only. Opens the desktop-like account menu when "
+    "tapping the toolbar sign-in button on all form factors, not only on "
+    "Desktop Android. Requires #signin-button-profile-menu.";
+
 inline constexpr char kEnableAccountPreviewDataName[] =
     "Enable Account Preview Data";
 inline constexpr char kEnableAccountPreviewDataDescription[] =
@@ -2360,13 +2373,19 @@ inline constexpr char kDynamicAimFulfillmentName[] = "Dynamic AIM Fulfillment";
 inline constexpr char kDynamicAimFulfillmentDescription[] =
     "Main switch for dynamic AIM fulfillment, routing Composebox queries to "
     "the Search results page unless active tools, models, or inputs require "
-    "AI Mode. Must be enabled alongside the per-surface (Realbox or Omnibox) "
-    "flag.";
+    "AI Mode. Must be enabled alongside the per-surface (Realbox, Omnibox or "
+    "Android Omnibox) flag.";
 
 inline constexpr char kDynamicAimFulfillmentOmniboxName[] =
     "Dynamic AIM Fulfillment (Omnibox)";
 inline constexpr char kDynamicAimFulfillmentOmniboxDescription[] =
     "Enables dynamic AIM fulfillment in the WebUI Omnibox Composebox. "
+    "Requires Dynamic AIM Fulfillment to also be enabled.";
+
+inline constexpr char kDynamicAimFulfillmentAndroidOmniboxName[] =
+    "Dynamic AIM Fulfillment (Android Omnibox)";
+inline constexpr char kDynamicAimFulfillmentAndroidOmniboxDescription[] =
+    "Enables dynamic AIM fulfillment in the Android Omnibox Composebox. "
     "Requires Dynamic AIM Fulfillment to also be enabled.";
 
 inline constexpr char kDynamicAimFulfillmentRealboxName[] =
@@ -3610,12 +3629,6 @@ inline constexpr char kOmniboxDuiPrerenderingName[] =
 inline constexpr char kOmniboxDuiPrerenderingDescription[] =
     "Enables Direct URL Input (DUI) prerendering in the Omnibox.";
 
-inline constexpr char kOmniboxFuseboxAsyncInflationName[] =
-    "Fusebox Async View Inflation";
-inline constexpr char kOmniboxFuseboxAsyncInflationDescription[] =
-    "When enabled, Fusebox RecyclerView will be inflated on a background thread"
-    " instead of the UI thread.";
-
 inline constexpr char kOmniboxEarlyInflationName[] = "Omnibox Early Inflation";
 inline constexpr char kOmniboxEarlyInflationDescription[] =
     "When enabled, the omnibox suggestions container starts inflating on a "
@@ -4514,10 +4527,6 @@ inline constexpr char kTestThirdPartyCookiePhaseoutDescription[] =
     "Enable to test third-party cookie phaseout. "
     "Learn more: https://goo.gle/3pcd-flags";
 
-inline constexpr char kTabGroupColorRefreshName[] = "Tab Group Color Refresh";
-inline constexpr char kTabGroupColorRefreshDescription[] =
-    "Update the color selection for tab groups.";
-
 inline constexpr char kTabGroupsFocusingName[] = "Tab Groups Focusing";
 inline constexpr char kTabGroupsFocusingDescription[] =
     "When a tab group is focused, the tabstrip constrains visiblity to the "
@@ -4548,13 +4557,6 @@ inline constexpr char kSegmentationSurveyPageName[] =
     "Segmentation survey internals page and model";
 inline constexpr char kSegmentationSurveyPageDescription[] =
     "Enable internals page for survey and fetching model";
-
-inline constexpr char kDeferOsClipboardReadCallToGetTypeName[] =
-    "Defer OS Clipboard Read Call To GetType";
-inline constexpr char kDeferOsClipboardReadCallToGetTypeDescription[] =
-    "Defers Async Clipboard Read API data retrieval from the OS until "
-    "ClipboardItem.getType() is called, instead of eagerly fetching all "
-    "formats at read() time.";
 
 inline constexpr char kServiceWorkerSyntheticResponseName[] =
     "ServiceWorkerSyntheticResponse";
@@ -5605,10 +5607,6 @@ inline constexpr char kAndroidTabstripStartupCaptureBugFixName[] =
 inline constexpr char kAndroidTabstripStartupCaptureBugFixDescription[] =
     "Enables the Android Tabstrip Startup Capture Bug Fix feature.";
 
-inline constexpr char kAndroidThemeModuleName[] = "Android Theme Module";
-inline constexpr char kAndroidThemeModuleDescription[] =
-    "Enables external theme overlays for Chrome activities when available.";
-
 inline constexpr char kAndroidThemeResourceProviderName[] =
     "Android Theme Resource Provider";
 inline constexpr char kAndroidThemeResourceProviderDescription[] =
@@ -6133,11 +6131,26 @@ inline constexpr char kDeviceTrustConnectorDesktopFormFactorsDescription[] =
     "requires the Device Trust Connector on Android flag. Has no effect on "
     "other form factors.";
 
+inline constexpr char kDisableAddAccountWhenRestrictedName[] =
+    "Disable add account when restricted";
+inline constexpr char kDisableAddAccountWhenRestrictedDescription[] =
+    "Disables the 'Add account to device' options when the device doesn't "
+    "allow adding accounts. On such a device with no accounts, hides the "
+    "sign-in promos and the Settings sign-in row, and shows a \"Can't sign "
+    "in\" message instead of the sign-in screen.";
+
 inline constexpr char kEdgeToEdgeTopInsetName[] = "Edge-to-Edge Top Inset";
 inline constexpr char kEdgeToEdgeTopInsetDescription[] =
     "Enables the prototype Edge-to-Edge top inset feature and refactor, which "
     "unifies top inset consumption and allows opted-in "
     "pages to draw under the top inset.";
+
+inline constexpr char kEdgeToEdgeTopPageColorSamplingName[] =
+    "Edge-to-Edge Top Page Color Sampling";
+inline constexpr char kEdgeToEdgeTopPageColorSamplingDescription[] =
+    "Samples the color at the top of the web page and uses it for the status "
+    "bar when the page sits directly under the status bar. Requires the "
+    "Edge-to-Edge Top Inset feature.";
 
 inline constexpr char kEdgeToEdgeExtraLogsName[] = "edge-to-edge-extra-logs";
 inline constexpr char kEdgeToEdgeExtraLogsDescription[] =
@@ -6206,6 +6219,12 @@ inline constexpr char kEnableCommandLineOnNonRootedName[] =
     "Enable command line on non-rooted devices";
 inline constexpr char kEnableCommandLineOnNoRootedDescription[] =
     "Enable reading command line file on non-rooted devices (DANGEROUS).";
+
+inline constexpr char kEnableBulkDataEntryAndroidName[] =
+    "Enterprise content analysis for bulk data entry";
+inline constexpr char kEnableBulkDataEntryAndroidDescription[] =
+    "Scans pasted text with enterprise content analysis on Android when the "
+    "OnBulkDataEntryEnterpriseConnector policy is set.";
 
 inline constexpr char kEnableFileAttachedEnterpriseScanOnClankName[] =
     "Enterprise content analysis for file uploads";
@@ -6525,10 +6544,6 @@ inline constexpr char kSigninButtonProfileMenuRefinementsName[] =
 inline constexpr char kSigninButtonProfileMenuRefinementsDescription[] =
     "Enables fast-follow refinements and visual adjustments for the desktop "
     "profile menu on Desktop Android.";
-
-inline constexpr char kSigninLevelUpButtonName[] = "Signin Level Up Button";
-inline constexpr char kSigninLevelUpButtonDescription[] =
-    "Replaces signed out avatar with signin button on Android.";
 
 inline constexpr char kSiteIsolationForPasswordSitesName[] =
     "Site Isolation For Password Sites";
@@ -8243,6 +8258,13 @@ inline constexpr char kWaylandSessionManagementName[] =
     "Wayland session management";
 inline constexpr char kWaylandSessionManagementDescription[] =
     "Enable Wayland's xx/xdg-session-management-v1 experimental support.";
+
+inline constexpr char kWaylandTextScaleTextOnlyName[] =
+    "Wayland text scaling affects text only";
+inline constexpr char kWaylandTextScaleTextOnlyDescription[] =
+    "On Wayland, apply the desktop text scaling factor (eg. GNOME's Large "
+    "Text) to UI text only, instead of scaling the whole browser UI and web "
+    "content.";
 
 // Random platform combinations -----------------------------------------------
 

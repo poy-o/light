@@ -460,12 +460,17 @@ action("regex_patterns_inl_h") {
          rebase_path(outputs, root_build_dir)
 }
 
-action_with_pydeps("entity_schema_enums_and_functions") {
+python_binary("transpile_entity_schema") {
+  visibility = [ ":entity_schema_enums_and_functions" ]
+  script = "data_model/autofill_ai/transpile_entity_schema.py"
+}
+
+python_action("entity_schema_enums_and_functions") {
   visibility = [ ":*" ]
 
   sources = [ "data_model/autofill_ai/entity_schema.json" ]
 
-  script = "data_model/autofill_ai/transpile_entity_schema.py"
+  python_binary = ":transpile_entity_schema"
   outputs = [
     "$target_gen_dir/data_model/autofill_ai/entity_type_names.h",
     "$target_gen_dir/data_model/autofill_ai/entity_type_funcs.cc",
@@ -718,6 +723,8 @@ static_library("browser") {
     "form_parsing/address_field_parser.h",
     "form_parsing/address_field_parser_ng.cc",
     "form_parsing/address_field_parser_ng.h",
+    "form_parsing/address_hierarchy_constraints.cc",
+    "form_parsing/address_hierarchy_constraints.h",
     "form_parsing/alternative_name_field_parser.cc",
     "form_parsing/alternative_name_field_parser.h",
     "form_parsing/autofill_parsing_util.cc",
@@ -856,6 +863,8 @@ static_library("browser") {
     "integrators/compose/autofill_compose_delegate.h",
     "integrators/custom_form_controls/custom_form_control_script_index.cc",
     "integrators/custom_form_controls/custom_form_control_script_index.h",
+    "integrators/custom_form_controls/metrics/custom_form_control_metrics.cc",
+    "integrators/custom_form_controls/metrics/custom_form_control_metrics.h",
     "integrators/identity_credential/identity_credential_delegate.h",
     "integrators/one_time_tokens/form_cache_query_util.cc",
     "integrators/one_time_tokens/form_cache_query_util.h",
@@ -1238,8 +1247,6 @@ static_library("browser") {
     "studies/hats_surveys_util.h",
     "suggestions/addresses/address_suggestion_generator.cc",
     "suggestions/addresses/address_suggestion_generator.h",
-    "suggestions/at_memory/at_memory_nudge_generator.cc",
-    "suggestions/at_memory/at_memory_nudge_generator.h",
     "suggestions/autocomplete_suggestion_generator.cc",
     "suggestions/autocomplete_suggestion_generator.h",
     "suggestions/autofill_ai/autofill_ai_suggestion_generator.cc",
@@ -2206,6 +2213,7 @@ source_set("unit_tests") {
     "integrators/autofill_ai/management_util_unittest.cc",
     "integrators/autofill_ai/metrics/autofill_ai_logger_unittest.cc",
     "integrators/custom_form_controls/custom_form_control_script_index_unittest.cc",
+    "integrators/custom_form_controls/metrics/custom_form_control_metrics_unittest.cc",
     "integrators/one_time_tokens/form_cache_query_util_unittest.cc",
     "integrators/one_time_tokens/gmail_otp_opt_in_coordinator_unittest.cc",
     "integrators/one_time_tokens/gmail_otp_source_unittest.cc",

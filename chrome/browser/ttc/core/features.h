@@ -55,6 +55,11 @@ BASE_DECLARE_FEATURE(kTtcFre);
 // (pipeline health, timeline, tool calls, problems and audio) for debugging.
 BASE_DECLARE_FEATURE(kTtcDebugTools);
 
+// Records the session's actor journal trace in memory so it can be downloaded
+// from the UI after an issue manifests. Enabled by default on dogfood clients
+// unless explicitly overridden.
+BASE_DECLARE_FEATURE(kTtcInMemoryJournal);
+
 // Enables Human-on-the-Loop (HOTL) local user confirmation before executing
 // click_element tool actions.
 BASE_DECLARE_FEATURE(kTtcHotlClickConfirmation);
@@ -103,6 +108,11 @@ inline constexpr base::FeatureParam<bool> kTtcGetPointerUseSelection{
 // Android yet.
 inline constexpr base::FeatureParam<bool> kTtcGetPointerShowMark{
     &kTtcGetPointer, "show_mark", false};
+
+// Warns the user with a toast when the system output is muted or very quiet,
+// so that they know why they don't hear the model. Only ChromeOS reads the
+// output volume so far; other platforms never warn.
+BASE_DECLARE_FEATURE(kTtcSpeakerVolumeWarning);
 
 }  // namespace ttc
 

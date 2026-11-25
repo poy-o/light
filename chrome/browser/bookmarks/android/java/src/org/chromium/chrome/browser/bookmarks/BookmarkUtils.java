@@ -74,9 +74,11 @@ public class BookmarkUtils {
     private static @Nullable Boolean sReadingListSupportedForTesting;
 
     /**
-     * If the tab has already been bookmarked, start {@link BookmarkEditActivity} for the normal
-     * bookmark or show the reading list page for reading list bookmark. If not, add the bookmark to
-     * {@link BookmarkModel}, and show a snackbar notifying the user.
+     * Adds or edits bookmarks for the given tabs. For a single tab, opens {@link
+     * BookmarkPopupCoordinator} or {@link BookmarkManagerOpener#startEditActivity} if already
+     * bookmarked, or adds the bookmark to {@link BookmarkModel} and shows the popup or {@link
+     * BookmarkSaveFlowCoordinator} bottom sheet if new. For multiple tabs, adds them to the reading
+     * list or a new bookmarks folder and shows a snackbar.
      *
      * @param existingBookmarkItems The {@link BookmarkItem} if the tab has already been bookmarked.
      * @param bookmarkModel The bookmark model.
@@ -392,8 +394,8 @@ public class BookmarkUtils {
         popupCoordinator.show(bookmarkId, launchType, isNewBookmark);
     }
 
-    // The legacy code path to add or edit bookmark without triggering the bookmark bottom sheet.
-    // Used for feed and GTS.
+    // Adds a single-tab bookmark and shows a confirmation snackbar without triggering the bookmark
+    // save flow.
     private static @Nullable BookmarkId addBookmarkAndShowSnackbar(
             BookmarkModel bookmarkModel,
             Tab tab,
@@ -484,8 +486,8 @@ public class BookmarkUtils {
 
     /**
      * Add an article to the reading list. If the article was already loaded, the entry will be
-     * overwritten. After successful addition, a snackbar will be shown notifying the user about the
-     * result of the operation.
+     * overwritten. After successful addition, shows the bookmark save flow when account bookmark
+     * folders are active, or a snackbar notifying the user otherwise.
      *
      * @param activity The associated activity which is adding this reading list item.
      * @param bookmarkModel The bookmark model that talks to the bookmark backend.
@@ -498,8 +500,8 @@ public class BookmarkUtils {
      * @param bookmarkManagerOpener Manages opening bookmarks.
      * @param priceDropNotificationManager Manages price drop notifications.
      * @return The bookmark ID created after saving the article to the reading list.
-     * @deprecated Used only by feed, new users should rely on addOrEditBookmark (or the tab
-     *     bookmarker).
+     * @deprecated Legacy entry point; new callers should rely on {@link TabBookmarker} or {@link
+     *     #addOrEditBookmark}.
      */
     @Deprecated
     public static @Nullable BookmarkId addToReadingList(
@@ -697,8 +699,10 @@ public class BookmarkUtils {
      * @param bookmarkModel The current {@link BookmarkModel} which talks to native.
      * @param title The title of the new bookmark.
      * @param url The {@link GURL} of the new bookmark.
-     * @param parent The {@link BookmarkId} which is the parent of the bookmark. If this is null,
-     *     then the last used parent is used, falling back to a default folder.
+     * @param parent The {@link BookmarkId} which is the parent of the bookmark. If this is null for
+     *     {@link BookmarkType#NORMAL}, the last used parent is used before falling back to a
+     *     default folder. If this is null or not a reading list folder for {@link
+     *     BookmarkType#READING_LIST}, the default reading list folder is used.
      * @param bookmarkType The {@link BookmarkType} of the bookmark.
      * @param isBookmarkBarVisible True when the user is currently showing the bookmark bar.
      */
@@ -711,8 +715,6 @@ public class BookmarkUtils {
             @Nullable BookmarkId parent,
             @BookmarkType int bookmarkType,
             boolean isBookmarkBarVisible) {
-        parent = parent == null ? getLastUsedParent() : parent;
-
         // When the user did not have a last used parent, then we will usually save into a default
         // folder, which for normal bookmarks is the default bookmark folder ("Mobile Bookmarks" on
         // mobile devices). In the special case of the Bookmark Bar being visible, we will instead
@@ -721,7 +723,8 @@ public class BookmarkUtils {
         // continue saving to it unless the user explicitly chose to from the Edit dialog.
         boolean shouldSetAsLastUsed = true;
         if (parent == null && bookmarkType == BookmarkType.NORMAL) {
-            if (isBookmarkBarVisible) {
+            parent = getLastUsedParent();
+            if (parent == null && isBookmarkBarVisible) {
                 parent =
                         bookmarkModel.areAccountBookmarkFoldersActive()
                                 ? bookmarkModel.getAccountDesktopFolderId()
@@ -738,7 +741,9 @@ public class BookmarkUtils {
         if (parent == null
                 || parentItem == null
                 || parentItem.isManaged()
-                || !parentItem.isFolder()) {
+                || !parentItem.isFolder()
+                || (bookmarkType == BookmarkType.READING_LIST
+                        && parent.getType() != BookmarkType.READING_LIST)) {
             parent =
                     bookmarkType == BookmarkType.READING_LIST
                             ? bookmarkModel.getDefaultReadingListFolder()
@@ -837,7 +842,7 @@ public class BookmarkUtils {
 
     /**
      * Saves the last used url to preference. The saved url will be later queried by {@link
-     * #getLastUsedUrl()}.
+     * BookmarkManagerOpener#getLastUsedUrl(Profile)}.
      */
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     public static void setLastUsedUrl(String url) {

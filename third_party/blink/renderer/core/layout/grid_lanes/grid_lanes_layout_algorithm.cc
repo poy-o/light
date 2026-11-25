@@ -1457,12 +1457,10 @@ GridLanesFragmentationItem GridLanesLayoutAlgorithm::LayoutItemForFragmentation(
                 : fixed_available_size.inline_size) = *stretch_size;
   }
   item_fragment.offset = item_offset;
-  // TODO(kschmi): When fragmented grid-lanes subgrids are supported, persist
-  // each subgrid item's finalized child-subtree index and select its subtree.
   const ConstraintSpace child_space = CreateConstraintSpaceForLayout(
       SubgriddedItemData(item, &layout_data, container_writing_mode),
-      /*opt_layout_subtree=*/nullptr, &containing_grid_area,
-      unavailable_block_size,
+      grid_lanes_item.grid_lanes_placement_data->subgrid_layout_subtree.Get(),
+      &containing_grid_area, unavailable_block_size,
       item_fragment.min_block_size_should_encompass_intrinsic_size,
       item_offset.block_offset,
       /*opt_fixed_inline_size=*/std::nullopt, fixed_available_size);
@@ -2065,6 +2063,7 @@ LayoutResult::EStatus GridLanesLayoutAlgorithm::FinishRowFragmentation(
   }
 
   LayoutUnit max_item_block_end;
+  GridBaselineAccumulator baseline_accumulator(Style().GetFontBaseline());
   // Commit rows before the breakpoint and defer every owning item in its row.
   // Any continuing parallel item keeps its lane unfinished.
   Vector<bool> has_continuation(grid_lanes.size(), false);
@@ -2090,6 +2089,14 @@ LayoutResult::EStatus GridLanesLayoutAlgorithm::FinishRowFragmentation(
         has_continuation[entry.lane_idx];
     container_builder_.AddResult(*entry.result, entry.offset,
                                  entry.data->PlacementData().margins);
+    baseline_accumulator.Accumulate(*entry.data->item, fragment,
+                                    entry.offset.block_offset);
+  }
+  if (auto first_baseline = baseline_accumulator.FirstBaseline()) {
+    container_builder_.SetFirstBaseline(*first_baseline);
+  }
+  if (auto last_baseline = baseline_accumulator.LastBaseline()) {
+    container_builder_.SetLastBaseline(*last_baseline);
   }
   if (!breakpoint && !container_builder_.HasInflowChildBreakInside()) {
     container_builder_.SetHasSeenAllChildren();
@@ -2823,6 +2830,12 @@ void GridLanesLayoutAlgorithm::RunGridLanesPlacementPhase(
 
         if (is_fragmentation_collection) {
           grid_lanes_placement_data->total_block_size = fragment.BlockSize();
+          // TODO(kschmi): Update inherited row geometry when fragmentation
+          // expands or shifts rows before passing it to a subgrid.
+          if (is_for_columns) {
+            grid_lanes_placement_data->subgrid_layout_subtree =
+                child_layout_subtree;
+          }
         } else {
           // Save the child index before `AddResult` appends it. Self-alignment
           // uses this index to update the child.

@@ -255,6 +255,7 @@
 #include "third_party/blink/renderer/core/html/forms/autofill_event.h"
 #include "third_party/blink/renderer/core/html/forms/email_input_type.h"
 #include "third_party/blink/renderer/core/html/forms/form_controller.h"
+#include "third_party/blink/renderer/core/html/forms/html_form_control_element_with_state.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_select_element.h"
@@ -4016,6 +4017,13 @@ void Document::open(LocalDOMWindow* entered_window,
   }
 
   open();
+
+  // Distinguish parsers created by the web-exposed document.open() (and
+  // implicitly by document.write()) from parsers created by internal callers
+  // of open(), e.g. Document::SetContent() for XHR or DOMParser.
+  if (ScriptableDocumentParser* parser = GetScriptableDocumentParser()) {
+    parser->SetWasCreatedByDocumentOpen(true);
+  }
 }
 
 // https://html.spec.whatwg.org/C/dynamic-markup-insertion.html#document-open-steps
@@ -9736,6 +9744,7 @@ void Document::Trace(Visitor* visitor) const {
   visitor->Trace(property_registry_);
   visitor->Trace(policy_);
   visitor->Trace(slot_assignment_engine_);
+  visitor->Trace(form_controls_needing_suggested_value_clear_);
   visitor->Trace(viewport_data_);
   visitor->Trace(lazy_load_media_observer_);
   visitor->Trace(mime_handler_view_before_unload_event_listener_);
@@ -9777,6 +9786,44 @@ SlotAssignmentEngine& Document::GetSlotAssignmentEngine() {
 bool Document::IsSlotAssignmentDirty() const {
   return slot_assignment_engine_ &&
          slot_assignment_engine_->HasPendingSlotAssignmentRecalc();
+}
+
+void Document::ScheduleClearSuggestedValueForCanvas(
+    HTMLFormControlElementWithState& control) {
+  form_controls_needing_suggested_value_clear_.insert(&control);
+  if (LocalFrameView* view = View()) {
+    view->ScheduleAnimation();
+  }
+}
+
+void Document::UnscheduleClearSuggestedValueForCanvas(
+    HTMLFormControlElementWithState& control) {
+  if (!form_controls_needing_suggested_value_clear_.empty()) {
+    form_controls_needing_suggested_value_clear_.erase(&control);
+  }
+}
+
+bool Document::ClearScheduledSuggestedValuesForCanvas() {
+  if (form_controls_needing_suggested_value_clear_.empty()) {
+    return false;
+  }
+  // Clearing can run script, which can queue more controls.
+  HeapVector<Member<HTMLFormControlElementWithState>> controls;
+  for (HTMLFormControlElementWithState* control :
+       form_controls_needing_suggested_value_clear_) {
+    controls.push_back(control);
+  }
+  form_controls_needing_suggested_value_clear_.clear();
+  bool changed = false;
+  for (HTMLFormControlElementWithState* control : controls) {
+    if (&control->GetDocument() != this) {
+      continue;
+    }
+    if (control->RunScheduledClearSuggestedValueForCanvas()) {
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 bool Document::IsFocusAllowed(FocusTrigger trigger,

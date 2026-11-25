@@ -39,6 +39,7 @@
 #import "ios/chrome/browser/intelligence/bwg/coordinator/gemini_actor_task_store_manager.h"
 #import "ios/chrome/browser/intelligence/bwg/coordinator/gemini_container_mediator_delegate.h"
 #import "ios/chrome/browser/intelligence/bwg/coordinator/gemini_container_mediator_event_handler.h"
+#import "ios/chrome/browser/intelligence/bwg/coordinator/gemini_container_snackbar_manager.h"
 #import "ios/chrome/browser/intelligence/bwg/metrics/gemini_metrics.h"
 #import "ios/chrome/browser/intelligence/bwg/metrics/gemini_session_metrics_manager.h"
 #import "ios/chrome/browser/intelligence/bwg/model/gemini_configuration.h"
@@ -2289,7 +2290,8 @@ TEST_F(GeminiContainerMediatorTest,
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
       {kAssistantContainer, kIOSGeminiBottomSheetMigration, kPageActionMenu,
-       kGeminiLive, kGeminiLiveDormantReasons, kFullscreenRefactoring},
+       kGeminiLive, kEnableGeminiLiveInBottomSheet, kGeminiLiveDormantReasons,
+       kFullscreenRefactoring},
       {});
 
   AppendActiveWebState();
@@ -2342,7 +2344,8 @@ TEST_F(GeminiContainerMediatorTest,
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
       {kAssistantContainer, kIOSGeminiBottomSheetMigration, kPageActionMenu,
-       kGeminiLive, kGeminiLiveDormantReasons, kFullscreenRefactoring},
+       kGeminiLive, kEnableGeminiLiveInBottomSheet, kGeminiLiveDormantReasons,
+       kFullscreenRefactoring},
       {});
 
   AppendActiveWebState();
@@ -2484,6 +2487,42 @@ TEST_F(GeminiContainerMediatorZeroStateTest,
   ASSERT_FALSE(zero_state_consumer_.hidden);
 
   [mediator_ didDetachTabWithID:@"inactive_tab_id"];
+  EXPECT_FALSE(zero_state_consumer_.hidden);
+}
+
+// Tests that the suggestion chips are hidden while the personalization notice
+// is shown, even when suggestions are refetched (e.g. on tab attachment), and
+// fetched again once it is dismissed. The zero-state view itself stays visible.
+TEST_F(GeminiContainerMediatorZeroStateTest,
+       TestSuggestionsHiddenWhilePersonalizationNoticeShown) {
+  ASSERT_FALSE(zero_state_consumer_.hidden);
+  ASSERT_TRUE(container_consumer_.zeroState);
+
+  [mediator_ didPresentDiscoveryBannerWithType:
+                 ios::provider::GeminiDiscoveryBannerType::kPersonalization
+                                conversationID:kTestConversationID];
+  EXPECT_TRUE(zero_state_consumer_.hidden);
+  EXPECT_TRUE(container_consumer_.zeroState);
+
+  [mediator_ didAttachTabWithID:ActiveTabID()];
+  EXPECT_TRUE(zero_state_consumer_.hidden);
+
+  [mediator_ didDismissDiscoveryBannerWithType:
+                 ios::provider::GeminiDiscoveryBannerType::kPersonalization
+                                conversationID:kTestConversationID];
+  EXPECT_FALSE(zero_state_consumer_.hidden);
+  EXPECT_TRUE(container_consumer_.zeroState);
+}
+
+// Tests that discovery banners other than the personalization notice don't
+// hide the suggestion chips.
+TEST_F(GeminiContainerMediatorZeroStateTest,
+       TestSuggestionsShownForUnknownDiscoveryBanner) {
+  ASSERT_FALSE(zero_state_consumer_.hidden);
+
+  [mediator_ didPresentDiscoveryBannerWithType:
+                 ios::provider::GeminiDiscoveryBannerType::kUnknown
+                                conversationID:kTestConversationID];
   EXPECT_FALSE(zero_state_consumer_.hidden);
 }
 
@@ -3040,9 +3079,7 @@ TEST_F(GeminiContainerMediatorTest,
   EXPECT_OCMOCK_VERIFY(mock_delegate);
   EXPECT_TRUE(exited_before_ready);
 
-  OCMExpect([strict_fullscreen_handler
-      exitFullscreenWithTrigger:FullscreenModeTransitionTrigger::kForcedByCode
-                       animated:YES]);
+  // Presenting minimized for auto-submit should not exit fullscreen again.
   [mediator_ didPresentContainer];
   EXPECT_OCMOCK_VERIFY(strict_fullscreen_handler);
 
@@ -3059,6 +3096,181 @@ TEST_F(GeminiContainerMediatorTest,
       animateAssistantContainerToDetent:AssistantContainerDetent::kMedium]);
   [mediator_ updateWithStartupState:startup_state_];
   EXPECT_OCMOCK_VERIFY(strict_fullscreen_handler);
+  EXPECT_OCMOCK_VERIFY(mock_container_handler_);
+}
+
+// Tests that `updateWithStartupState:` skips animating to the medium detent for
+// an auto-submit prompt, and falls back to medium when the prompt is empty.
+TEST_F(GeminiContainerMediatorTest,
+       TestUpdateWithStartupStateAutoSubmitDetent) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {kAssistantContainer, kIOSGeminiBottomSheetMigration}, {});
+
+  GeminiStartupState* empty_prompt_state = [[GeminiStartupState alloc]
+      initWithEntryPoint:gemini::EntryPoint::ContextualCueInfobar];
+  empty_prompt_state.prepopulatedPrompt = @"";
+  empty_prompt_state.shouldAutoSubmit = YES;
+
+  OCMExpect([mock_container_handler_
+      animateAssistantContainerToDetent:AssistantContainerDetent::kMedium]);
+  [mediator_ updateWithStartupState:empty_prompt_state];
+  EXPECT_OCMOCK_VERIFY(mock_container_handler_);
+
+  GeminiStartupState* auto_submit_state = [[GeminiStartupState alloc]
+      initWithEntryPoint:gemini::EntryPoint::ContextualCueInfobar];
+  auto_submit_state.prepopulatedPrompt = kAutoSubmitPrompt;
+  auto_submit_state.shouldAutoSubmit = YES;
+
+  [[mock_container_handler_ reject]
+      animateAssistantContainerToDetent:AssistantContainerDetent::kMedium];
+  [mediator_ updateWithStartupState:auto_submit_state];
+  EXPECT_OCMOCK_VERIFY(mock_container_handler_);
+}
+
+// Tests that an auto-submit flow starts directly in the minimized detent
+// without expanding to medium or prematurely dismissing under `kChromeNextIa`,
+// clears consumer padding, and expands to medium with accurate metrics once a
+// response arrives.
+TEST_F(GeminiContainerMediatorTest,
+       TestAutoSubmitStartsMinimizedAndExpandsOnResponse) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {kAssistantContainer, kIOSGeminiBottomSheetMigration, kChromeNextIa}, {});
+
+  base::HistogramTester histogram_tester;
+  web::FakeWebState* web_state = AppendActiveWebState();
+  web_state->SetCurrentURL(GURL("https://example.com"));
+  web_state->SetContentsMimeType("text/html");
+  web_state->WasShown();
+
+  ios::provider::ResetGemini();
+
+  FakeGeminiContainerConsumer* consumer =
+      [[FakeGeminiContainerConsumer alloc] init];
+  mediator_.consumer = consumer;
+  FakeGeminiContainerMediatorDelegate* delegate =
+      [[FakeGeminiContainerMediatorDelegate alloc] init];
+  mediator_.delegate = delegate;
+
+  GeminiStartupState* startup_state = [[GeminiStartupState alloc]
+      initWithEntryPoint:gemini::EntryPoint::ContextualCueInfobar];
+  startup_state.prepopulatedPrompt = kAutoSubmitPrompt;
+  startup_state.shouldAutoSubmit = YES;
+  mediator_.startupState = startup_state;
+
+  [[mock_container_handler_ reject]
+      animateAssistantContainerToDetent:AssistantContainerDetent::kMedium];
+  [[mock_gemini_handler_ reject] dismissGeminiFlowWithCompletion:nil];
+  OCMExpect([mock_container_handler_
+      animateAssistantContainerToDetent:AssistantContainerDetent::kMinimized]);
+  OCMExpect([mock_container_handler_ setAssistantContainerGrabberHidden:YES
+                                                               animated:YES]);
+
+  [mediator_ prepareForPresentation];
+  FakePageContextWrapper* wrapper =
+      fake_page_context_wrapper_factory_.last_wrapper();
+  ASSERT_TRUE(wrapper);
+  [wrapper completeWithEmptyPageContext];
+
+  EXPECT_EQ(1, delegate.readyForPresentationCallCount);
+  EXPECT_FALSE(consumer.zeroState);
+  EXPECT_FALSE(consumer.hasPadding);
+  EXPECT_OCMOCK_VERIFY(mock_container_handler_);
+
+  // Layout callbacks reporting `kMinimized` right after presentation must not
+  // dismiss the flow or record a collapse transition.
+  [mediator_ assistantContainer:nil
+                didChangeDetent:AssistantContainerDetent::kMinimized];
+  EXPECT_FALSE(consumer.hasPadding);
+  histogram_tester.ExpectTotalCount(kFloatyViewStateTransitionHistogram, 0);
+  EXPECT_OCMOCK_VERIFY(mock_gemini_handler_);
+
+  [mediator_
+      didUpdateProcessingStatus:ios::provider::GeminiClientMode::kThinking
+                      sessionID:kTestSessionID
+                 conversationID:kTestConversationID];
+  task_environment_.FastForwardBy(base::Seconds(2));
+
+  // Replace the handler mock so the prior `kMedium` rejection does not block
+  // the expected expansion on `kResponding`.
+  mock_container_handler_ =
+      OCMProtocolMock(@protocol(AssistantContainerCommands));
+  mediator_.containerHandler = mock_container_handler_;
+  OCMExpect([mock_container_handler_
+      animateAssistantContainerToDetent:AssistantContainerDetent::kMedium]);
+  OCMExpect([mock_container_handler_ setAssistantContainerGrabberHidden:NO
+                                                               animated:YES]);
+  [mediator_
+      didUpdateProcessingStatus:ios::provider::GeminiClientMode::kResponding
+                      sessionID:kTestSessionID
+                 conversationID:kTestConversationID];
+  EXPECT_TRUE(consumer.hasPadding);
+  EXPECT_OCMOCK_VERIFY(mock_container_handler_);
+
+  [mediator_ assistantContainer:nil
+                didChangeDetent:AssistantContainerDetent::kMedium];
+  histogram_tester.ExpectBucketCount(
+      kFloatyViewStateTransitionHistogram,
+      IOSGeminiViewStateTransition::kCollapsedToExpanded, 1);
+  histogram_tester.ExpectTotalCount(kFloatyTimeMinimizedHistogram, 0);
+}
+
+// Tests that `config.shouldShowAccountSnackbar` is disabled for the SDK when
+// `IsIOSGeminiBottomSheetMigrationEnabled()` is true.
+TEST_F(GeminiContainerMediatorTest,
+       TestMigrationAccountSnackbarConfigurationDisabledForSDK) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {kAssistantContainer, kIOSGeminiBottomSheetMigration,
+       kAppSwitcherAISummarization, kPageActionMenu},
+      {});
+
+  AppendActiveWebState();
+
+  GeminiStartupState* startup_state = [[GeminiStartupState alloc]
+      initWithEntryPoint:gemini::EntryPoint::AppSwitcherAISummarization];
+  startup_state.isMismatchedAccount = YES;
+
+  GeminiConfiguration* config =
+      [mediator_ createGeminiConfigurationForActiveWebState:startup_state
+                                                pageContext:nil];
+  EXPECT_FALSE(config.shouldShowAccountSnackbar);
+}
+
+// Tests that when `IsIOSGeminiBottomSheetMigrationEnabled()` is true,
+// `didPresentContainer` and `updateWithStartupState:` delegate mismatched
+// account snackbars to `snackbarManager` instead of calling the SDK API.
+TEST_F(GeminiContainerMediatorTest,
+       TestMigrationAccountSnackbarDelegatedToSnackbarManager) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {kAssistantContainer, kIOSGeminiBottomSheetMigration,
+       kAppSwitcherAISummarization, kPageActionMenu},
+      {});
+
+  id mock_snackbar_manager =
+      OCMClassMock([GeminiContainerSnackbarManager class]);
+  mediator_.snackbarManager = mock_snackbar_manager;
+
+  GeminiStartupState* startup_state = [[GeminiStartupState alloc]
+      initWithEntryPoint:gemini::EntryPoint::AppSwitcherAISummarization];
+  startup_state.isMismatchedAccount = YES;
+  mediator_.startupState = startup_state;
+
+  OCMExpect([mock_snackbar_manager
+      showSnackbarIfAccountMismatchedForStartupState:startup_state]);
+  [mediator_ didPresentContainer];
+  EXPECT_OCMOCK_VERIFY(mock_snackbar_manager);
+
+  OCMExpect([mock_container_handler_
+      animateAssistantContainerToDetent:AssistantContainerDetent::kMedium]);
+  OCMExpect([mock_snackbar_manager
+      showSnackbarIfAccountMismatchedForStartupState:startup_state]);
+  [mediator_ updateWithStartupState:startup_state];
+
+  EXPECT_FALSE(ios::provider::WasShowAccountSnackbarCalled());
+  EXPECT_OCMOCK_VERIFY(mock_snackbar_manager);
   EXPECT_OCMOCK_VERIFY(mock_container_handler_);
 }
 

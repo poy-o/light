@@ -32,6 +32,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "cc/layers/layer.h"
 #include "cc/paint/paint_canvas.h"
+#include "components/viz/common/surfaces/tracked_element_rects.h"
 #include "media/base/cdm_config.h"
 #include "media/base/key_system_names.h"
 #include "media/base/media_switches.h"
@@ -452,6 +453,7 @@ void HTMLVideoElement::UpdateVideoFrameAvailability() {
 // using a settings. See `HTMLMediaElement::onMediaControlsEnabledChange`.
 void HTMLVideoElement::SetPersistentState(bool persistent) {
   SetPersistentStateInternal(persistent);
+  UpdateContentVisibilityState();
   if (auto* wmp = GetWebMediaPlayer()) {
     wmp->SetPersistentState(persistent);
   }
@@ -1057,6 +1059,12 @@ void HTMLVideoElement::MediaRemotingStarted(
     const WebString& remote_device_friendly_name) {
   is_remote_rendering_ = true;
   remote_device_friendly_name_ = remote_device_friendly_name;
+  if (!pending_media_redirection_target_id_.is_zero()) {
+    SetTrackedElementSubRect(viz::TrackedElementFeature::kMediaRedirection,
+                             TrackedElementSubRect(TrackedElementId(
+                                 pending_media_redirection_target_id_)));
+    pending_media_redirection_target_id_ = base::Token();
+  }
   OnRemotePlaybackMetadataChange();
   if (!remoting_interstitial_) {
     remoting_interstitial_ =
@@ -1068,11 +1076,20 @@ void HTMLVideoElement::MediaRemotingStarted(
   remoting_interstitial_->Show(remote_device_friendly_name);
 }
 
+void HTMLVideoElement::SetMediaRedirectionTargetId(
+    const base::Token& tracked_element_id) {
+  pending_media_redirection_target_id_ = tracked_element_id;
+}
+
 void HTMLVideoElement::MediaRemotingStopped(int error_code) {
   is_remote_rendering_ = false;
   remote_device_friendly_name_.Reset();
+  pending_media_redirection_target_id_ = base::Token();
   if (IsDisposing()) {
     return;
+  }
+  if (GetTrackedElementSubRect(viz::TrackedElementFeature::kMediaRedirection)) {
+    ClearTrackedElementSubRect(viz::TrackedElementFeature::kMediaRedirection);
   }
   OnRemotePlaybackMetadataChange();
   if (remoting_interstitial_) {
@@ -1146,6 +1163,7 @@ void HTMLVideoElement::OnEnteredPictureInPicture() {
   picture_in_picture_interstitial_->Show();
 
   PseudoStateChanged(CSSSelector::kPseudoPictureInPicture);
+  UpdateContentVisibilityState();
 
   DCHECK(GetWebMediaPlayer());
   GetWebMediaPlayer()->OnDisplayTypeChanged(GetDisplayType());
@@ -1157,6 +1175,7 @@ void HTMLVideoElement::OnExitedPictureInPicture() {
   }
 
   PseudoStateChanged(CSSSelector::kPseudoPictureInPicture);
+  UpdateContentVisibilityState();
 
   if (auto* wmp = GetWebMediaPlayer()) {
     wmp->OnDisplayTypeChanged(GetDisplayType());

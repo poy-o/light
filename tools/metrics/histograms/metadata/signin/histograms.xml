@@ -267,6 +267,7 @@ to monitor/debug fetching OAuth2 Token issues. -->
 <histogram name="Signin.AccessTokenFetch.Latency.{Stage}.{Result}" units="ms"
     expires_after="2027-10-01">
   <owner>samarchehade@google.com</owner>
+  <owner>oussamajb@google.com</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
     Records the duration of an OAuth2 access token fetch, or of one of its
@@ -275,18 +276,40 @@ to monitor/debug fetching OAuth2 Token issues. -->
     the Signin.AccessTokenFetch.Failure.* histograms: with REQUEST_CANCELED when
     the refresh token is updated (on Android, every time the device accounts are
     reloaded) or on shutdown, and with ACCOUNT_NOT_FOUND when the refresh token
-    is revoked (e.g. on sign-out). The TokenService stage is not recorded for
-    these cancellations. The EndToEnd and Request stages are not recorded if the
+    is revoked (e.g. on sign-out). Other stages are not recorded for these
+    cancellations. The EndToEnd and Request stages are not recorded if the
     fetcher is destroyed before the fetch completes, nor for device tokens on
     iOS.
   </summary>
   <token key="Stage">
+    <variant name="Backoff"
+        summary="The cumulative time spent waiting on exponential backoff
+                 timers after transient failures across all retry attempts of
+                 a token service fetch. Immediate retries (such as on a DBSC
+                 challenge) do not enter backoff. Only recorded if at least
+                 one backoff wait completed during the fetch. Recorded once
+                 when the token service fetch completes."/>
+    <variant name="ChallengeSigning"
+        summary="The cumulative latency of loading the binding key and
+                 signing DBSC token binding challenges across all retry
+                 attempts of a token service fetch on Windows/Mac/Linux. Only
+                 recorded if at least one challenge signing attempt completed
+                 during the fetch. Recorded once when the token service fetch
+                 completes."/>
     <variant name="EndToEnd"
         summary="From the creation of the access token fetcher until the
                  result is returned to the client, including any wait for a
                  refresh token to become available. Includes requests served
                  from the cache. Recorded when the fetcher returns its
                  result."/>
+    <variant name="Network"
+        summary="The cumulative latency of all HTTP token requests to Gaia
+                 (IssueToken) across all retry attempts of a token service
+                 fetch on Windows/Mac/Linux, excluding any DBSC challenge
+                 signing or retry backoff delays. Only recorded if at least
+                 one HTTP request completed during the fetch (cache hits and
+                 immediate non-network rejections are excluded). Recorded
+                 once when the token service fetch completes."/>
     <variant name="Request"
         summary="From the start of the access token request until the result
                  is returned to the client, excluding any wait for a refresh
@@ -360,7 +383,7 @@ to monitor/debug fetching OAuth2 Token issues. -->
 
 <histogram
     name="Signin.AccountCapabilities.ExternalPrivacyContextBuildErrorCode"
-    units="ErrorCode" expires_after="2027-03-07">
+    units="ErrorCode" expires_after="2027-05-23">
   <owner>ddac@google.com</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -421,7 +444,7 @@ to monitor/debug fetching OAuth2 Token issues. -->
 
 <histogram name="Signin.AccountCapabilities.GetFromSystemLibraryResult"
     enum="AccountCapabilitiesGetFromSystemLibraryResult"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>fernandex@google.com</owner>
   <owner>msarda@chromium.org</owner>
   <owner>triploblastic@chromium.org</owner>
@@ -1182,7 +1205,7 @@ prefs when the profile is loaded.  -->
 </histogram>
 
 <histogram name="Signin.Android.AccountManagementAcceptedBeforeUserPolicyFetch"
-    enum="Boolean" expires_after="2027-03-14">
+    enum="Boolean" expires_after="2027-05-23">
   <owner>shadmehr@google.com</owner>
   <owner>chrome-signin-mobile-team@google.com</owner>
   <summary>
@@ -1294,7 +1317,7 @@ prefs when the profile is loaded.  -->
 </histogram>
 
 <histogram name="Signin.AndroidNumberOfDeviceAccounts" units="accounts"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>triploblastic@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -1318,7 +1341,7 @@ prefs when the profile is loaded.  -->
 </histogram>
 
 <histogram name="Signin.AuthError" enum="GoogleServiceAuthError"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>msarda@chromium.org</owner>
   <owner>droger@chromium.org</owner>
   <summary>
@@ -1681,7 +1704,7 @@ prefs when the profile is loaded.  -->
 </histogram>
 
 <histogram name="Signin.BoundSessionCredentials.SessionCountOnInit"
-    units="DBSC sessions" expires_after="2027-03-21">
+    units="DBSC sessions" expires_after="2027-05-23">
   <owner>alexilin@chromium.org</owner>
   <owner>msalama@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
@@ -1961,7 +1984,7 @@ prefs when the profile is loaded.  -->
 
 <histogram
     name="Signin.CookieJar.SignedInCountWithPrimary{UnconsentedPrimaryAccountType}"
-    units="accounts" expires_after="2027-03-21">
+    units="accounts" expires_after="2027-05-23">
   <owner>msarda@chromium.org</owner>
   <owner>droger@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
@@ -2355,7 +2378,7 @@ prefs when the profile is loaded.  -->
 </histogram>
 
 <histogram name="Signin.DiceTokenBindingOutcome" enum="DiceTokenBindingOutcome"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>alexilin@chromium.org</owner>
   <owner>ahijazi@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
@@ -2570,7 +2593,7 @@ prefs when the profile is loaded.  -->
 </histogram>
 
 <histogram name="Signin.GetAccounts.Android.Result"
-    enum="GetAccountsAndroidResult" expires_after="2027-03-14">
+    enum="GetAccountsAndroidResult" expires_after="2027-05-23">
   <owner>mlbipin@google.com</owner>
   <owner>chrome-signin-mobile-team@google.com</owner>
   <summary>
@@ -2581,7 +2604,7 @@ prefs when the profile is loaded.  -->
 </histogram>
 
 <histogram name="Signin.GetAccounts.AndroidApiAvailability" enum="Boolean"
-    expires_after="2027-03-14">
+    expires_after="2027-05-23">
   <owner>mlbipin@google.com</owner>
   <owner>chrome-signin-mobile-team@google.com</owner>
   <summary>
@@ -2934,7 +2957,7 @@ prefs when the profile is loaded.  -->
 </histogram>
 
 <histogram name="Signin.Intercept.FRE.Event"
-    enum="SigninInterceptFREDialogEvent" expires_after="2027-03-14">
+    enum="SigninInterceptFREDialogEvent" expires_after="2027-05-23">
   <owner>alexilin@chromium.org</owner>
   <owner>chrome-signin-desktop-team@google.com</owner>
   <summary>
@@ -3240,7 +3263,7 @@ prefs when the profile is loaded.  -->
 </histogram>
 
 <histogram name="Signin.IOSAuthenticationServiceInitializationOutcome"
-    enum="IOSProfileInitializationOutcome" expires_after="2027-03-21">
+    enum="IOSProfileInitializationOutcome" expires_after="2027-05-23">
   <owner>jlebel@chromium.org</owner>
   <owner>treib@chromium.org</owner>
   <owner>chrome-signin-mobile-team@google.com</owner>
@@ -3328,7 +3351,7 @@ prefs when the profile is loaded.  -->
 </histogram>
 
 <histogram name="Signin.IOSGaiaCookieStateOnSignedInNavigation"
-    enum="GaiaCookieStateOnSignedInNavigation" expires_after="2027-03-21">
+    enum="GaiaCookieStateOnSignedInNavigation" expires_after="2027-05-23">
   <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
@@ -3386,7 +3409,7 @@ prefs when the profile is loaded.  -->
 </histogram>
 
 <histogram name="Signin.IOSNumberOfDeviceAccounts" units="accounts"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>jlebel@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
@@ -3668,7 +3691,7 @@ the browser and content area. -->
 </histogram>
 
 <histogram name="Signin.OAuth2MintToken.ApiCallResult"
-    enum="OAuth2MintTokenApiCallResult" expires_after="2027-03-14">
+    enum="OAuth2MintTokenApiCallResult" expires_after="2027-05-23">
   <owner>alexilin@chromium.org</owner>
   <owner>droger@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
@@ -3682,7 +3705,7 @@ the browser and content area. -->
 </histogram>
 
 <histogram name="Signin.OAuth2MintToken.Response" enum="OAuth2Response"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>alexilin@chromium.org</owner>
   <owner>droger@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
@@ -3766,7 +3789,7 @@ tokens and is needed for as long as Chrome is fetching access tokens. -->
 </histogram>
 
 <histogram name="Signin.OAuthMultiloginResponseEncryptionError"
-    enum="TokenBindingResponseEncryptionError" expires_after="2027-03-21">
+    enum="TokenBindingResponseEncryptionError" expires_after="2027-05-23">
   <owner>alexilin@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -3833,7 +3856,7 @@ Signin.OAuthMultiloginResponseStatus2{PartitionSuffix} one for a long enough tim
 </histogram>
 
 <histogram name="Signin.PAMInitialize.PrimaryAccountPrefs"
-    enum="PAMInitializePrimaryAccountPrefs" expires_after="2027-03-21">
+    enum="PAMInitializePrimaryAccountPrefs" expires_after="2027-05-23">
   <owner>msarda@chromium.org</owner>
   <owner>droger@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
@@ -4643,7 +4666,7 @@ OAuth Multilogin call. -->
 </histogram>
 
 <histogram name="Signin.SigninPending.Offered" enum="SigninAccessPoint"
-    expires_after="2027-03-15">
+    expires_after="2027-05-23">
   <owner>rsult@google.com</owner>
   <owner>droger@chromium.org</owner>
   <owner>chrome-signin-desktop-team@google.com</owner>
@@ -5112,7 +5135,7 @@ kept as long as profile signout is possible -->
 </histogram>
 
 <histogram name="Signin.TokenBinding.BoundToTheSameKey"
-    enum="BooleanBoundToTheSameKey" expires_after="2027-03-21">
+    enum="BooleanBoundToTheSameKey" expires_after="2027-05-23">
   <owner>alexilin@chromium.org</owner>
   <owner>ahijazi@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
@@ -5126,7 +5149,7 @@ kept as long as profile signout is possible -->
 </histogram>
 
 <histogram name="Signin.TokenBinding.GenerateAssertionResult"
-    enum="TokenBindingGenerateAssertionResult" expires_after="2027-03-21">
+    enum="TokenBindingGenerateAssertionResult" expires_after="2027-05-23">
   <owner>alexilin@chromium.org</owner>
   <owner>ahijazi@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
@@ -5152,7 +5175,7 @@ kept as long as profile signout is possible -->
 </histogram>
 
 <histogram name="Signin.TokenBinding.UpgradeDuration" units="ms"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>alexilin@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <improvement direction="LOWER_IS_BETTER"/>
@@ -5168,7 +5191,7 @@ kept as long as profile signout is possible -->
 </histogram>
 
 <histogram name="Signin.TokenBinding.UpgradeEligibility" enum="Boolean"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>alexilin@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -5179,7 +5202,7 @@ kept as long as profile signout is possible -->
 </histogram>
 
 <histogram name="Signin.TokenBinding.UpgradeHttpResult"
-    enum="CombinedHttpResponseAndNetErrorCode" expires_after="2027-03-21">
+    enum="CombinedHttpResponseAndNetErrorCode" expires_after="2027-05-23">
   <owner>alexilin@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -5192,7 +5215,7 @@ kept as long as profile signout is possible -->
 </histogram>
 
 <histogram name="Signin.TokenBinding.UpgradeRequested" enum="Boolean"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>alexilin@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -5203,7 +5226,7 @@ kept as long as profile signout is possible -->
 </histogram>
 
 <histogram name="Signin.TokenBinding.UpgradeResult"
-    enum="OAuth2UpgradeTokenFlowResult" expires_after="2027-03-21">
+    enum="OAuth2UpgradeTokenFlowResult" expires_after="2027-05-23">
   <owner>alexilin@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -5217,7 +5240,7 @@ kept as long as profile signout is possible -->
 </histogram>
 
 <histogram name="Signin.TokenBinding.UpgradeSaveBindingKeyResult"
-    enum="TokenBindingUpgradeSaveBindingKeyResult" expires_after="2027-03-21">
+    enum="TokenBindingUpgradeSaveBindingKeyResult" expires_after="2027-05-23">
   <owner>alexilin@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>

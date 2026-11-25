@@ -70,6 +70,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_stringlegacynulltoemptystring_trustedhtml.h"
 #include "third_party/blink/renderer/core/accessibility/ax_context.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
+#include "third_party/blink/renderer/core/ad_tracker/ad_tracker.h"
 #include "third_party/blink/renderer/core/ad_tracker/display_ad_element_monitor.h"
 #include "third_party/blink/renderer/core/animation/animation.h"
 #include "third_party/blink/renderer/core/animation/css/css_animations.h"
@@ -166,6 +167,7 @@
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/slot_assignment.h"
 #include "third_party/blink/renderer/core/dom/slot_assignment_recalc_forbidden_scope.h"
+#include "third_party/blink/renderer/core/dom/slot_assignment_recalc_in_progress_scope.h"
 #include "third_party/blink/renderer/core/dom/space_split_string.h"
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/dom/user_action_element_traversal.h"
@@ -199,6 +201,7 @@
 #include "third_party/blink/renderer/core/geometry/dom_quad.h"
 #include "third_party/blink/renderer/core/geometry/dom_rect.h"
 #include "third_party/blink/renderer/core/geometry/dom_rect_list.h"
+#include "third_party/blink/renderer/core/highlight/highlight_pseudo_element.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
 #include "third_party/blink/renderer/core/html/custom/custom_element.h"
 #include "third_party/blink/renderer/core/html/custom/custom_element_registry.h"
@@ -2289,6 +2292,21 @@ ElementAnimations* Element::GetElementAnimations() const {
 
 ElementAnimations& Element::EnsureElementAnimations() {
   return EnsureRareData().EnsureElementAnimations().RefreshNodeAndUnwrap(*this);
+}
+
+void Element::SetPseudoElement(PseudoId pseudo_id,
+                               PseudoElement* pseudo_element,
+                               const AtomicString& pseudo_argument) {
+  CHECK(!pseudo_element || pseudo_element->parentElement() == this);
+  if (!pseudo_element && !RareData()) {
+    return;
+  }
+  EnsureRareData()
+      .SetPseudoElement(pseudo_id, pseudo_element, pseudo_argument)
+      .RefreshNode(*this);
+  if (pseudo_element) {
+    pseudo_element->InsertedInto(*this);
+  }
 }
 
 bool Element::HasAnimations() const {
@@ -4617,7 +4635,8 @@ void Element::SetIsInCanvasSubtree(
   if (propagation_behavior == CanvasSubtreePropagation::kOnlyIfChanged &&
       value == IsInCanvasSubtree()) {
 #if DCHECK_IS_ON()
-    if (!GetDocument().IsSlotAssignmentRecalcForbidden()) {
+    if (!GetDocument().IsSlotAssignmentRecalcForbidden() &&
+        !SlotAssignmentRecalcInProgressScope::IsActive()) {
       VerifySubtreeIsInCanvas(value);
     }
 #endif
@@ -11311,9 +11330,7 @@ void Element::UpdateFirstLetterPseudoElement(
 
 void Element::ClearPseudoElement(PseudoId pseudo_id,
                                  const AtomicString& pseudo_argument) {
-  RareData()
-      ->SetPseudoElement(pseudo_id, nullptr, pseudo_argument)
-      .RefreshNode(*this);
+  SetPseudoElement(pseudo_id, nullptr, pseudo_argument);
   GetDocument().GetStyleEngine().PseudoElementRemoved(*this);
 }
 
@@ -11479,17 +11496,12 @@ bool Element::SetAssociatedPseudoElement(
   DCHECK(pseudo_element);
   PseudoId pseudo_id = pseudo_element->GetPseudoId();
   const AtomicString& pseudo_argument = pseudo_element->GetPseudoArgument();
-  EnsureRareData()
-      .SetPseudoElement(pseudo_id, pseudo_element, pseudo_argument)
-      .RefreshNode(*this);
-  pseudo_element->InsertedInto(*this);
+  SetPseudoElement(pseudo_id, pseudo_element, pseudo_argument);
 
   const ComputedStyle* pseudo_style =
       pseudo_element->StyleForLayoutObject(style_recalc_context);
   if (!PseudoElementLayoutObjectIsNeeded(pseudo_id, pseudo_style, this)) {
-    RareData()
-        ->SetPseudoElement(pseudo_id, nullptr, pseudo_argument)
-        .RefreshNode(*this);
+    SetPseudoElement(pseudo_id, nullptr, pseudo_argument);
     // If the content property is relying on attr(), we add the pseudo-element's
     // ComputedStyle to the originating element's style cache, so that when the
     // attribute value changes we will cause a pseudo-element update via
@@ -11621,9 +11633,17 @@ bool Element::HasScrollButtonOrMarkerGroupPseudos() const {
   return data && data->HasScrollButtonOrMarkerGroupPseudos();
 }
 
+bool Element::HasAXIncludedPseudosInternal() const {
+  return RareData()->HasAXIncludedPseudos();
+}
+
 Element* Element::GetStyledPseudoElement(
     PseudoId pseudo_id,
     const AtomicString& pseudo_argument) const {
+  if (IsHighlightPseudoElement(pseudo_id)) {
+    StyleRequest request(pseudo_id, nullptr, nullptr, pseudo_argument);
+    return HighlightPseudoElement::FindTarget(*this, request);
+  }
   if (!IsTransitionPseudoElement(pseudo_id)) {
     if (pseudo_id == kPseudoIdScrollMarkerGroup) {
       if (const ComputedStyle* style = GetComputedStyle()) {
@@ -11716,7 +11736,8 @@ bool Element::PseudoElementStylesAffectCounters() const {
   }
 
   for (PseudoElement* pseudo_element : rare_data->GetPseudoElements()) {
-    if (pseudo_element->GetComputedStyle()->GetCounterDirectives()) {
+    const ComputedStyle* pseudo_style = pseudo_element->GetComputedStyle();
+    if (pseudo_style && pseudo_style->GetCounterDirectives()) {
       return true;
     }
   }
@@ -11772,8 +11793,10 @@ bool Element::PseudoElementStylesDependOnFunc(
   }
 
   for (PseudoElement* pseudo_element : rare_data->GetPseudoElements()) {
-    if (func(*pseudo_element->GetComputedStyle()) ||
-        pseudo_element->PseudoElementStylesDependOnFunc(func)) {
+    const ComputedStyle* pseudo_style = pseudo_element->GetComputedStyle();
+    if (pseudo_style &&
+        (func(*pseudo_style) ||
+         pseudo_element->PseudoElementStylesDependOnFunc(func))) {
       return true;
     }
   }
@@ -11849,11 +11872,30 @@ const ComputedStyle* Element::StyleForFirstLineInherited(
 const ComputedStyle* Element::StyleForPseudoElement(
     const StyleRecalcContext& style_recalc_context,
     const StyleRequest& request) {
-  GetDocument().GetStyleEngine().UpdateViewportSize();
-
   PseudoId pseudo_id = IsPseudoElement() && request.pseudo_id == kPseudoIdNone
                            ? GetPseudoIdForStyling()
                            : request.pseudo_id;
+  const bool is_highlight_target =
+      IsHighlightPseudoElement(pseudo_id) && IsPseudoElement();
+  StyleRecalcContext local_recalc_context(style_recalc_context);
+  if (is_highlight_target) {
+    // The incoming old style may belong to the originating element. Use the
+    // highlight target's style from the start of the lifecycle update.
+    local_recalc_context.old_style = PostStyleUpdateScope::GetOldStyle(*this);
+  }
+  if (IsHighlightPseudoElement(request.pseudo_id)) {
+    if (PseudoElement* pseudo =
+            HighlightPseudoElement::FindTarget(*this, request)) {
+      local_recalc_context.old_style =
+          PostStyleUpdateScope::GetOldStyle(*pseudo);
+      StyleRequest pseudo_request = request;
+      pseudo_request.pseudo_id = kPseudoIdNone;
+      return pseudo->StyleForPseudoElement(local_recalc_context,
+                                           pseudo_request);
+    }
+  }
+
+  GetDocument().GetStyleEngine().UpdateViewportSize();
 
   if (pseudo_id == kPseudoIdFirstLineInherited) {
     return StyleForFirstLineInherited(style_recalc_context, request);
@@ -11881,7 +11923,10 @@ const ComputedStyle* Element::StyleForPseudoElement(
   }
 
   const ComputedStyle* result = GetDocument().GetStyleResolver().ResolveStyle(
-      this, style_recalc_context, style_request);
+      this, local_recalc_context, style_request);
+  if (is_highlight_target) {
+    SetComputedStyle(result);
+  }
 
   if (result) {
     if (result->GetCounterDirectives()) {
@@ -12824,12 +12869,15 @@ void Element::CloneAttributesFrom(const Element& other) {
 
   // If 'other' has a mutable ElementData, convert it to an immutable one so we
   // can share it between both elements.
-  // We can only do this if there are no presentation attributes and sharing the
+  // We can only do this if there are no presentation attributes, no inline
+  // style URLs (which may carry caller-specific ad tagging), and sharing the
   // data won't result in different case sensitivity of class or id.
   auto* unique_element_data =
       DynamicTo<UniqueElementData>(other.element_data_.Get());
   if (unique_element_data && !owner_documents_have_different_case_sensitivity &&
-      !other.element_data_->PresentationAttributeStyle()) {
+      !other.element_data_->PresentationAttributeStyle() &&
+      (!other.element_data_->InlineStyle() ||
+       !other.element_data_->InlineStyle()->MayContainUrl())) {
     const_cast<Element&>(other).element_data_ =
         unique_element_data->MakeShareableCopy();
   }
@@ -12930,26 +12978,40 @@ void Element::NotifyInlineStyleMutation() {
 inline void Element::SetInlineStyleFromString(
     const AtomicString& new_style_string) {
   DCHECK(IsStyledElement());
-  Member<CSSPropertyValueSet>& inline_style = GetElementData()->inline_style_;
-
-  // Avoid redundant work if we're using shared attribute data with already
-  // parsed inline style.
-  if (inline_style && !GetElementData()->IsUnique()) {
-    return;
+  if (CSSPropertyValueSet* shared_inline_style =
+          GetElementData()->IsUnique()
+              ? nullptr
+              : GetElementData()->inline_style_.Get()) {
+    // When there are no URLs, reuse the cached declaration without querying
+    // AdTracker.
+    if (!shared_inline_style->MayContainUrl() ||
+        !AdTracker::IsAdScriptExecutingInDocument(&GetDocument())) {
+      return;
+    }
+    // Detach from `ShareableElementData` so re-parsing below records ad tagging
+    // on this element without polluting `ElementDataCache`.
+    EnsureUniqueElementData().inline_style_.Clear();
   }
 
   // We reconstruct the property set instead of mutating if there is no CSSOM
   // wrapper.  This makes wrapperless property sets immutable and so cacheable.
-  if (inline_style && !inline_style->IsMutable()) {
-    inline_style.Clear();
+  if (CSSPropertyValueSet* inline_style = GetElementData()->inline_style_.Get();
+      inline_style && !inline_style->IsMutable()) {
+    GetElementData()->inline_style_.Clear();
   }
 
-  if (!inline_style) {
-    inline_style =
+  if (!GetElementData()->inline_style_) {
+    ImmutableCSSPropertyValueSet* parsed_style =
         CSSParser::ParseInlineStyleDeclaration(new_style_string, this);
+    if (parsed_style->MayContainUrl() && !GetElementData()->IsUnique() &&
+        AdTracker::IsAdScriptExecutingInDocument(&GetDocument())) {
+      EnsureUniqueElementData().inline_style_ = parsed_style;
+    } else {
+      GetElementData()->inline_style_ = parsed_style;
+    }
   } else {
-    DCHECK(inline_style->IsMutable());
-    static_cast<MutableCSSPropertyValueSet*>(inline_style.Get())
+    DCHECK(GetElementData()->inline_style_->IsMutable());
+    To<MutableCSSPropertyValueSet>(GetElementData()->inline_style_.Get())
         ->ParseDeclarationList(
             new_style_string,
             GetExecutionContext()

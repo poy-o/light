@@ -50,6 +50,7 @@ TabGroupUnfocusButton::TabGroupUnfocusButton(Delegate& delegate,
   SetHorizontalAlignment(gfx::ALIGN_LEFT);
   label()->SetElideBehavior(gfx::NO_ELIDE);
   UpdateBorder();
+  SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
   views::FocusRing::Install(this);
   UpdateAccessibleName();
 }
@@ -60,7 +61,7 @@ gfx::Size TabGroupUnfocusButton::CalculatePreferredSize(
     const views::SizeBounds& available_size) const {
   gfx::Size size = views::LabelButton::CalculatePreferredSize(available_size);
   if (orientation_ == TabStripOrientation::kHorizontal) {
-    size.set_height(TabGroupStyle::GetFocusedChipHeight());
+    size.set_height(TabGroupStyle::GetUnfocusButtonHeight());
   }
   return size;
 }
@@ -94,11 +95,7 @@ void TabGroupUnfocusButton::SetFocusAnimationState(
 }
 
 void TabGroupUnfocusButton::UpdateBorder() {
-  gfx::Insets insets =
-      orientation_ == TabStripOrientation::kHorizontal
-          ? TabGroupStyle::GetInsetsForFocusedUnfocusChip()
-          : gfx::Insets::VH(
-                0, TabGroupStyle::GetInsetsForHeaderChip(orientation_).left());
+  gfx::Insets insets = TabGroupStyle::GetUnfocusButtonInsets(orientation_);
   if (orientation_ == TabStripOrientation::kVertical && !is_collapsed_ &&
       focus_animation_state_.content_horizontal_offset != 0) {
     insets.set_left(std::max(
@@ -127,7 +124,7 @@ void TabGroupUnfocusButton::UpdateColors() {
   SetBackground(views::CreateRoundedRectBackground(
       GetBackgroundColor(),
       TabGroupStyle::GetUnfocusButtonCornerRadii(
-          orientation_, focus_animation_state_.progress)));
+          orientation_, focus_animation_state_.progress.value_or(1.0f))));
 }
 
 SkColor TabGroupUnfocusButton::GetBaseBackgroundColor() const {

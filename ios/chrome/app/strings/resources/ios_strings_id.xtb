@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">Berbagi sandi</translation>
 <translation id="1554043146674176775">Nonaktifkan Mode AI</translation>
 <translation id="1554477036522844996">Jendela Baru</translation>
+<translation id="1555014818414775661">Tambahkan gambar</translation>
 <translation id="1557806604681757705">komputer Anda</translation>
 <translation id="1558391695376153246">Tutup tab Samaran</translation>
 <translation id="1560153516220021659">Tombol toolbar sekunder yang diciutkan</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">Buka <ph name="BEGIN_BOLD" />Setelan Safari<ph name="END_BOLD" /></translation>
 <translation id="3858860766373142691">Nama</translation>
 <translation id="386224966259596343">Anda akan memiliki kesempatan untuk menyimpan info ini ke Wallet saat Anda mengisi formulir terkait lagi.</translation>
-<translation id="3868495844258915202">Tampilkan URL lengkap</translation>
 <translation id="3870931306085184145">Tidak ada sandi yang tersimpan untuk <ph name="DOMAIN" /></translation>
 <translation id="3875783148670536197">Lihat Caranya</translation>
 <translation id="3878657761594430423">Pengambil sheet</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">Untuk mendapatkan notifikasi pemantauan harga, aktifkan notifikasi di Setelan iOS.</translation>
 <translation id="528857768909044842">Grup tab disimpan di sini</translation>
 <translation id="5294624619177114121">Notifikasi seluler</translation>
-<translation id="5295239312320826323">Hapus akun <ph name="USER_EMAIL" />?</translation>
 <translation id="5300589172476337783">Tampilkan</translation>
 <translation id="5311061401280561833">Akses kamera dan mikrofon diizinkan</translation>
 <translation id="5313967007315987356">Tambahkan situs</translation>
@@ -1788,6 +1787,7 @@ Handoff juga harus diaktifkan pada bagian General di Settings, dan perangkat And
 <translation id="6504541289630702018">Akses grup tab desktop dengan mudah</translation>
 <translation id="6505334220040167806">Ciutkan grup tab.</translation>
 <translation id="6506996418997555004">Bagikan Grup Tab "<ph name="GROUP_NAME" />"</translation>
+<translation id="650770261448122895">Telusuri konten yang Anda lihat dengan Lens</translation>
 <translation id="6507973708545996744">Login untuk mendapatkan daftar bacaan di semua perangkat Anda.</translation>
 <translation id="6518133107902771759">Verifikasi</translation>
 <translation id="6523575793810663688">Lihat caranya</translation>
@@ -2147,7 +2147,6 @@ Anda dapat memulai ulang kapan saja.</translation>
 <translation id="7603852183842204213">Pop-up diblokir (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Sinkronisasi tidak berfungsi</translation>
 <translation id="760667371114328991">Nonaktifkan Notifikasi untuk Pemeriksaan Keamanan</translation>
-<translation id="7612619742409846846">Login ke Google sebagai</translation>
 <translation id="7612849887607288481">Buka Menu Pembuatan Prototipe AI</translation>
 <translation id="7618220760967055820">Pilih tombol yang akan ditampilkan di toolbar</translation>
 <translation id="7620522820075868385">Batal</translation>
@@ -2430,6 +2429,7 @@ Anda dapat memulai ulang kapan saja.</translation>
 <translation id="8439758443371991593">Sembunyikan Tambahkan ke Daftar Bacaan</translation>
 <translation id="8443986842926457191">URL berisi lebih dari 2048 karakter</translation>
 <translation id="8449869326050867919">Sandi dibagikan</translation>
+<translation id="8473367210869452063">Untuk berinteraksi dengan situs ini, hentikan tugas yang sedang berjalan atau tunggu hingga Gemini menyelesaikan tugas</translation>
 <translation id="8473815223723723001">Edit Gambar dengan Gemini</translation>
 <translation id="8473863474539038330">Alamat dan lainnya</translation>
 <translation id="8474378002946546633">Izinkan pemberitahuan</translation>

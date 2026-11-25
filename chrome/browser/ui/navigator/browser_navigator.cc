@@ -371,6 +371,10 @@ std::tuple<BrowserWindowInterface*, int> GetBrowserAndTabForDisposition(
                                  should_trigger_session_restore),
               -1};
     case ui::mojom::WindowOpenDisposition::kNewPictureInPicture: {
+      if (GetBrowserWindowCreationStatusForProfile(*profile) !=
+          BrowserWindowInterface::CreationStatus::kOk) {
+        return {nullptr, -1};
+      }
       // The picture in picture window should be part of the opener's web app,
       // if any.
       std::string app_name;
@@ -893,7 +897,9 @@ base::WeakPtr<content::NavigationHandle> NavigateImpl(
             BrowserWindowInterface::Type::TYPE_FLOATING ||
         !params->source_contents ||
         PictureInPictureWindowManager::IsChildWebContents(
-            params->source_contents)) {
+            params->source_contents) ||
+        GetBrowserWindowCreationStatusForProfile(*params->initiating_profile) !=
+            BrowserWindowInterface::CreationStatus::kOk) {
       params->browser = nullptr;
       return nullptr;
     }

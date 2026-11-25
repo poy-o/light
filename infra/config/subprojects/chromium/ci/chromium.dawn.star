@@ -2331,7 +2331,7 @@ ci.thin_tester(
     ),
     targets = targets.bundle(
         targets = [
-            "dawn_chromium_isolated_scripts",
+            "dawn_chromium_isolated_scripts_hardware",
             "gpu_common_gtests_passthrough",
             "gpu_dawn_webgpu_cts_asan",
         ],
@@ -2409,7 +2409,7 @@ ci.thin_tester(
     ),
     targets = targets.bundle(
         targets = [
-            "dawn_chromium_isolated_scripts",
+            "dawn_chromium_isolated_scripts_hardware",
             "gpu_common_gtests_passthrough",
             "gpu_dawn_webgpu_cts_asan",
         ],
@@ -2659,6 +2659,9 @@ ci.thin_tester(
             "dawn_chromium_isolated_scripts",
             "gpu_common_gtests_passthrough",
             "gpu_dawn_telemetry_win_x64_tests",
+            # Software test coverage kept on this config since there are no
+            # Win/ARM64 GCE instances.
+            "gpu_dawn_web_platform_webgpu_cts_force_swiftshader",
         ],
         mixins = [
             "win11_qualcomm_snapdragon_x_elite_stable",
@@ -2717,6 +2720,9 @@ ci.thin_tester(
             "dawn_chromium_isolated_scripts",
             "gpu_common_gtests_passthrough",
             "gpu_dawn_telemetry_win_x64_tests",
+            # Software test coverage kept on this config since there are no
+            # Win/ARM64 GCE instances.
+            "gpu_dawn_web_platform_webgpu_cts_force_swiftshader",
         ],
         mixins = [
             "win11_qualcomm_snapdragon_x_elite_stable",
@@ -2775,7 +2781,7 @@ ci.thin_tester(
     ),
     targets = targets.bundle(
         targets = [
-            "dawn_chromium_isolated_scripts",
+            "dawn_chromium_isolated_scripts_hardware",
             "gpu_common_gtests_passthrough",
             "gpu_dawn_telemetry_win_x64_tests",
         ],
@@ -2796,9 +2802,6 @@ ci.thin_tester(
                 reason = "We only need coverage on one GPU per OS, so remove from lower capacity configs.",
             ),
             "webgpu_cts_with_validation_tests": targets.remove(
-                reason = "Remove from bots where capacity is constrained.",
-            ),
-            "webgpu_swiftshader_web_platform_cts_with_validation_tests": targets.remove(
                 reason = "Remove from bots where capacity is constrained.",
             ),
         },
@@ -2837,7 +2840,7 @@ ci.thin_tester(
     ),
     targets = targets.bundle(
         targets = [
-            "dawn_chromium_isolated_scripts",
+            "dawn_chromium_isolated_scripts_hardware",
             "gpu_common_gtests_passthrough",
             "gpu_dawn_telemetry_win_x64_tests",
         ],
@@ -2888,7 +2891,10 @@ ci.thin_tester(
         run_tests_serially = True,
     ),
     targets = targets.bundle(
-        targets = [],
+        targets = [
+            "dawn_chromium_isolated_scripts_software",
+            "gpu_dawn_web_platform_webgpu_cts_force_swiftshader",
+        ],
         mixins = [
             "gpu_win_gce_stable",
         ],
@@ -2952,9 +2958,6 @@ ci.thin_tester(
             # "webgpu_cts_with_validation_tests": targets.remove(
             #     reason = "Remove from bots where capacity is constrained.",
             # ),
-            # "webgpu_swiftshader_web_platform_cts_with_validation_tests": targets.remove(
-            #     reason = "Remove from bots where capacity is constrained.",
-            # ),
         },
     ),
     targets_settings = targets.settings(
@@ -2991,7 +2994,7 @@ ci.thin_tester(
     ),
     targets = targets.bundle(
         targets = [
-            "dawn_chromium_isolated_scripts",
+            "dawn_chromium_isolated_scripts_hardware",
             "gpu_common_gtests_passthrough",
             "gpu_dawn_telemetry_win_x64_tests",
         ],
@@ -3012,9 +3015,6 @@ ci.thin_tester(
                 reason = "We only need coverage on one GPU per OS, so remove from lower capacity configs.",
             ),
             "webgpu_cts_with_validation_tests": targets.remove(
-                reason = "Remove from bots where capacity is constrained.",
-            ),
-            "webgpu_swiftshader_web_platform_cts_with_validation_tests": targets.remove(
                 reason = "Remove from bots where capacity is constrained.",
             ),
         },
@@ -3053,7 +3053,7 @@ ci.thin_tester(
         targets = [
             "gpu_dawn_telemetry_win_x64_tests",
             "gpu_dawn_integration_gtests_passthrough_win_x64",
-            "gpu_dawn_isolated_scripts",
+            "gpu_dawn_isolated_scripts_hardware",
         ],
         mixins = [
             "win10_intel_uhd_770_stable",
@@ -3161,7 +3161,7 @@ ci.thin_tester(
     ),
     targets = targets.bundle(
         targets = [
-            "dawn_chromium_isolated_scripts",
+            "dawn_chromium_isolated_scripts_hardware",
             "gpu_common_gtests_passthrough",
             "gpu_dawn_webgpu_cts_default_features",
             targets.bundle(
@@ -3225,7 +3225,10 @@ ci.thin_tester(
         run_tests_serially = True,
     ),
     targets = targets.bundle(
-        targets = [],
+        targets = [
+            "dawn_chromium_isolated_scripts_software",
+            "gpu_dawn_web_platform_webgpu_cts_force_swiftshader",
+        ],
         mixins = [
             "gpu_win_gce_stable",
         ],
@@ -3350,9 +3353,9 @@ ci.thin_tester(
     ),
     targets = targets.bundle(
         targets = [
-            "dawn_chromium_isolated_scripts",
+            "dawn_chromium_isolated_scripts_hardware",
             "gpu_common_gtests_passthrough",
-            "gpu_dawn_telemetry_tests_fxc",
+            "gpu_dawn_webgpu_cts_fxc",
         ],
         mixins = [
             "win10_intel_uhd_630_stable",
@@ -3363,9 +3366,6 @@ ci.thin_tester(
                     "Disable testing with validation on x86 where they frequently OOM.",
                     "See crbug.com/1444815.",
                 ],
-            ),
-            "webgpu_swiftshader_web_platform_cts_with_validation_tests": targets.remove(
-                reason = "Remove from bots where capacity is constrained.",
             ),
         },
     ),
@@ -3403,9 +3403,9 @@ ci.thin_tester(
     ),
     targets = targets.bundle(
         targets = [
-            "dawn_chromium_isolated_scripts",
+            "dawn_chromium_isolated_scripts_hardware",
             "gpu_common_gtests_passthrough",
-            "gpu_dawn_telemetry_tests_fxc",
+            "gpu_dawn_webgpu_cts_fxc",
         ],
         mixins = [
             "win10_nvidia_gtx_1660_stable",
@@ -3422,12 +3422,6 @@ ci.thin_tester(
                     "Disable testing with validation on x86 where they frequently OOM.",
                     "See crbug.com/1444815.",
                 ],
-            ),
-            "webgpu_swiftshader_blink_web_tests": targets.remove(
-                reason = "crbug.com/570690123",
-            ),
-            "webgpu_swiftshader_blink_web_tests_with_backend_validation": targets.remove(
-                reason = "crbug.com/570690123",
             ),
         },
     ),
@@ -3464,10 +3458,21 @@ ci.thin_tester(
         run_tests_serially = True,
     ),
     targets = targets.bundle(
-        targets = [],
+        targets = [
+            "dawn_chromium_isolated_scripts_software",
+            "gpu_dawn_web_platform_webgpu_cts_force_swiftshader",
+        ],
         mixins = [
             "gpu_win_gce_stable",
         ],
+        per_test_modifications = {
+            "webgpu_swiftshader_blink_web_tests": targets.remove(
+                reason = "crbug.com/570690123",
+            ),
+            "webgpu_swiftshader_blink_web_tests_with_backend_validation": targets.remove(
+                reason = "crbug.com/570690123",
+            ),
+        },
     ),
     targets_settings = targets.settings(
         browser_config = targets.browser_config.RELEASE,
@@ -3528,9 +3533,6 @@ ci.thin_tester(
             # "webgpu_cts_shared_worker_tests": targets.remove(
             #     reason = "We only need coverage on one GPU per OS, so remove from lower capacity configs.",
             # ),
-            # "webgpu_swiftshader_web_platform_cts_with_validation_tests": targets.remove(
-            #     reason = "Remove from bots where capacity is constrained.",
-            # ),
         },
     ),
     targets_settings = targets.settings(
@@ -3572,7 +3574,7 @@ ci.thin_tester(
         # (NVIDIA)'.
         targets = [
             targets.bundle(
-                targets = "gpu_dawn_telemetry_tests_fxc",
+                targets = "gpu_dawn_webgpu_cts_fxc",
                 mixins = [
                     targets.mixin(
                         args = [
@@ -3584,7 +3586,7 @@ ci.thin_tester(
                 ],
             ),
             "gpu_dawn_integration_gtests_passthrough",
-            "gpu_dawn_isolated_scripts",
+            "gpu_dawn_isolated_scripts_hardware",
         ],
         mixins = [
             "limited_capacity_bot",
@@ -3636,9 +3638,9 @@ ci.thin_tester(
     ),
     targets = targets.bundle(
         targets = [
-            "dawn_chromium_isolated_scripts",
+            "dawn_chromium_isolated_scripts_hardware",
             "gpu_common_gtests_passthrough",
-            "gpu_dawn_telemetry_tests_fxc",
+            "gpu_dawn_webgpu_cts_fxc",
         ],
         mixins = [
             "win10_intel_uhd_630_stable",
@@ -3649,9 +3651,6 @@ ci.thin_tester(
                     "Disable testing with validation on x86 where they frequently OOM.",
                     "See crbug.com/1444815.",
                 ],
-            ),
-            "webgpu_swiftshader_web_platform_cts_with_validation_tests": targets.remove(
-                reason = "Remove from bots where capacity is constrained.",
             ),
         },
     ),
@@ -3687,9 +3686,9 @@ ci.thin_tester(
     ),
     targets = targets.bundle(
         targets = [
-            "dawn_chromium_isolated_scripts",
+            "dawn_chromium_isolated_scripts_hardware",
             "gpu_common_gtests_passthrough",
-            "gpu_dawn_telemetry_tests_fxc",
+            "gpu_dawn_webgpu_cts_fxc",
         ],
         mixins = [
             "win10_nvidia_gtx_1660_stable",
@@ -3706,12 +3705,6 @@ ci.thin_tester(
                     "Disable testing with validation on x86 where they frequently OOM.",
                     "See crbug.com/1444815.",
                 ],
-            ),
-            "webgpu_swiftshader_blink_web_tests": targets.remove(
-                reason = "crbug.com/570690123",
-            ),
-            "webgpu_swiftshader_blink_web_tests_with_backend_validation": targets.remove(
-                reason = "crbug.com/570690123",
             ),
         },
     ),
@@ -3746,10 +3739,21 @@ ci.thin_tester(
         run_tests_serially = True,
     ),
     targets = targets.bundle(
-        targets = [],
+        targets = [
+            "dawn_chromium_isolated_scripts_software",
+            "gpu_dawn_web_platform_webgpu_cts_force_swiftshader",
+        ],
         mixins = [
             "gpu_win_gce_stable",
         ],
+        per_test_modifications = {
+            "webgpu_swiftshader_blink_web_tests": targets.remove(
+                reason = "crbug.com/570690123",
+            ),
+            "webgpu_swiftshader_blink_web_tests_with_backend_validation": targets.remove(
+                reason = "crbug.com/570690123",
+            ),
+        },
     ),
     targets_settings = targets.settings(
         browser_config = targets.browser_config.RELEASE,

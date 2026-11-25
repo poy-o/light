@@ -30,7 +30,6 @@
 #include "third_party/blink/renderer/core/workers/worker_settings.h"
 #include "third_party/blink/renderer/modules/canvas/htmlcanvas/canvas_context_creation_attributes_helpers.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
-#include "third_party/blink/renderer/platform/graphics/canvas_resource.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/canvas_utils.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
 #include "third_party/blink/renderer/platform/graphics/memory_managed_paint_recorder.h"
@@ -182,7 +181,6 @@ bool OffscreenCanvasRenderingContext2D::InitializeBacking() {
     return false;
   }
 
-  gfx::Size surface_size(host->width(), host->height());
   const bool use_gpu_raster =
       SharedGpuContext::IsGpuCompositingEnabled() &&
       RuntimeEnabledFeatures::Accelerated2dCanvasEnabled() &&
@@ -259,7 +257,6 @@ bool OffscreenCanvasRenderingContext2D::InitializeBacking() {
     return false;
   }
 
-  RecordBackingHistograms();
   host->DidDraw();
   return true;
 }
@@ -283,13 +280,7 @@ OffscreenCanvasRenderingContext2D::ProduceCanvasResource(FlushReason reason) {
     return nullptr;
   }
 
-  scoped_refptr<ExportedCanvasResource> frame =
-      PaintRenderingResultsToResource(kBackBuffer, reason);
-  if (!frame)
-    return nullptr;
-
-  frame->SetOriginClean(OriginClean());
-  return frame;
+  return PaintRenderingResultsToResource(kBackBuffer, reason);
 }
 
 scoped_refptr<ExportedCanvasResource>
@@ -322,7 +313,6 @@ ImageBitmap* OffscreenCanvasRenderingContext2D::TransferToImageBitmap(
   scoped_refptr<StaticBitmapImage> image = GetImage();
   if (!image)
     return nullptr;
-  image->SetOriginClean(OriginClean());
 
   ResetBacking();
   Host()->DiscardResources();
@@ -344,10 +334,6 @@ V8RenderingContext* OffscreenCanvasRenderingContext2D::AsV8RenderingContext() {
 V8OffscreenRenderingContext*
 OffscreenCanvasRenderingContext2D::AsV8OffscreenRenderingContext() {
   return MakeGarbageCollected<V8OffscreenRenderingContext>(this);
-}
-
-Color OffscreenCanvasRenderingContext2D::GetCurrentColor() const {
-  return Color::kBlack;
 }
 
 MemoryManagedPaintCanvas*

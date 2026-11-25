@@ -176,7 +176,11 @@ int GetChildCrossoverWidth(const views::View* child) {
 int GetChildOverlap(const views::View* prev_child,
                     const views::View* next_child) {
   const int tab_overlap = TabStyle::Get()->GetTabOverlap();
-  const int header_overlap = TabGroupStyle::GetTabGroupOverlapAdjustment();
+  const int header_overlap = TabGroupStyle::GetOverlapAdjustment();
+
+  if (views::IsViewClass<TabGroupHeaderView>(prev_child)) {
+    return header_overlap;
+  }
 
   const auto* prev_group = views::AsViewClass<TabGroupView>(prev_child);
   const auto* next_group = views::AsViewClass<TabGroupView>(next_child);

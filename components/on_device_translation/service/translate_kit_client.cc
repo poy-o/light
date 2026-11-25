@@ -27,6 +27,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/timer/elapsed_timer.h"
+#include "base/trace_event/trace_event.h"
 #include "base/types/expected.h"
 #include "build/build_config.h"
 #include "components/on_device_translation/features.h"
@@ -102,8 +103,12 @@ void TranslateCallback(TranslateKitOutputText result,
                        std::uintptr_t user_data) {
   std::string* output = reinterpret_cast<std::string*>(user_data);
   CHECK(output);
-  CHECK(result.buffer);
-  *output = std::string(result.buffer, result.buffer_size);
+  CHECK(result.buffer || result.buffer_size == 0);
+  if (result.buffer) {
+    output->assign(result.buffer, result.buffer_size);
+  } else {
+    output->clear();
+  }
 }
 
 void DeleteReadOnlyMemoryRegion(std::uintptr_t memory_map_ptr,
@@ -168,10 +173,13 @@ void ParseFilePath(const char* file_name,
 
 // static
 TranslateKitClient* TranslateKitClient::Get() {
-  static base::NoDestructor<std::unique_ptr<TranslateKitClient>> client(
-      std::make_unique<TranslateKitClient>(
-          GetTranslateKitBinaryPathFromCommandLine(),
-          base::PassKey<TranslateKitClient>()));
+  static base::NoDestructor<std::unique_ptr<TranslateKitClient>> client([] {
+    // Loads the TranslateKit library.
+    TRACE_EVENT("on_device_translation", "TranslateKitClient::LoadLibrary");
+    return std::make_unique<TranslateKitClient>(
+        GetTranslateKitBinaryPathFromCommandLine(),
+        base::PassKey<TranslateKitClient>());
+  }());
   return client->get();
 }
 
@@ -266,6 +274,8 @@ bool TranslateKitClient::MaybeInitialize() {
     // initialization failed.
     return false;
   }
+  TRACE_EVENT("on_device_translation",
+              "TranslateKitClient::CreateTranslateKit");
   initialize_storage_backend_fnc_(
       &TranslateKitClient::FileExists,
       &TranslateKitClient::OpenForReadOnlyMemoryMap,
@@ -312,6 +322,9 @@ void TranslateKitClient::SetConfig(
   }
 
   const std::string packages_str = config_proto.SerializeAsString();
+  TRACE_EVENT("on_device_translation",
+              "TranslateKitClient::SetLanguagePackages", "package_count",
+              config->packages.size());
   CHECK(set_language_packages_func_(
       *maybe_kit_ptr_,
       TranslateKitSetLanguagePackagesArgs{packages_str.c_str(),
@@ -407,6 +420,9 @@ std::uintptr_t TranslateKitClient::TranslatorImpl::CreateTranslateKitTranslator(
     TranslateKitClient* client,
     const std::string& source_lang,
     const std::string& target_lang) {
+  // Loads the models of the language pair.
+  TRACE_EVENT("on_device_translation",
+              "TranslateKitClient::CreateTranslateKitTranslator");
   CHECK(client->translate_kit_create_translator_func_);
   return client->translate_kit_create_translator_func_(
       *client->maybe_kit_ptr_,
@@ -503,9 +519,10 @@ std::optional<std::string> TranslateKitClient::TranslatorImpl::Translate(
   if (!MaybeLoadModel()) {
     return std::nullopt;
   }
+  std::string output;
   const bool translated = client_->translator_translate_func_(
       translator_ptr_, TranslateKitInputText(text.c_str(), text.length()),
-      TranslateCallback, reinterpret_cast<uintptr_t>(&text));
+      TranslateCallback, reinterpret_cast<std::uintptr_t>(&output));
 
   // Count the idle time from the end of the call. One call can run longer
   // than the timeout, and a timer that started before it would unload the
@@ -514,7 +531,7 @@ std::optional<std::string> TranslateKitClient::TranslatorImpl::Translate(
   if (!translated) {
     return std::nullopt;
   }
-  return text;
+  return output;
 }
 
 DISABLE_CFI_DLSYM

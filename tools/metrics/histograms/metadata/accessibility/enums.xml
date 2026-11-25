@@ -2188,6 +2188,13 @@ Unknown properties are collapsed to zero. -->
   <int value="14" label="CreateTranslator: Library install failed"/>
   <int value="15" label="CreateTranslator: Language pack download failed"/>
   <int value="16" label="CreateTranslator: Not enough disk space"/>
+  <int value="17" label="CreateTranslator: Offline"/>
+  <int value="18" label="CanTranslate: Unsupported device"/>
+  <int value="19" label="CreateTranslator: Unsupported device"/>
+  <int value="20" label="CreateTranslator: Data Saver enabled"/>
+  <int value="21"
+      label="CreateTranslator: Exceeded language pack count limitation"/>
+  <int value="22" label="CreateTranslator: Metered connection blocked"/>
 </enum>
 
 <!-- LINT.ThenChange(//components/live_caption/translation_dispatcher_on_device.h:OnDeviceTranslationErrorReason) -->
@@ -2454,6 +2461,7 @@ Unknown properties are collapsed to zero. -->
   <int value="0" label="Allowed"/>
   <int value="1" label="Failed: Not from observed tree"/>
   <int value="2" label="Failed: Disallowed on page type"/>
+  <int value="3" label="Failed: Disallowed on node"/>
 </enum>
 
 <!-- LINT.ThenChange(//chrome/browser/ui/webui/side_panel/read_anything/read_anything_untrusted_page_handler.h:ReadAnythingRendererRequestResult) -->

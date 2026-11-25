@@ -58,7 +58,8 @@ constexpr net::BackoffEntry::Policy kFastBackoffPolicy = {
 // End-to-end integration tests exercising `MCSClient`, `ConnectionFactoryImpl`,
 // `ConnectionHandlerImpl`, and `GCMStoreImpl` over a real loopback TCP socket
 // against `FakeMCSServer`.
-class MCSClientIntegrationTest : public testing::Test {
+class MCSClientIntegrationTest : public testing::Test,
+                                 public MCSClient::Delegate {
  public:
   MCSClientIntegrationTest()
       : network_connection_tracker_(
@@ -98,8 +99,10 @@ class MCSClientIntegrationTest : public testing::Test {
 
   // Initializes `GCMStoreImpl`, `ConnectionFactoryImpl`, and `MCSClient` and
   // logs in with `kAndroidId` and `kSecurityToken`, waiting for the server's
-  // `LoginResponse`.
-  void InitializeAndLoginClient() {
+  // `LoginResponse` (or `WaitForInitialConnectionReady()` when
+  // `wait_for_initial_connection_ready` is true).
+  void InitializeAndLoginClient(
+      bool wait_for_initial_connection_ready = false) {
     gcm_store_ = std::make_unique<GCMStoreImpl>(
         client_store_dir_.GetPath(),
         task_environment_.GetMainThreadTaskRunner(),
@@ -121,12 +124,15 @@ class MCSClientIntegrationTest : public testing::Test {
     std::unique_ptr<GCMStore::LoadResult> load_result = load_future.Take();
     load_result->device_android_id = kAndroidId;
     load_result->device_security_token = kSecurityToken;
-    mcs_client_->Initialize(
-        base::BindRepeating(&MCSClientIntegrationTest::OnMessageReceived,
-                            base::Unretained(this)),
-        base::BindRepeating(&MCSClientIntegrationTest::OnMessageSent,
-                            base::Unretained(this)),
-        std::move(load_result));
+    mcs_client_->Initialize(/*delegate=*/this, std::move(load_result));
+
+    if (wait_for_initial_connection_ready) {
+      base::RunLoop ready_loop;
+      mcs_client_->WaitForInitialConnectionReady(ready_loop.QuitClosure());
+      mcs_client_->Login(kAndroidId, kSecurityToken);
+      ready_loop.Run();
+      return;
+    }
 
     base::RunLoop login_loop;
     wait_for_login_closure_ = login_loop.QuitClosure();
@@ -153,15 +159,16 @@ class MCSClientIntegrationTest : public testing::Test {
 
   mcs_proto::DataMessageStanza WaitForNextDataMessage() {
     if (received_data_messages_.empty()) {
-      // Wait until `OnMessageReceived()` receives a `kDataMessageStanzaTag`
-      // packet, appends it to `received_data_messages_`, and invokes
+      // Wait until `OnMessageReceivedFromMCS()` receives a
+      // `kDataMessageStanzaTag` packet, appends it to
+      // `received_data_messages_`, and invokes
       // `wait_for_data_message_closure_`.
       base::RunLoop loop;
       wait_for_data_message_closure_ = loop.QuitClosure();
       loop.Run();
     }
     CHECK(!received_data_messages_.empty())
-        << "Timed out waiting for OnMessageReceived() to receive a "
+        << "Timed out waiting for OnMessageReceivedFromMCS() to receive a "
            "DataMessageStanza";
     mcs_proto::DataMessageStanza stanza =
         std::move(received_data_messages_.front());
@@ -202,7 +209,7 @@ class MCSClientIntegrationTest : public testing::Test {
     network_context_->CreateProxyResolvingSocketFactory(std::move(receiver));
   }
 
-  void OnMessageReceived(const MCSMessage& message) {
+  void OnMessageReceivedFromMCS(const MCSMessage& message) override {
     if (message.tag() == kLoginResponseTag) {
       if (wait_for_login_closure_) {
         std::move(wait_for_login_closure_).Run();
@@ -219,9 +226,9 @@ class MCSClientIntegrationTest : public testing::Test {
     }
   }
 
-  void OnMessageSent(const std::string& app_id,
-                     const std::string& message_id,
-                     MCSClient::MessageSendStatus status) {
+  void OnMessageSentToMCS(const std::string& app_id,
+                          const std::string& message_id,
+                          MCSClient::MessageSendStatus status) override {
     sent_statuses_.emplace_back(message_id, status);
     if (status == MCSClient::SENT && wait_for_message_sent_closure_) {
       std::move(wait_for_message_sent_closure_).Run();
@@ -404,6 +411,25 @@ TEST_F(MCSClientIntegrationTest, SendClientToServerDataMessage) {
             std::make_pair(std::string("upstream-msg-1"), MCSClient::QUEUED));
   EXPECT_EQ(sent_statuses()[1],
             std::make_pair(std::string("upstream-msg-1"), MCSClient::SENT));
+}
+
+TEST_F(MCSClientIntegrationTest,
+       QueuedMessagesDeliveredBeforeInitialConnectionReady) {
+  mcs_proto::DataMessageStanza msg1;
+  msg1.set_from("sender-1");
+  msg1.set_category("com.chrome.test");
+  fake_mcs_server().SendDataMessage(kAndroidId, msg1);
+
+  mcs_proto::DataMessageStanza msg2;
+  msg2.set_from("sender-2");
+  msg2.set_category("com.chrome.test");
+  fake_mcs_server().SendDataMessage(kAndroidId, msg2);
+
+  InitializeAndLoginClient(/*wait_for_initial_connection_ready=*/true);
+
+  ASSERT_EQ(received_data_messages().size(), 2u);
+  EXPECT_EQ(received_data_messages()[0].from(), "sender-1");
+  EXPECT_EQ(received_data_messages()[1].from(), "sender-2");
 }
 
 }  // namespace

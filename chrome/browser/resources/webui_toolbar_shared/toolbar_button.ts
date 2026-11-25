@@ -17,6 +17,22 @@ export const BUTTON_LEFT = 0;
 export const BUTTON_MIDDLE = 1;
 export const BUTTON_RIGHT = 2;
 
+/**
+ * Returns true if `e` is a Mac Ctrl+LeftClick, which macOS treats as a
+ * secondary (context menu) click rather than a primary click.
+ */
+export function isMacContextClick(e: MouseEvent): boolean {
+  return isMac && e.button === BUTTON_LEFT && e.ctrlKey;
+}
+
+/**
+ * Returns true if `e` is a primary (left) button interaction, excluding Mac
+ * Ctrl+LeftClick which macOS treats as a secondary (context menu) click.
+ */
+export function isPrimaryClick(e: MouseEvent): boolean {
+  return e.button === BUTTON_LEFT && !isMacContextClick(e);
+}
+
 
 export interface GetEventDispositionFlagsOptions {
   ignoreCtrlKey?: boolean;
@@ -126,7 +142,7 @@ export class HighlightTracker {
   onPointerdown = (e: PointerEvent) => {
     // Ignore non-primary clicks or clicks not coming from a pointer (i.e.
     // keyboard).
-    if (e.button !== BUTTON_LEFT || e.pointerType === '') {
+    if (!isPrimaryClick(e) || e.pointerType === '') {
       this.skipNextClick_ = false;
       return;
     }
@@ -157,13 +173,17 @@ export class HighlightTracker {
 //
 // A press may be determined to be long based on either press duration or
 // vertical mouse movement. If long presses are not allowed at that point, long
-// press detection stops, but the press continues to be tracked, so releasing
-// the pointer results in a short press.
+// press detection stops, but mouse presses continue to be tracked, so releasing
+// the pointer results in a short press. Touch and pen presses are not tracked
+// any further, so they never result in a short press, matching Views.
 interface ContextMenuState {
   // True as long as the pointer is down, and the interaction has not been
-  // passed along as a long or short press.
+  // passed along as a long or short press. May remain true after the press
+  // ends, if no pointerup or pointercancel event is received. See
+  // `resetStalePress_()`.
   isListening: boolean;
   activePointerId: number;
+  activePointerType: string;
   activeElement: HTMLElement|null;
 
   longPressTimer: TimerHelper;
@@ -194,8 +214,8 @@ function isMouseEventOverTarget(e: MouseEvent, target: HTMLElement) {
  *
  * Consumers that can't always show a context menu should pass a `canLongPress`
  * predicate to the constructor, rather than ignoring calls to `onLongPress`, so
- * that holding or dragging the pointer still results in a short press on
- * release when a menu can't be shown.
+ * that holding or dragging the mouse still results in a short press on release
+ * when a menu can't be shown.
  *
  * Safe usage of this class requires the caller to route all relevant pointer
  * events (pointerdown, pointerup, pointercancel) and the contextmenu event
@@ -239,38 +259,35 @@ export class PressHandler {
   private onShortPress_: (e: PointerEvent) => void;
   private canLongPress_: () => boolean;
 
-  private contextMenuState_: ContextMenuState|null = null;
+  private contextMenuState_: ContextMenuState = {
+    isListening: false,
+    activePointerId: PressHandler.NO_ACTIVE_POINTER_ID,
+    activePointerType: '',
+    activeElement: null,
+    longPressTimer: new TimerHelper(),
+    initialY: 0,
+  };
 
   // Do we expect the pointer to be captured between pointerDown and pointerUp?
   // Mostly true, but false for screen reader synthetic mouse clicks.
   private expectPointerCapture_: boolean = true;
 
   // `canLongPress` is queried whenever a long press would otherwise be
-  // triggered. If it returns false, `onLongPress` is not called. Long presses
-  // detected from a held or dragged pointer are then treated as short presses
-  // if the pointer is released over the button.
+  // triggered. If it returns false, `onLongPress` is not called. Mouse presses
+  // held or dragged long enough to be long presses are then treated as short
+  // presses if the pointer is released over the button, while touch and pen
+  // presses are ignored, matching Views.
   constructor(
       onLongPress: (source: MenuSourceType) => void,
       onShortPress: (e: PointerEvent) => void,
-      enableContextMenu: boolean = true,
       canLongPress: () => boolean = () => true) {
     this.onLongPress_ = onLongPress;
     this.onShortPress_ = onShortPress;
     this.canLongPress_ = canLongPress;
-    if (enableContextMenu) {
-      this.contextMenuState_ = {
-        isListening: false,
-        activePointerId: PressHandler.NO_ACTIVE_POINTER_ID,
-        activeElement: null,
-        longPressTimer: new TimerHelper(),
-        initialY: 0,
-      };
-    }
   }
 
   private onPointermove_ = (e: PointerEvent) => {
-    if (!this.contextMenuState_ ||
-        e.pointerId !== this.contextMenuState_.activePointerId) {
+    if (e.pointerId !== this.contextMenuState_.activePointerId) {
       return;
     }
     // Detect downward drag.
@@ -282,14 +299,26 @@ export class PressHandler {
 
   // Called when the tracked press is held or dragged long enough to become a
   // long press. If long presses are allowed, stops tracking the press and
-  // invokes `onLongPress_`. Otherwise, stops long press detection, but keeps
-  // tracking the press, so it will be treated as a short press on release.
+  // invokes `onLongPress_`. Otherwise, for touch and pen presses, stops
+  // tracking the press, so it will be ignored on release, matching Views. For
+  // other presses, stops long press detection, but keeps tracking the press,
+  // so it will be treated as a short press on release.
   private onLongPressDetected_(source: MenuSourceType) {
-    assert(this.contextMenuState_?.isListening);
+    assert(this.contextMenuState_.isListening);
+    this.resetStalePress_();
+    if (!this.contextMenuState_.isListening) {
+      return;
+    }
     if (this.canLongPress_()) {
       // Have to release capture so that a short press will not be triggered.
       this.resetContextMenuState_();
       this.onLongPress_(source);
+      return;
+    }
+    const pointerType = this.contextMenuState_.activePointerType;
+    if (pointerType === 'touch' || pointerType === 'pen') {
+      // Releasing capture means the press will be ignored on release.
+      this.resetContextMenuState_();
       return;
     }
     this.contextMenuState_.longPressTimer.clearTimeout();
@@ -297,8 +326,25 @@ export class PressHandler {
         'pointermove', this.onPointermove_);
   }
 
+  // Resets state if a press is being tracked, but it ended without a pointerup
+  // or pointercancel reaching us. This can happen if the element is removed
+  // from the DOM mid-press, or otherwise loses pointer capture.
+  private resetStalePress_() {
+    const {isListening, activeElement, activePointerId} =
+        this.contextMenuState_;
+    if (!isListening) {
+      return;
+    }
+    const isLive = !!activeElement?.isConnected &&
+        (!this.expectPointerCapture_ ||
+         activeElement.hasPointerCapture(activePointerId));
+    if (!isLive) {
+      this.resetContextMenuState_();
+    }
+  }
+
   private resetContextMenuState_() {
-    if (this.contextMenuState_?.isListening) {
+    if (this.contextMenuState_.isListening) {
       this.contextMenuState_.longPressTimer.clearTimeout();
 
       if (this.contextMenuState_.activeElement) {
@@ -322,9 +368,8 @@ export class PressHandler {
   }
 
   private shouldCancelClick_(e: PointerEvent): boolean {
-    if (!this.contextMenuState_?.activeElement) {
-      // If drag-to-open-menu is not enabled or we're not actively tracking an
-      // element, don't cancel the click.
+    if (!this.contextMenuState_.activeElement) {
+      // If we're not actively tracking an element, don't cancel the click.
       return false;
     }
     const rect = this.contextMenuState_.activeElement.getBoundingClientRect();
@@ -334,15 +379,17 @@ export class PressHandler {
 
   onPointerdown = (e: PointerEvent) => {
     // Ignore secondary pointers if we are actively listening to a primary
-    // pointer.
-    if (this.contextMenuState_?.isListening) {
+    // pointer. If the primary pointer's press ended without us being notified,
+    // drop its state rather than ignoring all future presses.
+    this.resetStalePress_();
+    if (this.contextMenuState_.isListening) {
       return;
     }
 
     // On Mac, Ctrl+LeftClick is a Context Menu action. We return early to
     // bypass pointer capture and short-press logic, and let the native
     // contextmenu event handle it.
-    if (isMac && e.button === BUTTON_LEFT && e.ctrlKey) {
+    if (isMacContextClick(e)) {
       return;
     }
 
@@ -359,13 +406,9 @@ export class PressHandler {
       return;
     }
 
-    if (!this.contextMenuState_) {
-      return;
-    }
-
-    // If can show a context menu, need to initialize `contextMenuState_` and
-    // start a timer. Whether a long press is currently allowed is only checked
-    // when a long press is detected, since that may change during the press.
+    // Start tracking the press, and start the long press timer. Whether a long
+    // press is currently allowed is only checked when a long press is
+    // detected, since that may change during the press.
 
     this.contextMenuState_.isListening = true;
     // Use currentTarget to ensure we are capturing the button element that
@@ -373,6 +416,7 @@ export class PressHandler {
     // element (like an icon).
     this.contextMenuState_.activeElement = target;
     this.contextMenuState_.activePointerId = e.pointerId;
+    this.contextMenuState_.activePointerType = e.pointerType;
 
     this.contextMenuState_.longPressTimer.setTimeout(() => {
       this.onLongPressDetected_(MenuSourceType.kLongPress);
@@ -383,6 +427,8 @@ export class PressHandler {
   };
 
   onPointerup = (e: PointerEvent) => {
+    this.resetStalePress_();
+
     const target = e.currentTarget as HTMLElement;
     // Ignore pointers that are not captured, indicating that there was no
     // corresponding pointer down event over this button.
@@ -395,7 +441,7 @@ export class PressHandler {
 
     // Ignore secondary pointers if we are actively listening to a primary
     // pointer.
-    if (this.contextMenuState_?.isListening &&
+    if (this.contextMenuState_.isListening &&
         e.pointerId !== this.contextMenuState_.activePointerId) {
       return;
     }
@@ -415,7 +461,7 @@ export class PressHandler {
     }
 
     // If it's Ctrl+LeftClick on Mac, abort the click.
-    if (isMac && e.button === BUTTON_LEFT && e.ctrlKey) {
+    if (isMacContextClick(e)) {
       this.resetContextMenuState_();
       return;
     }
@@ -433,7 +479,7 @@ export class PressHandler {
   onPointercancel = (e: PointerEvent) => {
     // Ignore secondary pointers if we are actively listening to a primary
     // pointer.
-    if (this.contextMenuState_?.isListening &&
+    if (this.contextMenuState_.isListening &&
         e.pointerId !== this.contextMenuState_.activePointerId) {
       return;
     }
@@ -457,6 +503,10 @@ export function getContextMenuPosition(element: HTMLElement) {
   return element.getBoundingClientRect();
 }
 
+// `PointerEvent.button` value when no button is involved (e.g. a
+// keyboard-triggered `contextmenu` event).
+const BUTTON_NONE = -1;
+
 // Should match ui::GetMenuSourceTypeForEvent().
 // * keyboard event -> keyboard
 // * touch event -> touch
@@ -469,11 +519,12 @@ export function getClickSourceType(e: Event): MenuSourceType {
   // Keyboard activations on `<cr-icon-button>` or `<button>` (Space or Enter)
   // programmatically synthesize standard `click` events with `detail` 0, while
   // direct keydown activations (e.g. ArrowDown/ArrowUp) pass a `KeyboardEvent`.
-  // TODO(crbug.com/543376027): Handle pointer events correctly. Physical
-  // pointer events can have detail === 0, which incorrectly classifies them as
-  // keyboard events.
+  // Only `click` events are checked for `detail` 0: other mouse/pointer events
+  // (e.g. pointerdown, pointerup, pointermove, mousemove) natively have
+  // `detail` 0 even for physical interactions, so they must not be classified
+  // as keyboard.
   if (e instanceof KeyboardEvent ||
-      (e instanceof MouseEvent && e.detail === 0)) {
+      (e instanceof MouseEvent && e.type === 'click' && e.detail === 0)) {
     return MenuSourceType.kKeyboard;
   }
   return MenuSourceType.kMouse;
@@ -484,14 +535,19 @@ export function getClickSourceType(e: Event): MenuSourceType {
 // * touch/gesture event -> touch
 // * others -> mouse
 export function getContextMenuSourceType(e: Event): MenuSourceType {
-  if (e instanceof PointerEvent || e instanceof KeyboardEvent) {
+  if (e.type !== 'contextmenu') {
     return getClickSourceType(e);
   }
-  if (e instanceof MouseEvent && e.button === BUTTON_LEFT) {
-    // Mac Ctrl+Click (ctrlKey + button 0) should be Mouse for context menu.
-    if (e.type === 'contextmenu' && e.ctrlKey) {
-      return MenuSourceType.kMouse;
-    }
+  if (e instanceof PointerEvent &&
+      (e.pointerType === 'touch' || e.pointerType === 'pen')) {
+    return MenuSourceType.kTouch;
+  }
+  // Blink never populates `detail` for `contextmenu` events, so use `button`
+  // instead: keyboard-triggered context menus (e.g. Menu key or Shift+F10) have
+  // no button (reported as -1 on `PointerEvent` and 0 on `MouseEvent`) and no
+  // modifiers. Mac Ctrl+Click (button 0 + ctrlKey) is a mouse interaction.
+  if (e instanceof MouseEvent &&
+      (e.button === BUTTON_NONE || e.button === BUTTON_LEFT) && !e.ctrlKey) {
     return MenuSourceType.kKeyboard;
   }
   return MenuSourceType.kMouse;

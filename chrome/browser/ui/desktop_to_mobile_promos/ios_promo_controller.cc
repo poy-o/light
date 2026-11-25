@@ -48,6 +48,8 @@ const base::Feature& FeatureForIOSPromoType(PromoType promo_type) {
       return feature_engagement::kIPHiOSTabGroupsDesktopFeature;
     case PromoType::kPriceTracking:
       return feature_engagement::kIPHiOSPriceTrackingDesktopFeature;
+    case PromoType::kSafety:
+      return feature_engagement::kIPHiOSSafetyPromoDesktopFeature;
   }
 }
 
@@ -189,6 +191,9 @@ bool IOSPromoController::IsUserEligibleForPromo(PromoType promo_type) {
     case PromoType::kPriceTracking:
       feature_type = MobilePromoOnDesktopPromoType::kPriceTracking;
       break;
+    case PromoType::kSafety:
+      feature_type = MobilePromoOnDesktopPromoType::kSafety;
+      break;
     case PromoType::kAddress:
     case PromoType::kPayment:
       // These promos are not yet supported in this flow.
@@ -208,10 +213,14 @@ bool IOSPromoController::IsUserEligibleForPromo(PromoType promo_type) {
       MobilePromoOnDesktopTypeEnabled(
           feature_type, desktop_to_mobile_promos::BubbleType::kReminder)) {
     // For backwards compatibility with older iOS clients that only populate the
-    // boolean field, treat an empty types set as a fallback to the boolean.
+    // boolean field, treat an empty types set as a fallback to the boolean for
+    // the original promos (ESB and Autofill Passwords).
     bool receiving_enabled = false;
     if (device->desktop_to_ios_promo_receiving_types().empty()) {
-      receiving_enabled = device->desktop_to_ios_promo_receiving_enabled();
+      if (feature_type == MobilePromoOnDesktopPromoType::kAutofillPromo ||
+          feature_type == MobilePromoOnDesktopPromoType::kESBPromo) {
+        receiving_enabled = device->desktop_to_ios_promo_receiving_enabled();
+      }
     } else {
       receiving_enabled =
           device->desktop_to_ios_promo_receiving_types().Has(

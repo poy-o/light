@@ -33,6 +33,12 @@ extern const base::FeatureParam<base::TimeDelta>
 // created per browser context.
 extern const base::FeatureParam<size_t> kTranslationAPIMaxServiceCount;
 
+// The free disk space in MiB that a language pack download needs. When the
+// component updater volume has less, `Translator.create()` fails without
+// starting the download. 0 turns the check off.
+extern const base::FeatureParam<size_t>
+    kTranslationAPILanguagePackMinFreeDiskSpaceMB;
+
 // How long a translator in the translation service can go without a
 // translation before the service unloads its TranslateKit model, and whether
 // moderate or critical memory pressure unloads all models immediately. The
@@ -47,6 +53,19 @@ extern const base::FeatureParam<base::TimeDelta>
 // The limit applies to each call. It doesn't limit how many calls a page
 // queues, which the service runs one after another.
 extern const base::FeatureParam<int> kTranslationAPIMaxInputSizeBytes;
+
+// Minimum total physical RAM in MB required to use on-device translation.
+// Devices below this floor report the API as unavailable. 0 disables the check.
+extern const base::FeatureParam<size_t> kTranslationAPIMinPhysicalMemoryMB;
+
+// The maximum number of language packs that may be installed or registered at
+// once. A request that needs more missing packs fails before starting any
+// download. 0 or less disables the cap.
+extern const base::FeatureParam<int> kTranslationAPIMaxInstalledLanguagePacks;
+
+// Blocks TranslateKit library and language pack downloads and updates on
+// metered network connections when enabled.
+BASE_DECLARE_FEATURE(kTranslationAPIBlockDownloadsOnMeteredNetwork);
 
 // Enables automatic download of language packs for on-device translation.
 BASE_DECLARE_FEATURE(kAutoDownloadTranslateLanguagePacks);

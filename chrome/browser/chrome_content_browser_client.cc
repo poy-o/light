@@ -637,8 +637,8 @@
 #include "chrome/browser/media/webrtc/multi_capture/multi_capture_usage_indicator_service_factory.h"
 #include "chrome/browser/policy/system_features_disable_list_policy_handler.h"
 #include "chrome/browser/web_applications/chromeos_web_app_experiments.h"
-#include "chrome/common/chromeos/extensions/chromeos_system_extension_info.h"
 #include "chromeos/ash/components/quickoffice/quickoffice_prefs.h"
+#include "chromeos/ash/experiences/extensions/common/telemetry/chromeos_system_extension_info.h"
 #include "chromeos/components/kiosk/kiosk_utils.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "third_party/cros_system_api/switches/chrome_switches.h"
@@ -1242,6 +1242,20 @@ bool ShouldHonorPolicies() {
 const char kDisableSandboxExternalProtocolSwitch[] =
     "disable-sandbox-external-protocols";
 
+// Direct launch schemes (google-chrome:, chromium:) are not supported on
+// Android.
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \
+    BUILDFLAG(IS_WIN)
+// Opens the inner URL of a direct launch scheme URL (e.g. google-chrome:) in
+// `web_contents`, if it still exists.
+void OpenDirectLaunchUrl(base::WeakPtr<content::WebContents> web_contents,
+                         const content::OpenURLParams& params) {
+  if (web_contents) {
+    web_contents->OpenURL(params, /*navigation_handle_callback=*/{});
+  }
+}
+#endif
+
 void LaunchURL(
     base::WeakPtr<ChromeContentBrowserClient> client,
     const GURL& url,
@@ -1388,23 +1402,58 @@ void MaybeAppendSecureOriginsAllowlistSwitch(base::CommandLine* cmdline) {
   }
 }
 
-#if BUILDFLAG(IS_WIN) && !defined(COMPONENT_BUILD) && \
-    !defined(ADDRESS_SANITIZER)
+#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(ENABLE_SEPARATE_RENDERER_BINARY) || \
+    (!defined(COMPONENT_BUILD) && !defined(ADDRESS_SANITIZER))
 // Returns true if the current process was launched from `chrome.exe`.
 bool IsLaunchedFromChromeExe() {
   base::FilePath exe_path;
   return base::PathService::Get(base::FILE_EXE, &exe_path) &&
          exe_path.BaseName().value() == chrome::kBrowserProcessExecutableName;
 }
+#endif
 
+// Selects the renderer module for `process` (recording any staged dynamic
+// patch on `ChildModuleManager` once per launch) and appends the switches
+// instructing `chrome.exe` which renderer DLL to load. `process` may be null.
+void SelectAndAppendRendererModuleSwitches(
+    base::CommandLine& command_line,
+    content::RenderProcessHost* process) {
+  if (process) {
+    if (child_module::ChildModuleManager* child_module_manager =
+            g_browser_process->GetFeatures()->child_module_manager()) {
+      if (base::optional_ref<const child_module::ChildModuleManager::Module>
+              module = child_module_manager->SelectModuleForProcess(
+                  process->GetID())) {
+        command_line.AppendSwitchASCII(switches::kChildModuleVersion,
+                                       module->version.GetString());
+        // The renderer cannot compute the user path component identifying the
+        // directory that holds the patch, so provide it.
+        command_line.AppendSwitchPath(
+            switches::kChildModuleUserPathComponent,
+            child_module::GetUserPathComponentFromRendererBinaryPath(
+                module->renderer_binary_path));
+        return;
+      }
+    }
+  }
+#if BUILDFLAG(ENABLE_SEPARATE_RENDERER_BINARY)
+  if (IsLaunchedFromChromeExe() &&
+      base::FeatureList::IsEnabled(features::kSeparateRendererBinary)) {
+    command_line.AppendSwitch(switches::kSeparateRendererBinary);
+  }
+#endif
+}
+
+#if !defined(COMPONENT_BUILD) && !defined(ADDRESS_SANITIZER)
 // Returns the full path to `module_name` in the current module's directory
 // (which is the versioned sub-directory for proper installs, or the executable
 // directory for dev builds). The identified file is not guaranteed to exist.
 base::FilePath GetModulePath(std::wstring_view module_name) {
   return base::PathService::CheckedGet(base::DIR_MODULE).Append(module_name);
 }
-#endif  // BUILDFLAG(IS_WIN) && !defined(COMPONENT_BUILD) &&
-        // !defined(ADDRESS_SANITIZER)
+#endif  // !defined(COMPONENT_BUILD) && !defined(ADDRESS_SANITIZER)
+#endif  // BUILDFLAG(IS_WIN)
 
 void MaybeAddCondition(
     std::unique_ptr<content::CommitDeferringCondition> maybe_condition,
@@ -1552,6 +1601,28 @@ std::optional<GURL> GetIwaCustomManifestUrl(
   return std::nullopt;
 }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS_CORE) && !BUILDFLAG(IS_ANDROID)
+
+// Returns whether WebUIs at `site_url` load build-time bundled V8 code caches.
+// The code cache opt-in and the V8 flag override policy share this predicate
+// because V8 rejects bundled bytecode in a process that allows flag overrides.
+bool IsWebUIBundledCodeCacheEnabledForSite(const GURL& site_url) {
+  if (!base::FeatureList::IsEnabled(features::kWebUIBundledCodeCache)) {
+    return false;
+  }
+  if (::IsTopChromeWebUIURL(site_url)) {
+    return true;
+  }
+#if BUILDFLAG(ENABLE_WEBUI_GENERATE_CODE_CACHE) && !BUILDFLAG(IS_ANDROID) && \
+    BUILDFLAG(ENABLE_WEBUI_NTP)
+  return site_url.SchemeIs(content::kChromeUIScheme) &&
+         site_url.host() == chrome::kChromeUINewTabPageHost &&
+         base::FeatureList::IsEnabled(
+             features::kWebUIBundledCodeCacheForNewTabPage);
+#else
+  return false;
+#endif  // BUILDFLAG(ENABLE_WEBUI_GENERATE_CODE_CACHE) &&
+        // !BUILDFLAG(IS_ANDROID) && BUILDFLAG(ENABLE_WEBUI_NTP)
+}
 
 }  // namespace
 
@@ -3152,23 +3223,7 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
 #endif
 
 #if BUILDFLAG(IS_WIN)
-    if (process) {
-      if (child_module::ChildModuleManager* child_module_manager =
-              g_browser_process->GetFeatures()->child_module_manager()) {
-        if (base::optional_ref<const child_module::ChildModuleManager::Module>
-                module = child_module_manager->SelectModuleForProcess(
-                    process->GetID())) {
-          command_line->AppendSwitchASCII(switches::kChildModuleVersion,
-                                          module->version.GetString());
-          // The renderer cannot compute the user path component identifying the
-          // directory that holds the patch, so provide it.
-          command_line->AppendSwitchPath(
-              switches::kChildModuleUserPathComponent,
-              child_module::GetUserPathComponentFromRendererBinaryPath(
-                  module->renderer_binary_path));
-        }
-      }
-    }
+    SelectAndAppendRendererModuleSwitches(*command_line, process);
 #endif
 
     MaybeCopyDisableWebRtcEncryptionSwitch(command_line, browser_command_line,
@@ -3253,7 +3308,7 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
         switches::kEnableExperimentalWebAssemblyFeatures,
         embedder_support::kOriginTrialDisabledFeatures,
         embedder_support::kOriginTrialPublicKey,
-        switches::kReaderModeHeuristics,
+        switches::kDistillerHeuristics,
         sync_tab_context::kTabContextAllowedOriginSwitch,
         translate::switches::kTranslateSecurityOrigin,
     };
@@ -3943,9 +3998,7 @@ std::string ChromeContentBrowserClient::GetWebUIHostnameForCodeCacheMetrics(
 
 bool ChromeContentBrowserClient::IsWebUIBundledCodeCachingEnabled(
     const GURL& site_url) const {
-  // Enable bundled code caching only for top-chrome WebUI hosts.
-  return base::FeatureList::IsEnabled(features::kWebUIBundledCodeCache) &&
-         ::IsTopChromeWebUIURL(site_url);
+  return IsWebUIBundledCodeCacheEnabledForSite(site_url);
 }
 
 base::flat_map<GURL, int>
@@ -5640,14 +5693,15 @@ ChromeContentBrowserClient::GetRendererSandboxPolicyExtension(
   }
 
 #if BUILDFLAG(ENABLE_SEPARATE_RENDERER_BINARY)
-  return RendererSandboxPolicyExtension{
-      .extra_dll = GetModulePath(chrome::kRendererDll),
-  };
-#else
+  if (base::FeatureList::IsEnabled(features::kSeparateRendererBinary)) {
+    return RendererSandboxPolicyExtension{
+        .extra_dll = GetModulePath(chrome::kRendererDll),
+    };
+  }
+#endif
   return RendererSandboxPolicyExtension{
       .extra_dll = GetModulePath(chrome::kBrowserResourcesDll),
   };
-#endif
 #endif  // defined(COMPONENT_BUILD) || defined(ADDRESS_SANITIZER)
 }
 
@@ -7583,6 +7637,8 @@ bool ChromeContentBrowserClient::HandleExternalProtocol(
     mojo::PendingRemote<network::mojom::URLLoaderFactory>* out_factory) {
   CHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
 
+  // Direct launch schemes (google-chrome:, chromium:) are not supported on
+  // Android.
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \
     BUILDFLAG(IS_WIN)
   // Handle the google-chrome:// scheme (and chromium://).
@@ -7624,7 +7680,17 @@ bool ChromeContentBrowserClient::HandleExternalProtocol(
         // launches) to prevent it from being treated as a privileged
         // browser-initiated navigation.
         params.initiator_origin = initiating_origin.value_or(url::Origin());
-        web_contents->OpenURL(params, /*navigation_handle_callback=*/{});
+        // This is called synchronously from within the NavigationURLLoader of
+        // the navigation to the direct launch URL. OpenURL may synchronously
+        // start a new navigation in the same frame (e.g. if the disposition is
+        // rewritten to kCurrentTab), which would destroy the NavigationRequest
+        // and its NavigationURLLoader while they are still on the stack.
+        // Defer the navigation to avoid this. See https://crbug.com/589323185
+        // and https://crbug.com/361600654.
+        content::GetUIThreadTaskRunner({})->PostTask(
+            FROM_HERE,
+            base::BindOnce(&OpenDirectLaunchUrl, web_contents->GetWeakPtr(),
+                           std::move(params)));
         return true;
       }
     }
@@ -8701,9 +8767,7 @@ bool ChromeContentBrowserClient::AreV8OptimizationsEnabledForSite(
 
 bool ChromeContentBrowserClient::DisallowV8FeatureFlagOverridesForSite(
     const GURL& site_url) {
-  // Disable V8 feature flag overrides specifically for top-chrome WebUI URLs.
-  return base::FeatureList::IsEnabled(features::kWebUIBundledCodeCache) &&
-         ::IsTopChromeWebUIURL(site_url);
+  return IsWebUIBundledCodeCacheEnabledForSite(site_url);
 }
 
 ukm::UkmService* ChromeContentBrowserClient::GetUkmService() {
@@ -9211,11 +9275,13 @@ base::FilePath ChromeContentBrowserClient::GetChildProcessPath(
       }
     }
 #if BUILDFLAG(ENABLE_SEPARATE_RENDERER_BINARY)
-    CHECK(no_zygote)
-        << "--no-zygote is required when running separate renderer binary";
-    base::FilePath child_path;
-    if (base::PathService::Get(base::DIR_EXE, &child_path)) {
-      return child_path.Append(chrome::kRendererProcessExecutableName);
+    if (base::FeatureList::IsEnabled(features::kSeparateRendererBinary)) {
+      CHECK(no_zygote)
+          << "--no-zygote is required when running separate renderer binary";
+      base::FilePath child_path;
+      if (base::PathService::Get(base::DIR_EXE, &child_path)) {
+        return child_path.Append(chrome::kRendererProcessExecutableName);
+      }
     }
 #endif  // BUILDFLAG(ENABLE_SEPARATE_RENDERER_BINARY)
   }

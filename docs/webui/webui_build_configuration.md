@@ -275,9 +275,9 @@ ts_deps: List of ts_library() dependencies to generate path mappings for.
 manifest_files: Optional parameter. List of manifest files (e.g. from
                 generate_mojo_manifest() or ts_library() targets) whose listed
                 .js files should be mapped to their corresponding .d.ts files
-                using the `dts_dir` (or `base_dir`) and optional `url_prefix`
-                recorded in each manifest. Must be specified together with
-                `manifest_deps`.
+                using the `dts_dir` (or `base_dir`) and optional
+                `import_path_prefix` recorded in each manifest. Must be
+                specified together with `manifest_deps`.
 manifest_deps: Optional parameter. Targets generating |manifest_files|. Must be
                specified together with `manifest_files`.
 webui_context_type: What import scheme(s) should be mapped for the UI. Options:
@@ -676,9 +676,9 @@ webui_mojo_library("mojo_bindings_webui") {
 ### **generate_mojo_manifest**
 
 This rule writes a JSON manifest file (`entries` containing `base_dir`,
-`dts_dir`, optional `url_prefix`, and `files`) combining a target's own Mojo JS
-files with the entries from any dependent Mojo manifests (`dep_manifests`).
-Used internally by `webui_mojo_library()` and
+`dts_dir`, optional `import_path_prefix` and `serve_path_prefix`, and `files`)
+combining a target's own Mojo JS files with the entries from any dependent Mojo
+manifests (`dep_manifests`). Used internally by `webui_mojo_library()` and
 `//ui/webui/resources/mojo:mojo_manifest`.
 
 #### **Arguments**
@@ -688,9 +688,18 @@ base_dir: Optional parameter (required when `in_files` is specified). Base
           directory containing files listed in `in_files`.
 dts_dir: Optional parameter. Directory containing the `.d.ts` files emitted by
          `ts_library()` for `in_files`. Defaults to `base_dir`.
-url_prefix: Optional parameter. Import/resource URL prefix prepended to each
-            entry in `in_files` (e.g. the target's repository-relative
-            directory).
+import_path_prefix: Optional parameter. Prefix prepended to each entry in
+                    `in_files` to form the module specifier used in `import`
+                    statements (e.g. the target's repository-relative
+                    directory), as well as the default GRD/served path when
+                    packaged into a WebUI's own GRD.
+serve_path_prefix: Optional parameter. Served URL/path prefix override. Should
+                   only be set when files in `in_files` are served from a
+                   different runtime location than
+                   `/<import_path_prefix>/<file>` (or `/<file>` when
+                   `import_path_prefix` is unset), e.g. `"//resources/mojo"`
+                   for shared Mojo bindings served from
+                   `chrome://resources/mojo/`.
 in_files: Optional parameter. List of `.js` file paths relative to `base_dir`
           and `dts_dir` produced by the current target.
 dep_manifests: Optional parameter. List of manifest files from dependent
@@ -709,9 +718,47 @@ import("//ui/webui/resources/tools/generate_mojo_manifest.gni")
 generate_mojo_manifest("my_mojo_manifest") {
   out_manifest = "$target_gen_dir/my_mojo_manifest.json"
   base_dir = "$target_gen_dir/tsc"
-  url_prefix = rebase_path(target_gen_dir, root_gen_dir)
+  import_path_prefix = rebase_path(target_gen_dir, root_gen_dir)
   in_files = [ "my_webui.mojom-webui.js" ]
   public_deps = [ ":build_ts" ]
+}
+```
+
+### **generate_import_map**
+
+This rule injects a `<script type="importmap">` tag into a WebUI's entrypoint
+HTML file(s) and generates a matching `test_loader.html` in `out_folder`.
+
+#### **Arguments**
+```
+in_files: Required parameter. List of entrypoint `.html` files to inject the
+          import map into.
+in_folder: Optional parameter. Directory containing `in_files`. Defaults to `.`.
+out_folder: Optional parameter. Directory where the modified `in_files` and
+            `test_loader.html` will be written. Defaults to `target_gen_dir`.
+out_manifest: Optional parameter. Output path for a JSON manifest listing
+              `out_folder` as `base_dir` and the generated HTML files (including
+              `test_loader.html`) as `files`, suitable for passing to
+              `generate_grd()`'s `manifest_files`.
+manifest_files: Optional parameter. List of manifest files whose entries should
+                be added to the import map. Each `<import_path_prefix>/<file>`
+                (or `<file>`) entry is mapped to `<serve_path_prefix>/<file>`
+                when `serve_path_prefix` is set on the manifest entry, or to
+                `/<import_path_prefix>/<file>` (or `/<file>`) otherwise.
+```
+
+#### **Example**
+```python
+import("//ui/webui/resources/tools/generate_import_map.gni")
+
+generate_import_map("generate_import_map") {
+  in_files = [ "my_webui.html" ]
+  out_folder = "$target_gen_dir/html_with_importmap"
+  out_manifest = "$target_gen_dir/generate_import_map_manifest.json"
+  deps = [ "//chrome/browser/ui/webui/my_webui:mojo_bindings_webui" ]
+  manifest_files = [
+    "$root_gen_dir/chrome/browser/ui/webui/my_webui/mojo_bindings_webui_manifest.json",
+  ]
 }
 ```
 

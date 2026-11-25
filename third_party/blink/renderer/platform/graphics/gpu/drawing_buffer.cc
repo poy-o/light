@@ -70,7 +70,6 @@
 #include "third_party/blink/public/platform/web_graphics_shared_image_interface_provider.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
-#include "third_party/blink/renderer/platform/graphics/canvas_resource.h"
 #include "third_party/blink/renderer/platform/graphics/exported_canvas_resource.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/canvas_utils.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/extensions_3d_util.h"
@@ -692,7 +691,12 @@ void DrawingBuffer::MailboxReleasedSoftware(
     scoped_refptr<gpu::ClientImage> resource,
     const gpu::SyncToken& sync_token,
     bool lost_resource) {
-  resource->SetReleaseSyncToken(sync_token);
+  // Ignore an empty SyncToken so we do not clobber `creation_sync_token` (or a
+  // prior verified SyncToken), e.g., when an ExportedCanvasResource is dropped
+  // before reaching Viz.
+  if (sync_token.HasData()) {
+    resource->SetReleaseSyncToken(sync_token);
+  }
   if (destruction_in_progress_ || lost_resource || is_hidden_ || !pool) {
     return;
   }

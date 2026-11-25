@@ -42,6 +42,7 @@ suite('OrganizerPanelAppTest', () => {
       collapse: 'Collapse',
       createTabGroup: 'Create tab group',
       currentlyPlaying: 'Currently playing',
+      escHint: 'Press Escape to close',
       expand: 'Expand',
       foreignTabsEnabled: false,
       isIncognitoMode: false,
@@ -62,7 +63,7 @@ suite('OrganizerPanelAppTest', () => {
       tabGroupMoreOptions: 'More options',
       tabGroupMoreOptionsWithTitle: 'More options for $1',
       tabGroups: 'Tab groups',
-      tabsOnOtherDevices: 'Tabs on other devices',
+      tabsOnOtherDevices: 'Tabs by device',
     });
     mockOrganizerPanelHandler =
         TestMock.fromClass(OrganizerPanelPageHandlerRemote);
@@ -129,6 +130,42 @@ suite('OrganizerPanelAppTest', () => {
       }
     }
   }
+
+  test('sets Escape hint on search input until first blur', async () => {
+    const searchField = app.$.searchField;
+    const searchInput = searchField.getSearchInput();
+    assertEquals(
+        'Press Escape to close',
+        searchField.getAttribute('input-aria-description'));
+    assertEquals(
+        'Press Escape to close', searchInput.getAttribute('aria-description'));
+
+    searchInput.focus();
+    searchInput.blur();
+    await microtasksFinished();
+    assertFalse(searchField.hasAttribute('input-aria-description'));
+    assertEquals('', searchInput.getAttribute('aria-description'));
+
+    searchInput.focus();
+    await microtasksFinished();
+    assertFalse(searchField.hasAttribute('input-aria-description'));
+    assertEquals('', searchInput.getAttribute('aria-description'));
+
+    await withVisibilityState(async setVisibility => {
+      setVisibility('hidden');
+      searchInput.dispatchEvent(
+          new FocusEvent('focusout', {bubbles: true, composed: true}));
+      await microtasksFinished();
+      setVisibility('visible');
+      await microtasksFinished();
+      assertEquals(
+          'Press Escape to close',
+          searchField.getAttribute('input-aria-description'));
+      assertEquals(
+          'Press Escape to close',
+          searchInput.getAttribute('aria-description'));
+    });
+  });
 
   test('renders search field with correct label and shortcut', () => {
     const searchField = app.$.searchField;
@@ -206,8 +243,7 @@ suite('OrganizerPanelAppTest', () => {
 
     assertEquals(4, testApp.$.list.sectionDelegates.length);
     assertEquals(
-        'Tabs on other devices',
-        testApp.$.list.sectionDelegates[3]!.getHeader());
+        'Tabs by device', testApp.$.list.sectionDelegates[3]!.getHeader());
     const sections =
         testApp.$.list.shadowRoot.querySelectorAll('organizer-list-section');
     assertEquals(4, sections.length);
@@ -798,4 +834,22 @@ suite('OrganizerPanelAppTest', () => {
           assertEquals(0, mockOrganizerPanelHandler.getCallCount('showUI'));
         });
       });
+
+  test('window focus preserves existing focus on list control', async () => {
+    const sections = app.$.list.getVisibleSections();
+    const lastSection = sections[sections.length - 1]!;
+    lastSection.expanded = true;
+    await microtasksFinished();
+
+    lastSection.$.header.focusMenuButton();
+    await microtasksFinished();
+    assertEquals(lastSection.$.header.$.menuButton, getDeepActiveElement());
+    assertEquals(app.$.list, app.shadowRoot.activeElement);
+
+    window.dispatchEvent(new Event('focus'));
+    await microtasksFinished();
+
+    assertEquals(lastSection.$.header.$.menuButton, getDeepActiveElement());
+    assertEquals(app.$.list, app.shadowRoot.activeElement);
+  });
 });

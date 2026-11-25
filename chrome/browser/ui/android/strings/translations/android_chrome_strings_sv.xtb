@@ -150,7 +150,6 @@ Du hittar fler inställningar som använder data för att förbättra Chrome-upp
 <translation id="1543035591122163372">Logga in om du vill få dina lösenord med mera från <ph name="DEVICE_TYPE" /></translation>
 <translation id="1544084554881119930">Betalningsmetoder och adresser krypteras inte. Webbhistorik från Chrome synkroniseras inte.
 Din krypterade data kan endast läsas av en person som har din lösenfras. Lösenfrasen varken skickas till eller lagras av Google. Om du glömmer lösenfrasen eller vill ändra den här inställningen <ph name="BEGIN_LINK" />rensar du kontots Chrome-data<ph name="END_LINK" />.</translation>
-<translation id="1544826120773021464">Tryck på knappen Hantera kontot om du vill hantera ditt Google-konto</translation>
 <translation id="1549000191223877751">Flytta till annat fönster</translation>
 <translation id="1553358976309200471">Uppdatera Chrome</translation>
 <translation id="1554352084785952638"><ph name="SEARCH_ENGINE" /> för <ph name="SEARCH_TERMS" /></translation>
@@ -167,7 +166,6 @@ Din krypterade data kan endast läsas av en person som har din lösenfras. Löse
 <translation id="1600756129506222718"><ph name="TAB_TITLE" />, flik som delas</translation>
 <translation id="1601378265092360672">Webbinformation omfattar webbhistorik, cookies och annan webbplatsdata, cachelagrade bilder och filer samt öppna flikar</translation>
 <translation id="160275202205869636">Använd och spara data i Google-kontot när inställningen är aktiverad. När inställningen är inaktiverad sparas data endast på den här enheten.</translation>
-<translation id="160403827062749147">Välkommen till Google Chrome, världens säkraste webbläsare</translation>
 <translation id="1628019612362412531">{NUM_SELECTED,plural, =1{Ta bort 1 markerat objekt}other{Ta bort # markerade objekt}}</translation>
 <translation id="1639239467298939599">Profilen läses in</translation>
 <translation id="1641113438599504367">Säker webbsökning</translation>
@@ -283,6 +281,7 @@ Din krypterade data kan endast läsas av en person som har din lösenfras. Löse
 <translation id="2122601567107267586">Det gick inte att öppna appen</translation>
 <translation id="2128579426409352593"><ph name="TAB_TITLE" />, fäst delningsflik som har valts tillsammans med andra</translation>
 <translation id="213279576345780926"><ph name="TAB_TITLE" /> har stängts</translation>
+<translation id="2133857665503360653">Försök åtgärden igen med <ph name="FILE_NAME" /></translation>
 <translation id="2138283760993967204">Ikonen Hantera</translation>
 <translation id="2138632817776076519"><ph name="TAB_TITLE" />, vald flik som spelas in</translation>
 <translation id="2141396931810938595">Utifrån din användning</translation>
@@ -386,6 +385,7 @@ Din krypterade data kan endast läsas av en person som har din lösenfras. Löse
 <translation id="2496180316473517155">Webbhistorik</translation>
 <translation id="250020030759455918">Din inloggningsstatus, webbdata och webbplatsdata för <ph name="SITE_NAME" /> visas i Chrome</translation>
 <translation id="2501278716633472235">Föregående</translation>
+<translation id="2505742559092758182">{COUNT,plural, =1{# nedladdning pågår}other{# nedladdningar pågår}}</translation>
 <translation id="2510106555128151389"><ph name="WEBAPK_NAME" /> installeras …</translation>
 <translation id="2512234228327349533">Sök efter köpalternativ</translation>
 <translation id="2513403576141822879">Fler inställningar som rör integritet, säkerhet och datainsamling finns under <ph name="BEGIN_LINK" />Synkronisering och Googles tjänster<ph name="END_LINK" /></translation>
@@ -449,6 +449,7 @@ Din krypterade data kan endast läsas av en person som har din lösenfras. Löse
 <translation id="2762000892062317888">nyss</translation>
 <translation id="276378135349383280">Visa Gemini i verktygsfältet</translation>
 <translation id="276969039800130567">Inloggad som <ph name="USER_EMAIL_ADDRESS" />.</translation>
+<translation id="2770082596325051055">Pausa <ph name="FILE_NAME" /></translation>
 <translation id="2777555524387840389"><ph name="SECONDS" /> sekunder kvar</translation>
 <translation id="2779651927720337254">misslyckades</translation>
 <translation id="2781151931089541271">1 sekund kvar</translation>
@@ -697,6 +698,7 @@ Din krypterade data kan endast läsas av en person som har din lösenfras. Löse
 <translation id="3740290940447881599">Se till att du litar på den här webbplatsen</translation>
 <translation id="3740525748616366977">Röstsökning är inte tillgängligt på enheten</translation>
 <translation id="3749289110408117711">Filnamn</translation>
+<translation id="3751708358601675711">Redigera prisbevakning</translation>
 <translation id="3756823472711156529">Återställ grupp</translation>
 <translation id="3759306015475526475">Hantera inställningar för användnings- och kraschdata</translation>
 <translation id="3763110477555836428">Ett virtuellt kortnummer fylls i när du betalar med det här kortet för att skydda dina faktiska uppgifter. Hantera detta i Google Wallet. <ph name="BEGIN_LINK1" />Läs mer om virtuella kort<ph name="END_LINK1" />.</translation>
@@ -790,6 +792,7 @@ Din krypterade data kan endast läsas av en person som har din lösenfras. Löse
 <translation id="4121654769234887259">Du behöver inte komma ihåg det här lösenordet. Det sparas med Google Lösenordshantering för <ph name="USERNAME" />.</translation>
 <translation id="4128312955780560730">Lås dina inkognitoflikar</translation>
 <translation id="4132137475637520539">Låt alla med länken gå med</translation>
+<translation id="4132969033912447558">Återuppta <ph name="FILE_NAME" /></translation>
 <translation id="4136632885151622181"><ph name="TAB_TITLE" />, fäst flik som spelas in och som har valts tillsammans med andra</translation>
 <translation id="4137746084635924146">Aktuellt enhetsspråk</translation>
 <translation id="414128724510021958">Webbplatser för dator begärs som standard</translation>
@@ -865,7 +868,6 @@ Din krypterade data kan endast läsas av en person som har din lösenfras. Löse
 <translation id="4374192654218566997">\n\nDu kan även ta bort denna data från den här enheten:</translation>
 <translation id="4378154925671717803">Mobil</translation>
 <translation id="4380055775103003110">Om problemet kvarstår kan du testa andra sätt att fortsätta på <ph name="SITE_ETLD_PLUS_ONE" />.</translation>
-<translation id="4381351546374507910">Logga in om du vill ha dina bokmärken, lösenord och uppgifter från Autofyll på alla dina enheter.</translation>
 <translation id="4384468725000734951">Du söker med Sogou</translation>
 <translation id="4387647248986092471">Skapa ett profillås för bilen</translation>
 <translation id="4387817230000841154">Öppna Nedladdningar</translation>
@@ -1892,6 +1894,7 @@ Om du vill ändra den här inställningen <ph name="BEGIN_LINK" />raderar du Chr
 <translation id="8152331954420209374">Öppna Lens</translation>
 <translation id="8153206878708357851">Aktivera/inaktivera textmarkörläget</translation>
 <translation id="8154784523622173959">Anpassa bakgrunden på den här sidan</translation>
+<translation id="8161480780962562636">Se till att dina lösenord är säkra, ta reda på om de har utsatts för intrång och få råd om hur du skyddar dig online</translation>
 <translation id="8163820386638255770">Verifiera din identitet om du vill använda och spara lösenord i Google-kontot</translation>
 <translation id="8174047975335711832">Enhetsinformation</translation>
 <translation id="8175940240143658258">{ARCHIVED_TAB_COUNT,plural, =1{(1) inaktivt objekt}other{(#) inaktiva objekt}}</translation>
@@ -1906,7 +1909,6 @@ Om du vill ändra den här inställningen <ph name="BEGIN_LINK" />raderar du Chr
 <translation id="8210770465353466621">Du hittar dina flikar här</translation>
 <translation id="8212799748012101103">Öppna fliksökning</translation>
 <translation id="8215740705341534369">Ark på sidan av skärmen</translation>
-<translation id="8218622182176210845">Hantera kontot</translation>
 <translation id="8221985041778490865">Radera webbinformation</translation>
 <translation id="8223642481677794647">Menyn med flödeskort</translation>
 <translation id="82296173028782770">Redigera sökfråga: <ph name="SEARCH_QUERY" /></translation>
@@ -2037,6 +2039,7 @@ Om du vill ändra den här inställningen <ph name="BEGIN_LINK" />raderar du Chr
 <translation id="8676789164135894283">Verifieringar för inloggning</translation>
 <translation id="867914734596684889">Visa eller dölj bokmärkesfältet</translation>
 <translation id="8683039184091909753">bild</translation>
+<translation id="8687103160920393343">Avbryt <ph name="FILE_NAME" /></translation>
 <translation id="8688183792442786085"><ph name="TAB_TITLE" />, vald flik</translation>
 <translation id="8694622119922491927"><ph name="APP_NAME" /> behöver behörighet att komma åt styrdon för den här webbplatsen. Du kan ändra inställningen senare i Inställningar &gt; Appar &gt; Särskild appåtkomst.</translation>
 <translation id="8696297579102085705">Skicka till din enhet</translation>

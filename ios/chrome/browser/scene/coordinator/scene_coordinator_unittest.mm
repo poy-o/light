@@ -4,9 +4,15 @@
 
 #import "ios/chrome/browser/scene/coordinator/scene_coordinator.h"
 
+#import <memory>
+#import <optional>
+#import <string>
+#import <utility>
+
 #import "base/functional/callback.h"
 #import "base/memory/raw_ptr.h"
 #import "base/run_loop.h"
+#import "base/test/scoped_feature_list.h"
 #import "base/test/task_environment.h"
 #import "base/time/time.h"
 #import "components/password_manager/core/browser/remote_actor/remote_actor_credential_sharing_result.h"
@@ -18,6 +24,7 @@
 #import "ios/chrome/app/profile/profile_state.h"
 #import "ios/chrome/app/profile/profile_state_test_utils.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signout_action_sheet/undo_signout/coordinator/undo_signout_coordinator.h"
+#import "ios/chrome/browser/intelligence/features/features.h"
 #import "ios/chrome/browser/passwords/bottom_sheet/coordinator/remote_actor_credential_bottom_sheet_coordinator.h"
 #import "ios/chrome/browser/passwords/model/remote_actor/proto/remote_actor_password_upload_request.pb.h"
 #import "ios/chrome/browser/passwords/model/remote_actor/remote_actor_constants.h"
@@ -39,6 +46,7 @@
 #import "ios/chrome/browser/shared/public/commands/scene_sign_in_commands.h"
 #import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity.h"
@@ -102,6 +110,53 @@ bool SigninModalHostHandlesSceneSignInCommands(SceneCoordinator* coordinator,
   return [target isKindOfClass:[SigninModalHost class]];
 }
 
+// Holds strong references to mock command handlers registered on the
+// `CommandDispatcher` (which only holds weak references to targets).
+struct ModalDismissalMocks {
+  id snackbar_handler;
+  id bookmarks_handler;
+  id browser_coordinator_handler;
+  id gemini_handler;
+};
+
+// Registers mock handlers needed by `dismissModalDialogsWithCompletion:` on
+// `coordinator`'s command dispatcher and returns them.
+ModalDismissalMocks SetUpModalDismissalMocks(SceneCoordinator* coordinator) {
+  CommandDispatcher* dispatcher =
+      coordinator.currentBrowser->GetCommandDispatcher();
+
+  ModalDismissalMocks mocks;
+  mocks.snackbar_handler = OCMProtocolMock(@protocol(SnackbarCommands));
+  [dispatcher startDispatchingToTarget:mocks.snackbar_handler
+                           forProtocol:@protocol(SnackbarCommands)];
+
+  mocks.bookmarks_handler = OCMProtocolMock(@protocol(BookmarksCommands));
+  [dispatcher startDispatchingToTarget:mocks.bookmarks_handler
+                           forProtocol:@protocol(BookmarksCommands)];
+
+  mocks.browser_coordinator_handler =
+      OCMProtocolMock(@protocol(BrowserCoordinatorCommands));
+  OCMStub([mocks.browser_coordinator_handler
+              clearPresentedStateWithCompletion:[OCMArg any]
+                                 dismissOmnibox:YES])
+      .andDo(^(NSInvocation* invocation) {
+        void* ptr = nullptr;
+        [invocation getArgument:&ptr atIndex:2];
+        ProceduralBlock completionBlock = (__bridge ProceduralBlock)ptr;
+        ASSERT_TRUE(completionBlock);
+        completionBlock();
+      });
+  [dispatcher startDispatchingToTarget:mocks.browser_coordinator_handler
+                           forProtocol:@protocol(BrowserCoordinatorCommands)];
+
+  mocks.gemini_handler = OCMProtocolMock(@protocol(GeminiCommands));
+  // Replace the scene coordinator, which handles `GeminiCommands`, by the mock.
+  [dispatcher stopDispatchingForProtocol:@protocol(GeminiCommands)];
+  [dispatcher startDispatchingToTarget:mocks.gemini_handler
+                           forProtocol:@protocol(GeminiCommands)];
+  return mocks;
+}
+
 class SceneCoordinatorTest : public PlatformTest {
  protected:
   SceneCoordinatorTest() {
@@ -135,8 +190,18 @@ class SceneCoordinatorTest : public PlatformTest {
 
   void TearDown() override {
     @autoreleasepool {
+      [partial_scene_coordinator_ stopMocking];
+      partial_scene_coordinator_ = nil;
+      [mock_application_ stopMocking];
+      mock_application_ = nil;
+      remote_actor_start_swizzler_.reset();
+      started_remote_actor_coordinator_ = nil;
+      scoped_key_window_.reset();
       [coordinator_ stop];
       [scene_state_ shutdown];
+      mock_browser_coordinator_handler_ = nil;
+      mock_bookmarks_handler_ = nil;
+      mock_snackbar_handler_ = nil;
       coordinator_ = nil;
       scene_state_ = nil;
       profile_state_ = nil;
@@ -155,6 +220,114 @@ class SceneCoordinatorTest : public PlatformTest {
         IdentityManagerFactory::GetForProfile(profile_.get()), grant);
   }
 
+  // Registers mock `SnackbarCommands`, `BookmarksCommands`, and
+  // `BrowserCoordinatorCommands` handlers required by
+  // `dismissModalDialogsWithCompletion:`.
+  void RegisterDismissModalDialogsHandlers() {
+    CommandDispatcher* dispatcher =
+        coordinator_.currentBrowser->GetCommandDispatcher();
+    mock_snackbar_handler_ = OCMProtocolMock(@protocol(SnackbarCommands));
+    [dispatcher startDispatchingToTarget:mock_snackbar_handler_
+                             forProtocol:@protocol(SnackbarCommands)];
+    mock_bookmarks_handler_ = OCMProtocolMock(@protocol(BookmarksCommands));
+    [dispatcher startDispatchingToTarget:mock_bookmarks_handler_
+                             forProtocol:@protocol(BookmarksCommands)];
+    mock_browser_coordinator_handler_ =
+        OCMProtocolMock(@protocol(BrowserCoordinatorCommands));
+    [dispatcher startDispatchingToTarget:mock_browser_coordinator_handler_
+                             forProtocol:@protocol(BrowserCoordinatorCommands)];
+  }
+
+  // Registers mock command handlers for `dismissModalDialogsWithCompletion:`
+  // and stubs `clearPresentedStateWithCompletion:dismissOmnibox:` to invoke its
+  // completion block synchronously.
+  void SetUpDismissModalDialogsHandlers() {
+    RegisterDismissModalDialogsHandlers();
+    OCMStub([mock_browser_coordinator_handler_
+        clearPresentedStateWithCompletion:[OCMArg invokeBlock]
+                           dismissOmnibox:YES]);
+  }
+
+  // Sets up the shared foreground key-window, `UIApplication` mock,
+  // `activeViewController` partial mock,
+  // `RemoteActorCredentialBottomSheetCoordinator` start swizzler, and
+  // modal-dismissal command handlers used by deferred Remote Actor presentation
+  // tests.
+  void SetUpRemoteActorModalDismissalHarness() {
+    scene_state_.activationLevel = SceneActivationLevelForegroundActive;
+    scoped_key_window_.emplace();
+    scoped_key_window_->Get().rootViewController = base_view_controller_;
+    ASSERT_NE(base_view_controller_.view.window, nil);
+
+    RegisterDismissModalDialogsHandlers();
+
+    mock_application_ = OCMClassMock([UIApplication class]);
+    OCMStub([mock_application_ sharedApplication]).andReturn(mock_application_);
+
+    partial_scene_coordinator_ = OCMPartialMock(coordinator_);
+    OCMStub([partial_scene_coordinator_ activeViewController])
+        .andReturn(base_view_controller_);
+
+    RemoteActorCredentialBottomSheetCoordinator* __strong* started_slot =
+        &started_remote_actor_coordinator_;
+    remote_actor_start_swizzler_.emplace(
+        [RemoteActorCredentialBottomSheetCoordinator class], @selector(start),
+        ^(RemoteActorCredentialBottomSheetCoordinator* self_coordinator) {
+          *started_slot = self_coordinator;
+        });
+  }
+
+  // Dispatches a Remote Actor bottom sheet request and returns the captured
+  // deferred modal-dismissal completion block.
+  ProceduralBlock TriggerDeferredRemoteActorRequest() {
+    EXPECT_NE(mock_browser_coordinator_handler_, nil);
+    __block ProceduralBlock completion = nil;
+    OCMExpect([mock_browser_coordinator_handler_
+        clearPresentedStateWithCompletion:[OCMArg checkWithBlock:^BOOL(
+                                                      ProceduralBlock block) {
+          completion = [block copy];
+          return YES;
+        }]
+                           dismissOmnibox:YES]);
+    [coordinator_ showRemoteActorCredentialBottomSheetWithRequest:
+                      MakeRemoteActorRequest()];
+    EXPECT_OCMOCK_VERIFY(mock_browser_coordinator_handler_);
+    return completion;
+  }
+
+  // Expects `mock_application_` to open the Gemini FAILED / UPLOAD_FAILED
+  // callback URL for the default task ID.
+  void ExpectGeminiFailureCallback() {
+    NSURL* expected_url = [NSURL
+        URLWithString:[NSString
+                          stringWithFormat:@"%s?%s=task-123&%s=FAILED&%s="
+                                           @"UPLOAD_FAILED",
+                                           kRemoteActorGeminiCallbackBaseURL,
+                                           kRemoteActorTaskIdQueryParam,
+                                           kRemoteActorStatusQueryParam,
+                                           kRemoteActorReasonQueryParam]];
+    OCMExpect([mock_application_ openURL:expected_url
+                                 options:@{}
+                       completionHandler:[OCMArg any]]);
+  }
+
+  // Rejects any `openURL:` call on `mock_application_`.
+  void RejectGeminiCallback() {
+    OCMReject([mock_application_ openURL:[OCMArg any]
+                                 options:[OCMArg any]
+                       completionHandler:[OCMArg any]]);
+  }
+
+  // Builds a sample `RemoteActorPasswordUploadRequest` for `task_id`.
+  remote_actor::proto::RemoteActorPasswordUploadRequest MakeRemoteActorRequest(
+      std::string task_id = "task-123") {
+    remote_actor::proto::RemoteActorPasswordUploadRequest request;
+    request.set_task_id(std::move(task_id));
+    request.set_gaia_id("gaia-id");
+    request.set_domain("https://example.com");
+    return request;
+  }
+
   web::WebTaskEnvironment task_environment_{
       web::WebTaskEnvironment::MainThreadType::UI,
       web::WebTaskEnvironment::IOThreadType::REAL_THREAD,
@@ -166,6 +339,15 @@ class SceneCoordinatorTest : public PlatformTest {
   FakeSceneState* scene_state_;
   ProfileState* profile_state_;
   SceneCoordinator* coordinator_;
+  std::optional<ScopedKeyWindow> scoped_key_window_;
+  id mock_snackbar_handler_ = nil;
+  id mock_bookmarks_handler_ = nil;
+  id mock_browser_coordinator_handler_ = nil;
+  id mock_application_ = nil;
+  id partial_scene_coordinator_ = nil;
+  RemoteActorCredentialBottomSheetCoordinator*
+      started_remote_actor_coordinator_ = nil;
+  std::optional<ScopedBlockSwizzler> remote_actor_start_swizzler_;
 };
 
 // Tests that "Report an issue" populates user feedback data with available
@@ -327,90 +509,31 @@ TEST_F(SceneCoordinatorTest, PresentViewControllerHidesGeminiFloaty) {
   EXPECT_OCMOCK_VERIFY(mock_delegate);
 }
 
-// Tests that dismissModalDialogsWithCompletion completes without crashing.
+// Tests that dismissModalDialogsWithCompletion: completes without crashing and
+// dismisses Gemini when bottom-sheet migration is disabled.
 TEST_F(SceneCoordinatorTest, TestDismissModalDialogsWithCompletion) {
-  CommandDispatcher* dispatcher =
-      coordinator_.currentBrowser->GetCommandDispatcher();
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(kIOSGeminiBottomSheetMigration);
 
-  id mockSnackbarHandler = OCMProtocolMock(@protocol(SnackbarCommands));
-  [dispatcher startDispatchingToTarget:mockSnackbarHandler
-                           forProtocol:@protocol(SnackbarCommands)];
-
-  id mockBookmarksHandler = OCMProtocolMock(@protocol(BookmarksCommands));
-  [dispatcher startDispatchingToTarget:mockBookmarksHandler
-                           forProtocol:@protocol(BookmarksCommands)];
-
-  id mockBrowserCoordinatorHandler =
-      OCMProtocolMock(@protocol(BrowserCoordinatorCommands));
-  OCMStub([mockBrowserCoordinatorHandler
-              clearPresentedStateWithCompletion:[OCMArg any]
-                                 dismissOmnibox:YES])
-      .andDo(^(NSInvocation* invocation) {
-        void* ptr = nullptr;
-        [invocation getArgument:&ptr atIndex:2];
-        ProceduralBlock completionBlock = (__bridge ProceduralBlock)ptr;
-        if (completionBlock) {
-          completionBlock();
-        }
-      });
-  [dispatcher startDispatchingToTarget:mockBrowserCoordinatorHandler
-                           forProtocol:@protocol(BrowserCoordinatorCommands)];
-
-  id mockGeminiHandler = OCMProtocolMock(@protocol(GeminiCommands));
-  OCMExpect([mockGeminiHandler dismissGeminiFlowWithCompletion:nil]);
-  // Replace the scene coordinator, which handles `GeminiCommands`, by the mock.
-  [dispatcher stopDispatchingForProtocol:@protocol(GeminiCommands)];
-  [dispatcher startDispatchingToTarget:mockGeminiHandler
-                           forProtocol:@protocol(GeminiCommands)];
+  ModalDismissalMocks mocks = SetUpModalDismissalMocks(coordinator_);
+  OCMExpect([mocks.gemini_handler dismissGeminiFlowWithCompletion:nil]);
+  [[mocks.gemini_handler reject] minimizeGeminiIfInvoked];
 
   __block bool completed = false;
-  [coordinator_
-      dismissModalDialogsWithCompletion:^{
-        completed = true;
-      }
-                         dismissOmnibox:YES
-                       dismissSnackbars:YES];
+  [coordinator_ dismissModalDialogsWithCompletion:^{
+    completed = true;
+  }];
   EXPECT_TRUE(completed);
-  EXPECT_OCMOCK_VERIFY(mockGeminiHandler);
+  EXPECT_OCMOCK_VERIFY(mocks.gemini_handler);
 }
 
-// Tests that dismissModalDialogsWithCompletion does not dismiss Gemini when
-// dismissGemini is NO.
+// Tests that `dismissModalDialogsWithCompletion:` does not dismiss or minimize
+// Gemini when `GeminiDismissalBehavior::kNone` is specified.
 TEST_F(SceneCoordinatorTest,
        TestDismissModalDialogsWithCompletionDoesNotDismissGemini) {
-  CommandDispatcher* dispatcher =
-      coordinator_.currentBrowser->GetCommandDispatcher();
-
-  id mockSnackbarHandler = OCMProtocolMock(@protocol(SnackbarCommands));
-  [dispatcher startDispatchingToTarget:mockSnackbarHandler
-                           forProtocol:@protocol(SnackbarCommands)];
-
-  id mockBookmarksHandler = OCMProtocolMock(@protocol(BookmarksCommands));
-  [dispatcher startDispatchingToTarget:mockBookmarksHandler
-                           forProtocol:@protocol(BookmarksCommands)];
-
-  id mockBrowserCoordinatorHandler =
-      OCMProtocolMock(@protocol(BrowserCoordinatorCommands));
-  OCMStub([mockBrowserCoordinatorHandler
-              clearPresentedStateWithCompletion:[OCMArg any]
-                                 dismissOmnibox:YES])
-      .andDo(^(NSInvocation* invocation) {
-        void* ptr = nullptr;
-        [invocation getArgument:&ptr atIndex:2];
-        ProceduralBlock completionBlock = (__bridge ProceduralBlock)ptr;
-        if (completionBlock) {
-          completionBlock();
-        }
-      });
-  [dispatcher startDispatchingToTarget:mockBrowserCoordinatorHandler
-                           forProtocol:@protocol(BrowserCoordinatorCommands)];
-
-  id mockGeminiHandler = OCMProtocolMock(@protocol(GeminiCommands));
-  [[mockGeminiHandler reject] dismissGeminiFlowWithCompletion:[OCMArg any]];
-  // Replace the scene coordinator, which handles `GeminiCommands`, by the mock.
-  [dispatcher stopDispatchingForProtocol:@protocol(GeminiCommands)];
-  [dispatcher startDispatchingToTarget:mockGeminiHandler
-                           forProtocol:@protocol(GeminiCommands)];
+  ModalDismissalMocks mocks = SetUpModalDismissalMocks(coordinator_);
+  [[mocks.gemini_handler reject] dismissGeminiFlowWithCompletion:[OCMArg any]];
+  [[mocks.gemini_handler reject] minimizeGeminiIfInvoked];
 
   __block bool completed = false;
   [coordinator_
@@ -419,9 +542,9 @@ TEST_F(SceneCoordinatorTest,
       }
                          dismissOmnibox:YES
                        dismissSnackbars:YES
-                          dismissGemini:NO];
+                geminiDismissalBehavior:GeminiDismissalBehavior::kNone];
   EXPECT_TRUE(completed);
-  EXPECT_OCMOCK_VERIFY(mockGeminiHandler);
+  EXPECT_OCMOCK_VERIFY(mocks.gemini_handler);
 }
 
 // Tests that `showRemoteActorCredentialBottomSheetWithRequest:` starts
@@ -430,6 +553,7 @@ TEST_F(SceneCoordinatorTest,
 TEST_F(SceneCoordinatorTest,
        ShowRemoteActorCredentialBottomSheetSuccessCallback) {
   scene_state_.activationLevel = SceneActivationLevelForegroundActive;
+  SetUpDismissModalDialogsHandlers();
   ScopedKeyWindow scoped_key_window;
   scoped_key_window.Get().rootViewController = base_view_controller_;
   ASSERT_NE(base_view_controller_.view.window, nil);
@@ -449,13 +573,8 @@ TEST_F(SceneCoordinatorTest,
         started_coordinator = self_coordinator;
       });
 
-  remote_actor::proto::RemoteActorPasswordUploadRequest request;
-  request.set_task_id("task-123");
-  request.set_gaia_id("gaia-id");
-  request.set_domain("https://example.com");
-
   [(id<SceneCommands>)coordinator_
-      showRemoteActorCredentialBottomSheetWithRequest:request];
+      showRemoteActorCredentialBottomSheetWithRequest:MakeRemoteActorRequest()];
   ASSERT_NE(started_coordinator, nil);
   EXPECT_EQ([coordinator_
                 valueForKey:@"_remoteActorCredentialBottomSheetCoordinator"],
@@ -491,6 +610,7 @@ TEST_F(SceneCoordinatorTest,
 TEST_F(SceneCoordinatorTest,
        ShowRemoteActorCredentialBottomSheetCancelledCallback) {
   scene_state_.activationLevel = SceneActivationLevelForegroundActive;
+  SetUpDismissModalDialogsHandlers();
   ScopedKeyWindow scoped_key_window;
   scoped_key_window.Get().rootViewController = base_view_controller_;
   ASSERT_NE(base_view_controller_.view.window, nil);
@@ -510,13 +630,8 @@ TEST_F(SceneCoordinatorTest,
         started_coordinator = self_coordinator;
       });
 
-  remote_actor::proto::RemoteActorPasswordUploadRequest request;
-  request.set_task_id("task-123");
-  request.set_gaia_id("gaia-id");
-  request.set_domain("https://example.com");
-
   [(id<SceneCommands>)coordinator_
-      showRemoteActorCredentialBottomSheetWithRequest:request];
+      showRemoteActorCredentialBottomSheetWithRequest:MakeRemoteActorRequest()];
   ASSERT_NE(started_coordinator, nil);
 
   RemoteActorCredentialBottomSheetCompletion completion =
@@ -550,6 +665,7 @@ TEST_F(SceneCoordinatorTest,
 TEST_F(SceneCoordinatorTest,
        ShowRemoteActorCredentialBottomSheetFailureCallback) {
   scene_state_.activationLevel = SceneActivationLevelForegroundActive;
+  SetUpDismissModalDialogsHandlers();
   ScopedKeyWindow scoped_key_window;
   scoped_key_window.Get().rootViewController = base_view_controller_;
   ASSERT_NE(base_view_controller_.view.window, nil);
@@ -569,13 +685,9 @@ TEST_F(SceneCoordinatorTest,
         started_coordinator = self_coordinator;
       });
 
-  remote_actor::proto::RemoteActorPasswordUploadRequest request;
-  request.set_task_id("task-456");
-  request.set_gaia_id("gaia-id");
-  request.set_domain("https://example.com");
-
   [(id<SceneCommands>)coordinator_
-      showRemoteActorCredentialBottomSheetWithRequest:request];
+      showRemoteActorCredentialBottomSheetWithRequest:MakeRemoteActorRequest(
+                                                          "task-456")];
   ASSERT_NE(started_coordinator, nil);
 
   RemoteActorCredentialBottomSheetCompletion completion =
@@ -606,11 +718,12 @@ TEST_F(SceneCoordinatorTest,
 
 // Tests that `showRemoteActorCredentialBottomSheetWithRequest:` sends a failure
 // callback via `OpenGeminiCallbackURL` when the bottom sheet cannot be
-// presented (e.g., missing/detached/busy base view controller or disconnected
-// scene).
+// presented (missing, detached, presenting, or dismissing base view controller,
+// active incognito browser, or disconnected scene).
 TEST_F(SceneCoordinatorTest,
        ShowRemoteActorCredentialBottomSheetFailsWhenUnavailable) {
   scene_state_.activationLevel = SceneActivationLevelForegroundActive;
+  SetUpDismissModalDialogsHandlers();
   ScopedKeyWindow scoped_key_window;
 
   id mock_application = OCMClassMock([UIApplication class]);
@@ -624,10 +737,8 @@ TEST_F(SceneCoordinatorTest,
         started_coordinator = self_coordinator;
       });
 
-  remote_actor::proto::RemoteActorPasswordUploadRequest request;
-  request.set_task_id("task-unavailable");
-  request.set_gaia_id("gaia-id");
-  request.set_domain("https://example.com");
+  const remote_actor::proto::RemoteActorPasswordUploadRequest request =
+      MakeRemoteActorRequest("task-unavailable");
 
   NSURL* expected_url = [NSURL
       URLWithString:[NSString
@@ -638,7 +749,7 @@ TEST_F(SceneCoordinatorTest,
                                          kRemoteActorStatusQueryParam,
                                          kRemoteActorReasonQueryParam]];
 
-  // Case 1: `activeViewController` is nil.
+  // `activeViewController` is nil.
   OCMExpect([mock_application openURL:expected_url
                               options:@{}
                     completionHandler:[OCMArg any]]);
@@ -647,7 +758,7 @@ TEST_F(SceneCoordinatorTest,
   EXPECT_EQ(started_coordinator, nil);
   EXPECT_OCMOCK_VERIFY(mock_application);
 
-  // Case 2: `activeViewController` is not in a window hierarchy.
+  // `activeViewController` is not in a window hierarchy.
   id partial_scene_coordinator = OCMPartialMock(coordinator_);
   OCMStub([partial_scene_coordinator activeViewController])
       .andReturn(base_view_controller_);
@@ -660,11 +771,12 @@ TEST_F(SceneCoordinatorTest,
   EXPECT_EQ(started_coordinator, nil);
   EXPECT_OCMOCK_VERIFY(mock_application);
 
-  // Case 3: `activeViewController` is already presenting another VC.
+  // `activeViewController` still has a presented view controller after modal
+  // dismissal completes (e.g., dismissal timed out).
   scoped_key_window.Get().rootViewController = base_view_controller_;
   ASSERT_NE(base_view_controller_.view.window, nil);
-  id partial_vc = OCMPartialMock(base_view_controller_);
-  OCMStub([partial_vc presentedViewController])
+  id partial_view_controller = OCMPartialMock(base_view_controller_);
+  OCMStub([partial_view_controller presentedViewController])
       .andReturn([[UIViewController alloc] init]);
   OCMExpect([mock_application openURL:expected_url
                               options:@{}
@@ -673,9 +785,33 @@ TEST_F(SceneCoordinatorTest,
       showRemoteActorCredentialBottomSheetWithRequest:request];
   EXPECT_EQ(started_coordinator, nil);
   EXPECT_OCMOCK_VERIFY(mock_application);
-  [partial_vc stopMocking];
+  [partial_view_controller stopMocking];
 
-  // Case 4: Scene is disconnected.
+  // `activeViewController` is currently being dismissed.
+  partial_view_controller = OCMPartialMock(base_view_controller_);
+  OCMStub([partial_view_controller isBeingDismissed]).andReturn(YES);
+  OCMExpect([mock_application openURL:expected_url
+                              options:@{}
+                    completionHandler:[OCMArg any]]);
+  [coordinator_ showRemoteActorCredentialBottomSheetWithRequest:request];
+  EXPECT_EQ(started_coordinator, nil);
+  EXPECT_OCMOCK_VERIFY(mock_application);
+  [partial_view_controller stopMocking];
+
+  // Incognito browser is currently active.
+  Browser* regular_browser = scene_state_.browserProviderInterface.mainBrowser;
+  Browser* incognito_browser =
+      scene_state_.browserProviderInterface.incognitoBrowser;
+  [scene_state_ setCurrentBrowser:incognito_browser];
+  OCMExpect([mock_application openURL:expected_url
+                              options:@{}
+                    completionHandler:[OCMArg any]]);
+  [coordinator_ showRemoteActorCredentialBottomSheetWithRequest:request];
+  EXPECT_EQ(started_coordinator, nil);
+  EXPECT_OCMOCK_VERIFY(mock_application);
+  [scene_state_ setCurrentBrowser:regular_browser];
+
+  // Scene is disconnected.
   scene_state_.activationLevel = SceneActivationLevelDisconnected;
   OCMExpect([mock_application openURL:expected_url
                               options:@{}
@@ -689,12 +825,147 @@ TEST_F(SceneCoordinatorTest,
   [mock_application stopMocking];
 }
 
+// Tests that `showRemoteActorCredentialBottomSheetWithRequest:` dismisses modal
+// dialogs when UI is presented on `activeViewController`, and starts
+// `RemoteActorCredentialBottomSheetCoordinator` once dismissal completes
+// without triggering a failure callback.
+TEST_F(SceneCoordinatorTest,
+       ShowRemoteActorCredentialBottomSheetDismissesModalsBeforeStarting) {
+  ASSERT_NO_FATAL_FAILURE(SetUpRemoteActorModalDismissalHarness());
+  RejectGeminiCallback();
+
+  [base_view_controller_ presentViewController:[[UIViewController alloc] init]
+                                      animated:NO
+                                    completion:nil];
+  ASSERT_NE(base_view_controller_.presentedViewController, nil);
+
+  ProceduralBlock dismissal_completion = TriggerDeferredRemoteActorRequest();
+  ASSERT_NE(dismissal_completion, nil);
+  EXPECT_EQ(started_remote_actor_coordinator_, nil);
+
+  base::RunLoop run_loop;
+  __block base::OnceClosure quit_closure = run_loop.QuitClosure();
+  [base_view_controller_ dismissViewControllerAnimated:NO
+                                            completion:^{
+                                              dismissal_completion();
+                                              std::move(quit_closure).Run();
+                                            }];
+  run_loop.Run();
+
+  ASSERT_NE(started_remote_actor_coordinator_, nil);
+  EXPECT_EQ([coordinator_
+                valueForKey:@"_remoteActorCredentialBottomSheetCoordinator"],
+            started_remote_actor_coordinator_);
+  EXPECT_OCMOCK_VERIFY(mock_application_);
+}
+
+// Tests that `showRemoteActorCredentialBottomSheetWithRequest:` sends a failure
+// callback via `OpenGeminiCallbackURL` if the scene switches to Incognito or
+// disconnects while modal dialogs are dismissing.
+TEST_F(SceneCoordinatorTest,
+       ShowRemoteActorCredentialBottomSheetFailsIfUnavailableAfterDismissal) {
+  ASSERT_NO_FATAL_FAILURE(SetUpRemoteActorModalDismissalHarness());
+
+  Browser* regular_browser = scene_state_.browserProviderInterface.mainBrowser;
+  Browser* incognito_browser =
+      scene_state_.browserProviderInterface.incognitoBrowser;
+
+  // Browser switches to Incognito while modal dialogs are dismissing.
+  ProceduralBlock incognito_dismissal = TriggerDeferredRemoteActorRequest();
+  ASSERT_NE(incognito_dismissal, nil);
+  [scene_state_ setCurrentBrowser:incognito_browser];
+  ExpectGeminiFailureCallback();
+  incognito_dismissal();
+  EXPECT_EQ(started_remote_actor_coordinator_, nil);
+  EXPECT_OCMOCK_VERIFY(mock_application_);
+  [scene_state_ setCurrentBrowser:regular_browser];
+
+  // Scene disconnects while modal dialogs are dismissing.
+  ProceduralBlock disconnect_dismissal = TriggerDeferredRemoteActorRequest();
+  ASSERT_NE(disconnect_dismissal, nil);
+  scene_state_.activationLevel = SceneActivationLevelDisconnected;
+  ExpectGeminiFailureCallback();
+  disconnect_dismissal();
+  EXPECT_EQ(started_remote_actor_coordinator_, nil);
+  EXPECT_OCMOCK_VERIFY(mock_application_);
+}
+
+// Tests that an in-flight Remote Actor modal dismissal is silently cancelled
+// (without opening a callback URL or starting/disrupting a coordinator) when
+// superseded by a newer request, when `closePresentedViews` is called (both
+// asynchronously and synchronously during modal teardown), or when
+// `SceneCoordinator` stops.
+TEST_F(SceneCoordinatorTest,
+       ShowRemoteActorCredentialBottomSheetCancelsInFlightRequest) {
+  ASSERT_NO_FATAL_FAILURE(SetUpRemoteActorModalDismissalHarness());
+  RejectGeminiCallback();
+
+  // Superseded request: stale completion neither starts nor disrupts the sheet.
+  ProceduralBlock stale_completion = TriggerDeferredRemoteActorRequest();
+  ASSERT_NE(stale_completion, nil);
+  ProceduralBlock latest_completion = TriggerDeferredRemoteActorRequest();
+  ASSERT_NE(latest_completion, nil);
+
+  stale_completion();
+  EXPECT_EQ(started_remote_actor_coordinator_, nil);
+
+  latest_completion();
+  RemoteActorCredentialBottomSheetCoordinator* latest_coordinator =
+      started_remote_actor_coordinator_;
+  ASSERT_NE(latest_coordinator, nil);
+
+  stale_completion();
+  EXPECT_EQ(started_remote_actor_coordinator_, latest_coordinator);
+  EXPECT_EQ([coordinator_
+                valueForKey:@"_remoteActorCredentialBottomSheetCoordinator"],
+            latest_coordinator);
+
+  // `closePresentedViews` cancels an in-flight request.
+  started_remote_actor_coordinator_ = nil;
+  ProceduralBlock close_dismissal = TriggerDeferredRemoteActorRequest();
+  ASSERT_NE(close_dismissal, nil);
+  [coordinator_ closePresentedViews];
+  close_dismissal();
+  EXPECT_EQ(started_remote_actor_coordinator_, nil);
+
+  // Synchronous re-entrant `closePresentedViews` during modal teardown cancels
+  // the request because the one-shot preservation flag was already consumed by
+  // the coordinator's own `-closePresentedViews:completion:` pass.
+  __block ProceduralBlock reentrant_dismissal = nil;
+  OCMExpect(
+      [mock_browser_coordinator_handler_
+          clearPresentedStateWithCompletion:[OCMArg checkWithBlock:^BOOL(
+                                                        ProceduralBlock block) {
+            reentrant_dismissal = [block copy];
+            return YES;
+          }]
+                             dismissOmnibox:YES])
+      .andDo(^(NSInvocation* invocation) {
+        [coordinator_ closePresentedViews];
+      });
+  [coordinator_
+      showRemoteActorCredentialBottomSheetWithRequest:MakeRemoteActorRequest()];
+  EXPECT_OCMOCK_VERIFY(mock_browser_coordinator_handler_);
+  ASSERT_NE(reentrant_dismissal, nil);
+  reentrant_dismissal();
+  EXPECT_EQ(started_remote_actor_coordinator_, nil);
+
+  // `stop` cancels an in-flight request.
+  ProceduralBlock stop_dismissal = TriggerDeferredRemoteActorRequest();
+  ASSERT_NE(stop_dismissal, nil);
+  [coordinator_ stop];
+  stop_dismissal();
+  EXPECT_EQ(started_remote_actor_coordinator_, nil);
+  EXPECT_OCMOCK_VERIFY(mock_application_);
+}
+
 // Tests that stopping `SceneCoordinator` stops an active
 // `RemoteActorCredentialBottomSheetCoordinator` without opening the Gemini
 // callback URL.
 TEST_F(SceneCoordinatorTest,
        StopStopsRemoteActorCredentialBottomSheetWithoutCallback) {
   scene_state_.activationLevel = SceneActivationLevelForegroundActive;
+  SetUpDismissModalDialogsHandlers();
   ScopedKeyWindow scoped_key_window;
   scoped_key_window.Get().rootViewController = base_view_controller_;
   ASSERT_NE(base_view_controller_.view.window, nil);
@@ -714,13 +985,8 @@ TEST_F(SceneCoordinatorTest,
         started_coordinator = self_coordinator;
       });
 
-  remote_actor::proto::RemoteActorPasswordUploadRequest request;
-  request.set_task_id("task-789");
-  request.set_gaia_id("gaia-id");
-  request.set_domain("https://example.com");
-
   [(id<SceneCommands>)coordinator_
-      showRemoteActorCredentialBottomSheetWithRequest:request];
+      showRemoteActorCredentialBottomSheetWithRequest:MakeRemoteActorRequest()];
   ASSERT_NE(started_coordinator, nil);
   EXPECT_EQ([coordinator_
                 valueForKey:@"_remoteActorCredentialBottomSheetCoordinator"],
@@ -746,6 +1012,7 @@ TEST_F(SceneCoordinatorTest,
 // callback URL.
 TEST_F(SceneCoordinatorTest, ClosePresentedViewsStopsRemoteActorSheet) {
   scene_state_.activationLevel = SceneActivationLevelForegroundActive;
+  SetUpDismissModalDialogsHandlers();
   ScopedKeyWindow scoped_key_window;
   scoped_key_window.Get().rootViewController = base_view_controller_;
   ASSERT_NE(base_view_controller_.view.window, nil);
@@ -765,13 +1032,8 @@ TEST_F(SceneCoordinatorTest, ClosePresentedViewsStopsRemoteActorSheet) {
         started_coordinator = self_coordinator;
       });
 
-  remote_actor::proto::RemoteActorPasswordUploadRequest request;
-  request.set_task_id("task-789");
-  request.set_gaia_id("gaia-id");
-  request.set_domain("https://example.com");
-
   [(id<SceneCommands>)coordinator_
-      showRemoteActorCredentialBottomSheetWithRequest:request];
+      showRemoteActorCredentialBottomSheetWithRequest:MakeRemoteActorRequest()];
   ASSERT_NE(started_coordinator, nil);
   EXPECT_EQ([coordinator_
                 valueForKey:@"_remoteActorCredentialBottomSheetCoordinator"],
@@ -832,6 +1094,52 @@ TEST_F(SceneCoordinatorTest,
   EXPECT_EQ(started_coordinator.browser->type(), Browser::Type::kRegular);
 
   [partial_scene_coordinator stopMocking];
+}
+
+// Tests that `dismissModalDialogsWithCompletion:` minimizes Gemini instead of
+// dismissing it when `IOSGeminiBottomSheetMigration` is enabled.
+TEST_F(SceneCoordinatorTest,
+       TestDismissModalDialogsWithCompletionMinimizesGeminiWhenMigrated) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {kAssistantContainer, kIOSGeminiBottomSheetMigration}, {});
+
+  ModalDismissalMocks mocks = SetUpModalDismissalMocks(coordinator_);
+  [[mocks.gemini_handler reject] dismissGeminiFlowWithCompletion:[OCMArg any]];
+  OCMExpect([mocks.gemini_handler minimizeGeminiIfInvoked]);
+
+  __block bool completed = false;
+  [coordinator_ dismissModalDialogsWithCompletion:^{
+    completed = true;
+  }];
+  EXPECT_TRUE(completed);
+  EXPECT_OCMOCK_VERIFY(mocks.gemini_handler);
+}
+
+// Tests that `dismissModalDialogsWithCompletion:` dismisses Gemini when
+// `GeminiDismissalBehavior::kDismiss` is explicitly requested even if
+// `IOSGeminiBottomSheetMigration` is enabled.
+TEST_F(
+    SceneCoordinatorTest,
+    TestDismissModalDialogsWithCompletionDismissesGeminiWhenExplicitlyRequested) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {kAssistantContainer, kIOSGeminiBottomSheetMigration}, {});
+
+  ModalDismissalMocks mocks = SetUpModalDismissalMocks(coordinator_);
+  OCMExpect([mocks.gemini_handler dismissGeminiFlowWithCompletion:nil]);
+  [[mocks.gemini_handler reject] minimizeGeminiIfInvoked];
+
+  __block bool completed = false;
+  [coordinator_
+      dismissModalDialogsWithCompletion:^{
+        completed = true;
+      }
+                         dismissOmnibox:YES
+                       dismissSnackbars:YES
+                geminiDismissalBehavior:GeminiDismissalBehavior::kDismiss];
+  EXPECT_TRUE(completed);
+  EXPECT_OCMOCK_VERIFY(mocks.gemini_handler);
 }
 
 }  // namespace

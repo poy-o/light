@@ -5,8 +5,10 @@
 #include "chrome/browser/on_device_translation/translation_manager_impl.h"
 
 #include <array>
+#include <cstdint>
 #include <iterator>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -110,7 +112,8 @@ class TestCreateTranslatorClient
   // blink::mojom::TranslationManagerCreateTranslatorClient:
   void OnResult(blink::mojom::CreateTranslatorResultPtr result,
                 blink::mojom::TranslatorLanguageCodePtr source_lang,
-                blink::mojom::TranslatorLanguageCodePtr target_lang) override {
+                blink::mojom::TranslatorLanguageCodePtr target_lang,
+                std::optional<uint64_t> input_quota) override {
     result_future_.SetValue(std::move(result));
   }
 
@@ -186,6 +189,13 @@ TEST_F(TranslationManagerImplTest, RecordsCreateTranslatorError) {
            BlinkError::kLanguagePackDownloadFailed},
           {ControllerError::kNotEnoughDiskSpace,
            BlinkError::kNotEnoughDiskSpace},
+          {ControllerError::kOffline, BlinkError::kOffline},
+          {ControllerError::kUnsupportedDevice, BlinkError::kUnsupportedDevice},
+          {ControllerError::kDataSaverEnabled, BlinkError::kDataSaverEnabled},
+          {ControllerError::kExceedsLanguagePackCountLimitation,
+           BlinkError::kExceedsLanguagePackCountLimitation},
+          {ControllerError::kMeteredConnectionBlocked,
+           BlinkError::kMeteredConnectionBlocked},
       });
 
   base::HistogramTester histogram_tester;
@@ -218,9 +228,9 @@ TEST_F(TranslationManagerImplTest, DoesNotRecordErrorWhenClientDisconnects) {
   client.ResetReceiver();
   task_environment_.RunUntilIdle();
 
-  std::move(callback).Run(base::unexpected(
-      OnDeviceTranslationController::CreateTranslatorError::
-          kLibraryInstallFailed));
+  std::move(callback).Run(
+      base::unexpected(OnDeviceTranslationController::CreateTranslatorError::
+                           kLibraryInstallFailed));
   task_environment_.RunUntilIdle();
 
   EXPECT_FALSE(client.WasCalled());

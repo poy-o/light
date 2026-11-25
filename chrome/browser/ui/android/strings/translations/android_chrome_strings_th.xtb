@@ -150,7 +150,6 @@
 <translation id="1543035591122163372">ลงชื่อเข้าใช้เพื่อรับรหัสผ่านและอื่นๆ จาก <ph name="DEVICE_TYPE" /></translation>
 <translation id="1544084554881119930">จะไม่มีการเข้ารหัสวิธีการชำระเงินและที่อยู่ ประวัติการท่องเว็บจาก Chrome จะไม่ซิงค์
 เฉพาะผู้ที่มีพาสเฟรสของคุณเท่านั้นที่จะอ่านข้อมูลที่เข้ารหัสได้ Google จะไม่ได้รับหรือจัดเก็บพาสเฟรสดังกล่าว หากลืมพาสเฟรสหรือต้องการเปลี่ยนการตั้งค่านี้ ให้<ph name="BEGIN_LINK" />ล้างข้อมูล Chrome ในบัญชี<ph name="END_LINK" /></translation>
-<translation id="1544826120773021464">หากต้องการจัดการบัญชี Google ให้แตะปุ่ม "จัดการบัญชี"</translation>
 <translation id="1549000191223877751">ย้ายไปยังหน้าต่างอื่น</translation>
 <translation id="1553358976309200471">อัปเดต Chrome</translation>
 <translation id="1554352084785952638"><ph name="SEARCH_ENGINE" /> สำหรับ "<ph name="SEARCH_TERMS" />"</translation>
@@ -167,7 +166,6 @@
 <translation id="1600756129506222718"><ph name="TAB_TITLE" />, แท็บการแชร์</translation>
 <translation id="1601378265092360672">ข้อมูลการท่องเว็บประกอบด้วยประวัติการท่องเว็บ คุกกี้และข้อมูลเว็บไซต์อื่นๆ รูปภาพและไฟล์ที่แคชไว้ รวมถึงแท็บที่เปิดอยู่</translation>
 <translation id="160275202205869636">เมื่อเปิดไว้ ระบบจะใช้และบันทึกข้อมูลในบัญชี Google ของคุณ เมื่อปิดไว้ ระบบจะบันทึกข้อมูลในอุปกรณ์เครื่องนี้เท่านั้น</translation>
-<translation id="160403827062749147">ยินดีต้อนรับสู่ Google Chrome เบราว์เซอร์ที่ปลอดภัยที่สุดในโลก</translation>
 <translation id="1628019612362412531">{NUM_SELECTED,plural, =1{นำ 1 รายการที่เลือกออก}other{นำ # รายการที่เลือกออก}}</translation>
 <translation id="1639239467298939599">กำลังโหลด</translation>
 <translation id="1641113438599504367">Google Safe Browsing</translation>
@@ -283,6 +281,7 @@
 <translation id="2122601567107267586">เปิดแอปไม่ได้</translation>
 <translation id="2128579426409352593"><ph name="TAB_TITLE" />, แท็บการแชร์ที่ปักหมุดซึ่งเลือกไว้หลายแท็บ</translation>
 <translation id="213279576345780926">ปิด "<ph name="TAB_TITLE" />" แล้ว</translation>
+<translation id="2133857665503360653">ลอง <ph name="FILE_NAME" /> อีกครั้ง</translation>
 <translation id="2138283760993967204">ไอคอนจัดการ</translation>
 <translation id="2138632817776076519"><ph name="TAB_TITLE" />, แท็บการบันทึกเสียงที่เลือก</translation>
 <translation id="2141396931810938595">อิงตามการใช้งานของคุณ</translation>
@@ -450,6 +449,7 @@
 <translation id="2762000892062317888">เมื่อสักครู่</translation>
 <translation id="276378135349383280">แสดง Gemini ในแถบเครื่องมือด้านล่าง</translation>
 <translation id="276969039800130567">ลงชื่อเข้าใช้โดยใช้ <ph name="USER_EMAIL_ADDRESS" /></translation>
+<translation id="2770082596325051055">หยุด <ph name="FILE_NAME" /> ชั่วคราว</translation>
 <translation id="2777555524387840389">เหลือ <ph name="SECONDS" /> วิ</translation>
 <translation id="2779651927720337254">ล้มเหลว</translation>
 <translation id="2781151931089541271">เหลือ 1 วิ</translation>
@@ -791,6 +791,7 @@
 <translation id="4121654769234887259">คุณไม่ต้องจำรหัสผ่านนี้ เพราะระบบจะบันทึกไว้ในเครื่องมือจัดการรหัสผ่านบน Google สำหรับ <ph name="USERNAME" /></translation>
 <translation id="4128312955780560730">ล็อกแท็บที่ไม่ระบุตัวตน</translation>
 <translation id="4132137475637520539">ให้ทุกคนที่มีลิงก์เข้าร่วมได้</translation>
+<translation id="4132969033912447558">ดาวน์โหลด <ph name="FILE_NAME" /> ต่อ</translation>
 <translation id="4136632885151622181"><ph name="TAB_TITLE" />, แท็บการบันทึกเสียงที่ปักหมุดซึ่งเลือกไว้หลายแท็บ</translation>
 <translation id="4137746084635924146">ภาษาปัจจุบันของอุปกรณ์</translation>
 <translation id="414128724510021958">เว็บไซต์เวอร์ชันเดสก์ท็อปเปิดใช้งานโดยค่าเริ่มต้น</translation>
@@ -866,7 +867,6 @@
 <translation id="4374192654218566997">\n\nคุณยังนำข้อมูลนี้ออกจากอุปกรณ์นี้ได้ด้วย</translation>
 <translation id="4378154925671717803">โทรศัพท์</translation>
 <translation id="4380055775103003110">หากปัญหานี้ยังเกิดขึ้นอยู่ คุณสามารถลองดำเนินการต่อใน <ph name="SITE_ETLD_PLUS_ONE" /> ด้วยวิธีอื่นๆ ได้</translation>
-<translation id="4381351546374507910">ลงชื่อเข้าใช้เพื่อรับบุ๊กมาร์ก รหัสผ่าน และข้อมูลการป้อนข้อความอัตโนมัติในอุปกรณ์ทุกเครื่อง</translation>
 <translation id="4384468725000734951">กำลังใช้ Sogou ในการค้นหา</translation>
 <translation id="4387647248986092471">สร้างการล็อกโปรไฟล์รถยนต์</translation>
 <translation id="4387817230000841154">เปิดการดาวน์โหลด</translation>
@@ -1893,6 +1893,7 @@
 <translation id="8152331954420209374">ไปที่ Lens</translation>
 <translation id="8153206878708357851">เปิด/ปิดการเรียกดูด้วยแป้นพิมพ์</translation>
 <translation id="8154784523622173959">ปรับเปลี่ยนพื้นหลังของหน้านี้ในแบบของคุณ</translation>
+<translation id="8161480780962562636">ตรวจสอบว่ารหัสผ่านปลอดภัย ดูว่ารหัสผ่านรั่วไหลหรือไม่ และรับคำแนะนำที่จะช่วยปกป้องตัวคุณบนโลกออนไลน์</translation>
 <translation id="8163820386638255770">โปรดยืนยันว่าเป็นคุณเพื่อใช้และบันทึกรหัสผ่านในบัญชี Google</translation>
 <translation id="8174047975335711832">ข้อมูลอุปกรณ์</translation>
 <translation id="8175940240143658258">{ARCHIVED_TAB_COUNT,plural, =1{รายการที่ไม่ได้ใช้งาน 1 รายการ}other{รายการที่ไม่ได้ใช้งาน # รายการ}}</translation>
@@ -1907,7 +1908,6 @@
 <translation id="8210770465353466621">คุณจะเห็นแท็บที่นี่</translation>
 <translation id="8212799748012101103">เปิดการค้นหาแท็บ</translation>
 <translation id="8215740705341534369">ชีตด้านข้าง</translation>
-<translation id="8218622182176210845">จัดการบัญชีของคุณ</translation>
 <translation id="8221985041778490865">กำลังลบข้อมูลการท่องเว็บ</translation>
 <translation id="8223642481677794647">เมนูของการ์ดฟีด</translation>
 <translation id="82296173028782770">แก้ไขคำค้นหา: <ph name="SEARCH_QUERY" /></translation>
@@ -2038,6 +2038,7 @@
 <translation id="8676789164135894283">การยืนยันการลงชื่อเข้าใช้</translation>
 <translation id="867914734596684889">แสดงหรือซ่อนแถบบุ๊กมาร์ก</translation>
 <translation id="8683039184091909753">รูปภาพ</translation>
+<translation id="8687103160920393343">ยกเลิก <ph name="FILE_NAME" /></translation>
 <translation id="8688183792442786085"><ph name="TAB_TITLE" />, แท็บที่เลือก</translation>
 <translation id="8694622119922491927"><ph name="APP_NAME" /> ต้องการสิทธิ์เข้าถึงอุปกรณ์ที่โต้ตอบกับมนุษย์โดยตรง (HID) สำหรับเว็บไซต์นี้ คุณเปลี่ยนการตั้งค่านี้ได้ภายหลังในการตั้งค่า &gt; แอป &gt; สิทธิ์เข้าถึงพิเศษของแอป</translation>
 <translation id="8696297579102085705">ส่งไปที่อุปกรณ์</translation>

@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">Rhannu cyfrineiriau</translation>
 <translation id="1554043146674176775">Diffodd Dull AI</translation>
 <translation id="1554477036522844996">Ffenestr Newydd</translation>
+<translation id="1555014818414775661">Ychwanegu lluniau</translation>
 <translation id="1557806604681757705">eich cyfrifiadur</translation>
 <translation id="1558391695376153246">Cau tabiau Anhysbys</translation>
 <translation id="1560153516220021659">Botwm bar offer eilaidd wedi'i grebachu</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">Agor <ph name="BEGIN_BOLD" />Gosodiadau Safari<ph name="END_BOLD" /></translation>
 <translation id="3858860766373142691">Enw</translation>
 <translation id="386224966259596343">Byddwch yn cael cyfle i gadw'r wybodaeth hon i Wallet y tro nesaf y byddwch yn llenwi ffurflen berthnasol.</translation>
-<translation id="3868495844258915202">Dangos URL llawn</translation>
 <translation id="3870931306085184145">Nid oes unrhyw gyfrineiriau sydd wedi'u cadw ar gyfer <ph name="DOMAIN" /></translation>
 <translation id="3875783148670536197">Dangoswch i Fi Sut</translation>
 <translation id="3878657761594430423">Cydiwr dalen</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">I gael hysbysiadau olrhain prisiau, trowch hysbysiadau ymlaen yn eich Gosodiadau iOS.</translation>
 <translation id="528857768909044842">Mae grwpiau tabiau wedi'u cadw yma</translation>
 <translation id="5294624619177114121">Hysbysiadau ffôn symudol</translation>
-<translation id="5295239312320826323">Tynnu'r cyfrif <ph name="USER_EMAIL" />?</translation>
 <translation id="5300589172476337783">Arddangos</translation>
 <translation id="5311061401280561833">Caniateir mynediad at y camera a'r meicroffon</translation>
 <translation id="5313967007315987356">Ychwanegu gwefan</translation>
@@ -2148,7 +2147,6 @@ Gallwch ailgychwyn unrhyw bryd.</translation>
 <translation id="7603852183842204213">Mae ffenestri naid wedi'u rhwystro (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Nid yw Cysoni yn gweithio</translation>
 <translation id="760667371114328991">Diffodd Hysbysiadau ar gyfer Gwiriad Diogelwch</translation>
-<translation id="7612619742409846846">Wedi mewngofnodi i Google fel</translation>
 <translation id="7612849887607288481">Agor Dewislen Prototeipio AI</translation>
 <translation id="7618220760967055820">Dewiswch pa fotwm i'w ddangos yn y bar offer</translation>
 <translation id="7620522820075868385">Canslo</translation>

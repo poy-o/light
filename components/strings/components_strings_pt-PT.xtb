@@ -78,6 +78,7 @@
 <translation id="112840717907525620">Cache da política OK</translation>
 <translation id="1131264053432022307">Imagem que copiou</translation>
 <translation id="1132735979845538847"><ph name="ORIGIN" /> – Para sair do ecrã inteiro, arraste a partir da parte superior e toque no botão anterior</translation>
+<translation id="11370190534773372">Detalhes do cartão preenchidos</translation>
 <translation id="1138458427267715730">Receba alertas quando o preço descer em qualquer site na Web</translation>
 <translation id="1142713751288681188">Tipo de papel</translation>
 <translation id="1142965388643537393">Informações de viagem</translation>
@@ -583,6 +584,7 @@ Se não permitir, isto será bloqueado pelas suas definições de privacidade. I
 <translation id="1988881251331415125">Se a ortografia estiver correta, <ph name="BEGIN_LINK" />experimente executar o Diagnóstico de conetividade<ph name="END_LINK" />.</translation>
 <translation id="1991370806334788445">Experimente permitir os cookies de terceiros, o que significa uma menor proteção da navegação, mas é mais provável que as funcionalidades do site funcionem conforme esperado.</translation>
 <translation id="1992331125980284532">JIS B3</translation>
+<translation id="1995173078718234136">A analisar o conteúdo...</translation>
 <translation id="1996557034791506430">Remover a autorização?</translation>
 <translation id="1997484222658892567"><ph name="URL" /> quer armazenar permanentemente dados de grandes dimensões no seu computador local.</translation>
 <translation id="1997774360448418989">Papel (leve)</translation>
@@ -666,7 +668,6 @@ Se não permitir, isto será bloqueado pelas suas definições de privacidade. I
 <translation id="2126374524350484896">Criador do PDF:</translation>
 <translation id="2127090458081644412">Palavra-passe guardada neste dispositivo</translation>
 <translation id="2127747486437921899">Itálico</translation>
-<translation id="2129163794581571479">Com tecnologia do Gemini com Inteligência Personalizada. Os seus pedidos, os títulos das páginas e os URLs podem ser revistos para melhorar o preenchimento automático melhorado. <ph name="BEGIN_LINK" />Faça a gestão das definições<ph name="END_LINK" /></translation>
 <translation id="2130448033692577677">Os modelos que especificou podem não ser aplicados porque a política DnsOverHttpsMode não está definida.</translation>
 <translation id="2130699163006053678">A3x7</translation>
 <translation id="2131006834960167560">Opção Ativar preenchimento automático de pagamentos aberta à altura total.</translation>
@@ -1216,7 +1217,6 @@ Se não permitir, isto será bloqueado pelas suas definições de privacidade. I
 <translation id="3041584414879052436">A lista de emissores do método Comprar agora e pagar depois está fechada.</translation>
 <translation id="3041612393474885105">Informações do certificado</translation>
 <translation id="3041835740069544003">Agora, o Chrome pode detetar e preencher mais formulários com a Compreensão de formulários mais inteligente. Para o fazer, o conteúdo e os URLs das páginas podem ser tratados num espaço privado na nuvem. Faça a gestão nas definições.</translation>
-<translation id="3047054686095898948">Guarde as suas informações na <ph name="IDS_AUTOFILL_GOOGLE_WALLET_TITLE_1" /> e realize tarefas mais rapidamente, como preencher formulários nos produtos Google. Pode <ph name="BEGIN_LINK" />gerir as suas informações<ph name="END_LINK" /> na <ph name="IDS_AUTOFILL_GOOGLE_WALLET_TITLE_2" /> de <ph name="ACCOUNT" /></translation>
 <translation id="305162504811187366">Histórico do Ambiente de Trabalho Remoto do Chrome, incluindo datas/horas, anfitriões e IDs de sessão de cliente</translation>
 <translation id="3052868890529250114">Costuma estabelecer ligação aos sites em segurança, mas o Chrome não conseguiu usar uma ligação segura desta vez. Um atacante pode estar a tentar intercetar ou modificar a sua ligação de rede. <ph name="BEGIN_LEARN_MORE_LINK" />Saiba mais acerca deste aviso<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="3052964831964880138"><ph name="PRODUCT_NAME" />: descida do preço de <ph name="PRICE_DROP" /></translation>
@@ -1587,7 +1587,6 @@ Para ocultar as opções para pagar depois, aceda às <ph name="BEGIN_LINK" />de
 <translation id="3655670868607891010">Se vê isto com frequência, experimente <ph name="HELP_LINK" />.</translation>
 <translation id="3658742229777143148">Revisão</translation>
 <translation id="3659521826520353662">Que Websites definidos pelo administrador são visitados e quando: <ph name="ALLOWLISTED_WEBSITES" /></translation>
-<translation id="3663760610864720538">Com tecnologia do Gemini com Inteligência Personalizada. <ph name="BEGIN_LINK" />Faça a gestão das definições<ph name="END_LINK" /></translation>
 <translation id="3664479564786885722">Pesquise mais opções de compra noutras lojas que vendem este produto.</translation>
 <translation id="3664782872746246217">Palavras-chave:</translation>
 <translation id="3670030362669914947">Número</translation>
@@ -1866,7 +1865,6 @@ Para ocultar as opções para pagar depois, aceda às <ph name="BEGIN_LINK" />de
 <translation id="4112140312785995938">Procurar para trás</translation>
 <translation id="4114007503059268298">Quer guardar este cartão na sua Conta Google e neste dispositivo?</translation>
 <translation id="4114146879518089587">Continuar para o site</translation>
-<translation id="4115378294792113321">Magenta</translation>
 <translation id="4116701314593212016">JIS B7</translation>
 <translation id="4116798170070772848">RA2</translation>
 <translation id="4117700440116928470">O âmbito da política não é suportado.</translation>
@@ -3335,6 +3333,7 @@ Para ocultar as opções para pagar depois, aceda às <ph name="BEGIN_LINK" />de
 <translation id="6520509611422418552"><ph name="MEMBER_FIRST_NAME" /> aderiu ao grupo de separadores "<ph name="GROUP_NAME" />"</translation>
 <translation id="6521745193039995384">Não ativa</translation>
 <translation id="6524830701589638230">Botão Gerir definições de acessibilidade; ative para personalizar as ferramentas de acessibilidade nas definições do Chrome</translation>
+<translation id="652643331002043144">Este site parece semelhante a outros sites associados a phishing, malware e fraudes.</translation>
 <translation id="6529173248185917884">Sétimo rolo</translation>
 <translation id="6529602333819889595">&amp;Refazer eliminação</translation>
 <translation id="6532101170117367231">Guardar no Google Drive</translation>
@@ -3449,6 +3448,7 @@ Para ocultar as opções para pagar depois, aceda às <ph name="BEGIN_LINK" />de
 <translation id="6727094998759448074">SRA4</translation>
 <translation id="672853333773293432">Sessão iniciada com a conta</translation>
 <translation id="6732087373923685049">câmara</translation>
+<translation id="6736243959894955139">Endereço</translation>
 <translation id="6738516213925468394">Os seus dados foram encriptados com a sua <ph name="BEGIN_LINK" />frase de acesso de sincronização<ph name="END_LINK" /> à(s) <ph name="TIME" />. Introduza a mesma para iniciar a sincronização.</translation>
 <translation id="6740851646645036700">Atingiu o limite de ajuda na escrita por agora. Tente mais tarde.</translation>
 <translation id="674375294223700098">Erro de certificado de servidor desconhecido.</translation>
@@ -4547,6 +4547,7 @@ Detalhes adicionais:
 <translation id="8577348305244205642">Cartão virtual não disponível</translation>
 <translation id="8579000896558714521">Substituição do teclado</translation>
 <translation id="8579561564816585231">Sessão iniciada através de um serviço Google, como o Gestor de Palavras-passe</translation>
+<translation id="8580478010934016252">Aceder aos métodos de pagamento</translation>
 <translation id="8581064022803799721">Esta página foi guardada em <ph name="LAST_BOOKMARKS_FOLDER" />.</translation>
 <translation id="858637041960032120">Adic. n.º telef.
 </translation>
@@ -4761,6 +4762,7 @@ Detalhes adicionais:
 <translation id="8975263830901772334">Nomes dos ficheiros impressos</translation>
 <translation id="8982884016487650216">Carregamento do PDF concluído</translation>
 <translation id="8983369100812962543">Já pode redimensionar a app</translation>
+<translation id="8984453891367472218">Ordenar por grupos</translation>
 <translation id="8984785270737450103">A partilha está atualmente desativada</translation>
 <translation id="8985112471026018799">Guarde o cartão para um pagamento mais rápido</translation>
 <translation id="8987245424886630962"><ph name="VIEW_CHROME_HISTORY_FOCUSED_FRIENDLY_MATCH_TEXT" />, Prima Tab e, em seguida, Enter para ver o histórico de navegação no Chrome</translation>

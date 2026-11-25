@@ -46,6 +46,7 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "components/bookmarks/browser/bookmark_node.h"
+#include "components/bookmarks/browser/bookmark_node_data.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/browser/titled_url_match.h"
 #include "components/bookmarks/common/android/bookmark_type.h"
@@ -891,7 +892,9 @@ void BookmarkBridge::SetBookmarkUrl(JNIEnv* env,
                                     int32_t type,
                                     const GURL& url) {
   CHECK_CURRENTLY_ON(BrowserThread::UI, base::NotFatalUntil::M161);
-  CHECK(IsLoaded(), base::NotFatalUntil::M161);
+  // TODO(crbug.com/587560887): CHECK-exclusion: Convert to a CHECK once we are
+  // confident it won't be triggered.
+  DCHECK(IsLoaded());
   bookmark_model_->SetURL(GetNodeByID(id, type), url,
                           bookmarks::metrics::BookmarkEditSource::kUser);
 }
@@ -1124,6 +1127,59 @@ void BookmarkBridge::DeleteBookmarkImpl(const BookmarkNode* node, int type) {
     bookmark_model_->Remove(node, bookmarks::metrics::BookmarkEditSource::kUser,
                             FROM_HERE);
   }
+}
+
+void BookmarkBridge::CopyToClipboard(JNIEnv* env,
+                                     const JavaRef<jobject>& j_bookmark_id_obj,
+                                     bool is_off_the_record) {
+  CHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(IsLoaded());
+  if (!bookmark_model_->loaded()) {
+    return;
+  }
+  int type = JavaBookmarkIdGetType(env, j_bookmark_id_obj);
+  if (type != BookmarkType::BOOKMARK_TYPE_NORMAL) {
+    return;
+  }
+  const BookmarkNode* node =
+      GetNodeByID(JavaBookmarkIdGetId(env, j_bookmark_id_obj), type);
+  CopyToClipboardImpl(node, is_off_the_record);
+}
+
+void BookmarkBridge::CopyToClipboardImpl(const BookmarkNode* node,
+                                         bool is_off_the_record) {
+  if (!IsNormalBookmarkNode(node) || bookmark_model_->is_permanent_node(node)) {
+    return;
+  }
+  bookmarks::BookmarkNodeData(node).WriteToClipboard(is_off_the_record);
+}
+
+void BookmarkBridge::CutToClipboard(JNIEnv* env,
+                                    const JavaRef<jobject>& j_bookmark_id_obj,
+                                    bool is_off_the_record) {
+  CHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(IsLoaded());
+  if (!bookmark_model_->loaded()) {
+    return;
+  }
+  int type = JavaBookmarkIdGetType(env, j_bookmark_id_obj);
+  if (type != BookmarkType::BOOKMARK_TYPE_NORMAL) {
+    return;
+  }
+  const BookmarkNode* node =
+      GetNodeByID(JavaBookmarkIdGetId(env, j_bookmark_id_obj), type);
+  CutToClipboardImpl(node, is_off_the_record);
+}
+
+void BookmarkBridge::CutToClipboardImpl(const BookmarkNode* node,
+                                        bool is_off_the_record) {
+  if (!IsNormalBookmarkNode(node) || !IsEditable(node)) {
+    return;
+  }
+  bookmarks::BookmarkNodeData(node).WriteToClipboard(is_off_the_record);
+  bookmarks::ScopedGroupBookmarkActions group_cut(bookmark_model_);
+  bookmark_model_->Remove(node, bookmarks::metrics::BookmarkEditSource::kUser,
+                          FROM_HERE);
 }
 
 void BookmarkBridge::RemoveAllUserBookmarks(JNIEnv* env) {
@@ -1411,7 +1467,9 @@ void BookmarkBridge::ExtractBookmarkNodeInformation(
 
 const BookmarkNode* BookmarkBridge::GetNodeByID(long node_id, int type) {
   const BookmarkNode* node = nullptr;
-  CHECK_CURRENTLY_ON(BrowserThread::UI, base::NotFatalUntil::M161);
+  // TODO(crbug.com/587340790): CHECK-exclusion: Convert to a CHECK once we are
+  // confident it won't be triggered.
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (type == BookmarkType::BOOKMARK_TYPE_PARTNER) {
     node = partner_bookmarks_shim_->GetNodeByID(static_cast<int64_t>(node_id));
   } else if (type == BookmarkType::BOOKMARK_TYPE_READING_LIST) {
@@ -1480,6 +1538,10 @@ bool BookmarkBridge::IsEditable(const BookmarkNode* node) const {
   }
 
   return !managed_bookmark_service_->IsNodeManaged(node);
+}
+
+bool BookmarkBridge::IsNormalBookmarkNode(const BookmarkNode* node) const {
+  return bookmarks::IsDescendantOf(node, bookmark_model_->root_node());
 }
 
 bool BookmarkBridge::IsManaged(const BookmarkNode* node) const {
@@ -1766,8 +1828,8 @@ void BookmarkBridge::ReorderChildren(
   bookmark_model_->ReorderChildren(parent_node, ordered_nodes);
 }
 
-// Should destroy the bookmark bridge, if OTR profile is destroyed not to delete
-// related resources twice.
+// Tear down the Java and native bridge (via `destroyFromNative()` ->
+// `Destroy()`) before Profile KeyedServices shut down; may delete `this`.
 void BookmarkBridge::OnProfileWillBeDestroyed(Profile* profile) {
   weak_ptr_factory_.InvalidateWeakPtrs();
   DestroyJavaObject();

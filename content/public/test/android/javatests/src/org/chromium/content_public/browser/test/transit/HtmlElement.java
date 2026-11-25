@@ -4,6 +4,7 @@
 
 package org.chromium.content_public.browser.test.transit;
 
+import static org.chromium.build.NullUtil.assertNonNull;
 import static org.chromium.build.NullUtil.assumeNonNull;
 
 import android.graphics.Rect;
@@ -19,7 +20,9 @@ import org.chromium.build.annotations.Nullable;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.transit.HtmlConditions.DisplayedCondition;
 import org.chromium.content_public.browser.test.transit.HtmlConditions.NotDisplayedCondition;
+import org.chromium.content_public.browser.test.transit.HtmlConditions.StringPropertyCondition;
 import org.chromium.content_public.browser.test.util.DOMUtils;
+import org.chromium.content_public.browser.test.util.WebContentsUtils;
 
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
@@ -101,9 +104,33 @@ public class HtmlElement extends Element<Rect> {
         return new TripBuilder().withContext(this).withTrigger(getClickTrigger());
     }
 
+    /**
+     * Returns a TripBuilder with clicking the HTML element via JavaScript ({@code node.click()}
+     * with a user gesture) as trigger.
+     */
+    public TripBuilder jsClickTo() {
+        return new TripBuilder()
+                .withContext(this)
+                .withTrigger(
+                        () ->
+                                WebContentsUtils.evaluateJavaScriptWithUserGesture(
+                                        assertNonNull(mWebContentsSupplier.get()),
+                                        "(" + mHtmlElementSpec.getSelectorJs() + ").click();",
+                                        /* callback= */ null));
+    }
+
     /** Returns a TripBuilder with long pressing the HTML element as trigger. */
     public TripBuilder longPressTo() {
         return new TripBuilder().withContext(this).withTrigger(getLongPressTrigger());
+    }
+
+    /**
+     * Returns a {@link Condition} fulfilled when this element's {@code textContent} property equals
+     * {@code expectedText}.
+     */
+    public Condition textIs(String expectedText) {
+        return new StringPropertyCondition(
+                mWebContentsSupplier, mHtmlElementSpec, "textContent", expectedText);
     }
 
     /**

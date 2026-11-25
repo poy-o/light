@@ -27,6 +27,7 @@
 #include "components/bookmarks/browser/bookmark_client.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
+#include "components/bookmarks/browser/bookmark_node_iterator.h"
 #include "components/bookmarks/browser/scoped_group_bookmark_actions.h"
 #include "components/bookmarks/common/bookmark_bar_visibility_state.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
@@ -34,7 +35,6 @@
 #include "components/prefs/pref_service.h"
 #include "components/query_parser/query_parser.h"
 #include "components/url_formatter/url_formatter.h"
-#include "ui/base/models/tree_node_iterator.h"
 #include "url/gurl.h"
 
 using base::Time;
@@ -85,23 +85,6 @@ bool DoesBookmarkTextContainWords(const std::u16string& text,
   return true;
 }
 
-// Recursively searches for a node satisfying the functor `pred` . Returns
-// nullptr if not found.
-template <typename Predicate>
-const BookmarkNode* FindNode(const BookmarkNode* node, Predicate pred) {
-  if (pred(node)) {
-    return node;
-  }
-
-  for (const auto& child : node->children()) {
-    const BookmarkNode* result = FindNode(child.get(), pred);
-    if (result) {
-      return result;
-    }
-  }
-  return nullptr;
-}
-
 template <class type>
 std::vector<const BookmarkNode*> GetBookmarksMatchingPropertiesImpl(
     type& iterator,
@@ -135,7 +118,7 @@ void GetMostRecentEntries(
     BookmarkModel* model,
     size_t limit,
     std::multiset<const BookmarkNode*, Comparator>* nodes_set) {
-  ui::TreeNodeIterator<const BookmarkNode> iterator(model->root_node());
+  BookmarkNodeIterator iterator(model->root_node());
   while (iterator.has_next()) {
     const BookmarkNode* node = iterator.Next();
     if (node->is_url()) {
@@ -188,7 +171,7 @@ void CloneBookmarkNode(BookmarkModel* model,
 std::vector<raw_ptr<const BookmarkNode>> GetMostRecentlyModifiedUserFolders(
     BookmarkModel* model) {
   std::vector<raw_ptr<const BookmarkNode>> nodes;
-  ui::TreeNodeIterator<const BookmarkNode> iterator(
+  BookmarkNodeIterator iterator(
       model->root_node(), base::BindRepeating(&PruneFoldersForDisplay, model));
 
   while (iterator.has_next()) {
@@ -416,10 +399,9 @@ std::vector<const BookmarkNode*> GetBookmarksMatchingProperties(
         iterator, model, query, query_words, max_count);
   }
 
-  ui::TreeNodeIterator<const BookmarkNode> iterator(model->root_node());
-  return GetBookmarksMatchingPropertiesImpl<
-      ui::TreeNodeIterator<const BookmarkNode>>(iterator, model, query,
-                                                query_words, max_count);
+  BookmarkNodeIterator iterator(model->root_node());
+  return GetBookmarksMatchingPropertiesImpl<BookmarkNodeIterator>(
+      iterator, model, query, query_words, max_count);
 }
 
 // Parses the provided query and returns a vector of query words.
@@ -529,8 +511,7 @@ bool IsBookmarkedByUser(BookmarkModel* model, const GURL& url) {
 
 const BookmarkNode* GetBookmarkNodeByID(const BookmarkModel* model,
                                         int64_t id) {
-  return FindNode(model->root_node(),
-                  [id](const BookmarkNode* node) { return node->id() == id; });
+  return model->GetNodeById(id);
 }
 
 bool IsDescendantOf(const BookmarkNode* node, const BookmarkNode* root) {

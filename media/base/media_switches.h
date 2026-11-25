@@ -466,7 +466,11 @@ MEDIA_EXPORT BASE_DECLARE_FEATURE(kApplicationAudioCaptureMac);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kCastMacForceBaselineProfile);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kCastStreamingMacHardwareH264);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kMacAVFoundationPlayback);
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kMacNativeScreenCapturePickerSessionCache);
+MEDIA_EXPORT extern const base::FeatureParam<base::TimeDelta>
+    kMacNativeScreenCapturePickerSessionCacheMaxIdleTimeout;
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kUseSCContentSharingPicker);
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kVideoToolboxAV1SpatialLayerDecoding);
 #endif  // BUILDFLAG(IS_MAC)
 
 #if (BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN))

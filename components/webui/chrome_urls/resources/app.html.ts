@@ -10,14 +10,21 @@ export function getHtml(this: ChromeUrlsAppElement) {
   return html`
 <h2>Light About — Internal URLs</h2>
 <ul>
-  ${this.webuiUrlInfos_.map(info => html`
-    ${this.isChromeUrlsUrl_(info) ?
-      html`<li><a href="#">light://about</a></li>` :
-      html`${info.enabled ?
-        html`<li><a href="${info.url}">${this.toLightUrl_(info.url)}</a></li>` :
-        html`<li>${this.toLightUrl_(info.url)}</li>`
-      }`
-    }`)}
+  ${this.webuiUrlInfos_.map(item => html`
+    ${this.isChromeUrlsUrl_(item) ? html`
+      <li>
+        <a href="#">light://about</a>
+      </li>
+    ` : html`
+      ${item.enabled ? html`
+        <li>
+          <a href="${item.url}">${this.toLightUrl_(item.url)}</a>
+        </li>
+      ` : html`
+        <li>${this.toLightUrl_(item.url)}</li>
+      `}
+    `}
+  `)}
 </ul>
 ${this.internalUrlInfos_.length ? html`
   <h2 id="internal-debugging-pages">Internal Debugging Page URLs</h2>
@@ -30,12 +37,17 @@ ${this.internalUrlInfos_.length ? html`
     ${this.getDebugPagesToggleButtonLabel_()}
   </cr-button>
   <ul>
-    ${this.internalUrlInfos_.map(info => html`
-      ${this.isInternalUiEnabled_(info) ?
-        html`<li><a href="${info.url}">${this.toLightUrl_(info.url)}</a></li>` :
-        html`<li>${this.toLightUrl_(info.url)}</li>`
-      }`)}
-  </ul>` : ''}
+    ${this.internalUrlInfos_.map(item => html`
+      ${this.isInternalUiEnabled_(item) ? html`
+        <li>
+          <a href="${item.url}">${this.toLightUrl_(item.url)}</a>
+        </li>
+      ` : html`
+        <li>${this.toLightUrl_(item.url)}</li>
+      `}
+    `)}
+  </ul>
+` : ''}
 ${this.commandUrls_.length ? html`
   <h2>Command URLs for Debug</h2>
   <p>
@@ -44,6 +56,9 @@ ${this.commandUrls_.length ? html`
     address bar if you need them.
   </p>
   <ul>
-    ${this.commandUrls_.map(url => html`<li>${this.toLightUrl_(url)}</li>`)}
-  </ul>` : ''}`;
+    ${this.commandUrls_.map(item => html`
+      <li>${this.toLightUrl_(item)}</li>
+    `)}
+  </ul>
+` : ''}`;
 }

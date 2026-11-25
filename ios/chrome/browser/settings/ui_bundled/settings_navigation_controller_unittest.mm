@@ -252,16 +252,13 @@ TEST_F(SettingsNavigationControllerTest,
   id strict_delegate =
       OCMStrictProtocolMock(@protocol(SettingsNavigationControllerDelegate));
   @autoreleasepool {
-    UIViewController* base_view_controller = [[UIViewController alloc] init];
     SettingsNavigationController* settings_controller =
         [SettingsNavigationController
-                   accountsControllerForBrowser:browser_.get()
-                             baseViewController:base_view_controller
-                                       delegate:strict_delegate
-                      closeSettingsOnAddAccount:YES
-                              showSignoutButton:YES
-                                 showDoneButton:NO
-            signoutDismissalByParentCoordinator:NO];
+            accountsControllerForBrowser:browser_.get()
+                                delegate:strict_delegate
+               closeSettingsOnAddAccount:YES
+                       showSignoutButton:YES
+                          showDoneButton:NO];
     EXPECT_EQ(1U, settings_controller.viewControllers.count);
 
     // Simulate the settings being cleaned up.
@@ -287,16 +284,13 @@ TEST_F(SettingsNavigationControllerTest,
   id strict_delegate =
       OCMStrictProtocolMock(@protocol(SettingsNavigationControllerDelegate));
   @autoreleasepool {
-    UIViewController* base_view_controller = [[UIViewController alloc] init];
     SettingsNavigationController* settings_controller =
         [SettingsNavigationController
-                   accountsControllerForBrowser:browser_.get()
-                             baseViewController:base_view_controller
-                                       delegate:strict_delegate
-                      closeSettingsOnAddAccount:NO
-                              showSignoutButton:NO
-                                 showDoneButton:YES
-            signoutDismissalByParentCoordinator:YES];
+            accountsControllerForBrowser:browser_.get()
+                                delegate:strict_delegate
+               closeSettingsOnAddAccount:NO
+                       showSignoutButton:NO
+                          showDoneButton:YES];
     __weak SettingsNavigationController* weak_settings_controller =
         settings_controller;
     ASSERT_EQ(1U, settings_controller.viewControllers.count);

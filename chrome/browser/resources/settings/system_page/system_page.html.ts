@@ -4,19 +4,20 @@
 
 import {html} from '//resources/lit/v3_0/lit.rollup.js';
 
-import {RestartType} from '../relaunch_mixin_lit.js';
-
 import type {SettingsSystemPageElement} from './system_page.js';
 
 export function getHtml(this: SettingsSystemPageElement) {
   return html`<!--_html_template_start_-->
 <settings-section page-title="$i18n{systemPageTitle}"
-    class="cr-centered-card-container">
+    class="${
+        this.settingsRefresh2026Enabled_ ? '' : 'cr-centered-card-container'}">
 <if expr="not is_macosx">
   <settings-toggle-button pref-key="background_mode.enabled"
       label="$i18n{backgroundAppsLabel}">
   </settings-toggle-button>
-  <div class="hr"></div>
+  ${!this.settingsRefresh2026Enabled_ ? html`
+    <div class="hr"></div>
+  ` : ''}
 </if>
   <settings-toggle-button id="hardwareAcceleration"
       pref-key="hardware_acceleration_mode.enabled"
@@ -29,7 +30,9 @@ export function getHtml(this: SettingsSystemPageElement) {
   </settings-toggle-button>
 <if expr="is_win">
   ${this.showProcessIsolationSetting_ ? html`
-    <div class="hr"></div>
+    ${!this.settingsRefresh2026Enabled_ ? html`
+      <div class="hr"></div>
+    ` : ''}
     <settings-toggle-button id="isolationState"
         pref-key="isolation_state.enabled" label="$i18n{isolationStateLabel}"
         sub-label="$i18n{isolationStateSubLabel}"
@@ -45,7 +48,9 @@ export function getHtml(this: SettingsSystemPageElement) {
 
 <if expr="_google_chrome and is_win">
   ${this.showFeatureNotificationsSetting_ ? html`
-    <div class="hr"></div>
+    ${!this.settingsRefresh2026Enabled_ ? html`
+      <div class="hr"></div>
+    ` : ''}
     <settings-toggle-button id="featureNotificationsEnabled"
         @settings-boolean-control-change="${
             this.onFeatureNotificationsSettingsBooleanControlChange_}"
@@ -132,8 +137,7 @@ export function getHtml(this: SettingsSystemPageElement) {
   ` : ''}
 
   ${this.shouldShowRelaunchDialog ? html`
-    <relaunch-confirmation-dialog .restartType="${RestartType.RESTART}"
-        @close="${this.onRelaunchDialogClose}">
+    <relaunch-confirmation-dialog @close="${this.onRelaunchDialogClose}">
     </relaunch-confirmation-dialog>
   ` : ''}
 </settings-section>

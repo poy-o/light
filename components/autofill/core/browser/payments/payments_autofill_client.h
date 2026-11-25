@@ -16,6 +16,7 @@
 #include "base/containers/span.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_forward.h"
+#include "base/i18n/language_tag.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/data_model/payments/credit_card.h"
@@ -31,6 +32,8 @@ namespace webauthn {
 class InternalAuthenticator;
 }
 #endif
+
+class AccountInfo;
 
 namespace autofill {
 
@@ -65,6 +68,7 @@ class OmniboxAutofillDelegate;
 class OtpUnmaskDelegate;
 enum class OtpUnmaskResult;
 class PaymentsDataManager;
+enum class PaymentsUiClosedReason;
 enum class SuggestionHidingReason;
 class TouchToFillPaymentMethodDelegate;
 struct VirtualCardEnrollmentFields;
@@ -708,7 +712,7 @@ class PaymentsAutofillClient : public RiskDataLoader {
       base::span<const payments::BnplIssuerContext> bnpl_issuer_contexts,
       std::optional<int64_t> extracted_amount,
       bool is_amount_supported_by_any_issuer,
-      const std::optional<std::string>& app_locale,
+      const std::optional<base::i18n::LanguageTag>& app_locale,
       base::OnceCallback<void(BnplIssuer)> selected_issuer_callback,
       base::OnceClosure cancel_callback) = 0;
 
@@ -729,7 +733,7 @@ class PaymentsAutofillClient : public RiskDataLoader {
   // and iOS WebView, and should not be used on those platforms.
   virtual bool ShowTouchToFillBnplIssuers(
       base::span<const payments::BnplIssuerContext> bnpl_issuer_contexts,
-      const std::string& app_locale,
+      const base::i18n::LanguageTag& app_locale,
       base::OnceCallback<void(BnplIssuer)> selected_issuer_callback,
       base::OnceClosure cancel_callback) = 0;
 
@@ -832,6 +836,13 @@ class PaymentsAutofillClient : public RiskDataLoader {
   // Gets the `PaymentsChurnedUsersUiDelegate` instance associated with the
   // client. Handles the resurrection UI for the Payments Churned Users flow.
   virtual PaymentsChurnedUsersUiDelegate* GetPaymentsChurnedUsersUiDelegate();
+
+  // Requests the platform UI layer to show the Payments Churned Users
+  // resurrection UI, prompting churned users who turned off Autofill payment
+  // methods to resurrect and re-enable Autofill.
+  virtual void ShowPaymentsChurnedUsersUI(
+      AccountInfo account_info,
+      base::OnceCallback<void(PaymentsUiClosedReason)> closed_callback);
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   // Gets the `OmniboxAutofillDelegate` instance associated with the client, or

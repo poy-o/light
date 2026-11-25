@@ -466,6 +466,8 @@ should be able to be added at any place in this file.
       summary="For managing extensions in the app menu."/>
   <variant name="_ExtensionsManageAppMenuFeature"
       summary="For managing your extensions from the app menu feature."/>
+  <variant name="_ExtensionsManageSiteAccessTutorial"
+      summary="For the Extensions manage site access tutorial promo."/>
   <variant name="_ExtensionsManageToolbar"
       summary="For managing extensions in the toolbar."/>
   <variant name="_ExtensionsManageToolbarFeature"
@@ -1107,18 +1109,45 @@ should be able to be added at any place in this file.
   <variant name=".AutofillAiSuggestionRemoved"
       summary="Autofill AI suggestion removed"/>
   <variant name=".DiceUserMigrated" summary="DICe user migrated"/>
+  <variant name=".EmailVerificationError" summary="Email verification error"/>
   <variant name=".EnhancedBundledSecuritySettings"
       summary="Enhanced protection user migrated"/>
+  <variant name=".EnterpriseCopyWarning" summary="Enterprise copy warning"/>
+  <variant name=".GeminiWorkingOnTask"
+      summary="Gemini will keep working on task"/>
   <variant name=".Glic" summary="Glic toast"/>
   <variant name=".GlicSelectionHiddenForSite"
       summary="Glic selection hidden for site"/>
+  <variant name=".GlicShareImageFailed"
+      summary="Sharing image with Gemini failed"/>
+  <variant name=".IndigoDeleteError"
+      summary="Indigo delete uploaded photo error"/>
+  <variant name=".IndigoInvokeError" summary="Indigo invocation error"/>
   <variant name=".MultistepFilterSuggestion" summary="Filter suggested"/>
+  <variant name=".SendTabToSelfFailure"
+      summary="Send Tab To Self failed to send"/>
+  <variant name=".SendTabToSelfNoInternetConnection"
+      summary="Send Tab To Self no internet connection"/>
+  <variant name=".SendTabToSelfSuccess"
+      summary="Send Tab To Self successfully sent"/>
+  <variant name=".SendTabToSelfSuccessThrottled"
+      summary="Send Tab To Self successfully sent but throttled"/>
+  <variant name=".SendTabToSelfTabsOpenedInBackground"
+      summary="Send Tab To Self tabs opened in background"/>
   <variant name=".SkillDeleted" summary="Skill deleted"/>
   <variant name=".SkillSaved" summary="Skill saved"/>
   <variant name=".SyncEsbOff"
       summary="Enhanced Protection setting has been synced to Off"/>
   <variant name=".SyncEsbOn"
       summary="Enhanced Protection setting has been synced to On"/>
+  <variant name=".TabGroupSyncTabRemoved"
+      summary="Tab removed from shared tab group"/>
+  <variant name=".TabGroupSyncUserJoined"
+      summary="User joined shared tab group"/>
+  <variant name=".TabStripSwitchDelayedHorizontal"
+      summary="Tab strip switch to horizontal delayed"/>
+  <variant name=".TabStripSwitchDelayedVertical"
+      summary="Tab strip switch to vertical delayed"/>
   <variant name=".Translate" summary="Translate"/>
   <variant name=".TtcGenericError" summary="TTC generic error"/>
   <variant name=".TtcInactivityTimeout" summary="TTC inactivity timeout"/>
@@ -5080,6 +5109,8 @@ should be able to be added at any place in this file.
         summary="WebSettings method `getUseWideViewPort`"/>
     <variant name="WebSettingsIsAlgorithmicDarkeningAllowed"
         summary="WebSettings method `isAlgorithmicDarkeningAllowed`"/>
+    <variant name="WebSettingsIsWebGraphicsEnabled"
+        summary="WebSettings method `isWebGraphicsEnabled`"/>
     <variant name="WebSettingsSetAlgorithmicDarkeningAllowed"
         summary="WebSettings method `setAlgorithmicDarkeningAllowed`"/>
     <variant name="WebSettingsSetAllowContentAccess"
@@ -5171,6 +5202,8 @@ should be able to be added at any place in this file.
         summary="WebSettings method `setUserAgentString`"/>
     <variant name="WebSettingsSetUseWideViewPort"
         summary="WebSettings method `setUseWideViewPort`"/>
+    <variant name="WebSettingsSetWebGraphicsEnabled"
+        summary="WebSettings method `setWebGraphicsEnabled`"/>
     <variant name="WebSettingsSupportMultipleWindows"
         summary="WebSettings method `supportMultipleWindows`"/>
     <variant name="WebSettingsSupportZoom"
@@ -30827,15 +30860,6 @@ should be able to be added at any place in this file.
   <description>
     A website requested a permission which was queued because an existing
     permission request was already visible.
-  </description>
-</action>
-
-<action name="PersonalContext.AtMemory.Notice.SettingsLinkClick">
-  <owner>lamzin@google.com</owner>
-  <owner>chrome-browser-privacy-team@google.com</owner>
-  <description>
-    Recorded when the user clicks the Manage Settings link in the AtMemory
-    notice.
   </description>
 </action>
 

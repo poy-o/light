@@ -21,14 +21,14 @@ import type {AvatarIcon} from 'chrome://resources/cr_elements/cr_profile_avatar_
 import type {CrViewManagerElement} from 'chrome://resources/cr_elements/cr_view_manager/cr_view_manager.js';
 import {I18nMixinLit} from 'chrome://resources/cr_elements/i18n_mixin_lit.js';
 import {WebUiListenerMixinLit} from 'chrome://resources/cr_elements/web_ui_listener_mixin_lit.js';
-import {assert} from 'chrome://resources/js/assert.js';
+import {assert, assertNotReached} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 
 import {getCss} from './profile_customization_app.css.js';
 import {getHtml} from './profile_customization_app.html.js';
 import type {ProfileCustomizationBrowserProxy, ProfileInfo} from './profile_customization_browser_proxy.js';
-import {ProfileCustomizationBrowserProxyImpl} from './profile_customization_browser_proxy.js';
+import {ProfileCustomizationBrowserProxyImpl, ProfileCustomizationStyle} from './profile_customization_browser_proxy.js';
 
 
 export interface ProfileCustomizationAppElement {
@@ -81,8 +81,6 @@ export class ProfileCustomizationAppElement extends
       /** The currently selected profile avatar, if any. */
       selectedAvatar_: {type: Object},
 
-      isLocalProfileCreation_: {type: Boolean},
-
       /** Exposed to CSS as 'is-refreshed-ui_'. */
       isRefreshedUI_: {type: Boolean, reflect: true},
 
@@ -98,8 +96,8 @@ export class ProfileCustomizationAppElement extends
   protected accessor availableIcons_: AvatarIcon[] = [];
   protected accessor selectedAvatar_: AvatarIcon|null = null;
   private confirmedAvatar_: AvatarIcon|null = null;
-  protected accessor isLocalProfileCreation_: boolean =
-      loadTimeData.getBoolean('isLocalProfileCreation');
+  private style_: ProfileCustomizationStyle =
+      loadTimeData.getInteger('profileCustomizationStyle');
   protected accessor isRefreshedUI_: boolean =
       loadTimeData.getBoolean('isRefreshedUI');
   private profileCustomizationBrowserProxy_: ProfileCustomizationBrowserProxy =
@@ -109,7 +107,7 @@ export class ProfileCustomizationAppElement extends
     ColorChangeUpdater.forDocument().start();
     // profileName_ is only set now, because it triggers a validation of the
     // input which crashes if it's done too early.
-    if (!this.isLocalProfileCreation_) {
+    if (!this.isStyle_(ProfileCustomizationStyle.SIGNED_OUT_PROFILE_CREATION)) {
       this.profileName_ = loadTimeData.getString('profileName');
     }
     this.addWebUiListener(
@@ -120,7 +118,7 @@ export class ProfileCustomizationAppElement extends
         (icons: AvatarIcon[]) => this.setAvailableIcons_(icons));
     this.profileCustomizationBrowserProxy_.initialized().then(
         info => this.setProfileInfo_(info));
-    if (this.isLocalProfileCreation_) {
+    if (this.shouldShowCustomizeAvatar_()) {
       this.profileCustomizationBrowserProxy_.getAvailableIcons().then(
           icons => this.setAvailableIcons_(icons));
     }
@@ -138,14 +136,20 @@ export class ProfileCustomizationAppElement extends
     return !this.profileName_ || !this.$.nameInput.validate();
   }
 
+  // Whether the page is in the given `style`.
+  private isStyle_(style: ProfileCustomizationStyle): boolean {
+    return this.style_ === style;
+  }
+
   private setProfileInfo_(profileInfo: ProfileInfo) {
     this.style.setProperty(
         '--header-background-color', profileInfo.backgroundColor);
     this.pictureUrl_ = profileInfo.pictureUrl;
     this.isManaged_ = profileInfo.isManaged;
     this.hasEnterpriseLabel = profileInfo.hasEnterpriseLabel;
-    this.welcomeTitle_ = this.isLocalProfileCreation_ ?
-        this.i18n('localProfileCreationTitle') :
+    this.welcomeTitle_ =
+        this.isStyle_(ProfileCustomizationStyle.SIGNED_OUT_PROFILE_CREATION) ?
+        this.i18n('signedOutProfileCreationTitle') :
         this.i18n('profileCustomizationTitle');
   }
 
@@ -155,20 +159,42 @@ export class ProfileCustomizationAppElement extends
         this.i18n('profileCustomizationInputPlaceholder');
   }
 
-  protected shouldShowCancelButton_(): boolean {
-    return !this.isLocalProfileCreation_;
+  // The secondary button reads "Skip", "Delete profile" or "Cancel" depending
+  // on the style.
+  protected getSecondaryButtonLabel_(): string {
+    switch (this.style_) {
+      case ProfileCustomizationStyle.SIGNED_IN_PROFILE_CREATION:
+        return this.i18n('profileCustomizationSkipLabel');
+      case ProfileCustomizationStyle.SIGNED_OUT_PROFILE_CREATION:
+        return this.i18n('profileCustomizationDeleteProfileLabel');
+      case ProfileCustomizationStyle.EDIT_PROFILE:
+        return this.i18n('profileCustomizationCancelLabel');
+      default:
+        assertNotReached();
+    }
   }
 
-  protected onSkipCustomizationClick_() {
+  // Whether the "edit" button on the avatar, which opens the avatar selection
+  // view, is shown. It takes priority over the work badge of managed profiles.
+  protected shouldShowCustomizeAvatar_(): boolean {
+    return this.isStyle_(
+               ProfileCustomizationStyle.SIGNED_OUT_PROFILE_CREATION) ||
+        this.isStyle_(ProfileCustomizationStyle.EDIT_PROFILE);
+  }
+
+  // In signed-out profile creation, the secondary button deletes the profile
+  // being created. Otherwise, it closes the page without saving the profile
+  // name.
+  protected onSecondaryButtonClick_() {
+    if (this.isStyle_(ProfileCustomizationStyle.SIGNED_OUT_PROFILE_CREATION)) {
+      this.profileCustomizationBrowserProxy_.deleteProfile();
+      return;
+    }
     this.profileCustomizationBrowserProxy_.skip();
   }
 
-  protected onDeleteProfileClick_() {
-    this.profileCustomizationBrowserProxy_.deleteProfile();
-  }
-
   protected onCustomizeAvatarClick_() {
-    assert(this.isLocalProfileCreation_);
+    assert(this.shouldShowCustomizeAvatar_());
     this.$.viewManager.switchView('selectAvatarDialog');
   }
 
@@ -190,16 +216,22 @@ export class ProfileCustomizationAppElement extends
   }
 
   protected onSelectAvatarConfirmClick_() {
-    assert(this.isLocalProfileCreation_);
+    assert(this.shouldShowCustomizeAvatar_());
     assert(this.selectedAvatar_);
-    this.profileCustomizationBrowserProxy_.setAvatarIcon(
-        this.selectedAvatar_.index);
+    if (this.selectedAvatar_.isGaiaAvatar) {
+      // The Google Account picture (offered to signed-in profiles) is not a
+      // default avatar index.
+      this.profileCustomizationBrowserProxy_.setGaiaPictureAsAvatar();
+    } else {
+      this.profileCustomizationBrowserProxy_.setAvatarIcon(
+          this.selectedAvatar_.index);
+    }
     this.confirmedAvatar_ = this.selectedAvatar_;
     this.closeSelectAvatar_();
   }
 
   protected onSelectAvatarBackClick_() {
-    assert(this.isLocalProfileCreation_);
+    assert(this.shouldShowCustomizeAvatar_());
     this.closeSelectAvatar_();
     this.selectedAvatar_ = this.confirmedAvatar_;
   }

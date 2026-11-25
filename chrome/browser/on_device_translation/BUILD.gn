@@ -34,6 +34,7 @@ source_set("on_device_translation") {
     "//chrome/browser:browser_process",
     "//chrome/browser/content_settings",
     "//chrome/browser/content_settings:content_settings_factory",
+    "//chrome/browser/data_saver",
     "//components/component_updater",
     "//components/content_settings/core/browser",
     "//components/keyed_service/content",
@@ -45,6 +46,8 @@ source_set("on_device_translation") {
     "//components/prefs",
     "//components/update_client",
     "//content/public/browser",
+    "//net",
+    "//services/network/public/cpp",
   ]
   if (is_chromeos) {
     deps += [ "//chromeos/ash/components/dbus/image_loader" ]
@@ -64,6 +67,7 @@ source_set("unit_tests") {
     ":on_device_translation",
     "//base",
     "//base/test:test_support",
+    "//chrome/browser/data_saver",
     "//chrome/test:test_support",
     "//chrome/test/base:testing_browser_process",
     "//components/component_updater:test_support",
@@ -79,8 +83,12 @@ source_set("unit_tests") {
     "//components/update_client",
     "//content/test:test_support",
     "//mojo/public/cpp/bindings",
+    "//net",
+    "//net:test_support",
+    "//services/network:test_support",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/blink/public/common:headers",
     "//url",
   ]
   if (is_chromeos) {

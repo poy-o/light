@@ -36,6 +36,7 @@
 #import "ios/chrome/browser/intelligence/bwg/coordinator/gemini_actor_task_store_manager.h"
 #import "ios/chrome/browser/intelligence/bwg/coordinator/gemini_container_mediator_delegate.h"
 #import "ios/chrome/browser/intelligence/bwg/coordinator/gemini_container_mediator_event_handler.h"
+#import "ios/chrome/browser/intelligence/bwg/coordinator/gemini_container_snackbar_manager.h"
 #import "ios/chrome/browser/intelligence/bwg/coordinator/gemini_container_ui_state_manager.h"
 #import "ios/chrome/browser/intelligence/bwg/metrics/gemini_metrics.h"
 #import "ios/chrome/browser/intelligence/bwg/metrics/gemini_session_metrics_manager.h"
@@ -128,6 +129,12 @@ bool IsPageContextComputationEligible(
     ios::provider::GeminiPageContextComputationState state) {
   return state == ios::provider::GeminiPageContextComputationState::kSuccess ||
          state == ios::provider::GeminiPageContextComputationState::kPending;
+}
+
+// Returns whether `startup_state` requests auto-submitting a non-empty prompt.
+bool IsAutoSubmitStartupState(GeminiStartupState* startup_state) {
+  return startup_state.shouldAutoSubmit &&
+         startup_state.prepopulatedPrompt.length > 0;
 }
 
 // Internal C++ observer for `WebStateList` active `WebState` changes.
@@ -344,7 +351,8 @@ class GeminiContainerMediatorTabHelperObserver
   BOOL pageContextDetached =
       ios::provider::GetCurrentPageContextAttachmentState() ==
       ios::provider::GeminiPageContextAttachmentState::kDetached;
-  if (!geminiTabHelper || pageContextDetached || _activePageContextIneligible ||
+  if (_stateManager.zeroStateSuggestionChipsSuppressed || !geminiTabHelper ||
+      pageContextDetached || _activePageContextIneligible ||
       ![self isPageContextEligibleForTabHelper:geminiTabHelper] ||
       ![self shouldShowSuggestionChipsForEntryPoint:startupState.entryPoint]) {
     [self setZeroStateSuggestions:@[]];
@@ -378,7 +386,7 @@ class GeminiContainerMediatorTabHelperObserver
 - (void)prepareForPresentation {
   [self cancelPendingPresentation];
 
-  if (!_startupState.shouldAutoSubmit) {
+  if (!IsAutoSubmitStartupState(self.startupState)) {
     [self notifyReadyForPresentationWithPageContext:nil];
     return;
   }
@@ -415,6 +423,11 @@ class GeminiContainerMediatorTabHelperObserver
   }
   _initialPageContext = nil;
   [self onFloatyInvoked];
+
+  if (IsIOSGeminiBottomSheetMigrationEnabled()) {
+    [self.snackbarManager
+        showSnackbarIfAccountMismatchedForStartupState:_startupState];
+  }
 }
 
 - (void)onFloatyInvoked {
@@ -475,6 +488,7 @@ class GeminiContainerMediatorTabHelperObserver
   self.fullscreenHandler = nil;
   _fullscreenController = nullptr;
   self.snackbarHandler = nil;
+  self.snackbarManager = nil;
   _consumer = nil;
   _webStateList = nullptr;
   _prefObserverBridge.reset();
@@ -519,15 +533,17 @@ class GeminiContainerMediatorTabHelperObserver
       [self shouldShowPageLoadingSnackbarOnOpeningInvocationForEntryPoint:
                 entryPoint]);
 
-  if (startupState.isMismatchedAccount &&
-      IsAppSwitcherAISummarizationEnabled()) {
-    ios::provider::ShowAccountSnackbar();
-  }
-
   if (IsIOSGeminiBottomSheetMigrationEnabled()) {
-    [self exitFullscreen];
-    // Assumes it's minimized.
-    [_containerHandler animateAssistantContainerToDetent:kMedium];
+    if (!IsAutoSubmitStartupState(startupState)) {
+      [self exitFullscreen];
+      // Assumes it's minimized.
+      [_containerHandler animateAssistantContainerToDetent:kMedium];
+    }
+    [self.snackbarManager
+        showSnackbarIfAccountMismatchedForStartupState:startupState];
+  } else if (startupState.isMismatchedAccount &&
+             IsAppSwitcherAISummarizationEnabled()) {
+    ios::provider::ShowAccountSnackbar();
   }
 
   [self requestActivePageContextGeneration];
@@ -778,6 +794,33 @@ class GeminiContainerMediatorTabHelperObserver
   [self updateZeroStateMediumDetentHeight];
 }
 
+- (void)didPresentDiscoveryBannerWithType:
+            (ios::provider::GeminiDiscoveryBannerType)bannerType
+                           conversationID:(NSString*)conversationID {
+  if (bannerType !=
+      ios::provider::GeminiDiscoveryBannerType::kPersonalization) {
+    return;
+  }
+  [_stateManager handlePersonalizationNoticeVisibilityChanged:YES];
+  [self setZeroStateSuggestions:@[]];
+}
+
+- (void)didDismissDiscoveryBannerWithType:
+            (ios::provider::GeminiDiscoveryBannerType)bannerType
+                           conversationID:(NSString*)conversationID {
+  if (bannerType !=
+          ios::provider::GeminiDiscoveryBannerType::kPersonalization ||
+      !_stateManager.zeroStateSuggestionChipsSuppressed) {
+    return;
+  }
+  [_stateManager handlePersonalizationNoticeVisibilityChanged:NO];
+  // Outside of the zero state (e.g. when the notice is dismissed on query
+  // submission), suggestions are fetched again on the next zero state.
+  if (_stateManager.currentUIState.zeroStateVisible) {
+    [self fetchZeroStateSuggestions:_startupState];
+  }
+}
+
 - (void)didRequestToDetachTabWithID:(NSString*)tabID {
   if (_sharedTabsManager) {
     _sharedTabsManager->DetachTabWithID(tabID);
@@ -897,10 +940,12 @@ class GeminiContainerMediatorTabHelperObserver
   config.shouldAnimatePresentation = YES;
   config.lastInteractionURLDifferent =
       geminiTabHelper->IsLastInteractionUrlDifferent();
+  const bool isBottomSheetMigrationEnabled =
+      IsIOSGeminiBottomSheetMigrationEnabled();
   config.shouldShowSuggestionChips =
       [self shouldShowSuggestionChipsForEntryPoint:startupState.entryPoint] &&
-      !IsIOSGeminiBottomSheetMigrationEnabled();
-  if (IsAppSwitcherAISummarizationEnabled() &&
+      !isBottomSheetMigrationEnabled;
+  if (!isBottomSheetMigrationEnabled && IsAppSwitcherAISummarizationEnabled() &&
       startupState.isMismatchedAccount) {
     config.shouldShowAccountSnackbar = YES;
   }
@@ -953,6 +998,8 @@ class GeminiContainerMediatorTabHelperObserver
 
 - (void)didChangeUIState:(GeminiContainerUIState)containerUIState {
   [self.consumer updateZeroStateVisibility:containerUIState.zeroStateVisible];
+  [self.consumer setHasPadding:(containerUIState.detent !=
+                                AssistantContainerDetent::kMinimized)];
   [self updateWorklogDisplayModeForUIState:containerUIState];
   [self.consumer setActuationActive:containerUIState.actuating];
 
@@ -1153,8 +1200,20 @@ class GeminiContainerMediatorTabHelperObserver
 
   [self.containerHandler setAssistantContainerLargestUndimmedDetent:
                              AssistantContainerDetent::kMinimized];
-  [_stateManager
-      setupInitialUIStateWithConversation:config.serverID.length > 0];
+  if (IsIOSGeminiBottomSheetMigrationEnabled()) {
+    BOOL isAutoSubmit = IsAutoSubmitStartupState(self.startupState);
+    [_sessionMetricsManager
+        setInitialDetent:isAutoSubmit ? kMinimized : kMedium];
+    if (isAutoSubmit) {
+      [_stateManager setupInitialUIStateForAutoSubmit];
+    } else {
+      [_stateManager
+          setupInitialUIStateWithConversation:config.serverID.length > 0];
+    }
+  } else {
+    [_stateManager
+        setupInitialUIStateWithConversation:config.serverID.length > 0];
+  }
 
   // In initial zero state the view shouldn't be focused for input.
   [self.consumer dismissKeyboard];

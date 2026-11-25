@@ -2336,6 +2336,13 @@ Cette règle est une mesure temporaire pour contrôler la fonctionnalité et ser
 <translation id="2467181864598429837">Comportement par défaut du navigateur</translation>
 <translation id="2467896267442150508">Intervalle d'une semaine (au maximum). Si l'heure de début est postérieure à l'heure de fin, l'heure de fin sera décalée au jour suivant.</translation>
 <translation id="2476249479201711962">Activer l'accès au menu contextuel du moteur de recherche par défaut</translation>
+<translation id="247659494993692492">Cette règle permet de spécifier les serveurs autorisés pour l'authentification intégrée qui n'est activée que lorsque <ph name="PRODUCT_NAME" /> reçoit une demande d'authentification d'un proxy ou d'un serveur figurant sur la liste des serveurs autorisés.
+
+      Si cette règle n'est pas configurée, <ph name="PRODUCT_NAME" /> essaie de détecter si un serveur se trouve sur l'intranet et répond aux requêtes IWA seulement si c'est le cas. Si un serveur est détecté sur Internet, <ph name="PRODUCT_NAME" /> ignore alors les requêtes IWA.
+
+      Remarque : S'il y a plusieurs serveurs, séparez leur nom par une virgule. Les caractères génériques (<ph name="WILDCARD_VALUE" />) sont autorisés.
+
+      Sur <ph name="LINUX_OS_NAME" />, <ph name="MAC_OS_NAME" /> et <ph name="PRODUCT_OS_NAME" />, la bibliothèque GSSAPI/Kerberos du système peut canoniser un nom d'hôte de serveur en un autre hôte de principal de service (par exemple, via des recherches DNS CNAME ou des recherches DNS inversées PTR). L'authentification "Negotiate" échoue alors, sauf si cet hôte est également autorisé par cette règle.</translation>
 <translation id="2478756867046106663">Autoriser les sites aux expériences abusives à ouvrir de nouvelles fenêtres ou de nouveaux onglets</translation>
 <translation id="2479760962196319822">Cette règle détermine si les utilisateurs de <ph name="PRODUCT_OS_NAME" /> peuvent stocker des données localement ou non.
       Si cette règle est définie sur "False", le stockage local est bloqué sur <ph name="PRODUCT_OS_NAME" /> : les utilisateurs ne peuvent ni stocker des données localement, ni accéder aux répertoires locaux.
@@ -4673,6 +4680,11 @@ Cette règle peut être combinée avec <ph name="POLICY_CLOUD_POLICY_OVERRIDES_P
 
       Remarque : Cette règle doit être utilisée avec la règle "<ph name="REMOTE_ACCESS_HOST_TOKEN_VALIDATION_URL_POLICY_NAME" />".</translation>
 <translation id="3918339829588313389">Autoriser les utilisateurs à définir un code peu sécurisé</translation>
+<translation id="3920151704940430728">Si cette règle est activée, la recherche CNAME est ignorée. Le nom du serveur est utilisé tel qu'il a été saisi lors de la génération du SPN Kerberos.
+
+Si cette règle est désactivée ou qu'elle n'est pas configurée, la recherche CNAME détermine le nom canonique du serveur lors de la génération du SPN Kerberos.
+
+Remarque : Sous <ph name="LINUX_OS_NAME" />, <ph name="MAC_OS_NAME" /> et <ph name="PRODUCT_OS_NAME" />, l'activation de cette règle ignore la recherche CNAME de <ph name="PRODUCT_NAME" />, mais la bibliothèque GSSAPI/Kerberos du système peut toujours canoniser l'hôte du principal du service (par exemple, via les paramètres DNS <ph name="KRB5_CONFIG" />). L'authentification "Negotiate" échoue alors, à moins que cet hôte ne soit autorisé par <ph name="AUTH_SERVER_ALLOWLIST_POLICY_NAME" />, et la délégation est refusée, sauf si elle est également autorisée par <ph name="AUTH_NEGOTIATE_DELEGATE_ALLOWLIST_POLICY_NAME" />.</translation>
 <translation id="392227823425989489">Tous les raccourcis système s'activeront toujours comme prévu.</translation>
 <translation id="3924506460382372403">Désactiver les rapports sur l'état de la carte graphique de l'appareil</translation>
 <translation id="3925377537407648234">Régler la résolution d'affichage et le facteur d'adaptation</translation>
@@ -6414,6 +6426,13 @@ Si cette règle est définie sur une chaîne vide ou qu'elle n'est pas configur�
 
 Remarque : Cette règle étant obsolète, utilisez <ph name="ISOLATE_ORIGINS_POLICY_NAME" /> (pour les appareils hautes performances) ou <ph name="ISOLATE_ORIGINS_SHORTLIST_POLICY_NAME" /> à la place. Cette règle ne concerne que Chrome sur <ph name="ANDROID_NAME" />, sur les appareils avec plus de 1 Go de RAM pour lesquels il n'est pas recommandé de configurer spécifiquement l'isolation des processus.</translation>
 <translation id="4991786313466977061">Contrôler la visibilité des badges d'entreprise</translation>
+<translation id="4991886408515766724">Permet de dresser la liste des formats d'URL pour lesquels les sites sont autorisés à demander aux utilisateurs à accéder à un appareil USB.
+
+      Si cette règle n'est pas configurée, la règle <ph name="DEFAULT_WEB_USB_GUARD_SETTING_POLICY_NAME" /> s'applique pour tous les sites, à condition qu'elle soit définie. Si ce n'est pas le cas, les paramètres spécifiés par les utilisateurs s'appliquent.
+
+      Les formats d'URL ne doivent pas entrer en conflit avec ceux de la règle <ph name="WEB_USB_BLOCKED_FOR_URLS_POLICY_NAME" />. Aucune règle ne prévaut si un format d'URL est listé dans les deux règles.
+
+      Pour en savoir plus sur les formats d‘<ph name="URL_LABEL" /> valides, veuillez consulter https://chromeenterprise.google/policies/url-patterns. La valeur <ph name="WILDCARD_VALUE" /> n'est pas acceptée pour cette règle.</translation>
 <translation id="4995123966071996433">Ne pas autoriser le transfert de port vers les machines virtuelles Linux</translation>
 <translation id="4996068111491152684">Les identifiants de connexion <ph name="PRODUCT_OS_NAME" /> ne seront pas utilisés pour l'authentification réseau.</translation>
 <translation id="4996086761250834365">Autoriser l'analyse de produit <ph name="PLUGIN_VM_NAME" /></translation>
@@ -6760,6 +6779,13 @@ Cette règle est compatible avec l'actualisation dynamique.
 Cette règle est une mesure temporaire qui sera supprimée dans les futures versions de <ph name="PRODUCT_NAME" />.</translation>
 <translation id="5212810195096589189">Spécifier l'autorisation concernant l'interface de ligne de commande pour les machines virtuelles</translation>
 <translation id="5213038356678567351">Sites Web qui ne doivent jamais déclencher un changement de navigateur.</translation>
+<translation id="5213420013031914763">Si cette règle est activée, les utilisateurs ne peuvent pas faire de captures d'écran avec des raccourcis clavier ni avec des API d'extension. Si elle est désactivée ou qu'elle n'est pas configurée, les captures d'écran sont autorisées.
+
+Dans les versions 155 à 158 de <ph name="PRODUCT_NAME" />, l'activation de cette règle peut également empêcher les extensions d'associer le débogueur via "chrome.debugger.attach()", par exemple lorsque la règle <ph name="CHROME_VARIATIONS_POLICY_NAME" /> désactive toutes les variantes.
+
+Sachez que, sur <ph name="MS_WIN_NAME" />, <ph name="MAC_OS_NAME" /> et <ph name="LINUX_OS_NAME" />, cela n'empêche pas d'effectuer des captures d'écran avec des applis du système d'exploitation ou tierces.
+
+Sur <ph name="IOS_NAME" />, si cette règle est activée, les fenêtres <ph name="PRODUCT_NAME" /> sont masquées dans les captures d'écran et les enregistrements d'écran du système, et les captures d'écran de page entière ne sont pas disponibles.</translation>
 <translation id="5216710229085956333">Activer la suppression du bruit Krisp</translation>
 <translation id="5216815237712190041">Configurez le fond d'écran de l'appareil à afficher sur la page de connexion avant qu'un utilisateur ne se connecte à l'appareil. Pour configurer cette règle, vous devez indiquer l'URL depuis laquelle l'appareil Chrome OS peut télécharger l'image de fond d'écran et un hachage chiffré utilisé pour vérifier l'intégrité du téléchargement. L'image doit être au format JPEG, et sa taille ne doit pas dépasser 16 Mo. L'URL doit être accessible sans authentification. L'image de fond d'écran est téléchargée et mise en cache. Elle sera de nouveau téléchargée à chaque modification de l'URL ou du hachage.
 
@@ -7898,15 +7924,6 @@ Cette règle ne peut être configurée que comme règle relative aux utilisateur
 <translation id="5899751601113377553">Empêcher les utilisateurs de se servir de <ph name="LACROS_NAME" /></translation>
 <translation id="5900919753933009463">Signaler la configuration du réseau</translation>
 <translation id="5901427587865226597">Impression recto verso seulement</translation>
-<translation id="5903484826174648217">Si cette règle est activée, la fonctionnalité de navigation sécurisée juge fiables les domaines que vous avez spécifiés. Autrement dit, elle ne vérifie pas si des ressources présentent un danger (hameçonnage, logiciels malveillants ou indésirables, par exemple). Le service de protection des téléchargements associé à cette fonctionnalité ne vérifie pas non plus les téléchargements hébergés sur ces domaines. De même, le service de protection par mot de passe ne vérifie pas si un mot de passe est réutilisé.
-
-Si cette règle n'est pas configurée, la navigation sécurisée applique son service de protection par défaut à toutes les ressources.
-
-Cette règle n'accepte pas les expressions régulières, mais elle autorise les sous-domaines d'un domaine donné. Les noms de domaine complets ne sont pas obligatoires.
-
-Sous <ph name="MS_WIN_NAME" />, cette règle n'est disponible que sur les instances associées à un domaine <ph name="MS_AD_NAME" />, à <ph name="MS_AAD_NAME" /> ou qui bénéficient de <ph name="CHROME_ENTERPRISE_CORE_NAME" />.
-
-Sous <ph name="MAC_OS_NAME" />, cette règle n'est disponible que sur les instances gérées via MDM, associées à un domaine via MCX ou qui bénéficient de <ph name="CHROME_ENTERPRISE_CORE_NAME" />.</translation>
 <translation id="5905114360004248993">Autoriser les pop-up sur ces sites</translation>
 <translation id="5905473632148429217">Activer les contrôles OCSP/CRL en ligne</translation>
 <translation id="590591187943862671">Permet de dresser la liste des formats d'URL pour lesquels les sites sont autorisés à demander aux utilisateurs l'accès en lecture aux fichiers ou répertoires figurant dans le système de fichiers du système d'exploitation hôte via l'API File System.
@@ -9272,9 +9289,6 @@ Si cette règle est définie sur "False" ou qu'elle n'est pas configurée, c'est
 Si la règle n'est pas configurée, son comportement est déterminé par la règle <ph name="GEN_AI_DEFAULT_SETTINGS_POLICY_NAME" />.
 
 Pour en savoir plus sur la gestion des données pour les fonctionnalités d'IA générative, veuillez consulter https://support.google.com/chrome/a?p=generative_ai_settings.</translation>
-<translation id="6752711782954612641">Si la règle <ph name="DEFAULT_SEARCH_PROVIDER_ENABLED_POLICY_NAME" /> est activée, la règle <ph name="DEFAULT_SEARCH_PROVIDER_SEARCH_URL_POST_PARAMS_POLICY_NAME" /> vous permet de définir les paramètres d'une recherche d'URL à l'aide de la méthode POST. Il s'agit de paires de noms et de valeurs séparées par une virgule. Si une valeur correspond à un paramètre modèle, comme <ph name="SEARCH_TERM_MARKER" />, elle est remplacée par des termes de recherches réels.
-
-      Si la règle <ph name="DEFAULT_SEARCH_PROVIDER_SEARCH_URL_POST_PARAMS_POLICY_NAME" /> n'est pas configurée, les requêtes de recherche sont envoyées à l'aide de la méthode GET.</translation>
 <translation id="6757413365906304125">Cette règle détermine le comportement du remappage des touches Page précédente/Page suivante dans la sous-page de remappage des touches. Cette sous-page permet aux utilisateurs de personnaliser les touches du clavier. Si cette règle est activée, elle empêche les utilisateurs de personnaliser ces remappages spécifiques. Si cette règle n'est pas configurée, les raccourcis de recherche sont utilisés par défaut et les utilisateurs peuvent configurer les raccourcis.</translation>
 <translation id="6757613329154374267">Service de sauvegarde et de restauration activé</translation>
 <translation id="6758659208493449452">Cette règle détermine si les utilisateurs inscrits au Programme Protection Avancée bénéficient de protections supplémentaires. Ces fonctionnalités peuvent impliquer le partage de données avec Google (par exemple, les utilisateurs du programme Protection Avancée peuvent envoyer leurs téléchargements à Google pour les faire analyser afin de détecter d'éventuels logiciels malveillants). Si cette règle est définie sur "True" ou si elle n'est pas configurée, les utilisateurs inscrits bénéficieront de protections supplémentaires. Si elle est définie sur "False", les utilisateurs du programme Protection Avancée ne bénéficieront que des fonctionnalités grand public standards.</translation>
@@ -11246,6 +11260,11 @@ Cette règle remplace le comportement de <ph name="DEFAULT_SUB_APPS_WITHOUT_PROM
           La valeur de la règle doit être indiquée en millisecondes. Elle doit également être inférieure ou égale au délai d'inactivité.</translation>
 <translation id="7992613144342460685">Accorder l'autorisation de positionnement des fenêtres sur ces sites</translation>
 <translation id="7995610550667275367">Numérisation (compatible depuis la version 87)</translation>
+<translation id="7997288303774758253">Cette règle permet d'indiquer, en millisecondes, la fréquence à laquelle le service de gestion des appareils est interrogé en vue d'obtenir des informations sur les règles relatives aux utilisateurs. Les valeurs valides sont comprises entre 1 800 000 (30 minutes) et 86,4 millions (1 jour). Toute valeur en dehors de cette plage sera remplacée par la valeur minimale ou maximale la plus proche autorisée, sauf sur Android et iOS, où les valeurs supérieures à cette plage sont limitées à 604,8 millions (1 semaine).
+
+      Si cette règle n'est pas configurée, la valeur par défaut de trois heures (ou un jour sur Android et iOS) est utilisée.
+
+      Remarque : Pour éviter toute actualisation inutile, chaque fois qu'une règle est modifiée, une actualisation est effectuée de façon forcée pour signaler ce changement. Par conséquent, si la plate-forme prend en charge ces notifications, le délai d'actualisation est de 24 heures (et toutes les valeurs par défaut ainsi que celle de cette règle sont ignorées).</translation>
 <translation id="7999023147219236247">Cette règle permet d'accorder ou non aux applis les autorisations demandées. PERMISSION_POLICY_UNSPECIFIED : la règle n'est pas configurée. Si aucune règle n'est configurée pour une autorisation à quelque niveau que ce soit, l'utilisateur peut, par défaut, accorder ou non l'autorisation demandée. PROMPT : l'utilisateur est invité à accorder ou non l'autorisation demandée. GRANT : l'autorisation demandée est accordée automatiquement. DENY : l'autorisation demandée est refusée.</translation>
 <translation id="7999336306414770162">Désactiver les rapports sur les données VPD de l'appareil</translation>
 <translation id="7999818120028621358">Activer la création de rapports sur les événements de prévention des fuites de données</translation>
@@ -11330,6 +11349,11 @@ Plusieurs règles listent des origines qui ont un impact sur les requêtes adres
 <translation id="8062485064082966327">Utiliser un service Google anonyme pour qu'une description soit ajoutée automatiquement aux images sans libellé</translation>
 <translation id="8064875716442437829">Activer l'accessibilité du moteur de rendu</translation>
 <translation id="8066428282805800713">Envoyer des données matérielles supplémentaires sur ChromeOS Flex</translation>
+<translation id="8070654368411601340">Cette règle permet de spécifier les serveurs auxquels <ph name="PRODUCT_NAME" /> peut déléguer les identifiants utilisateur. Séparez les noms des serveurs par une virgule. Les caractères génériques (<ph name="WILDCARD_VALUE" />) sont autorisés.
+
+      Si cette règle n'est pas configurée, <ph name="PRODUCT_NAME" /> ne délègue pas les identifiants utilisateur, même si un serveur est identifié comme faisant partie de l'intranet.
+
+      Sous <ph name="LINUX_OS_NAME" />, <ph name="MAC_OS_NAME" /> et <ph name="PRODUCT_OS_NAME" />, lorsque cette règle autorise la délégation à un serveur, la bibliothèque GSSAPI/Kerberos du système peut canoniser son nom d'hôte en un autre hôte de principal de service (par exemple, via des recherches DNS CNAME ou des recherches DNS inversées PTR). <ph name="PRODUCT_NAME" /> refuse alors la délégation de ce principal de service, sauf si cet hôte est également autorisé par cette règle.</translation>
 <translation id="8071371098891664137">Si <ph name="PRINTERS_BLOCKLIST" /> est choisi pour <ph name="PRINTERS_BULK_ACCESS_MODE_POLICY_NAME" />, le fait de définir <ph name="PRINTERS_BULK_BLOCKLIST_POLICY_NAME" /> indique les imprimantes indisponibles pour les utilisateurs. Toutes les imprimantes sont proposées aux utilisateurs, sauf celles dont les ID sont répertoriés dans cette règle. Ces ID doivent correspondre à ceux indiqués dans les champs <ph name="ID_FIELD" /> ou <ph name="GUID_FIELD" /> du fichier spécifié dans la règle <ph name="PRINTERS_BULK_CONFIGURATION_POLICY_NAME" />.</translation>
 <translation id="8076539570602616846">Limiter les comptes Google éligibles à l'enregistrement de fichiers PDF dans Google Drive à partir du lecteur PDF <ph name="PRODUCT_NAME" /></translation>
 <translation id="8078224178125125527">Cette règle permet de lister les serveurs proxy devant autoriser tous les schémas d'authentification HTTP pris en charge par <ph name="PRODUCT_NAME" />, indépendamment de la règle <ph name="AUTH_SCHEMES_POLICY_NAME" />.
@@ -11761,9 +11785,6 @@ Si cette règle n'est pas configurée, la commande par le visage est désactivé
       Si cette règle est activée, aucun autre processus ne sera planifié sur le même cœur de processeur lorsque le processus de rendu est en cours d'exécution.
       Si cette règle est désactivée, tous les autres processus peuvent être planifiés sur le même cœur de processeur, même si un processus de rendu y est exécuté.
       Si cette règle n'est pas configurée, tous les autres processus peuvent être planifiés sur le même cœur de processeur, même si un processus de rendu y est exécuté. Celle-ci peut varier en fonction de la version de <ph name="PRODUCT_NAME" />, des tests en conditions réelles en cours et de la plate-forme.</translation>
-<translation id="8337114537412769126">Si la règle <ph name="DEFAULT_SEARCH_PROVIDER_ENABLED_POLICY_NAME" /> est activée, la règle <ph name="DEFAULT_SEARCH_PROVIDER_SUGGEST_URL_POST_PARAMS_POLICY_NAME" /> vous permet de définir les paramètres d'une recherche suggérée à l'aide de la méthode POST. Il s'agit de paires de noms et de valeurs séparées par une virgule. Si une valeur correspond à un paramètre modèle, comme <ph name="SEARCH_TERM_MARKER" />, elle est remplacée par des termes de recherches réels.
-
-      Si la règle <ph name="DEFAULT_SEARCH_PROVIDER_SUGGEST_URL_POST_PARAMS_POLICY_NAME" /> n'est pas configurée, les requêtes de recherche suggérée sont envoyées à l'aide de la méthode GET.</translation>
 <translation id="8337200442224446773">Empêcher la randomisation du pool de sockets pour les proxys</translation>
 <translation id="8337961007759352651">Les scripts pour les nœuds de calcul (nœuds de calcul Web, service workers, etc.) nécessitent un type MIME JavaScript, comme <ph name="MIMETYPE_TEXT_JAVASCRIPT" />. Les scripts de nœuds de calcul avec d'anciens types MIME, tels que <ph name="MIMETYPE_TEXT_ASCII" />, seront refusés.</translation>
 <translation id="8339089771335211509">WebRTC utilisera uniquement l'interface pour se connecter à l'Internet public, et ne se connectera pas à l'aide d'adresses IP privées.</translation>

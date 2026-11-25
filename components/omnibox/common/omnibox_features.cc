@@ -488,9 +488,6 @@ BASE_FEATURE(kTruncateSearchUrlOq, DISABLED);
 // parameter of search URLs.
 BASE_FEATURE(kTruncateSearchUrlQ, DISABLED);
 
-// Enable asynchronous Fusebox view inflation.
-BASE_FEATURE(kOmniboxFuseboxAsyncInflation, DISABLED);
-
 // When enabled, the Android omnibox suggestions container starts inflating on a
 // background thread as soon as AutocompleteCoordinator is created (rather than
 // on native initialization), and is never inflated synchronously as a fallback.
@@ -724,9 +721,9 @@ BASE_FEATURE(kOmniboxSessionlessVoiceSearch, ENABLED);
 // Kill switch for suppressing status icon during HTTP/HTTPS navigation.
 BASE_FEATURE(kSuppressStatusIconDuringHttpNavigation, ENABLED);
 
-// Enables computing and probing alternative navigation matches for intranet
-// redirects on Android.
-BASE_FEATURE(kOmniboxAndroidIntranetRedirect, DISABLED);
+// Kill switch for computing and probing alternative navigation matches for
+// intranet redirects on Android.
+BASE_FEATURE(kOmniboxAndroidIntranetRedirect, ENABLED);
 
 // If enabled, the Omnibox, New Tab Page and toolbar mic buttons delegate voice
 // capture and transcription to the Android Google App Voice Plate (via an
@@ -751,7 +748,6 @@ static int64_t JNI_OmniboxFeatureMap_GetNativeMap(JNIEnv* env) {
       &kForceAndroidRealbox,
       &kOmniboxTouchDownTriggerForPrefetch,
       &kOmniboxPrefetchSelectedSuggestionsOmtAndroid,
-      &kOmniboxFuseboxAsyncInflation,
       &kOmniboxEarlyInflation,
       &kRichAutocompletion,
       &kUrlBarWithoutLigatures,

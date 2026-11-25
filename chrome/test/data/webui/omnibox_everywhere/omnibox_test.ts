@@ -70,7 +70,7 @@ suite('OmniboxEverywhereOmniboxTest', () => {
       searchboxCr23Theming: true,
       searchboxCr23SteadyStateShadow: false,
       contextManagementInComposeboxEnabled: false,
-      profileAvatarUrl: 'chrome://theme/IDR_PROFILE_AVATAR_0',
+      profileAvatarUrl: 'chrome://theme/IDR_PROFILE_AVATAR_26',
       profileName: 'Test Profile',
       profileEmail: 'test@example.com',
       profileTooltipHeader: 'Chrome profile',
@@ -439,6 +439,53 @@ suite('OmniboxEverywhereOmniboxTest', () => {
     assertFalse(!!element.shadowRoot.querySelector('#lensSearchButton'));
     assertTrue(!!element.shadowRoot.querySelector('#voiceSearchButton'));
   });
+
+  test(
+      'searchEngineInfo sets icon, placeholder, and mic visibility',
+      async () => {
+        testProxy.page.updateAimPopupEligibility(false);
+        await microtasksFinished();
+
+        // Neutral until the browser pushes the default search engine.
+        assertEquals(
+            '//resources/cr_components/searchbox/icons/search_cr23.svg',
+            omnibox.$.input.searchboxIcon);
+        assertEquals('', omnibox.$.input.placeholderText);
+        assertTrue(!!omnibox.shadowRoot.querySelector('#voiceSearchButton'));
+
+        // No default search engine hides the mic.
+        omnibox.searchEngineInfo = null;
+        await microtasksFinished();
+        assertFalse(!!omnibox.shadowRoot.querySelector('#voiceSearchButton'));
+        assertEquals('', omnibox.$.input.placeholderText);
+        assertEquals(
+            '//resources/cr_components/searchbox/icons/search_cr23.svg',
+            omnibox.$.input.searchboxIcon);
+
+        omnibox.searchEngineInfo = {
+          placeholderText: 'Search Example or type a URL',
+          iconPath: 'chrome://favicon2/?iconUrl=https%3A%2F%2Fexample.com',
+          darkModeIconPath:
+              'chrome://favicon2/?iconUrl=https%3A%2F%2Fexample.com',
+        };
+        await microtasksFinished();
+        assertTrue(!!omnibox.shadowRoot.querySelector('#voiceSearchButton'));
+        assertEquals(
+            'Search Example or type a URL', omnibox.$.input.placeholderText);
+        assertEquals(
+            'chrome://favicon2/?iconUrl=https%3A%2F%2Fexample.com',
+            omnibox.$.input.searchboxIcon);
+
+        // With AI Mode available, its placeholder wins over the engine's.
+        testProxy.page.updateAimPopupEligibility(true);
+        await microtasksFinished();
+        assertEquals(
+            loadTimeData.getString('searchBoxHintAskOrType'),
+            omnibox.$.input.placeholderText);
+        assertEquals(
+            'chrome://favicon2/?iconUrl=https%3A%2F%2Fexample.com',
+            omnibox.$.input.searchboxIcon);
+      });
 
   test(
       'updateAimPopupEligibility toggles compose button and plus button',
@@ -1664,7 +1711,8 @@ suite('OmniboxEverywhereOmniboxTest', () => {
         await advanceToNextPlaceholder(filteredInput);
         assertEquals('Ask Google or type a URL', filteredInput.placeholder);
 
-        // Disabling Fusebox falls back to static searchBoxHint without cycling.
+        // Disabling Fusebox shows the static default search engine placeholder
+        // without cycling. It stays empty until the browser pushes one.
         document.body.innerHTML = window.trustedTypes!.emptyHTML;
         loadTimeData.overrideValues({
           isFuseboxEnabled: false,
@@ -1677,9 +1725,18 @@ suite('OmniboxEverywhereOmniboxTest', () => {
         const nonFuseboxInput = nonFuseboxOmnibox.$.input.inputElement;
         assertEquals(0, getPlaceholderAnimations(nonFuseboxInput).length);
         assertTrue(nonFuseboxOmnibox.$.lensPlaceholder.hidden);
+        assertEquals('', nonFuseboxInput.placeholder);
+
+        nonFuseboxOmnibox.searchEngineInfo = {
+          placeholderText: 'Search Example or type a URL',
+          iconPath: 'chrome://favicon2/?iconUrl=https%3A%2F%2Fexample.com',
+          darkModeIconPath:
+              'chrome://favicon2/?iconUrl=https%3A%2F%2Fexample.com',
+        };
+        await microtasksFinished();
+        assertEquals(0, getPlaceholderAnimations(nonFuseboxInput).length);
         assertEquals(
-            loadTimeData.getString('searchBoxHint'),
-            nonFuseboxInput.placeholder);
+            'Search Example or type a URL', nonFuseboxInput.placeholder);
       });
 
   test('switches searchboxIcon between light and dark mode', async () => {
@@ -1700,6 +1757,13 @@ suite('OmniboxEverywhereOmniboxTest', () => {
       const themedOmnibox =
           document.createElement('omnibox-everywhere-omnibox');
       document.body.appendChild(themedOmnibox);
+      themedOmnibox.searchEngineInfo = {
+        placeholderText: 'Search Google or type a URL',
+        iconPath:
+            '//resources/cr_components/searchbox/icons/google_g_gradient.svg',
+        darkModeIconPath:
+            '//resources/cr_components/searchbox/icons/google_g_cr23.svg',
+      };
       await microtasksFinished();
 
       assertEquals(
@@ -1893,6 +1957,12 @@ suite('OmniboxEverywhereOmniboxTest', () => {
         'no-drag',
         getComputedStyle(inputEl).getPropertyValue('-webkit-app-region'));
   });
+
+  test('uses text cursor only on the editable input', () => {
+    assertEquals('auto', getComputedStyle(omnibox.$.input).cursor);
+    assertEquals('auto', getComputedStyle(omnibox.$.input.$.icon).cursor);
+    assertEquals('text', getComputedStyle(omnibox.$.input.inputElement).cursor);
+  });
 });
 
 
@@ -1909,7 +1979,7 @@ suite('OmniboxEverywhereComposeboxTest', () => {
       composeboxContextDragAndDropEnabled: true,
       energyEffectAnimationEnabled: false,
       composeboxEnergyEffectAnimationEnabled: true,
-      profileAvatarUrl: 'chrome://theme/IDR_PROFILE_AVATAR_0',
+      profileAvatarUrl: 'chrome://theme/IDR_PROFILE_AVATAR_26',
       profileName: 'Test Profile',
       profileEmail: 'test@example.com',
       omniboxEverywhereProfilePickerEnabled: false,
@@ -2467,6 +2537,64 @@ suite('OmniboxEverywhereComposeboxTest', () => {
             'no-drag',
             getComputedStyle(inputEl).getPropertyValue('-webkit-app-region'));
       });
+
+  test('hides plus button container background in tool mode', async () => {
+    composebox.style.setProperty(
+        '--color-composebox-context-entrypoint-background', 'rgb(10, 20, 30)');
+    const baseInputState = {
+      allowedModels: [],
+      allowedTools: [ToolMode.kImageGen],
+      allowedInputTypes: [InputType.kLensImage],
+      activeModel: ModelMode.kUnspecified,
+      activeTool: ToolMode.kUnspecified,
+      disabledModels: [],
+      disabledTools: [],
+      disabledInputTypes: [],
+      inputTypeConfigs: [],
+      toolConfigs: [],
+      modelConfigs: [],
+      toolsSectionConfig: null,
+      modelSectionConfig: null,
+      hintText: '',
+      maxInputsByType: {},
+      maxTotalInputs: 0,
+      isCanvasQuerySubmitted: false,
+      willFulfillInAim: false,
+    };
+    composebox.inputState = baseInputState;
+    await microtasksFinished();
+
+    const entrypointButton =
+        composebox.shadowRoot.querySelector<HTMLElement>('#contextEntrypoint');
+    assertTrue(!!entrypointButton);
+    const innerButton =
+        entrypointButton.shadowRoot?.querySelector<HTMLElement>('#entrypoint');
+    assertTrue(!!innerButton);
+
+    assertFalse(composebox.hasAttribute('in-tool-mode'));
+    assertEquals(
+        'rgb(10, 20, 30)', getComputedStyle(innerButton).backgroundColor);
+
+    composebox.inputState = {
+      ...baseInputState,
+      activeTool: ToolMode.kImageGen,
+    };
+    await microtasksFinished();
+
+    assertTrue(composebox.hasAttribute('in-tool-mode'));
+    assertEquals(
+        'rgba(0, 0, 0, 0)', getComputedStyle(innerButton).backgroundColor);
+
+    composebox.inputState = {
+      ...baseInputState,
+      activeTool: ToolMode.kUnspecified,
+    };
+    await microtasksFinished();
+
+    assertFalse(composebox.hasAttribute('in-tool-mode'));
+    assertEquals(
+        'rgb(10, 20, 30)', getComputedStyle(innerButton).backgroundColor);
+  });
 });
 
 declare global {
@@ -2501,13 +2629,13 @@ suite('OmniboxEverywhereAppTest', () => {
       searchboxLayoutMode: 'normal',
       caretAnimationEnabled: true,
       composeboxAnimationDisabled: false,
-      contextualMenuUsePecApi: false,
+      contextualMenuUsePecApi: true,
       contextButtonShapeIsOblong: false,
       contextManagementInComposeboxEnabled: false,
       searchboxCr23Theming: true,
       searchboxCr23SteadyStateShadow: false,
       searchboxShowComposeEntrypoint: false,
-      profileAvatarUrl: 'chrome://theme/IDR_PROFILE_AVATAR_0',
+      profileAvatarUrl: 'chrome://theme/IDR_PROFILE_AVATAR_26',
       profileName: 'Test Profile',
       profileEmail: 'test@example.com',
       omniboxEverywhereProfilePickerEnabled: false,
@@ -2519,6 +2647,12 @@ suite('OmniboxEverywhereAppTest', () => {
       omniboxEverywhereMostVisitedHideTitle: true,
       draggableEmptyInput: true,
       initialFreStage: 0,
+      hasDefaultSearchEngine: true,
+      searchEnginePlaceholderText: 'Search Google or type a URL',
+      searchEngineIconPath:
+          '//resources/cr_components/searchbox/icons/google_g_gradient.svg',
+      searchEngineDarkModeIconPath:
+          '//resources/cr_components/searchbox/icons/google_g_cr23.svg',
       composeboxCancelButtonTitle: 'Close AI Mode',
       composeboxCancelButtonTitleInput: 'Clear text',
     });
@@ -2585,6 +2719,65 @@ suite('OmniboxEverywhereAppTest', () => {
     assertFalse(mousedown(composebox.$.composeboxInput.inputElement));
   });
 
+  test('search engine info initializes from loadTimeData', async () => {
+    const iconPath = 'chrome://favicon2/?iconUrl=https%3A%2F%2Fexample.com';
+    const darkModeIconPath =
+        '//resources/cr_components/searchbox/icons/google_g_cr23.svg';
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    loadTimeData.overrideValues({
+      hasDefaultSearchEngine: true,
+      searchEnginePlaceholderText: 'Search Example or type a URL',
+      searchEngineIconPath: iconPath,
+      searchEngineDarkModeIconPath: darkModeIconPath,
+    });
+    const seededApp = document.createElement('omnibox-everywhere-app');
+    document.body.appendChild(seededApp);
+    await microtasksFinished();
+    const seededSearchbox =
+        seededApp.shadowRoot.querySelector('omnibox-everywhere-omnibox')!;
+    assertDeepEquals(
+        {
+          placeholderText: 'Search Example or type a URL',
+          iconPath,
+          darkModeIconPath,
+        },
+        seededSearchbox.searchEngineInfo);
+
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    loadTimeData.overrideValues({hasDefaultSearchEngine: false});
+    const noDseApp = document.createElement('omnibox-everywhere-app');
+    document.body.appendChild(noDseApp);
+    await microtasksFinished();
+    const noDseSearchbox =
+        noDseApp.shadowRoot.querySelector('omnibox-everywhere-omnibox')!;
+    assertEquals(null, noDseSearchbox.searchEngineInfo);
+  });
+
+  test('search engine info persists across mode switches', async () => {
+    const iconPath = 'chrome://favicon2/?iconUrl=https%3A%2F%2Fexample.com';
+    testProxy.page.setSearchEngineInfo({
+      placeholderText: 'Search Example or type a URL',
+      iconPath,
+      darkModeIconPath: iconPath,
+    });
+    await testProxy.page.$.flushForTesting();
+    await microtasksFinished();
+    const searchbox =
+        app.shadowRoot.querySelector('omnibox-everywhere-omnibox')!;
+    assertEquals(iconPath, searchbox.searchEngineInfo?.iconPath);
+
+    // The omnibox is re-created after the composebox closes and must not fall
+    // back to neutral branding.
+    searchbox.fire('open-composebox', {text: '', files: [], mode: 0, model: 0});
+    await microtasksFinished();
+    app.shadowRoot.querySelector('omnibox-everywhere-composebox')!.fire(
+        'close-composebox');
+    await microtasksFinished();
+    const recreated =
+        app.shadowRoot.querySelector('omnibox-everywhere-omnibox')!;
+    assertNotEquals(searchbox, recreated);
+    assertEquals(iconPath, recreated.$.input.searchboxIcon);
+  });
 
   test('open-voice-search opens voice search dialog overlay', async () => {
     const searchbox =
@@ -4757,7 +4950,7 @@ suite('OmniboxEverywhereProfileIconTest', () => {
   async function createProfileIcon(profilePickerEnabled: boolean) {
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
     loadTimeData.overrideValues({
-      profileAvatarUrl: 'chrome://theme/IDR_PROFILE_AVATAR_0',
+      profileAvatarUrl: 'chrome://theme/IDR_PROFILE_AVATAR_26',
       profileName: 'Test Profile',
       profileEmail: 'test@example.com',
       profileTooltipHeader: 'Chrome profile',
@@ -4814,7 +5007,7 @@ suite('OmniboxEverywhereProfileIconTest', () => {
   test('renders enterprise badge when profile is enterprise', async () => {
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
     loadTimeData.overrideValues({
-      profileAvatarUrl: 'chrome://theme/IDR_PROFILE_AVATAR_0',
+      profileAvatarUrl: 'chrome://theme/IDR_PROFILE_AVATAR_26',
       profileName: 'Test Profile',
       profileEmail: 'test@example.com',
       omniboxEverywhereProfilePickerEnabled: true,
@@ -4946,7 +5139,7 @@ suite('OmniboxEverywhereContextMenuTest', () => {
       searchboxCr23Theming: true,
       searchboxCr23SteadyStateShadow: false,
       contextManagementInComposeboxEnabled: false,
-      profileAvatarUrl: 'chrome://theme/IDR_PROFILE_AVATAR_0',
+      profileAvatarUrl: 'chrome://theme/IDR_PROFILE_AVATAR_26',
       profileName: 'Test Profile',
       profileEmail: 'test@example.com',
       omniboxEverywhereProfilePickerEnabled: false,

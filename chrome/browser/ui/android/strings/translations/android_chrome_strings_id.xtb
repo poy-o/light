@@ -150,7 +150,6 @@ Untuk setelan lainnya yang menggunakan data guna meningkatkan pengalaman Chrome 
 <translation id="1543035591122163372">Login untuk mendapatkan sandi dan data lainnya dari <ph name="DEVICE_TYPE" /></translation>
 <translation id="1544084554881119930">Metode pembayaran dan alamat tidak akan dienkripsi. Histori penjelajahan dari Chrome tidak akan disinkronkan.
 Hanya orang yang memiliki frasa sandi Anda yang dapat membaca data terenkripsi Anda. Frasa sandi tidak dikirim ke atau disimpan oleh Google. Jika lupa frasa sandi atau ingin mengubah setelan ini, <ph name="BEGIN_LINK" />hapus data Chrome di akun Anda<ph name="END_LINK" />.</translation>
-<translation id="1544826120773021464">Untuk mengelola akun Google Anda, ketuk tombol "Kelola akun"</translation>
 <translation id="1549000191223877751">Beralih ke jendela lain</translation>
 <translation id="1553358976309200471">Perbarui browser Chrome</translation>
 <translation id="1554352084785952638"><ph name="SEARCH_ENGINE" /> untuk "<ph name="SEARCH_TERMS" />"</translation>
@@ -167,7 +166,6 @@ Hanya orang yang memiliki frasa sandi Anda yang dapat membaca data terenkripsi A
 <translation id="1600756129506222718"><ph name="TAB_TITLE" />, Tab yang Sedang Berbagi</translation>
 <translation id="1601378265092360672">Data penjelajahan mencakup histori penjelajahan, cookie dan data situs lainnya, gambar dan file dalam cache, serta tab terbuka</translation>
 <translation id="160275202205869636">Jika diaktifkan, data akan digunakan dan disimpan di Akun Google Anda. Jika dinonaktifkan, data hanya disimpan di perangkat ini.</translation>
-<translation id="160403827062749147">Selamat datang di Google Chrome, browser paling aman di dunia</translation>
 <translation id="1628019612362412531">{NUM_SELECTED,plural, =1{Hapus 1 item yang dipilih}other{Hapus # item yang dipilih}}</translation>
 <translation id="1639239467298939599">Memuat</translation>
 <translation id="1641113438599504367">Safe Browsing</translation>
@@ -283,6 +281,7 @@ Hanya orang yang memiliki frasa sandi Anda yang dapat membaca data terenkripsi A
 <translation id="2122601567107267586">Tidak dapat membuka aplikasi</translation>
 <translation id="2128579426409352593"><ph name="TAB_TITLE" />, Beberapa Tab yang sedang Berbagi, Disematkan, dan Dipilih</translation>
 <translation id="213279576345780926">Menutup <ph name="TAB_TITLE" /></translation>
+<translation id="2133857665503360653">Coba download <ph name="FILE_NAME" /> lagi</translation>
 <translation id="2138283760993967204">Ikon Kelola</translation>
 <translation id="2138632817776076519"><ph name="TAB_TITLE" />, Tab yang Sedang Merekam dan Dipilih</translation>
 <translation id="2141396931810938595">Berdasarkan penggunaan Anda</translation>
@@ -386,6 +385,7 @@ Hanya orang yang memiliki frasa sandi Anda yang dapat membaca data terenkripsi A
 <translation id="2496180316473517155">Histori penjelajahan</translation>
 <translation id="250020030759455918">Di Chrome, Anda akan melihat status login, data penjelajahan, dan data situs <ph name="SITE_NAME" /></translation>
 <translation id="2501278716633472235">Kembali</translation>
+<translation id="2505742559092758182">{COUNT,plural, =1{# download sedang berlangsung}other{# download sedang berlangsung}}</translation>
 <translation id="2510106555128151389">Menginstal <ph name="WEBAPK_NAME" /> ...</translation>
 <translation id="2512234228327349533">Telusuri opsi pembelian</translation>
 <translation id="2513403576141822879">Untuk setelan lainnya yang berkaitan dengan privasi, keamanan, dan pengumpulan data, lihat <ph name="BEGIN_LINK" />Sinkronisasi dan layanan Google<ph name="END_LINK" /></translation>
@@ -449,6 +449,7 @@ Hanya orang yang memiliki frasa sandi Anda yang dapat membaca data terenkripsi A
 <translation id="2762000892062317888">baru saja</translation>
 <translation id="276378135349383280">Tampilkan Gemini di toolbar bawah</translation>
 <translation id="276969039800130567">Login sebagai <ph name="USER_EMAIL_ADDRESS" />.</translation>
+<translation id="2770082596325051055">Jeda <ph name="FILE_NAME" /></translation>
 <translation id="2777555524387840389"><ph name="SECONDS" /> detik lagi</translation>
 <translation id="2779651927720337254">gagal</translation>
 <translation id="2781151931089541271">1 detik lagi</translation>
@@ -697,6 +698,7 @@ Hanya orang yang memiliki frasa sandi Anda yang dapat membaca data terenkripsi A
 <translation id="3740290940447881599">Pastikan Anda memercayai situs ini</translation>
 <translation id="3740525748616366977">Penelusuran suara tidak tersedia di perangkat ini</translation>
 <translation id="3749289110408117711">Nama file</translation>
+<translation id="3751708358601675711">Edit pemantauan harga</translation>
 <translation id="3756823472711156529">Pulihkan grup</translation>
 <translation id="3759306015475526475">Kelola setelan data penggunaan dan error</translation>
 <translation id="3763110477555836428">Nomor kartu virtual akan diisi saat Anda melakukan check out dengan kartu ini untuk melindungi detail kartu Anda yang sebenarnya. Kelola di Google Wallet. <ph name="BEGIN_LINK1" />Pelajari lebih lanjut kartu virtual<ph name="END_LINK1" /></translation>
@@ -789,6 +791,7 @@ Hanya orang yang memiliki frasa sandi Anda yang dapat membaca data terenkripsi A
 <translation id="4121654769234887259">Anda tidak perlu mengingat sandi ini. Sandi akan disimpan ke Pengelola Sandi Google untuk <ph name="USERNAME" />.</translation>
 <translation id="4128312955780560730">Kunci tab Samaran Anda</translation>
 <translation id="4132137475637520539">Izinkan siapa saja yang memiliki link ini untuk bergabung</translation>
+<translation id="4132969033912447558">Lanjutkan <ph name="FILE_NAME" /></translation>
 <translation id="4136632885151622181"><ph name="TAB_TITLE" />, Beberapa Tab yang Sedang Merekam, Disematkan, dan Dipilih</translation>
 <translation id="4137746084635924146">Bahasa perangkat saat ini</translation>
 <translation id="414128724510021958">Situs desktop diminta secara default</translation>
@@ -864,7 +867,6 @@ Hanya orang yang memiliki frasa sandi Anda yang dapat membaca data terenkripsi A
 <translation id="4374192654218566997">\n\nAnda juga dapat menghapus data ini dari perangkat ini:</translation>
 <translation id="4378154925671717803">Ponsel</translation>
 <translation id="4380055775103003110">Jika masalah ini terus terjadi, Anda dapat mencoba cara lain untuk melanjutkan di <ph name="SITE_ETLD_PLUS_ONE" />.</translation>
-<translation id="4381351546374507910">Login untuk mendapatkan bookmark, sandi, dan informasi Isi Otomatis di semua perangkat Anda.</translation>
 <translation id="4384468725000734951">Menggunakan Sogou untuk penelusuran</translation>
 <translation id="4387647248986092471">Buat kunci profil mobil</translation>
 <translation id="4387817230000841154">Buka Hasil Download</translation>
@@ -1891,6 +1893,7 @@ Untuk mengubah setelan ini, <ph name="BEGIN_LINK" />hapus data Chrome di akun An
 <translation id="8152331954420209374">Buka Lens</translation>
 <translation id="8153206878708357851">Aktifkan/nonaktifkan penjelajahan dengan keyboard</translation>
 <translation id="8154784523622173959">Personalisasi latar belakang halaman ini</translation>
+<translation id="8161480780962562636">Pastikan keamanan sandi Anda, periksa apakah ada sandi yang dibobol, dan dapatkan tips untuk membantu melindungi diri Anda ketika online</translation>
 <translation id="8163820386638255770">Untuk menggunakan dan menyimpan sandi di Akun Google Anda, verifikasi diri Anda</translation>
 <translation id="8174047975335711832">Informasi perangkat</translation>
 <translation id="8175940240143658258">{ARCHIVED_TAB_COUNT,plural, =1{(1) item tidak aktif}other{(#) item tidak aktif}}</translation>
@@ -1905,7 +1908,6 @@ Untuk mengubah setelan ini, <ph name="BEGIN_LINK" />hapus data Chrome di akun An
 <translation id="8210770465353466621">Tab Anda akan ditampilkan di sini</translation>
 <translation id="8212799748012101103">Buka penelusuran tab</translation>
 <translation id="8215740705341534369">Sheet samping</translation>
-<translation id="8218622182176210845">Kelola akun Anda</translation>
 <translation id="8221985041778490865">Menghapus data penjelajahan</translation>
 <translation id="8223642481677794647">Menu kartu feed</translation>
 <translation id="82296173028782770">Edit kueri penelusuran: <ph name="SEARCH_QUERY" /></translation>
@@ -2036,6 +2038,7 @@ Untuk mengubah setelan ini, <ph name="BEGIN_LINK" />hapus data Chrome di akun An
 <translation id="8676789164135894283">Verifikasi login</translation>
 <translation id="867914734596684889">Tampilkan atau sembunyikan kolom Bookmark</translation>
 <translation id="8683039184091909753">gambar</translation>
+<translation id="8687103160920393343">Batalkan <ph name="FILE_NAME" /></translation>
 <translation id="8688183792442786085"><ph name="TAB_TITLE" />, Tab yang Dipilih</translation>
 <translation id="8694622119922491927"><ph name="APP_NAME" /> memerlukan izin guna mengakses perangkat antarmuka manusia (HID) untuk situs ini. Anda dapat mengubah setelan ini nanti di Setelan &gt; Aplikasi &gt; Akses aplikasi khusus.</translation>
 <translation id="8696297579102085705">Kirim ke perangkat Anda</translation>

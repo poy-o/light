@@ -367,10 +367,6 @@ public final class ProductionSupportedFlagList {
                 AutofillFeatures.AUTOFILL_GREEK_REGEXES,
                 "When enabled, Greek regexes are used for parsing in branded builds."),
         Flag.baseFeature(
-                AutofillFeatures.AUTOFILL_STRUCTURED_FIELDS_DISABLE_ADDRESS_LINES,
-                "When enabled, Autofill disable address lines on forms with structured address"
-                        + " fields."),
-        Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_STRICTER_PHONE_EXTENSION_REGEX,
                 "When enabled, applies a stricter phone extension regex to avoid false"
                         + " positives."),
@@ -455,6 +451,9 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature(
                 BlinkFeatures.THREADED_PRELOAD_SCANNER,
                 "If enabled, the HTMLPreloadScanner will run on a worker thread."),
+        Flag.baseFeature(
+                BlinkFeatures.HTML_TOKENIZER_SIMD_SCAN,
+                "If enabled, HTMLTokenizer uses SIMD to bulk-scan script and style text."),
         Flag.baseFeature(BaseFeatures.ALIGN_WAKE_UPS, "Align delayed wake ups at 125 Hz"),
         Flag.baseFeature(
                 BaseFeatures.ANDROID_THREAD_PRIORITY,
@@ -1326,9 +1325,6 @@ public final class ProductionSupportedFlagList {
                 AwFeatures.WEBVIEW_ENABLE_DNS_PLATFORM,
                 "Enables the resolution of hostnames via platform DNS APIs in WebView."),
         Flag.baseFeature(
-                AwFeatures.WEBVIEW_CPP_METRICS_FILTERING,
-                "Enables WebView UMA metrics filtering in C++ instead of Java."),
-        Flag.baseFeature(
                 "QuicIgnoreRedundantOnNetworkMadeDefault",
                 "When enabled, Quic will ignore redundant OnNetworkMadeDefault calls."),
         Flag.baseFeature(
@@ -1631,6 +1627,12 @@ public final class ProductionSupportedFlagList {
                 BlinkFeatures.DRAG_THRESHOLD_REQUIRES_MOUSE_MOVEMENT,
                 "When enabled, the cursor needs to move past the drag start threshold in absolute"
                         + " screen coordinates rather than window-relative coordinates."),
+        Flag.baseFeature(
+                "MojoIpczParcelCapacityPolicy",
+                "Adds a feature to allow ipcz to request more shared memory based on various"
+                        + " policies on parcel allocation failures. This means that more Mojo"
+                        + " messages will utilize shared memory rather than falling back to"
+                        + " potentially slow OS transports (e.g. sockets)."),
         // Add new commandline switches and features above. The final entry should have a
         // trailing comma for cleaner diffs.
     };

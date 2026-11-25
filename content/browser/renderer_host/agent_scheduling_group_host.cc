@@ -21,7 +21,6 @@
 #include "content/common/renderer.mojom.h"
 #include "content/public/browser/render_process_host.h"
 #include "ipc/ipc_channel_proxy.h"
-#include "third_party/blink/public/mojom/worker/worklet_global_scope_creation_params.mojom.h"
 
 namespace content {
 
@@ -57,8 +56,7 @@ struct AgentSchedulingGroupHostUserData : public base::SupportsUserData::Data {
   // This is used solely to DCHECK the invariant that a SiteInstanceGroup cannot
   // request an AgentSchedulingGroup twice from the same RenderProcessHost.
 #if DCHECK_IS_ON()
-  std::set<raw_ptr<const SiteInstanceGroup, SetExperimental>>
-      site_instance_groups;
+  std::set<raw_ptr<const SiteInstanceGroup>> site_instance_groups;
 #endif
 };
 

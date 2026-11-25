@@ -63,18 +63,18 @@ void CreateFirstRunDesktopRefreshFieldTrial(
       default_percent = 0;
       break;
     case version_info::Channel::STABLE:
-      enabled_percent = 1;
-      disabled_percent = 1;
-      default_percent = 98;
+      enabled_percent = 20;
+      disabled_percent = 20;
+      default_percent = 60;
       break;
   }
-  constexpr base::FieldTrial::Probability total_probablility = 100;
-  CHECK_EQ(total_probablility,
+  constexpr base::FieldTrial::Probability total_probability = 100;
+  CHECK_EQ(total_probability,
            enabled_percent + disabled_percent + default_percent);
 
   scoped_refptr<base::FieldTrial> trial =
       base::FieldTrialList::FactoryGetFieldTrial(
-          kTrialName, total_probablility, kDefaultGroup, entropy_provider);
+          kTrialName, total_probability, kDefaultGroup, entropy_provider);
   CHECK(trial);
   trial->AppendGroup(kEnabledGroup, enabled_percent);
   trial->AppendGroup(kDisabledGroup, disabled_percent);

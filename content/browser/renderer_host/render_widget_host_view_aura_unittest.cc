@@ -113,6 +113,7 @@
 #include "ui/base/clipboard/test/clipboard_test_util.h"
 #include "ui/base/ime/init/input_method_factory.h"
 #include "ui/base/ime/input_method.h"
+#include "ui/base/ime/input_method_observer.h"
 #include "ui/base/ime/mock_input_method.h"
 #include "ui/base/ime/mojom/text_input_state.mojom.h"
 #include "ui/base/ime/virtual_keyboard_controller.h"
@@ -775,7 +776,7 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
 
   // Tests should set these to nullptr if they've already triggered their
   // destruction.
-  raw_ptr<RenderWidgetHostImpl> parent_host_ = nullptr;
+  raw_ptr<MockRenderWidgetHostImpl> parent_host_ = nullptr;
   // The `parent_view_` owns the object.
   // Note: It would be great turning this into a std::unique_ptr<>.
   raw_ptr<RenderWidgetHostViewAura> parent_view_ = nullptr;
@@ -1145,6 +1146,44 @@ class RenderWidgetHostViewAuraShutdownTest
 
 // Checks that a popup is positioned correctly relative to its parent using
 // screen coordinates.
+TEST_F(RenderWidgetHostViewAuraTest, GutterColorFollowsPreferredColorScheme) {
+  InitViewForFrame(nullptr);
+  ASSERT_FALSE(view_->GetBackgroundColor().has_value());
+
+  DelegatedFrameHostClientAura aura_client(view_);
+  DelegatedFrameHostClient* client = &aura_client;
+
+  // Dark view color mode must not flash white before the first paint.
+  render_widget_host_delegate()->set_color_mode(
+      ui::ColorProviderKey::ColorMode::kDark);
+  EXPECT_EQ(SK_ColorBLACK, client->DelegatedFrameHostGetGutterColor());
+
+  // Light view color mode keeps the historical white fallback.
+  render_widget_host_delegate()->set_color_mode(
+      ui::ColorProviderKey::ColorMode::kLight);
+  EXPECT_EQ(SK_ColorWHITE, client->DelegatedFrameHostGetGutterColor());
+
+  // Fallback must stay opaque so a pop-up window never shows the frame
+  // behind it (crbug.com/40581308).
+  EXPECT_EQ(SK_AlphaOPAQUE,
+            SkColorGetA(client->DelegatedFrameHostGetGutterColor()));
+
+  // An opaque per-tab base background color set by the embedder (e.g. the
+  // Chrome theme) wins over the color-mode fallback.
+  constexpr SkColor kTabBase = SkColorSetRGB(0x33, 0x66, 0x99);
+  render_widget_host_delegate()->set_base_background_color(kTabBase);
+  EXPECT_EQ(kTabBase, client->DelegatedFrameHostGetGutterColor());
+
+  // A transparent base background color (e.g. a WebUI overlay) must not
+  // leak through the gutter; the opaque color-mode fallback is used.
+  render_widget_host_delegate()->set_base_background_color(SK_ColorTRANSPARENT);
+  EXPECT_EQ(SK_ColorWHITE, client->DelegatedFrameHostGetGutterColor());
+  EXPECT_EQ(SK_AlphaOPAQUE,
+            SkColorGetA(client->DelegatedFrameHostGetGutterColor()));
+
+  render_widget_host_delegate()->set_base_background_color(std::nullopt);
+}
+
 TEST_F(RenderWidgetHostViewAuraTest, PositionChildPopup) {
   parent_view_->SetBounds(gfx::Rect(10, 10, 800, 600));
   gfx::Rect bounds_in_screen = parent_view_->GetViewBounds();
@@ -1527,6 +1566,42 @@ TEST_F(RenderWidgetHostViewAuraTest, PopupRetainsCaptureAfterMouseRelease) {
 
   generator.ReleaseLeftButton();
   EXPECT_TRUE(window->HasCapture());
+}
+
+// The popup takes capture while the mouse press that opened it is still held.
+// Drags and the release must still reach the parent so that the page sees
+// mousemoves and a mouseup, even if another button is pressed and released in
+// between (crbug.com/40245423).
+TEST_F(RenderWidgetHostViewAuraTest, PopupForwardsOpeningDragToParent) {
+  parent_view_->SetBounds(gfx::Rect(10, 10, 400, 400));
+  parent_view_->ShowWithVisibility(PageVisibilityState::kVisible);
+  parent_view_->Focus();
+
+  ui::test::EventGenerator generator(
+      parent_view_->GetNativeView()->GetRootWindow(), gfx::Point(300, 300));
+  generator.PressLeftButton();
+  ASSERT_TRUE(parent_view_->GetNativeView()->HasCapture());
+  InitViewForPopup(parent_view_, gfx::Rect(10, 10, 100, 100));
+  parent_host_->input_handler()->GetAndResetDispatchedMessages();
+
+  generator.MoveMouseTo(gfx::Point(50, 50));
+  generator.PressRightButton();
+  generator.MoveMouseTo(gfx::Point(55, 55));
+  generator.ReleaseRightButton();
+  generator.MoveMouseTo(gfx::Point(60, 60));
+  generator.ReleaseLeftButton();
+  ASSERT_TRUE(base::test::RunUntil([&]() {
+    return parent_host_->input_handler()->dispatched_messages().size() >= 4;
+  }));
+  auto messages =
+      parent_host_->input_handler()->GetAndResetDispatchedMessages();
+  EXPECT_EQ("MouseMove MouseMove MouseMove MouseUp", GetMessageNames(messages));
+  // The right button was pressed after the popup opened, so the parent doesn't
+  // see it held.
+  const int modifiers = messages[1]->ToEvent()->Event()->Event().GetModifiers();
+  EXPECT_TRUE(modifiers & blink::WebInputEvent::kLeftButtonDown);
+  EXPECT_FALSE(modifiers & blink::WebInputEvent::kRightButtonDown);
+  EXPECT_TRUE(view_->GetNativeView()->HasCapture());
 }
 #endif
 
@@ -8856,6 +8931,88 @@ TEST_F(RenderWidgetHostViewAuraReentrantDestructionIME,
   ui::GestureEventDetails tap_details(ui::EventType::kGestureTap);
   ui::GestureEvent gesture_tap(10, 10, 0, ui::EventTimeForNow(), tap_details);
   target_view->OnGestureEvent(&gesture_tap);
+}
+
+using RenderWidgetHostViewAuraIMETest =
+    RenderWidgetHostViewAuraReentrantDestructionIME;
+
+// Regression test for crbug.com/574410501: during a cross-RenderFrameHost
+// navigation, CommitPending() swaps the primary main frame to the incoming
+// RenderWidgetHostViewAura and focuses it before UnloadOldFrame() clears
+// TextInputManager::active_view_ for the outgoing view. Verify that when the
+// outgoing (now non-primary) view subsequently deactivates, the focused
+// incoming view dispatches OnTextInputTypeChanged(TEXT_INPUT_TYPE_NONE) to the
+// InputMethod so any open virtual keyboard is dismissed.
+TEST_F(RenderWidgetHostViewAuraIMETest, DeactivatingOldPrimaryNotifiesIME) {
+  class RecordingInputMethodObserver : public ui::InputMethodObserver {
+   public:
+    void OnFocus() override {}
+    void OnBlur() override {}
+    void OnCaretBoundsChanged(const ui::TextInputClient* client) override {}
+    void OnTextInputStateChanged(const ui::TextInputClient* client) override {
+      notifications.emplace_back(client, client ? client->GetTextInputType()
+                                                : ui::TEXT_INPUT_TYPE_NONE);
+    }
+    void OnInputMethodDestroyed(const ui::InputMethod* input_method) override {}
+
+    std::vector<std::pair<const ui::TextInputClient*, ui::TextInputType>>
+        notifications;
+  };
+
+  InitViewForFrame(nullptr);
+  ParentHostView(view_, parent_view_);
+
+  MockRenderWidgetHostDelegate* delegate = render_widget_host_delegate();
+  TextInputManager* manager = GetTextInputManager(view_);
+
+  // 1) `view_` is the focused primary main frame widget with an active search
+  // input (e.g. chrome://os-settings/ search box).
+  delegate->set_primary_main_frame_widget(widget_host_);
+  delegate->set_focused_widget(widget_host_);
+  view_->OnWindowFocused(view_->GetNativeView(), nullptr);
+  ASSERT_EQ(view_.get(), input_method_->GetTextInputClient());
+
+  ui::mojom::TextInputState search_state;
+  search_state.type = ui::TEXT_INPUT_TYPE_SEARCH;
+  manager->UpdateTextInputState(view_, search_state);
+  ASSERT_EQ(view_.get(), manager->active_view_for_testing());
+  ASSERT_EQ(ui::TEXT_INPUT_TYPE_SEARCH, view_->GetTextInputType());
+
+  // 2) Create speculative `new_view` after `view_` is already active, then
+  // simulate CommitPending(): `new_host` becomes the primary main frame and
+  // `new_view` gains Aura focus while `active_view_` still points to `view_`.
+  auto* new_host = MockRenderWidgetHostImpl::Create(
+      GetFrameTree(), delegate, site_instance_group_->GetSafeRef(),
+      process_host_->GetNextRoutingID(), /*hidden=*/false);
+  auto* new_view = new FakeRenderWidgetHostViewAura(new_host);
+  new_view->InitAsChild(nullptr);
+  ParentHostView(new_view, parent_view_);
+  ASSERT_EQ(manager, GetTextInputManager(new_view));
+
+  delegate->set_primary_main_frame_widget(new_host);
+  delegate->set_focused_widget(new_host);
+  view_->OnWindowFocused(new_view->GetNativeView(), view_->GetNativeView());
+  new_view->OnWindowFocused(new_view->GetNativeView(), view_->GetNativeView());
+  ASSERT_EQ(new_view, input_method_->GetTextInputClient());
+  ASSERT_EQ(ui::TEXT_INPUT_TYPE_SEARCH, new_view->GetTextInputType());
+  ASSERT_FALSE(manager->IsViewFocused(view_));
+
+  // 3) Simulate UnloadOldFrame() -> DidEnterBackForwardCache(`view_`) clearing
+  // `active_view_`. `new_view` must notify the InputMethod that its
+  // TextInputType transitioned from SEARCH to NONE.
+  RecordingInputMethodObserver observer;
+  input_method_->AddObserver(&observer);
+  manager->DidEnterBackForwardCache(view_);
+  input_method_->RemoveObserver(&observer);
+
+  EXPECT_EQ(nullptr, manager->active_view_for_testing());
+  EXPECT_EQ(ui::TEXT_INPUT_TYPE_NONE, new_view->GetTextInputType());
+  ASSERT_EQ(1u, observer.notifications.size());
+  EXPECT_EQ(new_view, observer.notifications[0].first);
+  EXPECT_EQ(ui::TEXT_INPUT_TYPE_NONE, observer.notifications[0].second);
+
+  delegate->set_primary_main_frame_widget(std::nullopt);
+  DestroyView(new_view);
 }
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)

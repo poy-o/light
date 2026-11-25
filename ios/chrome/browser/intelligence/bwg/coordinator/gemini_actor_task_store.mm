@@ -11,6 +11,7 @@
 #import "base/memory/raw_ptr.h"
 #import "base/not_fatal_until.h"
 #import "base/strings/sys_string_conversions.h"
+#import "base/types/expected.h"
 #import "components/autofill/core/browser/suggestions/suggestion_type.h"
 #import "components/autofill/ios/browser/form_suggestion.h"
 #import "ios/chrome/browser/intelligence/actor/model/actor_service.h"
@@ -39,10 +40,6 @@ NSString* const kMaskedPassword = @"••••••••";
 NSString* const kTaskPausedCardTitle = @"Task paused";
 // Label of the intervention button resuming the task paused by the user.
 NSString* const kResumeTaskButtonText = @"Resume task";
-
-// Completion handler for suggestion selection interventions.
-using SuggestionSelectionCompletionHandler = void (
-    ^)(ActorFormSuggestion* selectedSuggestion, BOOL shouldStorePermission);
 
 // Creates an `ActuationWorklogItem` card for a non-federated credential
 // `suggestion`.
@@ -190,15 +187,21 @@ ActuationWorklogItem* CardItemForSuggestion(ActorFormSuggestion* suggestion) {
   NSString* _latestTaskUpdate;
   // Pending intervention, if any.
   ActuationInterventionData* _intervention;
-  // Completion of `_intervention`, called with the identifier of the action the
-  // user resolves it with.
+  // Completion of a non-suggestions `_intervention`, called with the identifier
+  // of the action the user resolves it with.
   void (^_interventionCompletion)(InterventionActionIdentifier);
+  // Completion of a suggestions `_intervention`.
+  ActorSuggestionSelectionCallback _suggestionsCompletion;
   // Suggestions selectable for `_suggestionsEntry`, if any.
   NSArray<ActorFormSuggestion*>* _suggestions;
   // Entry for which `_suggestions` are selectable.
   ActuationWorklogEntry* _suggestionsEntry;
-  // Suggestion of `_suggestions` resolved by the "Allow" action.
-  ActorFormSuggestion* _selectedSuggestion;
+  // Index in `_suggestions` of the suggestion resolved by the "Allow" action,
+  // or `NSNotFound` if no suggestion selection is pending.
+  NSInteger _selectedSuggestionIndex;
+  // Worklog entry for the pending navigation confirmation prompt, cleared once
+  // answered so unanswered entries are removed when discarded.
+  ActuationWorklogEntry* _navigationConfirmationEntry;
   // Latest published state, `nil` until the task is registered.
   ActuationWorklogState* _state;
 }
@@ -209,6 +212,7 @@ ActuationWorklogItem* CardItemForSuggestion(ActorFormSuggestion* suggestion) {
   if (self) {
     _taskID = taskID;
     _taskState = actor::ActorTaskState::kInit;
+    _selectedSuggestionIndex = NSNotFound;
     _observers =
         static_cast<CRBProtocolObservers<ActorTaskDataSourceObserver>*>(
             [CRBProtocolObservers
@@ -231,7 +235,6 @@ ActuationWorklogItem* CardItemForSuggestion(ActorFormSuggestion* suggestion) {
     _actorService->RemoveTaskUpdatesObserver(_taskID, self);
     _actorService = nullptr;
   }
-  _selectedSuggestion = nil;
   [self discardIntervention];
   // The store is discarded after disconnecting, so nothing is published, but
   // the dropped intervention must not be replayed to a later observer.
@@ -306,17 +309,18 @@ ActuationWorklogItem* CardItemForSuggestion(ActorFormSuggestion* suggestion) {
 
 - (void)actorTask:(actor::ActorTaskId)taskID
     selectFromSuggestions:(NSArray<ActorFormSuggestion*>*)suggestions
-        completionHandler:
-            (void (^)(ActorFormSuggestion* selectedSuggestion,
-                      BOOL shouldStorePermission))completionHandler {
+                 callback:(ActorSuggestionSelectionCallback)callback {
+  CHECK(callback);
   CHECK(!_intervention, base::NotFatalUntil::M165);
   CHECK(!_interventionCompletion, base::NotFatalUntil::M165);
+  CHECK(!_suggestionsCompletion, base::NotFatalUntil::M165);
 
-  _selectedSuggestion = suggestions.firstObject;
-  CHECK(_selectedSuggestion.formSuggestion, base::NotFatalUntil::M165);
+  CHECK_GT(suggestions.count, 0u);
+  ActorFormSuggestion* suggestion = suggestions.firstObject;
+  CHECK(suggestion.formSuggestion, base::NotFatalUntil::M165);
 
   NSString* manuallyEnterButtonText;
-  switch (_selectedSuggestion.type) {
+  switch (suggestion.type) {
     case autofill::SuggestionType::kPasswordEntry:
       manuallyEnterButtonText = l10n_util::GetNSString(
           IDS_IOS_ACTOR_WORKLOG_SUGGESTIONS_CREDENTIAL_MANUAL_FILL_BUTTON);
@@ -333,25 +337,23 @@ ActuationWorklogItem* CardItemForSuggestion(ActorFormSuggestion* suggestion) {
 
   // Start loading before building `cardItem`. The update handler may run
   // synchronously on cache hits or asynchronously later; here `_intervention`
-  // is still nil so a synchronous call no-ops while `_selectedSuggestion.icon`
-  // is populated for `cardItem`.
+  // is still nil so a synchronous call no-ops while `suggestion.icon` is
+  // populated for `cardItem`.
   __weak __typeof(self) weakSelf = self;
-  __weak ActorFormSuggestion* weakSuggestion = _selectedSuggestion;
-  [_selectedSuggestion loadIconWithUpdateHandler:^{
+  __weak ActorFormSuggestion* weakSuggestion = suggestion;
+  [suggestion loadIconWithUpdateHandler:^{
     [weakSelf didUpdateIconForSuggestion:weakSuggestion];
   }];
 
-  ActuationWorklogItem* cardItem = CardItemForSuggestion(_selectedSuggestion);
-  if (cardItem) {
-    _suggestionsEntry = [self appendItem:cardItem toolType:std::nullopt];
-    _suggestions = [suggestions copy];
+  ActuationWorklogItem* cardItem = CardItemForSuggestion(suggestion);
+  if (!cardItem) {
+    callback(base::unexpected(actor::InterventionDelegateError::kUnsupported));
+    return;
   }
-  if (completionHandler) {
-    _interventionCompletion = ^(InterventionActionIdentifier actionIdentifier) {
-      [weakSelf resolveSuggestionsWithAction:actionIdentifier
-                           completionHandler:completionHandler];
-    };
-  }
+  _suggestionsEntry = [self appendItem:cardItem toolType:std::nullopt];
+  _suggestions = [suggestions copy];
+  _selectedSuggestionIndex = 0;
+  _suggestionsCompletion = callback;
 
   // TODO(crbug.com/571139088): Prefix the secondary button with the SF symbol
   // "hand.tap".
@@ -379,12 +381,66 @@ ActuationWorklogItem* CardItemForSuggestion(ActorFormSuggestion* suggestion) {
     requestUserInterventionWithTitle:(NSString*)title
                             subtitle:(NSString*)subtitle
                           buttonText:(NSString*)buttonText
-                   completionHandler:(void (^)(void))completionHandler {
+                            callback:(ActorConfirmationCallback)callback {
+  CHECK(callback);
   [self showCardInterventionWithTitle:title
                              subtitle:subtitle
                            buttonText:buttonText
-                    completionHandler:completionHandler];
+                    completionHandler:^{
+                      callback(base::ok());
+                    }];
   [self publishState];
+}
+
+- (void)actorTask:(actor::ActorTaskId)taskID
+    requestNavigationConfirmationForDomain:(NSString*)domain
+                                  callback:(ActorNavigationConfirmationCallback)
+                                               callback {
+  CHECK(callback);
+  [self cancelSuggestionSelection];
+  [self discardIntervention];
+
+  NSString* title = l10n_util::GetNSStringF(
+      IDS_IOS_ACTOR_WORKLOG_NAVIGATION_CONFIRMATION_TITLE,
+      base::SysNSStringToUTF16(domain));
+  NSString* subtitle = l10n_util::GetNSString(
+      IDS_IOS_ACTOR_WORKLOG_NAVIGATION_CONFIRMATION_SUBTITLE);
+
+  ActuationWorklogItem* item = [ActuationWorklogItem
+      labeledItemWithTitle:title
+                  subtitle:subtitle
+                      icon:SymbolWithPointSize(SymbolCustomShield, kIconSize)];
+
+  _navigationConfirmationEntry = [self appendItem:item toolType:std::nullopt];
+
+  _interventionCompletion = ^(InterventionActionIdentifier actionIdentifier) {
+    callback(actionIdentifier == InterventionActionIdentifier::kContinue);
+  };
+
+  ActuationInterventionAction* declineAction = [[ActuationInterventionAction
+      alloc]
+      initWithIdentifier:InterventionActionIdentifier::kDecline
+                   title:
+                       l10n_util::GetNSString(
+                           IDS_IOS_ACTOR_WORKLOG_NAVIGATION_CONFIRMATION_DECLINE_BUTTON)];
+  ActuationInterventionAction* continueAction = [[ActuationInterventionAction
+      alloc]
+      initWithIdentifier:InterventionActionIdentifier::kContinue
+                   title:
+                       l10n_util::GetNSString(
+                           IDS_IOS_ACTOR_WORKLOG_NAVIGATION_CONFIRMATION_CONTINUE_BUTTON)];
+
+  _intervention = [ActuationInterventionData
+      rowItemWithActions:@[ declineAction, continueAction ]];
+  [self publishState];
+}
+
+- (void)actorTask:(actor::ActorTaskId)taskID
+    requestClarificationWithMessage:(NSString*)message
+                           callback:(ActorClarificationCallback)callback {
+  // TODO(crbug.com/567036896): Ask the user `message`.
+  CHECK(callback);
+  callback(base::unexpected(actor::InterventionDelegateError::kUnsupported));
 }
 
 #pragma mark - ActorTaskActionHandler
@@ -393,32 +449,50 @@ ActuationWorklogItem* CardItemForSuggestion(ActorFormSuggestion* suggestion) {
   if (!_intervention) {
     return;
   }
-  void (^completion)(InterventionActionIdentifier) = _interventionCompletion;
+  ActorSuggestionSelectionCallback suggestionsCompletion =
+      _suggestionsCompletion;
+  ActorFormSuggestion* selectedSuggestion = nil;
+  if (suggestionsCompletion &&
+      action.identifier == InterventionActionIdentifier::kAllow) {
+    CHECK_GE(_selectedSuggestionIndex, 0);
+    CHECK_LT(static_cast<NSUInteger>(_selectedSuggestionIndex),
+             _suggestions.count);
+    selectedSuggestion = _suggestions[_selectedSuggestionIndex];
+  }
+  void (^interventionCompletion)(InterventionActionIdentifier) =
+      _interventionCompletion;
+  // Clear before discarding so the answered entry remains in the worklog.
+  _navigationConfirmationEntry = nil;
   [self discardIntervention];
   [self publishState];
   // Called last, as it may synchronously resume the task.
-  if (completion) {
-    completion(action.identifier);
+  if (suggestionsCompletion) {
+    suggestionsCompletion(
+        actor::SuggestionSelection{.suggestion = selectedSuggestion});
+  } else if (interventionCompletion) {
+    interventionCompletion(action.identifier);
   }
 }
 
-- (void)selectSuggestion:(ActorFormSuggestion*)suggestion {
+- (void)selectSuggestionAtIndex:(NSInteger)index {
   // While the task waits on the user, the suggestions card is the last entry.
-  if (!suggestion || !_suggestionsEntry ||
-      _entries.lastObject != _suggestionsEntry) {
+  if (!_suggestionsEntry || _entries.lastObject != _suggestionsEntry) {
     return;
   }
-  // Start loading before `-replaceSuggestionsCardWithSuggestion:` updates
-  // `_selectedSuggestion` so a cached favicon populates `suggestion.icon`
-  // immediately without a synchronous callback publishing a duplicate update;
-  // the handler may run either synchronously on cache hits or asynchronously
-  // later.
+  CHECK_GE(index, 0);
+  CHECK_LT(static_cast<NSUInteger>(index), _suggestions.count);
+  ActorFormSuggestion* suggestion = _suggestions[index];
+  // Start loading before `-replaceSuggestionsCardWithSuggestionAtIndex:`
+  // updates `_selectedSuggestionIndex` so a cached favicon populates
+  // `suggestion.icon` immediately without a synchronous callback publishing a
+  // duplicate update; the handler may run either synchronously on cache hits or
+  // asynchronously later.
   __weak __typeof(self) weakSelf = self;
   __weak ActorFormSuggestion* weakSuggestion = suggestion;
   [suggestion loadIconWithUpdateHandler:^{
     [weakSelf didUpdateIconForSuggestion:weakSuggestion];
   }];
-  [self replaceSuggestionsCardWithSuggestion:suggestion];
+  [self replaceSuggestionsCardWithSuggestionAtIndex:index];
 }
 
 - (void)stopTask {
@@ -485,19 +559,20 @@ ActuationWorklogItem* CardItemForSuggestion(ActorFormSuggestion* suggestion) {
   _actorService->ResumeTask(_taskID);
 }
 
-// Replaces `_suggestionsEntry` with a card built for `suggestion`, updates
-// `_selectedSuggestion`, and publishes the new state.
-- (void)replaceSuggestionsCardWithSuggestion:(ActorFormSuggestion*)suggestion {
+// Replaces `_suggestionsEntry` with a card built for `_suggestions[index]`,
+// updates `_selectedSuggestionIndex`, and publishes the new state.
+- (void)replaceSuggestionsCardWithSuggestionAtIndex:(NSInteger)index {
   // While the task waits on the user, the suggestions card is the last entry.
-  if (!suggestion || !_suggestionsEntry ||
-      _entries.lastObject != _suggestionsEntry) {
+  if (!_suggestionsEntry || _entries.lastObject != _suggestionsEntry) {
     return;
   }
-  ActuationWorklogItem* item = CardItemForSuggestion(suggestion);
+  CHECK_GE(index, 0);
+  CHECK_LT(static_cast<NSUInteger>(index), _suggestions.count);
+  ActuationWorklogItem* item = CardItemForSuggestion(_suggestions[index]);
   if (!item) {
     return;
   }
-  _selectedSuggestion = suggestion;
+  _selectedSuggestionIndex = index;
   // Like the card it replaces, the new card has no tool chip.
   _suggestionsEntry = [[ActuationWorklogEntry alloc] initWithItem:item
                                                              chip:nil];
@@ -508,22 +583,11 @@ ActuationWorklogItem* CardItemForSuggestion(ActorFormSuggestion* suggestion) {
 // Replaces the active suggestion card when `suggestion.icon` updates while
 // `suggestion` is the currently selected intervention suggestion.
 - (void)didUpdateIconForSuggestion:(ActorFormSuggestion*)suggestion {
-  if (suggestion && suggestion == _selectedSuggestion && _intervention) {
-    [self replaceSuggestionsCardWithSuggestion:suggestion];
+  if (suggestion && _suggestions && _intervention &&
+      _selectedSuggestionIndex != NSNotFound &&
+      _suggestions[_selectedSuggestionIndex] == suggestion) {
+    [self replaceSuggestionsCardWithSuggestionAtIndex:_selectedSuggestionIndex];
   }
-}
-
-// Resolves the pending suggestions intervention with `action` through
-// `completionHandler`. The suggestions are already cleared by
-// `resolveInterventionWithAction:`.
-- (void)resolveSuggestionsWithAction:(InterventionActionIdentifier)action
-                   completionHandler:
-                       (SuggestionSelectionCompletionHandler)completionHandler {
-  ActorFormSuggestion* selected =
-      (action == InterventionActionIdentifier::kAllow) ? _selectedSuggestion
-                                                       : nil;
-  _selectedSuggestion = nil;
-  completionHandler(selected, NO);
 }
 
 // Appends an item for `taskUpdate` unless empty or a consecutive duplicate.
@@ -554,12 +618,11 @@ ActuationWorklogItem* CardItemForSuggestion(ActorFormSuggestion* suggestion) {
 
 // Drops any pending suggestion selection without calling its completion, along
 // with its unanswered card, and returns whether one was pending
-// (`_selectedSuggestion` is `nil` otherwise).
+// (`_selectedSuggestionIndex` is `NSNotFound` otherwise).
 - (BOOL)cancelSuggestionSelection {
-  if (!_selectedSuggestion) {
+  if (_selectedSuggestionIndex == NSNotFound) {
     return NO;
   }
-  _selectedSuggestion = nil;
   // Removed so that the card is not duplicated if the prompt is retried.
   if (_suggestionsEntry) {
     [_entries removeObjectIdenticalTo:_suggestionsEntry];
@@ -568,13 +631,19 @@ ActuationWorklogItem* CardItemForSuggestion(ActorFormSuggestion* suggestion) {
   return YES;
 }
 
-// Clears the pending intervention and its suggestions, and drops its
-// completion without calling it.
+// Clears the pending intervention and its suggestions, drops its completion
+// without calling it, and removes any unanswered navigation confirmation entry.
 - (void)discardIntervention {
+  if (_navigationConfirmationEntry) {
+    [_entries removeObjectIdenticalTo:_navigationConfirmationEntry];
+    _navigationConfirmationEntry = nil;
+  }
   _interventionCompletion = nil;
+  _suggestionsCompletion = nil;
   _intervention = nil;
   _suggestions = nil;
   _suggestionsEntry = nil;
+  _selectedSuggestionIndex = NSNotFound;
 }
 
 // Builds the state from the fields and sends it to the observers. Called once
@@ -582,13 +651,12 @@ ActuationWorklogItem* CardItemForSuggestion(ActorFormSuggestion* suggestion) {
 - (void)publishState {
   _state = [[ActuationWorklogState alloc]
       initWithActuationActive:!actor::IsTerminalState(_taskState)
-          headerPrimaryAction:ActuationHeaderPrimaryActionForTaskState(
-                                  _taskState)
                 headerContent:ActuationHeaderContentVariantsForTask(
                                   _taskTitle, _taskState, _latestTaskUpdate)
                       entries:_entries
                  intervention:_intervention
                   suggestions:_suggestions
+      selectedSuggestionIndex:_selectedSuggestionIndex
              suggestionsEntry:_suggestionsEntry];
   [_observers taskDataSource:self didUpdateState:_state];
 }

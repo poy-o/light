@@ -8,6 +8,8 @@
 #include <optional>
 #include <unordered_map>
 
+#include "base/functional/bind.h"
+#include "base/i18n/language_tag.h"
 #include "base/json/json_reader.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -46,7 +48,7 @@ TestPaymentsNetworkInterface::~TestPaymentsNetworkInterface() = default;
 
 void TestPaymentsNetworkInterface::GetUnmaskDetails(
     base::OnceCallback<void(PaymentsRpcResult, UnmaskDetails&)> callback,
-    const std::string& app_locale) {
+    const base::i18n::LanguageTag& app_locale) {
   if (should_return_unmask_details_)
     std::move(callback).Run(PaymentsRpcResult::kSuccess, unmask_details_);
 }
@@ -62,7 +64,7 @@ void TestPaymentsNetworkInterface::GetCardUploadDetails(
     const std::vector<AutofillProfile>& addresses,
     const int detected_values,
     const std::vector<ClientBehaviorConstants>& client_behavior_signals,
-    const std::string& app_locale,
+    const base::i18n::LanguageTag& app_locale,
     base::OnceCallback<void(PaymentsRpcResult,
                             const std::u16string&,
                             std::unique_ptr<base::DictValue>,
@@ -76,11 +78,18 @@ void TestPaymentsNetworkInterface::GetCardUploadDetails(
   billable_service_number_ = billable_service_number;
   billing_customer_number_ = billing_customer_number;
   upload_card_source_ = upload_card_source;
-  std::move(callback).Run(
-      app_locale == "en-US" ? PaymentsRpcResult::kSuccess
-                            : PaymentsRpcResult::kPermanentFailure,
+  base::OnceClosure response = base::BindOnce(
+      std::move(callback),
+      app_locale == base::i18n::GetKnownLanguageTag("en-US")
+          ? PaymentsRpcResult::kSuccess
+          : PaymentsRpcResult::kPermanentFailure,
       u"this is a context token", TestPaymentsNetworkInterface::LegalMessage(),
       supported_card_bin_ranges_);
+  if (!should_return_card_upload_details_) {
+    get_card_upload_details_callback_ = std::move(response);
+    return;
+  }
+  std::move(response).Run();
 }
 
 void TestPaymentsNetworkInterface::UploadCard(
@@ -127,6 +136,11 @@ void TestPaymentsNetworkInterface::UpdateVirtualCardEnrollment(
 void TestPaymentsNetworkInterface::ShouldReturnUnmaskDetailsImmediately(
     bool should_return_unmask_details) {
   should_return_unmask_details_ = should_return_unmask_details;
+}
+
+void TestPaymentsNetworkInterface::ShouldReturnCardUploadDetailsImmediately(
+    bool should_return_card_upload_details) {
+  should_return_card_upload_details_ = should_return_card_upload_details;
 }
 
 void TestPaymentsNetworkInterface::AllowFidoRegistration(

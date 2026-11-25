@@ -29,10 +29,10 @@ import org.mockito.Mock;
 import org.chromium.base.Token;
 import org.chromium.base.supplier.ObservableSuppliers;
 import org.chromium.base.supplier.SettableNonNullObservableSupplier;
+import org.chromium.base.supplier.SettableNullableObservableSupplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.tab.MockTab;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabLaunchType;
@@ -56,6 +56,7 @@ public class FlatTabListDataProviderUnitTest extends TabListDataProviderTestBase
     private final Predicate<Tab> mInCurrentGroupFilter = this::isInCurrentGroup;
 
     private @Nullable Token mCurrentTabGroupId = TAB_GROUP_ID;
+    private @Nullable SettableNullableObservableSupplier<TabModel> mHighlightTabModelSupplier;
     private SettableNonNullObservableSupplier<List<TabModel>> mTabModelListSupplier;
 
     // ============================================================================================
@@ -872,7 +873,8 @@ public class FlatTabListDataProviderUnitTest extends TabListDataProviderTestBase
     @Test
     public void testBaseProvider_InScopeTabNotProjected_NotifiesClosureEventsAndNoOpsMove() {
         TabListDataProvider testProvider =
-                new TabListDataProvider(createTabModelListSupplier()) {
+                new TabListDataProvider(
+                        createTabModelListSupplier(), /* highlightTabModelSupplier= */ null) {
                     @Override
                     protected void rebuildItems() {}
 
@@ -908,20 +910,31 @@ public class FlatTabListDataProviderUnitTest extends TabListDataProviderTestBase
                         new FlatTabListDataProvider(
                                 ObservableSuppliers.createNonNull(
                                         List.of(mTabModel, mOtherTabModel)),
+                                /* highlightTabModelSupplier= */ null,
                                 /* filter= */ null,
                                 /* comparator= */ null,
                                 /* supportsMultipleModels= */ false));
     }
 
     @Test
-    public void testSupportsMultipleModels_WithoutComparator_Asserts() {
+    public void testSupportsMultipleModels_WithoutComparatorOrHighlightSupplier_Asserts() {
         assertThrows(
                 AssertionError.class,
                 () ->
                         new FlatTabListDataProvider(
                                 ObservableSuppliers.createNonNull(List.of(mTabModel)),
+                                ObservableSuppliers.createNullable(mTabModel),
                                 /* filter= */ null,
                                 /* comparator= */ null,
+                                /* supportsMultipleModels= */ true));
+        assertThrows(
+                AssertionError.class,
+                () ->
+                        new FlatTabListDataProvider(
+                                ObservableSuppliers.createNonNull(List.of(mTabModel)),
+                                /* highlightTabModelSupplier= */ null,
+                                /* filter= */ null,
+                                (a, b) -> Integer.compare(b.getId(), a.getId()),
                                 /* supportsMultipleModels= */ true));
     }
 
@@ -959,6 +972,7 @@ public class FlatTabListDataProviderUnitTest extends TabListDataProviderTestBase
                 () ->
                         new FlatTabListDataProvider(
                                 mTabModelListSupplier,
+                                ObservableSuppliers.createNullable(mTabModel),
                                 /* filter= */ null,
                                 (a, b) -> Integer.compare(b.getId(), a.getId()),
                                 /* supportsMultipleModels= */ true));
@@ -975,6 +989,7 @@ public class FlatTabListDataProviderUnitTest extends TabListDataProviderTestBase
         initProvider(
                 new FlatTabListDataProvider(
                         mTabModelListSupplier,
+                        /* highlightTabModelSupplier= */ null,
                         /* filter= */ null,
                         /* comparator= */ null,
                         /* supportsMultipleModels= */ false));
@@ -992,11 +1007,13 @@ public class FlatTabListDataProviderUnitTest extends TabListDataProviderTestBase
 
         mProvider.stop();
         verifyDetached(/* times= */ 1, mTabModel, mOtherTabModel);
+        assertTrue(mHighlightTabModelSupplier.hasObservers());
         assertItems();
 
         mProvider.requestDataReset();
         mProvider.destroy();
         verifyDetached(/* times= */ 2, mTabModel, mOtherTabModel);
+        assertFalse(mHighlightTabModelSupplier.hasObservers());
         assertItems();
     }
 
@@ -1025,52 +1042,7 @@ public class FlatTabListDataProviderUnitTest extends TabListDataProviderTestBase
     }
 
     @Test
-    public void testComparator_Rebuild_SortsTabsFromAllModels() {
-        mModelTabs.addAll(List.of(mTab1, mTab3));
-        mOtherModelTabs.addAll(List.of(mTab2, mTab4));
-        setUpSortedProvider(mTabModel, mOtherTabModel);
-
-        assertItems(item(TAB4_ID), item(TAB3_ID), item(TAB2_ID), item(TAB1_ID));
-    }
-
-    @Test
-    public void testComparator_Rebuild_ShowsRepeatedTabIdOnce() {
-        // The second model holds a different Tab object with the same ID.
-        MockTab otherTab2 = new MockTab(TAB2_ID, /* profile= */ null);
-        otherTab2.setIsPinned(true);
-        mModelTabs.addAll(List.of(mTab1, mTab2));
-        mOtherModelTabs.add(otherTab2);
-        setUpSortedProvider(mTabModel, mOtherTabModel);
-
-        // The first model's copy wins, so the card isn't pinned.
-        assertItems(item(TAB2_ID), item(TAB1_ID));
-    }
-
-    @Test
-    public void testComparator_Rebuild_FilteredOutFirstCopyHidesRepeatedTabId() {
-        // The filter shows pinned tabs. The first model's copy of TAB2_ID isn't pinned, while the
-        // second model's copy is.
-        MockTab otherTab2 = new MockTab(TAB2_ID, /* profile= */ null);
-        otherTab2.setIsPinned(true);
-        mTab1.setIsPinned(true);
-        mModelTabs.addAll(List.of(mTab1, mTab2));
-        mOtherModelTabs.add(otherTab2);
-        mTabModelListSupplier =
-                ObservableSuppliers.createNonNull(List.of(mTabModel, mOtherTabModel));
-        initProvider(
-                new FlatTabListDataProvider(
-                        mTabModelListSupplier,
-                        Tab::getIsPinned,
-                        (a, b) -> Integer.compare(b.getId(), a.getId()),
-                        /* supportsMultipleModels= */ true));
-        mProvider.requestDataReset();
-
-        // The first model's copy is checked before the filter, so TAB2_ID gets no card.
-        assertItems(pinned(TAB1_ID));
-    }
-
-    @Test
-    public void testComparator_Rebuild_SkipsModelThatHasNotLoaded() {
+    public void testComparator_Rebuild_SortsLoadedModels() {
         when(mOtherTabModel.isTabStateInitialized()).thenReturn(false);
         mModelTabs.addAll(List.of(mTab1, mTab3));
         mOtherModelTabs.addAll(List.of(mTab2, mTab4));
@@ -1078,7 +1050,7 @@ public class FlatTabListDataProviderUnitTest extends TabListDataProviderTestBase
         assertItems(item(TAB3_ID), item(TAB1_ID));
 
         when(mOtherTabModel.isTabStateInitialized()).thenReturn(true);
-        mTabModelObserver.restoreCompleted();
+        mProvider.requestDataReset();
 
         assertItems(item(TAB4_ID), item(TAB3_ID), item(TAB2_ID), item(TAB1_ID));
     }
@@ -1146,7 +1118,7 @@ public class FlatTabListDataProviderUnitTest extends TabListDataProviderTestBase
     // ============================================================================================
 
     @Test
-    public void testMultipleModels_AddTabWhileFirstModelLoading_InsertsTab() {
+    public void testMultipleModels_FirstModelLoading_SecondModelEventsUpdateItems() {
         mModelTabs.add(mTab1);
         mOtherModelTabs.add(mTab2);
         when(mTabModel.isTabStateInitialized()).thenReturn(false);
@@ -1154,36 +1126,17 @@ public class FlatTabListDataProviderUnitTest extends TabListDataProviderTestBase
         assertItems(item(TAB2_ID));
 
         addTabToOtherModel(mTab3);
-
         verify(mObserver).onItemsInserted(List.of(item(TAB3_ID)), /* after= */ null);
-        assertItems(item(TAB3_ID), item(TAB2_ID));
-    }
-
-    @Test
-    public void testMultipleModels_PinInSecondModelWhileFirstLoading_UpdatesItem() {
-        mModelTabs.add(mTab1);
-        mOtherModelTabs.add(mTab2);
-        when(mTabModel.isTabStateInitialized()).thenReturn(false);
-        setUpSortedProvider(mTabModel, mOtherTabModel);
 
         mTab2.setIsPinned(true);
         mTabModelObserver.didChangePinState(mTab2);
-
         verify(mObserver).onItemUpdated(pinned(TAB2_ID), PayloadType.PIN_STATE);
-        assertItems(pinned(TAB2_ID));
-    }
-
-    @Test
-    public void testMultipleModels_MultiSelectInSecondModelWhileFirstLoading_UpdatesItem() {
-        mModelTabs.add(mTab1);
-        mOtherModelTabs.add(mTab2);
-        when(mTabModel.isTabStateInitialized()).thenReturn(false);
-        setUpSortedProvider(mTabModel, mOtherTabModel);
 
         setMultiSelectedTabs(TAB2_ID);
-
-        verify(mObserver).onItemUpdated(multiSelected(TAB2_ID), PayloadType.MULTI_SELECTION);
-        assertItems(multiSelected(TAB2_ID));
+        TabItem pinnedAndMultiSelected =
+                pinned(TAB2_ID).withMultiSelected(/* isMultiSelected= */ true);
+        verify(mObserver).onItemUpdated(pinnedAndMultiSelected, PayloadType.MULTI_SELECTION);
+        assertItems(item(TAB3_ID), pinnedAndMultiSelected);
     }
 
     @Test
@@ -1276,6 +1229,129 @@ public class FlatTabListDataProviderUnitTest extends TabListDataProviderTestBase
         assertItems(item(TAB1_ID));
     }
 
+    @Test
+    public void testMultipleModels_RestoreCompleted_AddsOnlyTheRestoredModelsTabs() {
+        // Both models start loading. The highlight supplier holds the first model, which finishes
+        // last.
+        mModelTabs.add(mTab2);
+        mOtherModelTabs.add(mTab1);
+        mSelectedTab = mTab2;
+        when(mTabModel.isTabStateInitialized()).thenReturn(false);
+        when(mOtherTabModel.isTabStateInitialized()).thenReturn(false);
+        setUpSortedProvider(mTabModel, mOtherTabModel);
+        assertItems();
+
+        when(mOtherTabModel.isTabStateInitialized()).thenReturn(true);
+        mTabModelObserver.restoreCompleted();
+
+        verify(mObserver).onItemsInserted(List.of(item(TAB1_ID)), /* after= */ null);
+        assertItems(item(TAB1_ID));
+
+        clearInvocations(mObserver);
+        when(mTabModel.isTabStateInitialized()).thenReturn(true);
+        mTabModelObserver.restoreCompleted();
+
+        verify(mObserver).onItemsInserted(List.of(selected(TAB2_ID)), /* after= */ null);
+        verify(mObserver, never()).onDataReset(any());
+        assertItems(selected(TAB2_ID), item(TAB1_ID));
+
+        // Another restoreCompleted() once every model has loaded changes nothing.
+        clearInvocations(mObserver);
+        mTabModelObserver.restoreCompleted();
+        verifyNoInteractions(mObserver);
+    }
+
+    // ============================================================================================
+    // Multiple Models: Highlight
+    // ============================================================================================
+
+    @Test
+    public void testHighlightSupplier_HighlightsSuppliedModelsCurrentTab() {
+        // Each model has its own current tab: TAB1_ID in the first, TAB2_ID in the second.
+        mModelTabs.add(mTab1);
+        mOtherModelTabs.add(mTab2);
+        mSelectedTab = mTab1;
+        when(mOtherTabModel.index()).thenReturn(0);
+        SettableNullableObservableSupplier<TabModel> highlightSupplier =
+                ObservableSuppliers.createNullable(mOtherTabModel);
+        mHighlightTabModelSupplier = highlightSupplier;
+        setUpSortedProvider(mTabModel, mOtherTabModel);
+
+        assertItems(selected(TAB2_ID), item(TAB1_ID));
+
+        // A supplier holding null highlights nothing.
+        highlightSupplier.set(null);
+
+        verify(mObserver).onItemUpdated(item(TAB2_ID), PayloadType.SELECTION);
+        assertItems(item(TAB2_ID), item(TAB1_ID));
+
+        // Switching the supplier to the first model highlights only its current tab.
+        highlightSupplier.set(mTabModel);
+
+        verify(mObserver).onItemUpdated(selected(TAB1_ID), PayloadType.SELECTION);
+        assertItems(item(TAB2_ID), selected(TAB1_ID));
+    }
+
+    @Test
+    public void testHighlightSupplier_SelectInOtherModel_KeepsHighlight() {
+        mModelTabs.add(mTab1);
+        mOtherModelTabs.addAll(List.of(mTab2, mTab3));
+        mSelectedTab = mTab2;
+        mHighlightTabModelSupplier = ObservableSuppliers.createNullable(mOtherTabModel);
+        setUpSortedProvider(mTabModel, mOtherTabModel);
+        assertItems(item(TAB3_ID), selected(TAB2_ID), item(TAB1_ID));
+
+        // The supplier holds the second model, so a selection in the first model is ignored.
+        selectTab(mTab1, Tab.INVALID_TAB_ID);
+
+        verifyNoInteractions(mObserver);
+        assertItems(item(TAB3_ID), selected(TAB2_ID), item(TAB1_ID));
+
+        // A selection in the second model moves the highlight.
+        selectTab(mTab3, TAB2_ID);
+
+        verify(mObserver).onItemUpdated(item(TAB2_ID), PayloadType.SELECTION);
+        verify(mObserver).onItemUpdated(selected(TAB3_ID), PayloadType.SELECTION);
+        assertItems(selected(TAB3_ID), item(TAB2_ID), item(TAB1_ID));
+    }
+
+    @Test
+    public void testHighlightSupplier_BackgroundCurrentTabNotMultiSelected() {
+        // Each model has an active tab and reports it as multi-selected with count 1.
+        mModelTabs.add(mTab1);
+        mOtherModelTabs.addAll(List.of(mTab2, mTab3));
+        mSelectedTab = mTab1;
+        when(mOtherTabModel.index()).thenReturn(0);
+        mMultiSelectedTabIds.addAll(List.of(TAB1_ID, TAB2_ID));
+        when(mTabModel.getMultiSelectedTabsCount()).thenReturn(1);
+        when(mOtherTabModel.getMultiSelectedTabsCount()).thenReturn(1);
+        SettableNullableObservableSupplier<TabModel> highlightSupplier =
+                ObservableSuppliers.createNullable(mTabModel);
+        mHighlightTabModelSupplier = highlightSupplier;
+        setUpSortedProvider(mTabModel, mOtherTabModel);
+
+        // Only the highlight model's active tab is multi-selected.
+        assertItems(
+                item(TAB3_ID),
+                item(TAB2_ID),
+                selected(TAB1_ID).withMultiSelected(/* isMultiSelected= */ true));
+
+        // Switching the highlight model moves both highlight and multi-selection.
+        highlightSupplier.set(mOtherTabModel);
+        assertItems(
+                item(TAB3_ID),
+                selected(TAB2_ID).withMultiSelected(/* isMultiSelected= */ true),
+                item(TAB1_ID));
+
+        // A background model with an explicit multi-selection (count > 1) still reports it.
+        when(mTabModel.getMultiSelectedTabsCount()).thenReturn(2);
+        mTabModelObserver.onTabsSelectionChanged();
+        assertItems(
+                item(TAB3_ID),
+                selected(TAB2_ID).withMultiSelected(/* isMultiSelected= */ true),
+                multiSelected(TAB1_ID));
+    }
+
     // ============================================================================================
     // Test Helpers
     // ============================================================================================
@@ -1288,6 +1364,7 @@ public class FlatTabListDataProviderUnitTest extends TabListDataProviderTestBase
         initProvider(
                 new FlatTabListDataProvider(
                         createTabModelListSupplier(),
+                        /* highlightTabModelSupplier= */ null,
                         filter,
                         /* comparator= */ null,
                         /* supportsMultipleModels= */ false));
@@ -1297,6 +1374,7 @@ public class FlatTabListDataProviderUnitTest extends TabListDataProviderTestBase
         initProviderWithTabs(
                 new FlatTabListDataProvider(
                         createTabModelListSupplier(),
+                        /* highlightTabModelSupplier= */ null,
                         filter,
                         /* comparator= */ null,
                         /* supportsMultipleModels= */ false),
@@ -1310,13 +1388,18 @@ public class FlatTabListDataProviderUnitTest extends TabListDataProviderTestBase
 
     /**
      * Sets up a provider over {@code models} sorted by {@code comparator}, and checks that every
-     * model got the provider's observers.
+     * model got the provider's observers. With several models and no {@link
+     * #mHighlightTabModelSupplier} set, the supplier defaults to the first model.
      */
     private void setUpProviderWithComparator(Comparator<Tab> comparator, TabModel... models) {
+        if (mHighlightTabModelSupplier == null && models.length > 1) {
+            mHighlightTabModelSupplier = ObservableSuppliers.createNullable(models[0]);
+        }
         mTabModelListSupplier = ObservableSuppliers.createNonNull(List.of(models));
         initProvider(
                 new FlatTabListDataProvider(
                         mTabModelListSupplier,
+                        mHighlightTabModelSupplier,
                         /* filter= */ null,
                         comparator,
                         /* supportsMultipleModels= */ models.length > 1));

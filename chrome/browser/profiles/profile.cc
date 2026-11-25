@@ -16,7 +16,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/path_service.h"
-#include "base/rand_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/task_traits.h"
@@ -270,9 +269,10 @@ std::string Profile::OTRProfileID::Serialize() const {
 }
 #endif  // BUILDFLAG(IS_ANDROID)
 
-Profile::Profile(const OTRProfileID* otr_profile_id)
+Profile::Profile(const base::FilePath& path, const OTRProfileID* otr_profile_id)
     : otr_profile_id_(otr_profile_id ? std::make_optional(*otr_profile_id)
-                                     : std::nullopt) {
+                                     : std::nullopt),
+      path_(path) {
 #if DCHECK_IS_ON()
   base::AutoLock lock(GetProfileInstancesLock());
   GetProfileInstances().insert(this);
@@ -326,6 +326,10 @@ void Profile::AddObserver(ProfileObserver* observer) {
 
 void Profile::RemoveObserver(ProfileObserver* observer) {
   observers_.RemoveObserver(observer);
+}
+
+base::FilePath Profile::GetPath() const {
+  return path_;
 }
 
 base::FilePath Profile::GetBaseName() const {
@@ -670,19 +674,6 @@ variations::VariationsClient* Profile::GetVariationsClient() {
 
 base::WeakPtr<Profile> Profile::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
-}
-
-uint64_t Profile::GetLomProfileId() {
-  PrefService* prefs = GetPrefs();
-  CHECK(prefs);
-  uint64_t id = prefs->GetUint64(prefs::kLomProfileId);
-  if (id == 0u) {
-    while (id == 0u) {
-      id = base::RandUint64();
-    }
-    prefs->SetUint64(prefs::kLomProfileId, id);
-  }
-  return id;
 }
 
 std::string Profile::ToDebugString() const {

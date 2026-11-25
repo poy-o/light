@@ -70,6 +70,7 @@ namespace gpu {
 class DisplayCompositorMemoryAndTaskControllerOnGpu;
 class SharedImageRepresentationFactory;
 class SharedImageFactory;
+class SkiaReadbackSource;
 class VulkanContextProvider;
 }  // namespace gpu
 
@@ -162,7 +163,7 @@ class SkiaOutputSurfaceImplOnGpu
       sk_sp<GrDeferredDisplayList> ddl,
       sk_sp<GrDeferredDisplayList> overdraw_ddl,
       std::unique_ptr<skgpu::graphite::Recording> graphite_recording,
-      std::vector<raw_ptr<ImageContextImpl, VectorExperimental>> image_contexts,
+      std::vector<raw_ptr<ImageContextImpl>> image_contexts,
       base::OnceClosure on_finished,
       base::OnceCallback<void(gfx::GpuFenceHandle)> return_release_fence_cb);
   void SwapBuffers(OutputSurfaceFrame frame);
@@ -183,7 +184,7 @@ class SkiaOutputSurfaceImplOnGpu
       sk_sp<GrDeferredDisplayList> ddl,
       sk_sp<GrDeferredDisplayList> overdraw_ddl,
       std::unique_ptr<skgpu::graphite::Recording> graphite_recording,
-      std::vector<raw_ptr<ImageContextImpl, VectorExperimental>> image_contexts,
+      std::vector<raw_ptr<ImageContextImpl>> image_contexts,
       base::OnceClosure on_finished,
       base::OnceCallback<void(gfx::GpuFenceHandle)> return_release_fence_cb,
       const gfx::Rect& update_rect,
@@ -200,14 +201,12 @@ class SkiaOutputSurfaceImplOnGpu
                   ReleaseCallback blit_release_callback);
 
   void BeginAccessImages(
-      const std::vector<raw_ptr<ImageContextImpl, VectorExperimental>>&
-          image_contexts,
+      const std::vector<raw_ptr<ImageContextImpl>>& image_contexts,
       std::vector<GrBackendSemaphore>* begin_semaphores,
       std::vector<GrBackendSemaphore>* end_semaphores);
   void ResetStateOfImages();
   void EndAccessImages(
-      const base::flat_set<raw_ptr<ImageContextImpl, CtnExperimental>>&
-          image_contexts);
+      const base::flat_set<raw_ptr<ImageContextImpl>>& image_contexts);
 
   size_t max_resource_cache_bytes() const { return max_resource_cache_bytes_; }
   void ReleaseImageContexts(
@@ -369,7 +368,7 @@ class SkiaOutputSurfaceImplOnGpu
   }
 
   // Helper for `CopyOutput()` method, handles the RGBA format.
-  void CopyOutputRGBA(SkSurface* surface,
+  void CopyOutputRGBA(const gpu::SkiaReadbackSource& source,
                       copy_output::RenderPassGeometry geometry,
                       const gfx::ColorSpace& color_space,
                       const SkIRect& src_rect,
@@ -378,7 +377,7 @@ class SkiaOutputSurfaceImplOnGpu
                       std::unique_ptr<CopyOutputRequest> request,
                       ReleaseCallback blit_release_callback);
 
-  void CopyOutputRGBAInMemory(SkSurface* surface,
+  void CopyOutputRGBAInMemory(const gpu::SkiaReadbackSource& source,
                               copy_output::RenderPassGeometry geometry,
                               const gfx::ColorSpace& color_space,
                               const SkIRect& src_rect,
@@ -386,7 +385,7 @@ class SkiaOutputSurfaceImplOnGpu
                               bool is_downscale_or_identity_in_both_dimensions,
                               std::unique_ptr<CopyOutputRequest> request);
 
-  void CopyOutputRGBAInTexture(SkSurface* surface,
+  void CopyOutputRGBAInTexture(const gpu::SkiaReadbackSource& source,
                                copy_output::RenderPassGeometry geometry,
                                const gfx::ColorSpace& color_space,
                                const SkIRect& src_rect,
@@ -395,7 +394,7 @@ class SkiaOutputSurfaceImplOnGpu
                                std::unique_ptr<CopyOutputRequest> request,
                                ReleaseCallback blit_release_callback);
 
-  void CopyOutputNV12(SkSurface* surface,
+  void CopyOutputNV12(const gpu::SkiaReadbackSource& source,
                       copy_output::RenderPassGeometry geometry,
                       const gfx::ColorSpace& color_space,
                       const SkIRect& src_rect,
@@ -412,10 +411,10 @@ class SkiaOutputSurfaceImplOnGpu
                                       std::string_view debug_label);
 
   // Helper for `CopyOutputNV12()` & `CopyOutputRGBA()` methods, renders
-  // |surface| into |dest_surface|'s canvas, cropping and scaling the results
-  // appropriately. |source_selection| is the area of the |surface| that will be
+  // |source| into |dest_surface|'s canvas, cropping and scaling the results
+  // appropriately. |source_selection| is the area of the |source| that will be
   // rendered to the destination.
-  void RenderSurface(SkSurface* surface,
+  void RenderSurface(const gpu::SkiaReadbackSource& source,
                      const SkIRect& source_selection,
                      std::optional<SkVector> scaling,
                      bool is_downscale_or_identity_in_both_dimensions,
@@ -561,19 +560,17 @@ class SkiaOutputSurfaceImplOnGpu
 
     ~PromiseImageAccessHelper();
 
-    void BeginAccess(std::vector<raw_ptr<ImageContextImpl, VectorExperimental>>
-                         image_contexts,
+    void BeginAccess(std::vector<raw_ptr<ImageContextImpl>> image_contexts,
                      std::vector<GrBackendSemaphore>* begin_semaphores,
                      std::vector<GrBackendSemaphore>* end_semaphores);
     void EndAccess();
 
    private:
     const raw_ptr<SkiaOutputSurfaceImplOnGpu> impl_on_gpu_;
-    base::flat_set<raw_ptr<ImageContextImpl, CtnExperimental>> image_contexts_;
+    base::flat_set<raw_ptr<ImageContextImpl>> image_contexts_;
   };
   PromiseImageAccessHelper promise_image_access_helper_{this};
-  base::flat_set<raw_ptr<ImageContextImpl, CtnExperimental>>
-      image_contexts_to_apply_end_state_;
+  base::flat_set<raw_ptr<ImageContextImpl>> image_contexts_to_apply_end_state_;
 
   std::unique_ptr<SkiaOutputDevice> output_device_;
   std::unique_ptr<SkiaOutputDevice::ScopedPaint> scoped_output_device_paint_;
@@ -612,8 +609,7 @@ class SkiaOutputSurfaceImplOnGpu
   scoped_refptr<AsyncReadResultLock> async_read_result_lock_;
 
   // Tracking for ongoing AsyncReadResults.
-  base::flat_set<raw_ptr<AsyncReadResultHelper, CtnExperimental>>
-      async_read_result_helpers_;
+  base::flat_set<raw_ptr<AsyncReadResultHelper>> async_read_result_helpers_;
 
   // Pending release fence callbacks. These callbacks can be delayed if Vulkan
   // external semaphore type has copy transference, which means importing

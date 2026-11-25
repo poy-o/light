@@ -1536,11 +1536,11 @@ void TemplateURLService::RepairPrepopulatedSearchEngines() {
     default_search_provider_ = nullptr;
   }
 
-  std::vector<std::unique_ptr<TemplateURLData>> prepopulated_urls =
+  TemplateURLPrepopulateData::PrepopulatedEngineVector prepopulated_engines =
       prepopulate_data_resolver_->GetPrepopulatedEngines();
-  DCHECK(!prepopulated_urls.empty());
+  CHECK(!prepopulated_engines.empty());
   ActionsFromCurrentData actions(CreateActionsFromCurrentPrepopulateData(
-      &prepopulated_urls, template_urls_, default_search_provider_,
+      prepopulated_engines, template_urls_, default_search_provider_,
       prepopulate_data_resolver_.get()));
 
   // Remove items.

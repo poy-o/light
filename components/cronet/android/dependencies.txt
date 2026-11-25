@@ -132,6 +132,7 @@
 //third_party/rust/unicode_width
 //third_party/rust/utf16_iter
 //third_party/rust/utf8_iter
+//third_party/rust/utf_types
 //third_party/rust/write16
 //third_party/rust/writeable
 //third_party/rust/yoke
@@ -144,4 +145,5 @@
 //third_party/simdutf
 //third_party/zlib
 //third_party/zstd
+//tools/metrics
 //url

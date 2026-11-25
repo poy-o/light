@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">Comparte contraseñas</translation>
 <translation id="1554043146674176775">Desactivar Modo IA</translation>
 <translation id="1554477036522844996">Nueva ventana</translation>
+<translation id="1555014818414775661">Añadir imágenes</translation>
 <translation id="1557806604681757705">tu ordenador</translation>
 <translation id="1558391695376153246">Cerrar pestañas incógnito</translation>
 <translation id="1560153516220021659">Botón de la barra de herramientas secundaria contraído</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">Abre la <ph name="BEGIN_BOLD" />configuración de Safari<ph name="END_BOLD" /></translation>
 <translation id="3858860766373142691">Nombre</translation>
 <translation id="386224966259596343">Tendrás la oportunidad de guardar esta información en Wallet la próxima vez que rellenes un formulario pertinente.</translation>
-<translation id="3868495844258915202">Mostrar URL completa</translation>
 <translation id="3870931306085184145">No hay contraseñas guardadas de <ph name="DOMAIN" /></translation>
 <translation id="3875783148670536197">Ver cómo</translation>
 <translation id="3878657761594430423">Sujetahojas</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">Para recibir notificaciones de seguimiento de precios, actívalas en los ajustes de iOS.</translation>
 <translation id="528857768909044842">Los grupos de pestañas se guardan aquí</translation>
 <translation id="5294624619177114121">Notificaciones móviles</translation>
-<translation id="5295239312320826323">¿Quitar la cuenta <ph name="USER_EMAIL" />?</translation>
 <translation id="5300589172476337783">Mostrar</translation>
 <translation id="5311061401280561833">Accesos a cámara y micrófono permitidos</translation>
 <translation id="5313967007315987356">Añadir sitio</translation>
@@ -1788,6 +1787,7 @@ Handoff también debe estar habilitado en la sección General de Ajustes del sis
 <translation id="6504541289630702018">Accede fácilmente a tus grupos de pestañas del ordenador</translation>
 <translation id="6505334220040167806">Contraer grupo de pestañas.</translation>
 <translation id="6506996418997555004">Compartir el grupo de pestañas <ph name="GROUP_NAME" /></translation>
+<translation id="650770261448122895">Busca lo que ves con Lens</translation>
 <translation id="6507973708545996744">Inicia sesión para consultar tu lista de lectura en todos tus dispositivos.</translation>
 <translation id="6518133107902771759">Verificar</translation>
 <translation id="6523575793810663688">Ver cómo</translation>
@@ -2147,7 +2147,6 @@ Puedes reiniciar Level Up en cualquier momento.</translation>
 <translation id="7603852183842204213">Pop-ups bloqueados (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">La sincronización no funciona</translation>
 <translation id="760667371114328991">Desactivar notificaciones de Comprobación de tu estado</translation>
-<translation id="7612619742409846846">Has iniciado sesión en Google como</translation>
 <translation id="7612849887607288481">Abrir menú de prototipado de IA</translation>
 <translation id="7618220760967055820">Elige qué botón quieres que se muestre en la barra de herramientas</translation>
 <translation id="7620522820075868385">Cancelar</translation>
@@ -2430,6 +2429,7 @@ Puedes reiniciar Level Up en cualquier momento.</translation>
 <translation id="8439758443371991593">Ocultar Añadir a lista de lectura</translation>
 <translation id="8443986842926457191">La URL contiene más de 2048 caracteres</translation>
 <translation id="8449869326050867919">Contraseña compartida</translation>
+<translation id="8473367210869452063">Para interactuar con este sitio, detén la tarea actual o espera a que Gemini termine de trabajar</translation>
 <translation id="8473815223723723001">Editar imagen con Gemini</translation>
 <translation id="8473863474539038330">Direcciones y más</translation>
 <translation id="8474378002946546633">Permitir notificaciones</translation>
@@ -2687,7 +2687,7 @@ Puedes reiniciar Level Up en cualquier momento.</translation>
 <translation id="9205189991633470489">Bloqueo de pestañas de Incógnito</translation>
 <translation id="9206887540681440657">Velocidad</translation>
 <translation id="9218088788182688902">No se ha podido aplicar este ajuste. Actualiza Chrome y iPadOS, y reinicia el dispositivo para volver a intentarlo. Si este error sigue produciéndose, es posible que tu iPad no admita este ajuste.</translation>
-<translation id="9218430445555521422">Establecer como predeterminado</translation>
+<translation id="9218430445555521422">Establecer como predeterminada</translation>
 <translation id="9219103736887031265">Imágenes</translation>
 <translation id="9219154867334666734">Buscar pestañas…</translation>
 <translation id="9223358826628549784">Informe sobre fallos enviado.</translation>

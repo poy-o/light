@@ -289,7 +289,9 @@ public class TabGroupContextMenuCoordinator extends TabStripReorderingHelper<Tok
             TabModel tabModel = tabModelSupplier.get();
             if (!tabModel.containsTabGroup(TabGroupId.fromOptionalToken(tabGroupId))) return;
 
-            EitherGroupId eitherId = EitherGroupId.createLocalId(new LocalTabGroupId(tabGroupId));
+            EitherGroupId eitherId =
+                    EitherGroupId.createLocalId(
+                            new LocalTabGroupId(TabGroupId.fromRawToken(tabGroupId)));
 
             if (menuId == R.id.ungroup_tab) {
                 TabUiUtils.ungroupTabGroup(tabModel, tabGroupId);
@@ -323,7 +325,7 @@ public class TabGroupContextMenuCoordinator extends TabStripReorderingHelper<Tok
                 TabGroupUtils.openUrlInGroup(
                         tabModel,
                         resolver.getNtpUrl(),
-                        tabGroupId,
+                        TabGroupId.fromOptionalToken(tabGroupId),
                         TabLaunchType.FROM_TAB_GROUP_UI);
                 TabStripMenuMetricsUtils.recordGroupMenuUserAction(
                         GroupMenuAction.NEW_TAB_IN_GROUP, tabStripLayout);
@@ -901,7 +903,8 @@ public class TabGroupContextMenuCoordinator extends TabStripReorderingHelper<Tok
                 });
 
         setExistingOrDefaultTitle(
-                TabGroupTitleUtils.getDisplayableTitle(context, getTabModel(), mTabGroupId));
+                TabGroupTitleUtils.getDisplayableTitle(
+                        context, getTabModel(), TabGroupId.fromOptionalToken(mTabGroupId)));
 
         final EditText titleEditText = mGroupTitleEditText;
 

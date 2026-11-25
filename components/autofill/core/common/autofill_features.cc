@@ -242,6 +242,12 @@ BASE_FEATURE(kAutofillAiPrivateInferenceNoticeBottomSheet,
 // TODO(crbug.com/468236932): Remove once feature is launched.
 DEFINE_FEATURE_WITH_MOBILE_COUNTRY_RESTRICTION(kAutofillAiReauthRequired);
 
+// If enabled, offers to save confirmed personal context entities on form
+// submission using the whole verified entity rather than only the submitted
+// form values.
+BASE_FEATURE(kAutofillAiSaveConfirmedPersonalContextEntities,
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // When enabled, a HaTS survey is shown after the save prompt for a walletable
 // entity was interacted with.
 BASE_FEATURE(kAutofillAiSavePromptSurvey, base::FEATURE_DISABLED_BY_DEFAULT);
@@ -513,17 +519,6 @@ BASE_FEATURE(kAutofillAndroidUseGlobalIdForFormComparison,
 // Feature flag for kAutofillAtMemory.
 BASE_FEATURE(kAutofillAtMemory, base::FEATURE_DISABLED_BY_DEFAULT);
 
-// If enabled, AtMemory can be triggered by pressing Ctrl twice.
-BASE_FEATURE(kAutofillAtMemoryDoubleCtrl, base::FEATURE_DISABLED_BY_DEFAULT);
-
-// The default state for the `kAutofillAtMemoryDoubleCtrlTriggerEnabled`
-// preference.
-BASE_FEATURE_PARAM(bool,
-                   kAutofillAtMemoryDoubleCtrlDefaultPref,
-                   &kAutofillAtMemoryDoubleCtrl,
-                   "default_pref",
-                   true);
-
 // The subscription tiers for which AtMemory is eligible. Comma-separated list
 // of subscription tier integers. If empty/not defined, no tier restrictions
 // are applied.
@@ -548,11 +543,6 @@ BASE_FEATURE_PARAM(base::TimeDelta,
                    &kAutofillAtMemory,
                    base::Seconds(30));
 
-// Controls whether the Autosuggest nudging logic is used. If enabled, user are
-// encouraged to use the AtMemory feature.
-BASE_FEATURE(kAutofillAtMemoryInactivityNudge,
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Controls whether the previously filled suggestions from AtMemory are shown.
 // Takes no effect when `kAutofillAtMemorySearchStatefulness` is disabled.
 BASE_FEATURE(kAutofillAtMemoryPreviouslyFilled,
@@ -563,23 +553,6 @@ BASE_FEATURE(kAutofillAtMemoryPreviouslyFilled,
 // suggestions on the same field. State is reset once a suggestion is accepted
 // or a different field is focused.
 BASE_FEATURE(kAutofillAtMemorySearchStatefulness,
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Controls whether contenteditable fields on Android are supported for
-// AtMemory.
-BASE_FEATURE(kAutofillAtMemorySupportContenteditableOnAndroid,
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Controls whether <textarea> fields on Android are supported for AtMemory.
-// When enabled, the keyboard accessory is shown on textareas with only the
-// AtMemory entry point, and regular Autofill suggestions are not generated
-// for them.
-BASE_FEATURE(kAutofillAtMemorySupportTextAreaOnAndroid,
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// If enabled, AtMemory can be triggered with a keyboard shortcut like
-// Ctrl+Space.
-BASE_FEATURE(kAutofillAtMemoryTriggerShortcut,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // When enabled, the placeholder is not considered a label fallback on the
@@ -1116,6 +1089,11 @@ BASE_FEATURE(kAutofillReplaceFormElementObserver,
 BASE_FEATURE(kAutofillRequireFocusInFrameForSuggestions,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Kill switch: When enabled, renderer-side Autofill functions require elements
+// to belong to the expected `blink::WebDocument` (e.g., when looking up
+// elements by renderer ID or extracting/finding forms).
+BASE_FEATURE(kAutofillRequireSameDocument, base::FEATURE_ENABLED_BY_DEFAULT);
+
 // Kill switch: If enabled, `AutofillPopupControllerImpl` and
 // `AutofillKeyboardAccessoryControllerImpl` reset `barrier_for_accepting_` when
 // datalist values are updated via `UpdateDataListValues()`.
@@ -1143,17 +1121,6 @@ BASE_FEATURE(kAutofillShowGmailOtpSuggestions,
 // right after a phone number were misclassified as PHONE_HOME_EXTENSION.
 // TODO(crbug.com/417192418): Clean up when launched.
 BASE_FEATURE(kAutofillStricterPhoneExtensionRegex,
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// If this feature is enabled, the AddressFieldParser does NOT try to parse
-// address lines once it has found a street name and house number or other
-// combinations of fields that indicate that an address form uses structured
-// addresses. This should be the default in all countries with fully supported
-// structured addresses. However, if a country is not sufficiently modeled,
-// autofill may still do the right thing if it recognizes "Street name, house
-// number, address line 2" as a sequence.
-// TODO(crbug.com/40266693) Remove once launched.
-BASE_FEATURE(kAutofillStructuredFieldsDisableAddressLines,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables parsing of fields that combine postal code and city in France,

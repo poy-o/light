@@ -752,7 +752,9 @@ void ChromeShelfController::UpdateBrowserItemState() {
 
   int browser_index = model_->ItemIndexByID(chrome_id);
   if (browser_index < 0) {
-    CHECK_EQ(browser_status, ash::STATUS_CLOSED, base::NotFatalUntil::M162);
+    // TODO(crbug.com/590153468): CHECK-exclusion: Convert to a CHECK once we
+    // are confident it won't be triggered.
+    DCHECK_EQ(browser_status, ash::STATUS_CLOSED);
     return;
   }
   ash::ShelfItem browser_item = model_->items()[browser_index];
@@ -1475,8 +1477,9 @@ bool ChromeShelfController::EnsureAppPinnedInModelAtIndex(
   // Passing current app index in model as an argument is an optimization in
   // case this method is used while looping over items that avoids extra pass
   // over items in the model to find the app index.
-  CHECK_EQ(current_index, model_->ItemIndexByAppID(app_id),
-           base::NotFatalUntil::M162);
+  // TODO(crbug.com/588566915): CHECK-exclusion: Convert to a CHECK once we are
+  // confident it won't be triggered.
+  DCHECK_EQ(current_index, model_->ItemIndexByAppID(app_id));
 
   if (current_index >= 0) {
     const ash::ShelfItem item = model_->items()[current_index];
@@ -1661,7 +1664,10 @@ void ChromeShelfController::AddAppUpdaterAndIconLoader(Profile* profile) {
     std::vector<std::unique_ptr<ShelfAppUpdater>>& app_updaters_for_profile =
         app_updaters_[profile];
     app_updaters_for_profile.push_back(
-        std::make_unique<ShelfAppServiceAppUpdater>(this, profile));
+        std::make_unique<ShelfAppServiceAppUpdater>(
+            this, profile,
+            &apps::AppServiceProxyFactory::GetForProfile(profile)
+                 ->AppRegistryCache()));
 
     // Some special extensions open new windows, and on Chrome OS, those windows
     // should show the extension icon in the shelf. Extensions are not present

@@ -424,6 +424,7 @@ import org.chromium.ui.base.Clipboard;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.SelectFileDialog;
+import org.chromium.ui.base.UiAndroidFeatureList;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.dragdrop.DragAndDropDelegate;
 import org.chromium.ui.dragdrop.DragAndDropDelegateImpl;
@@ -1454,7 +1455,7 @@ public class ChromeTabbedActivity extends ChromeActivity implements PreAttachInt
                 getProfileProviderSupplier(),
                 (profile) ->
                         new BookmarkOpenerImpl(
-                                () -> BookmarkModel.getForProfile(profile),
+                                () -> profile,
                                 this,
                                 getComponentName(),
                                 /* multiInstanceManager= */ null,
@@ -1843,6 +1844,12 @@ public class ChromeTabbedActivity extends ChromeActivity implements PreAttachInt
             assumeNonNull(mInactivityTrackerSupplier.get())
                     .setLastVisibleTimeMsAndRecord(System.currentTimeMillis());
         }
+
+        // Must run after setInitialOverviewState() and super.onResumeWithNative(), which records
+        // the launch cause.
+        if (mRootUiCoordinator != null) {
+            ((TabbedRootUiCoordinator) mRootUiCoordinator).onResumeWithNativeCompleted();
+        }
     }
 
     @Override
@@ -2216,10 +2223,11 @@ public class ChromeTabbedActivity extends ChromeActivity implements PreAttachInt
     /**
      * Merges incoming reparented tabs into their destination tab group. When {@link
      * ChromeFeatureList#CROSS_WINDOW_TAB_GROUP_OPERATIONS} is enabled, schedules a deferred merge
-     * once tab state restoration has completed on cold start. Otherwise, performs an immediate
-     * merge.
+     * once tab state restoration and startup tab group sync reconciliation have completed on cold
+     * start. Otherwise, performs an immediate merge.
      */
-    private void maybeScheduleTabGroupMerge(Intent intent, List<Tab> tabs) {
+    @VisibleForTesting
+    void maybeScheduleTabGroupMerge(Intent intent, List<Tab> tabs) {
         @TabId int destTabId = IntentHandler.getDestTabId(intent);
         IntentUtils.safeRemoveExtra(intent, IntentHandler.EXTRA_DEST_TAB_ID);
         if (destTabId == Tab.INVALID_TAB_ID || tabs.isEmpty()) {
@@ -2239,7 +2247,31 @@ public class ChromeTabbedActivity extends ChromeActivity implements PreAttachInt
         TabModelUtils.runOnTabStateInitialized(
                 getTabModelSelector(),
                 mCallbackController.makeCancelable(
-                        selector -> mergeValidTabsToDest(selector, tabs, destTabId, isIncognito)));
+                        selector ->
+                                mergeValidTabsToDestAfterSyncInit(
+                                        selector, tabs, destTabId, isIncognito)));
+    }
+
+    private void mergeValidTabsToDestAfterSyncInit(
+            TabModelSelector selector, List<Tab> tabs, @TabId int destTabId, boolean isIncognito) {
+        if (isActivityFinishingOrDestroyed()) {
+            return;
+        }
+        if (!isIncognito
+                && mRootUiCoordinator instanceof TabbedRootUiCoordinator tabbedRootUiCoordinator) {
+            tabbedRootUiCoordinator
+                    .getTabGroupSyncReadySupplier()
+                    .runSyncOrOnAvailable(
+                            mCallbackController.makeCancelable(
+                                    ignored -> {
+                                        if (!isActivityFinishingOrDestroyed()) {
+                                            mergeValidTabsToDest(
+                                                    selector, tabs, destTabId, isIncognito);
+                                        }
+                                    }));
+            return;
+        }
+        mergeValidTabsToDest(selector, tabs, destTabId, isIncognito);
     }
 
     private static void mergeValidTabsToDest(
@@ -3598,7 +3630,8 @@ public class ChromeTabbedActivity extends ChromeActivity implements PreAttachInt
                 createVerticalTabsActionDelegate(),
                 mUrlBarVisibleSupplier,
                 mAppLaunchDrawBlocker::onTabLayoutAvailable,
-                this::isWarmOnResume);
+                this::isWarmOnResume,
+                this::getLaunchCause);
     }
 
     @Override
@@ -4262,8 +4295,7 @@ public class ChromeTabbedActivity extends ChromeActivity implements PreAttachInt
         TabWindowManagerSingleton.getInstance()
                 .keepAllTabModelsLoaded(
                         MultiWindowUtils.getUsableInstanceIds(PersistedInstanceType.ANY),
-                        originalProfile,
-                        getTabModelSelector());
+                        originalProfile);
 
         var modalDialogManager = assertNonNull(getModalDialogManager());
         VersioningMessageBanner.maybeShow(activity, messageDispatcher, modalDialogManager, profile);
@@ -5782,6 +5814,13 @@ public class ChromeTabbedActivity extends ChromeActivity implements PreAttachInt
     protected @TabDestroyStatus int destroyTabModels() {
         @TabDestroyStatus int status = TabDestroyStatus.NO_SHUTDOWN;
         try {
+            if (mIsRecreating) {
+                TabWindowManager tabWindowManager =
+                        TabWindowManagerSingleton.getInstanceIfCreated();
+                if (tabWindowManager != null) {
+                    tabWindowManager.notifyActivityRecreating(this);
+                }
+            }
             TabModelOrchestrator orchestrator =
                     mTabModelOrchestrator != null
                             ? mTabModelOrchestrator
@@ -5852,14 +5891,18 @@ public class ChromeTabbedActivity extends ChromeActivity implements PreAttachInt
 
         if (Boolean.TRUE.equals(result)) return result;
 
-        @Nullable ToolbarManager toolbarManager =
-                mRootUiCoordinator.getToolbarManagerSupplier().get();
-        ExtensionsToolbarCoordinator extensionsToolbarCoordinator =
-                toolbarManager == null ? null : toolbarManager.getExtensionsToolbarCoordinator();
-        if (extensionsToolbarCoordinator != null) {
-            // Handle extension shortcuts.
-            if (extensionsToolbarCoordinator.dispatchKeyEvent(event)) {
-                result = true;
+        if (!UiAndroidFeatureList.sAndroidUnifiedKeyboardShortcuts.isEnabled()) {
+            @Nullable ToolbarManager toolbarManager =
+                    mRootUiCoordinator.getToolbarManagerSupplier().get();
+            ExtensionsToolbarCoordinator extensionsToolbarCoordinator =
+                    toolbarManager == null
+                            ? null
+                            : toolbarManager.getExtensionsToolbarCoordinator();
+            if (extensionsToolbarCoordinator != null) {
+                // Handle extension shortcuts.
+                if (extensionsToolbarCoordinator.dispatchKeyEvent(event)) {
+                    result = true;
+                }
             }
         }
 

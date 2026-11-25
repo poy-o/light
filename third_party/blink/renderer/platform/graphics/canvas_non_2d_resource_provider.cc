@@ -8,8 +8,10 @@
 #include <optional>
 #include <utility>
 
+#include "base/check.h"
 #include "base/feature_list.h"
 #include "base/functional/function_ref.h"
+#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/safety_checks.h"
 #include "base/memory/scoped_refptr.h"
@@ -25,6 +27,7 @@
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "gpu/command_buffer/client/client_shared_image.h"
 #include "gpu/command_buffer/client/raster_interface.h"
+#include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/common/capabilities.h"
 #include "gpu/command_buffer/common/shared_image_capabilities.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
@@ -33,7 +36,6 @@
 #include "third_party/blink/public/platform/web_graphics_shared_image_interface_provider.h"
 #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_image_provider.h"
-#include "third_party/blink/renderer/platform/graphics/canvas_resource.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/canvas_utils.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
 #include "third_party/blink/renderer/platform/graphics/image.h"
@@ -42,9 +44,78 @@
 #include "third_party/blink/renderer/platform/instrumentation/canvas_memory_dump_provider.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/skia/include/core/SkAlphaType.h"
+#include "third_party/skia/include/core/SkPixmap.h"
 #include "third_party/skia/include/core/SkSurface.h"
 
 namespace blink {
+
+// Private fork of `CanvasResource` for `CanvasNon2DResourceProvider` so that
+// `CanvasResource` can be eliminated incrementally for 2D canvas without
+// touching killswitch-guarded non-2D compositor/software paths. Once those
+// paths are removed and `CanvasNon2DResourceProvider` is reduced to an
+// accelerated snapshot provider, this class can be replaced directly with
+// `gpu::ClientImage`.
+class CanvasNon2DResourceProvider::Resource final : public gpu::ClientImage {
+ public:
+  explicit Resource(scoped_refptr<gpu::ClientSharedImage> shared_image)
+      : gpu::ClientImage(std::move(shared_image)) {
+    subclass_manages_destruction_sync_token_ = true;
+  }
+
+  ~Resource() override = default;
+
+  void InitializeSoftware(base::WeakPtr<WebGraphicsSharedImageInterfaceProvider>
+                              shared_image_interface_provider) {
+    DCHECK(GetSharedImage());
+    DCHECK(!is_initialized_);
+    DCHECK(shared_image_interface_provider);
+
+    // This class doesn't currently have a way of verifying the sync token for
+    // software SharedImages at the time of vending it in VerifySyncToken(),
+    // so we instead ensure that it is verified now.
+    auto* shared_image_interface =
+        shared_image_interface_provider->SharedImageInterface();
+    DCHECK(shared_image_interface);
+    gpu::SyncToken sync_token = GetSharedImage()->creation_sync_token();
+    shared_image_interface->VerifySyncToken(sync_token);
+    SetReleaseSyncToken(sync_token);
+    GetSharedImage()->UpdateDestructionSyncToken(sync_token);
+
+    is_initialized_ = true;
+  }
+
+  void Initialize() {
+    DCHECK(GetSharedImage());
+    DCHECK(!is_initialized_);
+
+    // Wait for the mailbox to be ready to be used.
+    WaitSyncToken(GetSharedImage()->creation_sync_token());
+
+    is_initialized_ = true;
+  }
+
+  bool IsInitialized() const { return is_initialized_; }
+
+  void WaitSyncToken(const gpu::SyncToken& sync_token) {
+    if (sync_token.HasData()) {
+      acquire_sync_token_ = sync_token;
+      GetSharedImage()->UpdateDestructionSyncToken(acquire_sync_token_);
+    }
+  }
+
+  const gpu::SyncToken& acquire_sync_token() const {
+    return acquire_sync_token_;
+  }
+
+  void NotifyResourceLost() { resource_is_lost_ = true; }
+
+  bool IsLost() const { return resource_is_lost_; }
+
+ private:
+  bool resource_is_lost_ = false;
+  gpu::SyncToken acquire_sync_token_;
+  bool is_initialized_ = false;
+};
 
 base::WeakPtr<CanvasNon2DResourceProvider>
 CanvasNon2DResourceProvider::CreateWeakPtr() {
@@ -208,14 +279,8 @@ CanvasNon2DResourceProvider::CanvasNon2DResourceProvider(
                                 alpha_type, /*buffer_usage=*/std::nullopt,
                                 /*is_software=*/false);
 
-      std::optional<base::TimeDelta> expiration_time =
-          (base::FeatureList::IsEnabled(kCanvas2DReclaimUnusedResources))
-              ? std::make_optional(kUnusedResourceExpirationTime)
-              : std::nullopt;
-
-      image_pool_ = gpu::SharedImagePool<CanvasResource>::Create(
-          image_info, sii, "CanvasResourceRaster", kMaxRecycledCanvasResources,
-          expiration_time);
+      image_pool_ = gpu::SharedImagePool<Resource>::Create(
+          image_info, sii, "CanvasResourceRaster", kMaxRecycledCanvasResources);
     }
   }
 
@@ -251,7 +316,7 @@ CanvasNon2DResourceProvider::CanvasNon2DResourceProvider(
           size, format, gpu::SHARED_IMAGE_USAGE_CPU_WRITE_ONLY, color_space,
           kTopLeft_GrSurfaceOrigin, alpha_type, /*buffer_usage=*/std::nullopt,
           /*is_software=*/true);
-      image_pool_ = gpu::SharedImagePool<CanvasResource>::Create(
+      image_pool_ = gpu::SharedImagePool<Resource>::Create(
           image_info, sii, "CanvasResourceSharedImage",
           kMaxRecycledCanvasResources);
     }
@@ -275,7 +340,7 @@ CanvasNon2DResourceProvider::~CanvasNon2DResourceProvider() {
   }
 }
 
-scoped_refptr<CanvasResource>
+scoped_refptr<CanvasNon2DResourceProvider::Resource>
 CanvasNon2DResourceProvider::NewOrRecycledResource() {
   if (!image_pool_) {
     return nullptr;
@@ -434,7 +499,7 @@ CanvasNon2DResourceProvider::DoExternalOverdrawAndProduceResource(
     return nullptr;
   }
 
-  scoped_refptr<CanvasResource> software_resource;
+  scoped_refptr<Resource> software_resource;
   if (IsSoftware()) {
     software_resource = NewOrRecycledResource();
     if (!software_resource) {
@@ -449,7 +514,7 @@ CanvasNon2DResourceProvider::DoExternalOverdrawAndProduceResource(
   }
 
   if (IsSoftware()) {
-    software_resource->UploadSoftwareRenderingResults(GetSkSurface());
+    UploadSoftwareRenderingResults(*software_resource);
 
     return CreateExportedResource(std::move(software_resource));
   }
@@ -497,19 +562,18 @@ void CanvasNon2DResourceProvider::EnsureResourceReadyForDraw() {
 
 scoped_refptr<ExportedCanvasResource>
 CanvasNon2DResourceProvider::CreateExportedResource(
-    scoped_refptr<CanvasResource> resource) {
+    scoped_refptr<Resource> resource) {
   auto wait_sync_token = base::BindRepeating(
-      [](scoped_refptr<CanvasResource> resource, gpu::SyncToken sync_token) {
+      [](scoped_refptr<Resource> resource, gpu::SyncToken sync_token) {
         resource->WaitSyncToken(sync_token);
       },
       resource);
 
   auto release_callback = base::BindOnce(
-      [](base::WeakPtr<gpu::SharedImagePool<CanvasResource>> pool,
-         scoped_refptr<CanvasResource> resource,
-         const gpu::SyncToken& sync_token, bool is_lost) {
+      [](base::WeakPtr<gpu::SharedImagePool<Resource>> pool,
+         scoped_refptr<Resource> resource, const gpu::SyncToken& sync_token,
+         bool is_lost) {
         CHECK(resource);
-        DCHECK(!resource->is_cross_thread());
         if (is_lost) {
           resource->NotifyResourceLost();
         }
@@ -520,11 +584,32 @@ CanvasNon2DResourceProvider::CreateExportedResource(
       image_pool_->GetWeakPtr(), resource);
 
   return base::MakeRefCounted<ExportedCanvasResource>(
-      resource->GetSharedImage(), resource->sync_token(),
+      resource->GetSharedImage(), resource->GetSyncToken(),
       viz::TransferableResource::ResourceSource::kCanvas, hdr_metadata_,
       context_provider_wrapper_, !IsSoftware(), std::move(wait_sync_token),
       std::move(release_callback),
       /*use_legacy_external_canvas_resource_bitmap_path=*/false);
+}
+
+void CanvasNon2DResourceProvider::UploadSoftwareRenderingResults(
+    gpu::ClientImage& resource) {
+  CHECK(IsSoftware());
+  const scoped_refptr<gpu::ClientSharedImage>& shared_image =
+      resource.GetSharedImage();
+  CHECK(shared_image->is_software());
+
+  // Copy the rendering results from `GetSkSurface()` to the SharedImage backing
+  // this resource.
+  // NOTE: Calling `BackingWasExternallyUpdated()` is not necessary for the
+  // software compositor, as all accesses to the SI's backing happen via shared
+  // memory.
+  auto scoped_mapping = shared_image->Map();
+  if (!scoped_mapping) {
+    LOG(ERROR) << "MapSharedImage failed.";
+    return;
+  }
+
+  GetSkSurface()->readPixels(scoped_mapping->GetSkPixmapForPlane(0), 0, 0);
 }
 
 scoped_refptr<ExportedCanvasResource>
@@ -532,12 +617,12 @@ CanvasNon2DResourceProvider::ProduceCanvasResource() {
   TRACE_EVENT0("blink", "CanvasNon2DResourceProvider::ProduceCanvasResource");
   if (IsSoftware()) {
     DCHECK(GetSkSurface());
-    scoped_refptr<CanvasResource> output_resource = NewOrRecycledResource();
+    scoped_refptr<Resource> output_resource = NewOrRecycledResource();
     if (!output_resource) {
       return nullptr;
     }
 
-    output_resource->UploadSoftwareRenderingResults(GetSkSurface());
+    UploadSoftwareRenderingResults(*output_resource);
 
     return CreateExportedResource(std::move(output_resource));
   }
@@ -590,11 +675,10 @@ scoped_refptr<StaticBitmapImage> CanvasNon2DResourceProvider::Snapshot() {
     // the ref-count on the resource as a proxy for a read lock to allow
     // recycling the resource once all refs have been released.
     auto release_callback = base::BindOnce(
-        [](base::WeakPtr<gpu::SharedImagePool<CanvasResource>> pool,
-           scoped_refptr<CanvasResource> resource,
-           const gpu::SyncToken& sync_token, bool lost_resource) {
+        [](base::WeakPtr<gpu::SharedImagePool<Resource>> pool,
+           scoped_refptr<Resource> resource, const gpu::SyncToken& sync_token,
+           bool lost_resource) {
           CHECK(resource);
-          DCHECK(!resource->is_cross_thread());
           CHECK(!lost_resource);
 
           resource->WaitSyncToken(sync_token);
@@ -606,7 +690,7 @@ scoped_refptr<StaticBitmapImage> CanvasNon2DResourceProvider::Snapshot() {
 
     cached_snapshot_ =
         AcceleratedStaticBitmapImage::CreateFromCanvasSharedImage(
-            resource_->GetSharedImage(), resource_->sync_token(), alpha_type_,
+            resource_->GetSharedImage(), resource_->GetSyncToken(), alpha_type_,
             hdr_metadata_, context_provider_wrapper_,
             base::PlatformThread::CurrentRef(),
             ThreadScheduler::Current()->CleanupTaskRunner(),
@@ -634,22 +718,9 @@ CanvasImageProvider* CanvasNon2DResourceProvider::GetOrCreateImageProvider() {
   if (!canvas_image_provider_) {
     if (!is_software_) {
       if (!IsGpuContextLost()) {
-        // Create an ImageDecodeCache for half float images only if the canvas
-        // is using half float back storage.
-        cc::ImageDecodeCache* cache_f16 = nullptr;
-        if (format_ == viz::SinglePlaneFormat::kRGBA_F16) {
-          cache_f16 =
-              context_provider_wrapper_->ContextProvider().ImageDecodeCache(
-                  kRGBA_F16_SkColorType);
-        }
-
-        cc::ImageDecodeCache* cache_rgba8 =
-            context_provider_wrapper_->ContextProvider().ImageDecodeCache(
-                kN32_SkColorType);
-
         canvas_image_provider_ = std::make_unique<CanvasImageProvider>(
-            cache_rgba8, cache_f16, color_space_, format_,
-            cc::PlaybackImageProvider::RasterMode::kGpu,
+            context_provider_wrapper_->ContextProvider().ImageDecodeCache(),
+            color_space_, format_, cc::PlaybackImageProvider::RasterMode::kGpu,
             context_provider_wrapper_);
       }
     } else {
@@ -667,18 +738,8 @@ CanvasImageProvider* CanvasNon2DResourceProvider::GetOrCreateImageProvider() {
         }
       }
 
-      // Create an ImageDecodeCache for half float images only if the canvas
-      // is using half float back storage.
-      cc::ImageDecodeCache* cache_f16 = nullptr;
-      if (format_ == viz::SinglePlaneFormat::kRGBA_F16) {
-        cache_f16 = &Image::SharedCCDecodeCache(kRGBA_F16_SkColorType);
-      }
-
-      cc::ImageDecodeCache* cache_rgba8 =
-          &Image::SharedCCDecodeCache(kN32_SkColorType);
-
       canvas_image_provider_ = std::make_unique<CanvasImageProvider>(
-          cache_rgba8, cache_f16, color_space_, format_,
+          &Image::SharedCCDecodeCache(), color_space_, format_,
           cc::PlaybackImageProvider::RasterMode::kSoftware,
           context_provider_wrapper_);
     }

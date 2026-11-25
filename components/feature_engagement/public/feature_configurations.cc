@@ -1755,7 +1755,7 @@ std::optional<FeatureConfig> GetClientSideFeatureConfig(
     // * Once per week.
     // * Up to 3 times per year.
     // * And only as long as the user has never initiated price tracking from
-    // the menu.
+    // the menu or the toolbar button.
     FeatureConfig config;
     config.valid = true;
     config.availability = kAlwaysAvailable;
@@ -1766,6 +1766,9 @@ std::optional<FeatureConfig> GetClientSideFeatureConfig(
     config.event_configs.insert(
         EventConfig("shopping_list_menu_item_iph_triggered",
                     Comparator(LESS_THAN, 3), /*window=*/360, /*storage=*/360));
+    config.event_configs.insert(
+        EventConfig("shopping_list_track_price_from_toolbar",
+                    Comparator(EQUAL, 0), /*window=*/360, /*storage=*/360));
     config.used =
         EventConfig("shopping_list_track_price_from_menu", Comparator(EQUAL, 0),
                     /*window=*/360, /*storage=*/360);
@@ -2543,9 +2546,9 @@ std::optional<FeatureConfig> GetClientSideFeatureConfig(
   }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
-  // This is enabled on both Desktop and Desktop Android. However, this feature
-  // is auto-configured dynamically by the Feature Engagement service on Desktop
-  // (see
+  // These are enabled on both Desktop and Desktop Android. However, these
+  // features are auto-configured dynamically by the Feature Engagement service
+  // on Desktop (see
   // components/feature_engagement/browser/user_data/feature_engagement_tracker.h).
   // Manual configuration is explicitly bypassed on Desktop (and only done here
   // on Android) to prevent test failures in
@@ -2563,6 +2566,26 @@ std::optional<FeatureConfig> GetClientSideFeatureConfig(
     config.used =
         EventConfig("extensions_pinned_by_default_used", Comparator(EQUAL, 0),
                     /*window=*/360, /*storage=*/360);
+    return config;
+  }
+
+  if (kIPHExtensionsManageSiteAccessTutorial.name == feature->name) {
+    FeatureConfig config;
+    config.valid = true;
+    config.availability = kAlwaysAvailable;
+    // Installing an extension on Desktop Android can show a post-install IPH
+    // (e.g. `kIPHExtensionsManageToolbarFeature` or
+    // `kIPHExtensionsPinnedByDefaultFeature`) in the same session; allow `< 2`
+    // so this promo can still trigger when the user navigates to a site to try
+    // the extension.
+    config.session_rate = Comparator(LESS_THAN, 2);
+    config.trigger =
+        EventConfig("extensions_manage_site_access_tutorial_trigger",
+                    Comparator(LESS_THAN, 1), /*window=*/k10YearsInDays,
+                    /*storage=*/k10YearsInDays);
+    config.used = EventConfig(events::kExtensionsManageSiteAccessUsed,
+                              Comparator(EQUAL, 0), /*window=*/k10YearsInDays,
+                              /*storage=*/k10YearsInDays);
     return config;
   }
 #endif

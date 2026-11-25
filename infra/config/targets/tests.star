@@ -705,6 +705,36 @@ targets.tests.isolated_script_test(
 )
 
 targets.tests.isolated_script_test(
+    name = "websocket_h3_content_shell_wpt_tests",
+    mixins = [
+        "has_native_resultdb_integration",
+        "blink_tests_write_run_histories",
+    ],
+    args = [
+        "--enable-websocket-h3",
+        "--flag-specific=websocket-h3",
+        "--num-retries=3",
+        "external/wpt/websockets",
+    ],
+    binary = "blink_wpt_tests",
+)
+
+targets.tests.isolated_script_test(
+    name = "websocket_h3_headless_shell_wpt_tests",
+    mixins = [
+        "has_native_resultdb_integration",
+    ],
+    args = [
+        "--enable-websocket-h3",
+        "--flag-specific=websocket-h3",
+        "--no-virtual-tests",
+        "--inverted-test-launcher-filter-file=../../third_party/blink/web_tests/TestLists/content_shell.filter",
+        "external/wpt/websockets",
+    ],
+    binary = "headless_shell_wpt",
+)
+
+targets.tests.isolated_script_test(
     name = "headless_shell_wpt_tests",
     mixins = [
         "has_native_resultdb_integration",
@@ -1056,6 +1086,13 @@ targets.tests.isolated_script_test(
 
 targets.tests.isolated_script_test(
     name = "devtools_node_unit_tests",
+    mixins = [
+        "has_native_resultdb_integration",
+    ],
+)
+
+targets.tests.isolated_script_test(
+    name = "devtools_script_tests",
     mixins = [
         "has_native_resultdb_integration",
     ],
@@ -1924,6 +1961,30 @@ targets.tests.isolated_script_test(
         "--backends=cpu",
     ],
     binary = "litert_e2e_tests",
+)
+
+targets.tests.isolated_script_test(
+    name = "litert_conversation_e2e_tests_gpu",
+    mixins = [
+        "has_native_resultdb_integration",
+    ],
+    args = [
+        "--benchmark_binary_dir=./",
+        "--backends=gpu",
+    ],
+    binary = "litert_conversation_e2e_tests",
+)
+
+targets.tests.isolated_script_test(
+    name = "litert_conversation_e2e_tests_cpu",
+    mixins = [
+        "has_native_resultdb_integration",
+    ],
+    args = [
+        "--benchmark_binary_dir=./",
+        "--backends=cpu",
+    ],
+    binary = "litert_conversation_e2e_tests",
 )
 
 targets.tests.isolated_script_test(
@@ -2934,6 +2995,26 @@ targets.tests.isolated_script_test(
 )
 
 targets.tests.gpu_telemetry_test(
+    name = "webgl2_conformance_d3d11_passthrough_ganesh_tests",
+    telemetry_test_name = "webgl2_conformance",
+    mixins = [
+        "has_native_resultdb_integration",
+        "gpu_force_command_decoder_passthrough",
+        "gpu_force_angle_d3d11",
+        "gpu_force_skia_ganesh",
+        "gpu_force_high_performance_gpu",
+        "gpu_integration_test_webgl2_args",
+        "gpu_integration_test_common_args",
+        targets.mixin(
+            swarming = targets.swarming(
+                shards = 20,
+            ),
+        ),
+    ],
+    module_scheme = "flat",
+)
+
+targets.tests.gpu_telemetry_test(
     name = "webgl2_conformance_d3d11_passthrough_tests",
     telemetry_test_name = "webgl2_conformance",
     mixins = [
@@ -3036,6 +3117,26 @@ targets.tests.gpu_telemetry_test(
         "gpu_force_webgl_on_webgpu",
         "gpu_force_high_performance_gpu",
         "gpu_integration_test_webgl2_args",
+        "gpu_integration_test_common_args",
+        targets.mixin(
+            swarming = targets.swarming(
+                shards = 2,
+            ),
+        ),
+    ],
+    module_scheme = "flat",
+)
+
+targets.tests.gpu_telemetry_test(
+    name = "webgl_conformance_d3d11_passthrough_ganesh_tests",
+    telemetry_test_name = "webgl1_conformance",
+    mixins = [
+        "has_native_resultdb_integration",
+        "gpu_force_command_decoder_passthrough",
+        "gpu_force_angle_d3d11",
+        "gpu_force_skia_ganesh",
+        "gpu_force_high_performance_gpu",
+        "gpu_integration_test_webgl1_args",
         "gpu_integration_test_common_args",
         targets.mixin(
             swarming = targets.swarming(

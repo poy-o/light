@@ -17,6 +17,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import android.app.Activity;
@@ -40,6 +41,7 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.components.browser_ui.adaptive_ui.AdaptiveUiProperties.CloseButtonVisibility;
+import org.chromium.components.browser_ui.adaptive_ui.AdaptiveUiProperties.Delegate;
 import org.chromium.components.browser_ui.adaptive_ui.AdaptiveUiProperties.SecondaryButtonBehavior;
 import org.chromium.components.browser_ui.modaldialog.ModalDialogView;
 import org.chromium.components.browser_ui.modaldialog.ModalDialogViewBinder;
@@ -69,6 +71,7 @@ public class AdaptiveUiDialogCoordinatorTest {
 
     @Mock private ModalDialogManager mModalDialogManager;
     @Mock private PropertyModel mOtherDialogModel;
+    @Mock private Delegate mDelegate;
 
     private Activity mActivity;
     private int mShownCount;
@@ -132,8 +135,7 @@ public class AdaptiveUiDialogCoordinatorTest {
     public void testCoordinatorHandledKeysAreExpectedSet() {
         Set<PropertyKey> expected =
                 Set.of(
-                        AdaptiveUiProperties.ON_SHOWN,
-                        AdaptiveUiProperties.ON_DISMISSED,
+                        AdaptiveUiProperties.DELEGATE,
                         AdaptiveUiProperties.DIALOG_CONTENT_DESCRIPTION,
                         AdaptiveUiProperties.SHEET_OPENED_ACCESSIBILITY_STRING_ID,
                         AdaptiveUiProperties.SHEET_CLOSED_ACCESSIBILITY_STRING_ID,
@@ -147,8 +149,6 @@ public class AdaptiveUiDialogCoordinatorTest {
                         AdaptiveUiProperties.CUSTOM_VIEW,
                         AdaptiveUiProperties.CUSTOM_VIEW_SCROLLS_ITSELF,
                         AdaptiveUiProperties.BACK_PRESS_HANDLER,
-                        AdaptiveUiProperties.ON_PRIMARY_BUTTON_CLICKED,
-                        AdaptiveUiProperties.ON_SECONDARY_BUTTON_CLICKED,
                         AdaptiveUiProperties.PRIMARY_BUTTON_KEEPS_OPEN,
                         AdaptiveUiProperties.SECONDARY_BUTTON_BEHAVIOR,
                         AdaptiveUiProperties.FILTER_TOUCH_FOR_SECURITY);
@@ -655,43 +655,40 @@ public class AdaptiveUiDialogCoordinatorTest {
 
     @Test
     public void testPrimaryClick_RunsCallbackAndRequestsDismiss() {
-        int[] clicks = new int[1];
         PropertyModel model =
                 newModelBuilder()
                         .with(AdaptiveUiProperties.PRIMARY_BUTTON_TEXT, "Primary")
-                        .with(AdaptiveUiProperties.ON_PRIMARY_BUTTON_CLICKED, () -> clicks[0]++)
+                        .with(AdaptiveUiProperties.DELEGATE, mDelegate)
                         .build();
         AdaptiveUiDialogCoordinator coordinator = createCoordinator(model);
 
         coordinator.onClick(coordinator.getDialogModel(), ButtonType.POSITIVE);
 
-        assertEquals(1, clicks[0]);
+        verify(mDelegate).onPrimaryButtonClicked();
         assertEquals(List.of(DismissReason.PRIMARY_ACTION), mDialogDismissals);
     }
 
     @Test
     public void testSecondaryClick_RunsCallbackAndRequestsDismiss() {
-        int[] clicks = new int[1];
         PropertyModel model =
                 newModelBuilder()
                         .with(AdaptiveUiProperties.SECONDARY_BUTTON_TEXT, "Secondary")
-                        .with(AdaptiveUiProperties.ON_SECONDARY_BUTTON_CLICKED, () -> clicks[0]++)
+                        .with(AdaptiveUiProperties.DELEGATE, mDelegate)
                         .build();
         AdaptiveUiDialogCoordinator coordinator = createCoordinator(model);
 
         coordinator.onClick(coordinator.getDialogModel(), ButtonType.NEGATIVE);
 
-        assertEquals(1, clicks[0]);
+        verify(mDelegate).onSecondaryButtonClicked();
         assertEquals(List.of(DismissReason.SECONDARY_ACTION), mDialogDismissals);
     }
 
     @Test
     public void testPrimaryClick_KeepsOpen() {
-        int[] clicks = new int[1];
         PropertyModel model =
                 newModelBuilder()
                         .with(AdaptiveUiProperties.PRIMARY_BUTTON_TEXT, "Primary")
-                        .with(AdaptiveUiProperties.ON_PRIMARY_BUTTON_CLICKED, () -> clicks[0]++)
+                        .with(AdaptiveUiProperties.DELEGATE, mDelegate)
                         .with(AdaptiveUiProperties.PRIMARY_BUTTON_KEEPS_OPEN, true)
                         .build();
         AdaptiveUiDialogCoordinator coordinator = createCoordinator(model);
@@ -699,17 +696,16 @@ public class AdaptiveUiDialogCoordinatorTest {
         coordinator.onClick(coordinator.getDialogModel(), ButtonType.POSITIVE);
         coordinator.onClick(coordinator.getDialogModel(), ButtonType.POSITIVE);
 
-        assertEquals(2, clicks[0]);
+        verify(mDelegate, times(2)).onPrimaryButtonClicked();
         assertTrue(mDialogDismissals.isEmpty());
     }
 
     @Test
     public void testSecondaryClick_KeepsOpen() {
-        int[] clicks = new int[1];
         PropertyModel model =
                 newModelBuilder()
                         .with(AdaptiveUiProperties.SECONDARY_BUTTON_TEXT, "Secondary")
-                        .with(AdaptiveUiProperties.ON_SECONDARY_BUTTON_CLICKED, () -> clicks[0]++)
+                        .with(AdaptiveUiProperties.DELEGATE, mDelegate)
                         .with(
                                 AdaptiveUiProperties.SECONDARY_BUTTON_BEHAVIOR,
                                 SecondaryButtonBehavior.ACTION_THEN_STAY_OPEN)
@@ -718,7 +714,7 @@ public class AdaptiveUiDialogCoordinatorTest {
 
         coordinator.onClick(coordinator.getDialogModel(), ButtonType.NEGATIVE);
 
-        assertEquals(1, clicks[0]);
+        verify(mDelegate).onSecondaryButtonClicked();
         assertTrue(mDialogDismissals.isEmpty());
     }
 
@@ -809,7 +805,6 @@ public class AdaptiveUiDialogCoordinatorTest {
 
     @Test
     public void testCloseButtonClick_WithCloseSecondary_ReportsCloseButtonWithoutCallback() {
-        int[] secondaryClicks = new int[1];
         PropertyModel model =
                 newModelBuilder()
                         .with(AdaptiveUiProperties.TITLE, "Title")
@@ -818,9 +813,7 @@ public class AdaptiveUiDialogCoordinatorTest {
                         .with(
                                 AdaptiveUiProperties.SECONDARY_BUTTON_BEHAVIOR,
                                 SecondaryButtonBehavior.CLOSE)
-                        .with(
-                                AdaptiveUiProperties.ON_SECONDARY_BUTTON_CLICKED,
-                                () -> secondaryClicks[0]++)
+                        .with(AdaptiveUiProperties.DELEGATE, mDelegate)
                         .build();
         PropertyModel dialogModel = createCoordinator(model).getDialogModel();
 
@@ -828,7 +821,7 @@ public class AdaptiveUiDialogCoordinatorTest {
                 .get(ModalDialogProperties.TITLE_CLOSE_BUTTON_CLICK_LISTENER)
                 .onClick(new View(mActivity));
 
-        assertEquals(0, secondaryClicks[0]);
+        verify(mDelegate, never()).onSecondaryButtonClicked();
         assertEquals(List.of(DismissReason.CLOSE_BUTTON), mDialogDismissals);
     }
 
@@ -910,7 +903,6 @@ public class AdaptiveUiDialogCoordinatorTest {
     @Test
     public void
             testCloseSecondary_WhenCloseButtonHidden_DrawsNegativeAndDismissesWithoutCallback() {
-        int[] secondaryClicks = new int[1];
         PropertyModel model =
                 newModelBuilder()
                         .with(AdaptiveUiProperties.TITLE, "Title")
@@ -922,9 +914,7 @@ public class AdaptiveUiDialogCoordinatorTest {
                         .with(
                                 AdaptiveUiProperties.SECONDARY_BUTTON_BEHAVIOR,
                                 SecondaryButtonBehavior.CLOSE)
-                        .with(
-                                AdaptiveUiProperties.ON_SECONDARY_BUTTON_CLICKED,
-                                () -> secondaryClicks[0]++)
+                        .with(AdaptiveUiProperties.DELEGATE, mDelegate)
                         .build();
         AdaptiveUiDialogCoordinator coordinator = createCoordinator(model);
         PropertyModel dialogModel = coordinator.getDialogModel();
@@ -944,7 +934,7 @@ public class AdaptiveUiDialogCoordinatorTest {
         assertEquals(View.VISIBLE, negativeButton.getVisibility());
 
         coordinator.onClick(dialogModel, ButtonType.NEGATIVE);
-        assertEquals(0, secondaryClicks[0]);
+        verify(mDelegate, never()).onSecondaryButtonClicked();
         assertEquals(List.of(DismissReason.SECONDARY_ACTION), mDialogDismissals);
     }
 
@@ -983,7 +973,6 @@ public class AdaptiveUiDialogCoordinatorTest {
 
     @Test
     public void testActionThenDismissSecondary_DrawsNegativeAlongsideCloseButton() {
-        int[] secondaryClicks = new int[1];
         PropertyModel model =
                 newModelBuilder()
                         .with(AdaptiveUiProperties.TITLE, "Title")
@@ -992,9 +981,7 @@ public class AdaptiveUiDialogCoordinatorTest {
                         .with(
                                 AdaptiveUiProperties.SECONDARY_BUTTON_BEHAVIOR,
                                 SecondaryButtonBehavior.ACTION_THEN_DISMISS)
-                        .with(
-                                AdaptiveUiProperties.ON_SECONDARY_BUTTON_CLICKED,
-                                () -> secondaryClicks[0]++)
+                        .with(AdaptiveUiProperties.DELEGATE, mDelegate)
                         .build();
         AdaptiveUiDialogCoordinator coordinator = createCoordinator(model);
         PropertyModel dialogModel = coordinator.getDialogModel();
@@ -1015,7 +1002,7 @@ public class AdaptiveUiDialogCoordinatorTest {
         assertEquals(View.VISIBLE, negativeButton.getVisibility());
 
         coordinator.onClick(dialogModel, ButtonType.NEGATIVE);
-        assertEquals(1, secondaryClicks[0]);
+        verify(mDelegate).onSecondaryButtonClicked();
         assertEquals(List.of(DismissReason.SECONDARY_ACTION), mDialogDismissals);
     }
 
@@ -1124,18 +1111,17 @@ public class AdaptiveUiDialogCoordinatorTest {
 
     @Test
     public void testClicksAfterDestroyAreIgnored() {
-        int[] clicks = new int[1];
         PropertyModel model =
                 newModelBuilder()
                         .with(AdaptiveUiProperties.PRIMARY_BUTTON_TEXT, "Primary")
-                        .with(AdaptiveUiProperties.ON_PRIMARY_BUTTON_CLICKED, () -> clicks[0]++)
+                        .with(AdaptiveUiProperties.DELEGATE, mDelegate)
                         .build();
         AdaptiveUiDialogCoordinator coordinator = createCoordinator(model);
 
         coordinator.destroy();
         coordinator.onClick(coordinator.getDialogModel(), ButtonType.POSITIVE);
 
-        assertEquals(0, clicks[0]);
+        verify(mDelegate, never()).onPrimaryButtonClicked();
         assertTrue(mDialogDismissals.isEmpty());
     }
 
@@ -1199,9 +1185,7 @@ public class AdaptiveUiDialogCoordinatorTest {
         PropertyModel dialogModel =
                 createCoordinator(model, AdaptiveUiScope.WINDOW).getDialogModel();
 
-        dialogModel
-                .get(ModalDialogProperties.APP_MODAL_DIALOG_BACK_PRESS_HANDLER)
-                .handleOnBackPressed();
+        dialogModel.get(ModalDialogProperties.BACK_PRESS_HANDLER).handleOnBackPressed();
 
         assertEquals(List.of(DismissReason.BACK_PRESS), mDialogDismissals);
     }
@@ -1215,9 +1199,7 @@ public class AdaptiveUiDialogCoordinatorTest {
         PropertyModel dialogModel =
                 createCoordinator(model, AdaptiveUiScope.WINDOW).getDialogModel();
 
-        dialogModel
-                .get(ModalDialogProperties.APP_MODAL_DIALOG_BACK_PRESS_HANDLER)
-                .handleOnBackPressed();
+        dialogModel.get(ModalDialogProperties.BACK_PRESS_HANDLER).handleOnBackPressed();
 
         assertEquals(1, handled[0]);
         assertTrue(mDialogDismissals.isEmpty());
@@ -1233,9 +1215,7 @@ public class AdaptiveUiDialogCoordinatorTest {
                 createCoordinator(model, AdaptiveUiScope.WINDOW).getDialogModel();
 
         model.set(AdaptiveUiProperties.BACK_PRESS_HANDLER, null);
-        dialogModel
-                .get(ModalDialogProperties.APP_MODAL_DIALOG_BACK_PRESS_HANDLER)
-                .handleOnBackPressed();
+        dialogModel.get(ModalDialogProperties.BACK_PRESS_HANDLER).handleOnBackPressed();
 
         assertEquals(0, handled[0]);
         assertEquals(List.of(DismissReason.BACK_PRESS), mDialogDismissals);
@@ -1255,9 +1235,7 @@ public class AdaptiveUiDialogCoordinatorTest {
                 createCoordinator(model, AdaptiveUiScope.WINDOW).getDialogModel();
 
         model.set(AdaptiveUiProperties.BACK_PRESS_HANDLER, newBackPressHandler(handledB));
-        dialogModel
-                .get(ModalDialogProperties.APP_MODAL_DIALOG_BACK_PRESS_HANDLER)
-                .handleOnBackPressed();
+        dialogModel.get(ModalDialogProperties.BACK_PRESS_HANDLER).handleOnBackPressed();
 
         assertEquals(0, handledA[0]);
         assertEquals(1, handledB[0]);
@@ -1276,29 +1254,47 @@ public class AdaptiveUiDialogCoordinatorTest {
         PropertyModel dialogModel = coordinator.getDialogModel();
 
         coordinator.onClick(dialogModel, ButtonType.POSITIVE);
-        dialogModel
-                .get(ModalDialogProperties.APP_MODAL_DIALOG_BACK_PRESS_HANDLER)
-                .handleOnBackPressed();
+        dialogModel.get(ModalDialogProperties.BACK_PRESS_HANDLER).handleOnBackPressed();
 
         assertEquals(0, handled[0]);
         assertEquals(List.of(DismissReason.PRIMARY_ACTION), mDialogDismissals);
     }
 
     @Test
-    public void testBackPress_TransientScope_DoesNotSetAppModalProperty() {
-        PropertyModel model =
-                newModelBuilder()
-                        .with(
-                                AdaptiveUiProperties.BACK_PRESS_HANDLER,
-                                newBackPressHandler(new int[1]))
-                        .build();
+    public void testBackPress_TransientScope_UnsetHandlerRequestsDismiss() {
+        PropertyModel model = newModelBuilder().build();
         PropertyModel dialogModel =
                 createCoordinator(model, AdaptiveUiScope.TRANSIENT).getDialogModel();
 
-        assertFalse(
-                dialogModel
-                        .getAllSetProperties()
-                        .contains(ModalDialogProperties.APP_MODAL_DIALOG_BACK_PRESS_HANDLER));
+        OnBackPressedCallback dialogHandler =
+                dialogModel.get(ModalDialogProperties.BACK_PRESS_HANDLER);
+        assertTrue(dialogHandler.isEnabled());
+        dialogHandler.handleOnBackPressed();
+
+        assertEquals(List.of(DismissReason.BACK_PRESS), mDialogDismissals);
+        verify(mModalDialogManager).dismissDialog(dialogModel, DialogDismissalCause.NAVIGATE_BACK);
+    }
+
+    @Test
+    public void testBackPress_TransientScope_EnabledHandlerConsumesBackPress() {
+        int[] handled = new int[1];
+        OnBackPressedCallback handler = newBackPressHandler(handled);
+        PropertyModel model =
+                newModelBuilder().with(AdaptiveUiProperties.BACK_PRESS_HANDLER, handler).build();
+        PropertyModel dialogModel =
+                createCoordinator(model, AdaptiveUiScope.TRANSIENT).getDialogModel();
+
+        dialogModel.get(ModalDialogProperties.BACK_PRESS_HANDLER).handleOnBackPressed();
+
+        assertEquals(1, handled[0]);
+        assertTrue(mDialogDismissals.isEmpty());
+
+        // Disabling the feature's handler falls back to dismissing the dialog.
+        handler.setEnabled(false);
+        dialogModel.get(ModalDialogProperties.BACK_PRESS_HANDLER).handleOnBackPressed();
+
+        assertEquals(1, handled[0]);
+        assertEquals(List.of(DismissReason.BACK_PRESS), mDialogDismissals);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -1346,7 +1342,7 @@ public class AdaptiveUiDialogCoordinatorTest {
 
         coordinator
                 .getDialogModel()
-                .get(ModalDialogProperties.APP_MODAL_DIALOG_BACK_PRESS_HANDLER)
+                .get(ModalDialogProperties.BACK_PRESS_HANDLER)
                 .handleOnBackPressed();
         assertEquals(List.of(DismissReason.BACK_PRESS), mDialogDismissals);
 

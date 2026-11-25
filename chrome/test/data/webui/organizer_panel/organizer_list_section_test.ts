@@ -4,7 +4,7 @@
 
 import 'chrome://organizer-panel.top-chrome/organizer_panel.js';
 
-import {INITIAL_ITEM_COUNT, organizerPanelBrowserProxyFactory, OrganizerPanelPageHandlerRemote, OrganizerSectionMenuOption, OrganizerSectionToggleAction, SearchApiProxyImpl, SectionId} from 'chrome://organizer-panel.top-chrome/organizer_panel.js';
+import {INITIAL_ITEM_COUNT, OrganizerPanelAction, organizerPanelBrowserProxyFactory, OrganizerPanelPageHandlerRemote, OrganizerSectionMenuOption, OrganizerSectionToggleAction, SearchApiProxyImpl, SectionId} from 'chrome://organizer-panel.top-chrome/organizer_panel.js';
 import type {OrganizerListSectionElement, OrganizerListSectionItem, OrganizerListSectionItemElement, OrganizerPanelPageRemote} from 'chrome://organizer-panel.top-chrome/organizer_panel.js';
 import type {CrCollapseElement} from 'chrome://resources/cr_elements/cr_collapse/cr_collapse.js';
 import {html} from 'chrome://resources/lit/v3_0/lit.rollup.js';
@@ -18,7 +18,6 @@ import {TestSearchApiProxy} from './test_search_api_proxy.js';
 import {TestSectionDelegate} from './test_section_delegate.js';
 
 suite('OrganizerListSectionTest', () => {
-  const originalMatchMedia = window.matchMedia;
   let listSection: OrganizerListSectionElement;
   let mockHandler: TestMock<OrganizerPanelPageHandlerRemote>&
       OrganizerPanelPageHandlerRemote;
@@ -45,7 +44,6 @@ suite('OrganizerListSectionTest', () => {
 
   teardown(() => {
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
-    window.matchMedia = originalMatchMedia;
   });
 
   test('renders header and items from delegate', async () => {
@@ -1195,14 +1193,10 @@ suite('OrganizerListSectionTest', () => {
             0,
             metrics.count(
                 'Tabs.Organizer.WebUI.IndexOfSwitchTabInFilteredList'));
-        assertEquals(
-            1,
-            metrics.count(
-                'Tabs.Organizer.WebUI.TimeToSwitchTabInUnfilteredList'));
-        assertEquals(
-            0,
-            metrics.count(
-                'Tabs.Organizer.WebUI.TimeToSwitchTabInFilteredList'));
+        assertEquals(1, mockHandler.getCallCount('recordTimeToAction'));
+        assertDeepEquals(
+            [OrganizerPanelAction.kSwitchTab, false],
+            mockHandler.getArgs('recordTimeToAction')[0]);
 
         listItems[2]!.shadowRoot.querySelector<HTMLElement>(
                                     '#actionButton')!.click();
@@ -1215,13 +1209,10 @@ suite('OrganizerListSectionTest', () => {
             0,
             metrics.count(
                 'Tabs.Organizer.WebUI.IndexOfCloseTabInFilteredList'));
-        assertEquals(
-            1,
-            metrics.count(
-                'Tabs.Organizer.WebUI.TimeToCloseTabInUnfilteredList'));
-        assertEquals(
-            0,
-            metrics.count('Tabs.Organizer.WebUI.TimeToCloseTabInFilteredList'));
+        assertEquals(2, mockHandler.getCallCount('recordTimeToAction'));
+        assertDeepEquals(
+            [OrganizerPanelAction.kCloseTab, false],
+            mockHandler.getArgs('recordTimeToAction')[1]);
 
         // Filter items and verify filtered index and time are recorded.
         listSection.searchQuery = 'YouTube';
@@ -1236,10 +1227,10 @@ suite('OrganizerListSectionTest', () => {
             1,
             metrics.count(
                 'Tabs.Organizer.WebUI.IndexOfSwitchTabInFilteredList', 1));
-        assertEquals(
-            1,
-            metrics.count(
-                'Tabs.Organizer.WebUI.TimeToSwitchTabInFilteredList'));
+        assertEquals(3, mockHandler.getCallCount('recordTimeToAction'));
+        assertDeepEquals(
+            [OrganizerPanelAction.kSwitchTab, true],
+            mockHandler.getArgs('recordTimeToAction')[2]);
 
         listItems[0]!.shadowRoot.querySelector<HTMLElement>(
                                     '#actionButton')!.click();
@@ -1248,9 +1239,10 @@ suite('OrganizerListSectionTest', () => {
             1,
             metrics.count(
                 'Tabs.Organizer.WebUI.IndexOfCloseTabInFilteredList', 0));
-        assertEquals(
-            1,
-            metrics.count('Tabs.Organizer.WebUI.TimeToCloseTabInFilteredList'));
+        assertEquals(4, mockHandler.getCallCount('recordTimeToAction'));
+        assertDeepEquals(
+            [OrganizerPanelAction.kCloseTab, true],
+            mockHandler.getArgs('recordTimeToAction')[3]);
       });
 
   test(
@@ -1285,55 +1277,18 @@ suite('OrganizerListSectionTest', () => {
             0,
             metrics.count(
                 'Tabs.Organizer.WebUI.IndexOfSwitchTabInUnfilteredList'));
-        assertEquals(
-            0,
-            metrics.count(
-                'Tabs.Organizer.WebUI.TimeToCloseTabInUnfilteredList'));
-        assertEquals(
-            0,
-            metrics.count(
-                'Tabs.Organizer.WebUI.TimeToSwitchTabInUnfilteredList'));
+        assertEquals(0, mockHandler.getCallCount('recordTimeToAction'));
 
         listItems[0]!.click();
         assertEquals(
             1,
             metrics.count(
                 'Tabs.Organizer.WebUI.IndexOfSwitchTabInUnfilteredList', 0));
-        assertEquals(
-            1,
-            metrics.count(
-                'Tabs.Organizer.WebUI.TimeToSwitchTabInUnfilteredList'));
+        assertEquals(1, mockHandler.getCallCount('recordTimeToAction'));
+        assertDeepEquals(
+            [OrganizerPanelAction.kSwitchTab, false],
+            mockHandler.getArgs('recordTimeToAction')[0]);
       });
-
-  test('sets no-animation on cr-collapse for reduced motion', async () => {
-    const reducedMotionQuery =
-        Object.assign(new EventTarget(), {matches: true});
-    window.matchMedia = (query: string) => {
-      if (query === '(prefers-reduced-motion: reduce)') {
-        return reducedMotionQuery as unknown as MediaQueryList;
-      }
-      return originalMatchMedia.call(window, query);
-    };
-
-    document.body.innerHTML = window.trustedTypes!.emptyHTML;
-    const section = document.createElement('organizer-list-section');
-    document.body.appendChild(section);
-    await microtasksFinished();
-
-    const itemsContainer =
-        section.shadowRoot.querySelector<CrCollapseElement>('#items')!;
-    assertTrue(itemsContainer.noAnimation);
-
-    reducedMotionQuery.matches = false;
-    reducedMotionQuery.dispatchEvent(new Event('change'));
-    await microtasksFinished();
-    assertFalse(itemsContainer.noAnimation);
-
-    reducedMotionQuery.matches = true;
-    reducedMotionQuery.dispatchEvent(new Event('change'));
-    await microtasksFinished();
-    assertTrue(itemsContainer.noAnimation);
-  });
 
   test('defers delegate init until connected to DOM', async () => {
     const detachedSection = document.createElement('organizer-list-section');

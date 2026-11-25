@@ -34,6 +34,7 @@
 
 namespace blink {
 class AnimationFrameTimingInfo;
+class ContainerTiming;
 class ElementTiming;
 class LargestContentfulPaintManager;
 struct HeapTimeTicks;
@@ -234,6 +235,10 @@ class CORE_EXPORT PaintTiming final : public GarbageCollected<PaintTiming>,
 
   ElementTiming* GetElementTiming() { return element_timing_; }
 
+  // Null until EnsureContainerTiming(), which requires container timing.
+  ContainerTiming* GetContainerTiming() { return container_timing_; }
+  ContainerTiming& EnsureContainerTiming();
+
   // Adds a `PaintTimingClient` to observe contentful paints. The client must
   // not have been previously added.
   void AddClient(PaintTimingClient*);
@@ -389,12 +394,12 @@ class CORE_EXPORT PaintTiming final : public GarbageCollected<PaintTiming>,
   void MaybeRecordBeforeInputOrScrollHistogram();
   void MaybeRecordHistogramsOnPageHiddenOrContextDestroyed();
 
-  // Propagates the paint timing info and presentation time to the
-  // `PaintTimingRecord`s owned by the `PresentationCallbackData`.
-  void SetPaintTimingInfoForPaintTimingRecords(
-      PresentationCallbackData&,
-      const DOMPaintTimingInfo&,
-      base::TimeTicks raw_presentation_timestamp);
+  // Resolves the presentation time for `pending_timestamps` and runs the
+  // `client_callbacks` owned by the `PresentationCallbackData`.
+  void FlushPresentationCallbackData(PresentationCallbackData&,
+                                     const DOMPaintTimingInfo&,
+                                     base::TimeTicks raw_presentation_timestamp,
+                                     uint64_t navigation_id);
 
   Vector<base::TimeTicks>
       first_paints_after_back_forward_cache_restore_presentation_;
@@ -427,6 +432,7 @@ class CORE_EXPORT PaintTiming final : public GarbageCollected<PaintTiming>,
 
   Member<PaintTimingDetector> paint_timing_detector_;
   Member<ElementTiming> element_timing_;
+  Member<ContainerTiming> container_timing_;
   Member<LargestContentfulPaintManager> largest_contentful_paint_manager_;
   Member<FirstMeaningfulPaintDetector> fmp_detector_;
   // The callback ID for requestAnimationFrame to record its time after the page

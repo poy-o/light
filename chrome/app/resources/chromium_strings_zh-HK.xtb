@@ -53,6 +53,7 @@
 <translation id="1572572333538561328">重新開啟「搜尋 AI 模式」</translation>
 <translation id="1574377791422810894">Chromium 的安全工具</translation>
 <translation id="1594928384848033697">Chromium 想刪除你的「密碼管理工具」資料。如果允許，請輸入 Windows 密碼。</translation>
+<translation id="1599690375407103815">關閉後，Chromium 會移除裝置內置 AI 模型，且不會再次下載。部分網站和 Chromium 功能可能無法運作。</translation>
 <translation id="1607715478322902680">{COUNT,plural, =0{管理員要求您重新啟動 Chromium，以套用更新}=1{管理員要求您重新啟動 Chromium，以套用更新。您的無痕式視窗不會重新開啟。}other{管理員要求您重新啟動 Chromium，以套用更新。您的 # 個無痕式視窗不會重新開啟。}}</translation>
 <translation id="1625909126243026060">查看 Chromium 中重要的私隱和安全控制項</translation>
 <translation id="1640672724030957280">正在下載…</translation>
@@ -67,6 +68,7 @@
 <translation id="1745121272106313518">Chromium 將會在 <ph name="REMAINING_TIME" />後重新啟動</translation>
 <translation id="1749104137266986751">無法使用 HTTPS 時，Chromium 會在不顯示警告的情況下使用不安全的連線</translation>
 <translation id="1774152462503052664">讓 Chromium 在背景執行</translation>
+<translation id="1792680680989393197">你可隨時移除這些模型。當網站或功能需要使用這些模型時，Chromium 可能會自動重新下載。</translation>
 <translation id="1793486931176048546">在 Windows 通知中點擊 [是]<ph name="BEGIN_BOLD" /><ph name="END_BOLD" />，即可將 Chromium 固定至工作列，以便快速存取</translation>
 <translation id="1808667845054772817">重新安裝 Chromium</translation>
 <translation id="1820835682567584003">Chromium 正在嘗試<ph name="AUTHENTICATION_PURPOSE" /></translation>
@@ -124,7 +126,6 @@
 <translation id="2287771843518581140">{NUM_TABS,plural, =1{Chromium 建議暫停拖慢瀏覽器速度的分頁}other{Chromium 建議暫停拖慢瀏覽器速度的分頁}}</translation>
 <translation id="2307973900865360088">保留在 Dock</translation>
 <translation id="2313870531055795960">使用儲存在 Chromium 中的不安全網站清單來檢查網址。如果有網站試圖盜取您的密碼，或當您下載有害檔案時，Chromium 亦可能將網址 (包括部分網頁內容) 傳送至「安全瀏覽」功能。</translation>
-<translation id="2350411688004301551">切換至 Gemini Enterprise</translation>
 <translation id="2356070529366658676">詢問</translation>
 <translation id="2359808026110333948">繼續</translation>
 <translation id="2361918034042471035">擴充程式「<ph name="EXTENSION_NAME" />」需要你登入 Chromium</translation>
@@ -148,6 +149,7 @@
 <translation id="2572494885440352020">Chromium 輔助工具</translation>
 <translation id="2575822587468774919">選取要使用「圖片搜尋」尋找的內容</translation>
 <translation id="2576118232315942160">如要在你的所有裝置上存取密碼和其他資料，請登入 Chromium</translation>
+<translation id="2587622539943955767">使用手機掃瞄二維碼，以下載 Chromium 並登入 Google 帳戶。</translation>
 <translation id="2587885422541096572">即可使用 Chromium 搜尋。</translation>
 <translation id="2592940277904433508">繼續使用 Chromium</translation>
 <translation id="259935314519650377">無法快取已下載的安裝程式。錯誤代碼：<ph name="UNPACK_CACHING_ERROR_CODE" />。</translation>
@@ -173,7 +175,6 @@
 <translation id="2846251086934905009">安裝錯誤：安裝程式並未完成。安裝已取消。</translation>
 <translation id="2850691299438350830">確保您登入使用 Chromium 的安全，並可提升您在其他 Google 應用程式的安全性</translation>
 <translation id="2885378588091291677">工作管理員</translation>
-<translation id="2898830646167954300">切換回非受管 Gemini 助理</translation>
 <translation id="2910007522516064972">關於 Chromium(&amp;C)</translation>
 <translation id="2915996080311180594">稍後重新開機</translation>
 <translation id="2933336679234709858">你已使用密碼短語加密資料。如要在 Google 帳戶中使用及儲存 Chromium 資料，請輸入密碼短語。</translation>
@@ -252,6 +253,7 @@
 <translation id="3751920144677881410">你可透過工具列上的「搜尋側面板」按鈕，重新開啟「搜尋側面板」以在瀏覽時提問</translation>
 <translation id="3788675262216168505">管理 Chromium 設定檔</translation>
 <translation id="3790262771324122253">瞭解 Chromium 封鎖部分下載內容的原因</translation>
+<translation id="3793196697433239004">使用裝置儲存空間。Chromium 會在 45 天後或儲存空間不足時移除未使用的 AI 模型</translation>
 <translation id="379589255253486813">如有任何需要審核的事項，Chromium 會通知你</translation>
 <translation id="3802055581630249637">Chromium 會預先載入你可能瀏覽的頁面，以便在你瀏覽時更快載入</translation>
 <translation id="3810973564298564668">管理</translation>
@@ -333,6 +335,7 @@
 <translation id="4621240073146040695">即將更新至最新版本！重新啟動 Chromium 即可完成更新程序。</translation>
 <translation id="4625064703209785397">使用 Chromium 的 V8 引擎加快網站速度，但 Chromium 防攻擊的能力會略為下降</translation>
 <translation id="4626321472657185181">開啟「Chromium 搜尋」功能</translation>
+<translation id="4639628733881319833">分享 Chromium 以外內容的螢幕截圖，例如其他應用程式或檔案</translation>
 <translation id="4654639495249754755">Chromium 設定檔</translation>
 <translation id="4665829708273112819">警告：Chromium 無法阻止擴充程式記錄您的瀏覽活動。如要在無痕模式中停用這個擴充程式，請取消選取這個選項。</translation>
 <translation id="4673151026126227699">如果您同時分享 Chromium 使用情況報告，這些報告將會包含您瀏覽的網址</translation>
@@ -359,7 +362,6 @@
 <translation id="4950660488495335294">透過 Chromium 設定檔，你可將所有 Chromium 內容分門別類，例如建立親朋好友專屬的設定檔，或劃分工作和娛樂內容。</translation>
 <translation id="4992938037305302429">你在 Chromium 的帳戶</translation>
 <translation id="5123973130450702873">Chromium 需要相關權限才能追蹤手勢</translation>
-<translation id="5139546603444206048">你可以切換至原本與 Google 帳戶關聯且不受 <ph name="DOMAIN" /> 管理的 Gemini 助理。答覆將不再以 <ph name="DOMAIN" /> 管理的檔案或服務為基礎，對話記錄亦不會保留，因此可能不適合用於工作。切換需要重新啟動 Chromium。</translation>
 <translation id="5141988424377517949">由於最近沒有瀏覽記錄，Chromium 已移除<ph name="PERMISSION_1" />、<ph name="PERMISSION_2" />和<ph name="PERMISSION_3" />權限。</translation>
 <translation id="5171868502429358653">登入 Chromium</translation>
 <translation id="5174969993834422967">系統已按照你的使用習慣封鎖通知。如要允許此網站傳送通知，請按一下網址列右上角的通知圖示。</translation>
@@ -391,6 +393,7 @@
 <translation id="5405650547142096840">從 Chromium 中移除</translation>
 <translation id="5424544524441439284">降低效能但提高 Chromium 防範攻擊的能力</translation>
 <translation id="5427571867875391349">將 Chromium 設為預設瀏覽器</translation>
+<translation id="5435079900593041559">在 Windows 工作列顯示 Chromium 的搜尋功能，並啟用鍵盤快速鍵</translation>
 <translation id="5438241569118040789"><ph name="PAGE_TITLE" /> - Chromium Beta 版本</translation>
 <translation id="5460618461609401056">{NUM_TABS,plural, =1{Chromium 建議暫停拖慢瀏覽器速度的分頁}other{Chromium 建議暫停拖慢瀏覽器速度的分頁}}</translation>
 <translation id="5473971139929175403">Chromium 不再支援此 Linux 發行版本，因此可能無法正常運作</translation>
@@ -417,6 +420,7 @@
 <translation id="5690427481109656848">Google LLC</translation>
 <translation id="5698481217667032250">以此語言顯示 Chromium</translation>
 <translation id="569897634095159764">無法連線至互聯網。Proxy 伺服器需要驗證。</translation>
+<translation id="5755377560105094542">網站和 Chromium 可使用直接在裝置上執行的 AI，提供摘要、校對、字幕等功能。這有別於「Chromium 版 Gemini」。<ph name="BEGIN_LINK" />進一步瞭解裝置內置 AI<ph name="END_LINK" /></translation>
 <translation id="5762954990778294910">透過工具列嘅 [搜尋面板] 掣，重新打開搜尋面板，就可以喺瀏覽嘅時候問問題</translation>
 <translation id="5768371961535086509">Chromium 會從閒置分頁釋出記憶體，為使用中的分頁和其他應用程式提供更多電腦資源，同時保持 Chromium 的運作速度。閒置分頁會在你使用時自動恢復為「使用中」狀態。<ph name="BEGIN_LINK" />進一步瞭解記憶體節省模式<ph name="END_LINK" /></translation>
 <translation id="5775198138441669627">如果忘記密碼短語或想變更此設定，請<ph name="SETTINGS_LINK" />帳戶中的 Chromium 資料</translation>
@@ -473,6 +477,7 @@
 <translation id="6245734527075554892">使用儲存在 Chromium 中的不安全網站清單來檢查網址</translation>
 <translation id="6248213926982192922">將 Chromium 設為預設瀏覽器</translation>
 <translation id="6248988683584659830">搜尋設定</translation>
+<translation id="6251986571402453005">Chromium 會自動下載和更新這些 AI 模型</translation>
 <translation id="6268381023930128611">要登出 Chromium 嗎？</translation>
 <translation id="6270547683008298381">這些分頁正在使用額外的資源。為提升效能，請讓 Chromium 將其設定為閒置分頁。</translation>
 <translation id="6281746429495226318">自訂您的 Chromium 設定檔</translation>
@@ -713,7 +718,6 @@ Chromium 無法復原您的設定。</translation>
 <translation id="8447525028100794994">進一步了解如何在 Chromium 中使用「圖片搜尋」</translation>
 <translation id="8453117565092476964">安裝程式封存檔案已損毀或無效，請重新下載 Chromium。</translation>
 <translation id="8471947159125090285">如要將 Chromium 的資料儲存至 Google 帳戶及使用這類資料，請驗證身分</translation>
-<translation id="8473541503127475913">重新啟動 Chromium 以切換</translation>
 <translation id="8482493977473846331">顯示 Chromium 登入提示</translation>
 <translation id="8493179195440786826">Chromium 版本過舊</translation>
 <translation id="850264194101621529">感謝你選用 Chromium 作為預設瀏覽器！</translation>
@@ -747,7 +751,6 @@ Chromium 無法復原您的設定。</translation>
 <translation id="8906384069222226849">Chromium 只支援 Windows 10 1809 或以上版本。</translation>
 <translation id="8907580949721785412">Chromium 現在會嘗試顯示密碼。如果您同意的話，請輸入您的 Windows 密碼。</translation>
 <translation id="8910309838319708610">大功告成！你現可透過「搜尋 AI 模式」在瀏覽時輕鬆提問</translation>
-<translation id="8915682436012075700">此受管瀏覽器可使用由 <ph name="DOMAIN" /> 為工作設定的 Gemini 助理，根據機構檔案和獲核准服務尋找資料並提供答案。不建議透過個人設定檔使用。對話記錄不會保留。切換需要重新啟動 Chromium。</translation>
 <translation id="8932992523185907506">Chromium 不再是你的預設瀏覽器。要將 Chromium 設為預設瀏覽器嗎？</translation>
 <translation id="8941642502866065432">無法更新 Chromium</translation>
 <translation id="8944232836376404813">此操作將：
@@ -765,6 +768,7 @@ Chromium 無法復原您的設定。</translation>
 <translation id="8981886272598860786">即可使用 Chromium 搜尋，或在「<ph name="BEGIN_LINK" />設定<ph name="END_LINK" />」中自訂</translation>
 <translation id="8988036198400390003">管理 Chromium 設定檔</translation>
 <translation id="8993855408334954620">使用鍵盤在 Chromium 版 Gemini 和已開啟的分頁之間導覽。</translation>
+<translation id="9002987346523307190">Chromium 會從此裝置移除 AI 模型。部分網站和 Chromium 功能可能無法運作。</translation>
 <translation id="9018218886431812662">安裝完成</translation>
 <translation id="9022552996538154597">登入 Chromium</translation>
 <translation id="9035791714111278917">在 Mac 選單列顯示 Chromium 的搜尋功能，並啟用鍵盤快速鍵</translation>

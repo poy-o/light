@@ -17,6 +17,7 @@ import org.chromium.base.Callback;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.components.browser_ui.adaptive_ui.AdaptiveUiProperties.CloseButtonVisibility;
+import org.chromium.components.browser_ui.adaptive_ui.AdaptiveUiProperties.Delegate;
 import org.chromium.components.browser_ui.adaptive_ui.AdaptiveUiProperties.SecondaryButtonBehavior;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
@@ -73,8 +74,8 @@ final class AdaptiveUiDialogCoordinator
      * @param context The {@link Context} used to inflate the dialog body layout that wraps a custom
      *     view.
      * @param model The feature's model, built with {@link AdaptiveUiProperties#ALL_KEYS}.
-     * @param scope The {@link AdaptiveUiScope} of the entry. The model's back press handler is only
-     *     forwarded to the dialog for {@link AdaptiveUiScope#WINDOW}.
+     * @param scope The {@link AdaptiveUiScope} of the entry, which decides whether the dialog is
+     *     app-modal or tab-modal.
      * @param modalDialogManager The window's {@link ModalDialogManager} that shows the dialog.
      * @param onShown Runs once, right after the {@link ModalDialogManager} shows the dialog. Not
      *     run again if the dialog is suspended and later shown again.
@@ -95,7 +96,7 @@ final class AdaptiveUiDialogCoordinator
         mOnShown = onShown;
         mOnDismissed = onDismissed;
         mScope = scope;
-        mDialogModel = createDialogModel(context, model, scope);
+        mDialogModel = createDialogModel(context, model);
         mChangeProcessor =
                 PropertyModelChangeProcessor.create(
                         model, mDialogModel, AdaptiveUiDialogViewBinder::bind);
@@ -251,8 +252,7 @@ final class AdaptiveUiDialogCoordinator
                 && canDrawSecondaryButton(model);
     }
 
-    private PropertyModel createDialogModel(
-            Context context, PropertyModel model, @AdaptiveUiScope int scope) {
+    private PropertyModel createDialogModel(Context context, PropertyModel model) {
         assert !TextUtils.isEmpty(model.get(AdaptiveUiProperties.TITLE))
                         || !TextUtils.isEmpty(
                                 model.get(AdaptiveUiProperties.DIALOG_CONTENT_DESCRIPTION))
@@ -292,16 +292,16 @@ final class AdaptiveUiDialogCoordinator
             builder.with(ModalDialogProperties.FILTER_TOUCH_FOR_SECURITY, true);
         }
 
-        if (scope == AdaptiveUiScope.WINDOW) {
-            builder.with(
-                    ModalDialogProperties.APP_MODAL_DIALOG_BACK_PRESS_HANDLER,
-                    new OnBackPressedCallback(/* enabled= */ true) {
-                        @Override
-                        public void handleOnBackPressed() {
-                            onBackPressed();
-                        }
-                    });
-        }
+        // Always enabled, so every back press on the dialog, app-modal or tab-modal, reaches
+        // onBackPressed(), which reads the model's back press handler at that time.
+        builder.with(
+                ModalDialogProperties.BACK_PRESS_HANDLER,
+                new OnBackPressedCallback(/* enabled= */ true) {
+                    @Override
+                    public void handleOnBackPressed() {
+                        onBackPressed();
+                    }
+                });
 
         configureBody(
                 context,
@@ -366,8 +366,8 @@ final class AdaptiveUiDialogCoordinator
 
     private void onPrimaryButtonClicked() {
         if (isDismissing()) return;
-        Runnable callback = mModel.get(AdaptiveUiProperties.ON_PRIMARY_BUTTON_CLICKED);
-        if (callback != null) callback.run();
+        Delegate delegate = mModel.get(AdaptiveUiProperties.DELEGATE);
+        if (delegate != null) delegate.onPrimaryButtonClicked();
         if (mModel.get(AdaptiveUiProperties.PRIMARY_BUTTON_KEEPS_OPEN)) return;
         requestDismiss(DismissReason.PRIMARY_ACTION);
     }
@@ -390,8 +390,8 @@ final class AdaptiveUiDialogCoordinator
     }
 
     private void runSecondaryButtonCallback() {
-        Runnable callback = mModel.get(AdaptiveUiProperties.ON_SECONDARY_BUTTON_CLICKED);
-        if (callback != null) callback.run();
+        Delegate delegate = mModel.get(AdaptiveUiProperties.DELEGATE);
+        if (delegate != null) delegate.onSecondaryButtonClicked();
     }
 
     private void onCloseButtonClicked(View view) {

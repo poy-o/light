@@ -58,14 +58,12 @@ public class WebPageStation extends CtaPageStation implements WebContentsElement
         return new Builder<>(WebPageStation::new);
     }
 
-    /** {@link #waitForPage(Tab, String, Builder)} for a web page. */
-    public static WebPageStation waitForWebPage(Tab tab, String url) {
-        return waitForPage(tab, url, newBuilder());
-    }
-
-    /** {@link #waitForPageLoad(TripBuilder, Tab, String, Builder)} for a web page. */
-    public static WebPageStation waitForWebPageLoad(TripBuilder trip, Tab tab, String url) {
-        return waitForPageLoad(trip, tab, url, newBuilder());
+    /**
+     * Builder for a web page at |url|. Matched as a substring, so a path is enough, e.g. when the
+     * test server port may vary.
+     */
+    public static Builder<WebPageStation> at(String url) {
+        return newBuilder().withExpectedUrlSubstring(url);
     }
 
     /** Condition to check the page url does not match any of the prohibited urls. */
@@ -209,7 +207,7 @@ public class WebPageStation extends CtaPageStation implements WebContentsElement
 
         public ScrollToBottomCondition(Supplier<WebContents> webContentsSupplier) {
             super(/* isRunOnUiThread= */ false);
-            mWebContentsSupplier = webContentsSupplier;
+            mWebContentsSupplier = dependOnSupplier(webContentsSupplier, "WebContents");
         }
 
         @Override
@@ -244,16 +242,16 @@ public class WebPageStation extends CtaPageStation implements WebContentsElement
 
         public ScrollToTopCondition(Supplier<WebContents> webContentsSupplier) {
             super(/* isRunOnUiThread= */ false);
-            mWebContentsSupplier = webContentsSupplier;
+            mWebContentsSupplier = dependOnSupplier(webContentsSupplier, "WebContents");
         }
 
         @Override
         protected ConditionStatus checkWithSuppliers() throws Exception {
             String code = "window.visualViewport.pageTop";
-            int currentPageTop;
+            double currentPageTop;
             try {
                 currentPageTop =
-                        Integer.parseInt(
+                        Double.parseDouble(
                                 JavaScriptUtils.executeJavaScriptAndWaitForResult(
                                         mWebContentsSupplier.get(), code));
             } catch (TimeoutException e) {
@@ -264,7 +262,7 @@ public class WebPageStation extends CtaPageStation implements WebContentsElement
                 return fulfilled();
             }
             return notFulfilled(
-                    "Not scrolled to the top yet. Current page top: %d", currentPageTop);
+                    "Not scrolled to the top yet. Current page top: %.2f", currentPageTop);
         }
 
         @Override

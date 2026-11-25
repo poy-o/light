@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <concepts>
 #include <functional>
 #include <iterator>
 #include <limits>
@@ -20,6 +21,7 @@
 #include <variant>
 #include <vector>
 
+#include "base/check.h"
 #include "base/check_deref.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
@@ -140,7 +142,6 @@ constexpr std::string_view kAriaLabel = "aria-label";
 constexpr std::string_view kAriaLabelledBy = "aria-labelledby";
 constexpr std::string_view kBold = "b";
 constexpr std::string_view kBreak = "br";
-constexpr std::string_view kButton = "button";
 constexpr std::string_view kClass = "class";
 constexpr std::string_view kColspan = "colspan";
 constexpr std::string_view kDefinitionDescriptionTag = "dd";
@@ -154,7 +155,6 @@ constexpr std::string_view kFormControlSelector = "input, select, textarea";
 constexpr std::string_view kId = "id";
 constexpr std::string_view kIframe = "iframe";
 constexpr std::string_view kImage = "img";
-constexpr std::string_view kInput = "input";
 constexpr std::string_view kLabel = "label";
 constexpr std::string_view kListItem = "li";
 constexpr std::string_view kMeta = "meta";
@@ -172,13 +172,11 @@ constexpr std::string_view kSrc = "src";
 #endif
 constexpr std::string_view kStrong = "strong";
 constexpr std::string_view kStyle = "style";
-constexpr std::string_view kSubmit = "submit";
 constexpr std::string_view kTable = "table";
 constexpr std::string_view kTableCell = "td";
 constexpr std::string_view kTableHeader = "th";
 constexpr std::string_view kTableRow = "tr";
 constexpr std::string_view kTitle = "title";
-constexpr std::string_view kType = "type";
 constexpr std::string_view kValue = "value";
 
 // Wrapper for frequently used WebString constants.
@@ -222,6 +220,26 @@ bool IsAdmissibleUrl(const blink::WebURL& url) {
     }
   }
   return false;
+}
+
+template <typename WebElementType, typename RendererId>
+  requires(std::derived_from<WebElementType, WebElement> &&
+           (std::same_as<RendererId, FormRendererId> ||
+            std::same_as<RendererId, FieldRendererId>))
+WebElementType GetElementByRendererId(const WebDocument& document,
+                                      RendererId renderer_id) {
+  if (!renderer_id) {
+    return WebElementType();
+  }
+  WebNode node = WebNode::FromDomNodeId(*renderer_id);
+  WebElementType element = node.DynamicTo<WebElementType>();
+  return element && IsAccessible(element) &&
+                 (!base::FeatureList::IsEnabled(
+                      features::kAutofillRequireSameDocument)
+                      ? element.GetDocument().GetFrame() != nullptr
+                      : element.GetDocument() == document)
+             ? element
+             : WebElementType();
 }
 
 // Returns the form's |name| attribute if non-empty; otherwise the form's |id|
@@ -1054,7 +1072,8 @@ std::optional<InferredLabel> InferLabelForElement(
   return std::nullopt;
 }
 
-void InferLabelForElements(base::span<FormFieldData> fields) {
+void InferLabelForElements(const WebDocument& document,
+                           base::span<FormFieldData> fields) {
   if (fields.empty()) {
     return;
   }
@@ -1063,7 +1082,7 @@ void InferLabelForElements(base::span<FormFieldData> fields) {
   for (FormFieldData& field : fields) {
     if (field.label().empty()) {
       WebFormControlElement control =
-          GetFormControlByRendererId(field.renderer_id());
+          GetFormControlByRendererId(document, field.renderer_id());
       if (!control) {
         continue;
       }
@@ -1105,8 +1124,12 @@ void RemoveDuplicatesAndLimitTotalLength(ButtonTitleList* result) {
 }
 
 // Return button titles with highest priority based on credibility of their HTML
-// tags and attributes.
-ButtonTitleList InferButtonTitlesForForm(const WebFormElement& web_form) {
+// tags and attributes. `owned_controls` must contain the form controls owned by
+// `web_form` (see `GetOwnedFormControls()`).
+ButtonTitleList InferButtonTitlesForForm(
+    const WebFormElement& web_form,
+    base::span<const WebFormControlElement> owned_controls) {
+  CHECK(web_form);
   // Different button types have different credibility of being the main button.
   // Highest - <input type='submit'>, <button type='submit'>, <button>.
   // Moderate - <input type='button'> <button type='button'>.
@@ -1114,50 +1137,32 @@ ButtonTitleList InferButtonTitlesForForm(const WebFormElement& web_form) {
   ButtonTitleList highest_priority_buttons;
   ButtonTitleList moderate_priority_buttons;
 
-  WebElementCollection input_elements =
-      web_form.GetElementsByHTMLTagName(GetWebString<kInput>());
-  for (WebElement item = input_elements.FirstItem(); item;
-       item = input_elements.NextItem()) {
-    DCHECK(item.IsFormControlElement());
-    WebFormControlElement control_element = item.To<WebFormControlElement>();
-    blink::mojom::FormControlType type =
-        control_element.FormControlTypeForAutofill();
-    bool is_submit_type = type == blink::mojom::FormControlType::kInputSubmit ||
-                          type == blink::mojom::FormControlType::kButtonSubmit;
-    bool is_button_type = type == blink::mojom::FormControlType::kInputButton ||
-                          type == blink::mojom::FormControlType::kButtonButton;
-    if (!is_submit_type && !is_button_type) {
-      continue;
+  for (const WebFormControlElement& control : owned_controls) {
+    using enum blink::mojom::FormControlType;
+    switch (control.FormControlTypeForAutofill()) {
+      case kInputSubmit:
+        AddButtonTitleToList(control.Value().Utf16(),
+                             mojom::ButtonTitleType::INPUT_ELEMENT_SUBMIT_TYPE,
+                             &highest_priority_buttons);
+        break;
+      case kButtonSubmit:
+        AddButtonTitleToList(control.TextContent().Utf16(),
+                             mojom::ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE,
+                             &highest_priority_buttons);
+        break;
+      case kInputButton:
+        AddButtonTitleToList(control.Value().Utf16(),
+                             mojom::ButtonTitleType::INPUT_ELEMENT_BUTTON_TYPE,
+                             &moderate_priority_buttons);
+        break;
+      case kButtonButton:
+        AddButtonTitleToList(control.TextContent().Utf16(),
+                             mojom::ButtonTitleType::BUTTON_ELEMENT_BUTTON_TYPE,
+                             &moderate_priority_buttons);
+        break;
+      default:
+        break;
     }
-    std::u16string title = control_element.Value().Utf16();
-    AddButtonTitleToList(
-        std::move(title),
-        is_submit_type ? mojom::ButtonTitleType::INPUT_ELEMENT_SUBMIT_TYPE
-                       : mojom::ButtonTitleType::INPUT_ELEMENT_BUTTON_TYPE,
-        is_submit_type ? &highest_priority_buttons
-                       : &moderate_priority_buttons);
-  }
-
-  WebElementCollection button_elements =
-      web_form.GetElementsByHTMLTagName(GetWebString<kButton>());
-  for (WebElement item = button_elements.FirstItem(); item;
-       item = button_elements.NextItem()) {
-    const WebString& type_attribute = GetAttribute<kType>(item);
-    if (!type_attribute.IsNull() && type_attribute != GetWebString<kButton>() &&
-        type_attribute != GetWebString<kSubmit>()) {
-      // Neither type='submit' nor type='button'. Skip this button.
-      continue;
-    }
-
-    bool is_submit_type =
-        type_attribute.IsNull() || type_attribute == GetWebString<kSubmit>();
-    std::u16string title = item.TextContent().Utf16();
-    AddButtonTitleToList(
-        std::move(title),
-        is_submit_type ? mojom::ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE
-                       : mojom::ButtonTitleType::BUTTON_ELEMENT_BUTTON_TYPE,
-        is_submit_type ? &highest_priority_buttons
-                       : &moderate_priority_buttons);
   }
 
   if (!highest_priority_buttons.empty()) {
@@ -2067,6 +2072,7 @@ bool IsLikelyCaptchaIframe(const WebElement& element) {
 // `form_element` represents the form that the `fields` and `custom_controls`
 // are associated with - or null for the unowned form.
 std::vector<FormFieldData> MergeFieldsWithCustomFormControls(
+    const WebDocument& document,
     const WebFormElement& form_element,
     std::vector<FormFieldData> fields,
     base::span<const CustomFormControl> custom_controls) {
@@ -2075,9 +2081,19 @@ std::vector<FormFieldData> MergeFieldsWithCustomFormControls(
   }
   std::vector<FormFieldData> custom_fields =
       base::ToVector(custom_controls, &CustomFormControlToFormField);
-  auto to_web_node = [](const FormFieldData& field) {
-    return WebNode::FromDomNodeId(*field.renderer_id());
+  auto to_web_node = [&](const FormFieldData& field) -> WebNode {
+    return base::FeatureList::IsEnabled(features::kAutofillRequireSameDocument)
+               ? GetElementByRendererId<WebElement>(document,
+                                                    field.renderer_id())
+               : WebNode::FromDomNodeId(*field.renderer_id());
   };
+  if (base::FeatureList::IsEnabled(features::kAutofillRequireSameDocument)) {
+    auto is_missing = [&](const FormFieldData& field) {
+      return !to_web_node(field);
+    };
+    std::erase_if(fields, is_missing);
+    std::erase_if(custom_fields, is_missing);
+  }
   auto is_dom_predecessor = [&](const WebNode& x, const WebNode& y) {
     return IsDOMPredecessor(x, y, form_element);
   };
@@ -2097,6 +2113,7 @@ std::vector<FormFieldData> MergeFieldsWithCustomFormControls(
 // `child_frames[i].predecessor` to the field index of the last field in
 // `fields` that precedes the `i`th child frame.
 std::vector<FrameTokenWithPredecessor> ExtractChildFrames(
+    const WebDocument& document,
     const WebFormElement& form_element,
     base::span<const WebElement> iframe_elements,
     base::span<const FormFieldData> fields) {
@@ -2107,7 +2124,16 @@ std::vector<FrameTokenWithPredecessor> ExtractChildFrames(
   for (size_t i = 0; i < fields.size() && next_iframe < iframe_elements.size();
        ++i) {
     // Finds the first frame that succeeds `fields[i]`.
-    WebNode field = WebNode::FromDomNodeId(*fields[i].renderer_id());
+    WebNode field =
+        base::FeatureList::IsEnabled(features::kAutofillRequireSameDocument)
+            ? GetElementByRendererId<WebElement>(document,
+                                                 fields[i].renderer_id())
+            : WebNode::FromDomNodeId(*fields[i].renderer_id());
+    if (!field) {
+      // `field` may be null if layout updates during extraction disconnected
+      // the element.
+      continue;
+    }
     while (
         next_iframe < iframe_elements.size() &&
         !IsDOMPredecessor(field, iframe_elements[next_iframe], form_element)) {
@@ -2146,7 +2172,11 @@ std::optional<FormData> ExtractFormDataWithFieldsAndFrames(
     const FieldDataManager& field_data_manager,
     ButtonTitlesCache* button_titles_cache,
     base::span<const CustomFormControl> custom_controls) {
-  WebFormElement form_element = GetFormByRendererId(form_id);
+  if (base::FeatureList::IsEnabled(features::kAutofillRequireSameDocument) &&
+      !document) {
+    return std::nullopt;
+  }
+  WebFormElement form_element = GetFormByRendererId(document, form_id);
   if (form_id.is_null() != form_element.IsNull()) {
     return std::nullopt;
   }
@@ -2158,19 +2188,22 @@ std::optional<FormData> ExtractFormDataWithFieldsAndFrames(
     return std::nullopt;
   }
 
-  std::vector<WebFormControlElement> control_elements =
-      GetOwnedAutofillableFormControls(document, form_element);
-  if (control_elements.size() + custom_controls.size() >
+  std::vector<WebFormControlElement> owned_controls =
+      GetOwnedFormControls(document, form_element);
+  const size_t num_autofillable_controls =
+      std::ranges::count_if(owned_controls, &IsAutofillableElement);
+  if (num_autofillable_controls + custom_controls.size() >
       kMaxExtractableFields) {
     return std::nullopt;
   }
 
-  // Extracts fields from `control_elements` into `fields`.
   std::vector<FormFieldData> fields;
-  fields.reserve(control_elements.size());
-  for (const WebFormControlElement& control_element : control_elements) {
+  fields.reserve(num_autofillable_controls);
+  for (const WebFormControlElement& control_element : owned_controls) {
     DCHECK(IsAccessible(control_element));
-    DCHECK(IsAutofillableElement(control_element));
+    if (!IsAutofillableElement(control_element)) {
+      continue;
+    }
     fields.emplace_back();
     WebFormControlElementToFormField(form_element, control_element,
                                      &field_data_manager, &fields.back());
@@ -2184,20 +2217,20 @@ std::optional<FormData> ExtractFormDataWithFieldsAndFrames(
   MatchLabelsAndFields(document, fields);
 
   // Infers field labels from other tags or <labels> without for="...".
-  InferLabelForElements(fields);
+  InferLabelForElements(document, fields);
 
   // TODO(crbug.com/582617845): Label inference only works for standard form
   // controls. Consider generalising it and calling
   // `MergeFieldsWithCustomFormControls()` earlier.
-  fields = MergeFieldsWithCustomFormControls(form_element, std::move(fields),
-                                             custom_controls);
+  fields = MergeFieldsWithCustomFormControls(
+      document, form_element, std::move(fields), custom_controls);
 
   // Extracts child frames of `form_element` (or `document` if unowned) and
   // computes their field predecessors in `fields`.
   std::vector<WebElement> iframe_elements =
       GetIframeElements(document, form_element);
   std::vector<FrameTokenWithPredecessor> child_frames =
-      ExtractChildFrames(form_element, iframe_elements, fields);
+      ExtractChildFrames(document, form_element, iframe_elements, fields);
 
   if (fields.empty() && iframe_elements.empty()) {
     return std::nullopt;
@@ -2219,10 +2252,11 @@ std::optional<FormData> ExtractFormDataWithFieldsAndFrames(
     }
     form.set_is_action_empty(form_element.Action().IsNull() ||
                              form_element.Action().IsEmpty());
+    form.set_button_titles(
+        GetButtonTitles(form_element, owned_controls, button_titles_cache));
   }
   form.set_fields(std::move(fields));
   form.set_child_frames(std::move(child_frames));
-  form.set_button_titles(GetButtonTitles(form_element, button_titles_cache));
   // `likely_contains_captcha` is only needed for Android for the autosubmission
   // after filling credentials from TTF bottom sheet.
 #if BUILDFLAG(IS_ANDROID)
@@ -2471,6 +2505,10 @@ base::i18n::TextDirection GetTextDirectionForElement(
 std::vector<WebFormControlElement> GetOwnedFormControls(
     const WebDocument& document,
     const WebFormElement& form_element) {
+  if (base::FeatureList::IsEnabled(features::kAutofillRequireSameDocument) &&
+      (!document || (form_element && form_element.GetDocument() != document))) {
+    return {};
+  }
   std::vector<WebFormControlElement> form_controls;
   if (form_element) {
     form_controls = form_element.GetFormControlElements();  // nocheck
@@ -2507,6 +2545,7 @@ WebFormElement GetOutermostAncestorFormElement(WebNode n) {
 }
 
 std::optional<FormAndField> FindFormAndFieldForFormControlElement(
+    WebDocument document,
     const WebFormControlElement& element,
     base::FunctionRef<std::optional<FormData>(const WebDocument&,
                                               FormRendererId)>
@@ -2517,7 +2556,12 @@ std::optional<FormAndField> FindFormAndFieldForFormControlElement(
     return std::nullopt;
   }
 
-  WebDocument document = element.GetDocument();
+  if (!base::FeatureList::IsEnabled(features::kAutofillRequireSameDocument)) {
+    document = element.GetDocument();
+  } else if (element.GetDocument() != document) {
+    return std::nullopt;
+  }
+
   if (!IsAdmissibleUrl(document.Url())) {
     return std::nullopt;
   }
@@ -2624,8 +2668,13 @@ std::optional<FormAndField> FindFormAndFieldForFormControlElement(
 }
 
 std::optional<FormData> FindFormForContentEditable(
+    WebDocument document,
     const WebElement& content_editable) {
-  WebDocument document = content_editable.GetDocument();
+  if (!base::FeatureList::IsEnabled(features::kAutofillRequireSameDocument)) {
+    document = content_editable.GetDocument();
+  } else if (!content_editable || content_editable.GetDocument() != document) {
+    return std::nullopt;
+  }
 
   if (content_editable.DynamicTo<WebFormElement>() ||
       content_editable.DynamicTo<WebFormControlElement>() ||
@@ -2719,7 +2768,7 @@ std::vector<std::pair<FieldRendererId, WebAutofillState>> ApplyFieldsAction(
   // Step 0: Find the focused and the unfocused fields to fill.
   for (const FormFieldData::FillData& field : fields) {
     WebFormControlElement element =
-        GetFormControlByRendererId(field.renderer_id);
+        GetFormControlByRendererId(document, field.renderer_id);
     if (!element) {
       continue;
     }
@@ -2811,9 +2860,10 @@ void DispatchAutofillEvent(blink::WebDocument document,
   }
 
   std::vector<std::pair<WebFormControlElement, WebString>> autofill_values =
-      base::ToVector(fields, [](const FormFieldData::FillData& field) {
-        return std::pair(GetFormControlByRendererId(field.renderer_id),
-                         WebString::FromUtf16(field.value));
+      base::ToVector(fields, [&](const FormFieldData::FillData& field) {
+        return std::pair(
+            GetFormControlByRendererId(document, field.renderer_id),
+            WebString::FromUtf16(field.value));
       });
   std::erase_if(autofill_values, [&](const auto& p) {
     const WebFormControlElement& control = p.first;
@@ -2862,8 +2912,10 @@ std::u16string FindChildText(const WebNode& node) {
   return FindChildTextWithIgnoreList(node, std::set<WebNode>());
 }
 
-ButtonTitleList GetButtonTitles(const WebFormElement& web_form,
-                                ButtonTitlesCache* button_titles_cache) {
+ButtonTitleList GetButtonTitles(
+    const WebFormElement& web_form,
+    base::span<const WebFormControlElement> owned_controls,
+    ButtonTitlesCache* button_titles_cache) {
   // It makes no sense to collect button titles for a synthetic forms built
   // from unowned fields, as it's time-consuming and leads to scraping
   // many irrelevant elements.
@@ -2873,7 +2925,7 @@ ButtonTitleList GetButtonTitles(const WebFormElement& web_form,
 
   if (!button_titles_cache) {
     // Button titles scraping is disabled for this form.
-    return InferButtonTitlesForForm(web_form);
+    return InferButtonTitlesForForm(web_form, owned_controls);
   }
 
   FormRendererId form_id = GetFormRendererId(web_form);
@@ -2882,38 +2934,30 @@ ButtonTitleList GetButtonTitles(const WebFormElement& web_form,
     return *titles;
   }
 
-  ButtonTitleList button_titles = InferButtonTitlesForForm(web_form);
+  ButtonTitleList button_titles =
+      InferButtonTitlesForForm(web_form, owned_controls);
   button_titles_cache->insert_or_assign(form_id, button_titles);
   return button_titles;
 }
 
-WebFormElement GetFormByRendererId(FormRendererId form_renderer_id) {
-  if (!form_renderer_id) {
-    return WebFormElement();
-  }
-  WebNode node = WebNode::FromDomNodeId(form_renderer_id.value());
-  WebFormElement form = node.DynamicTo<WebFormElement>();
-  return form && IsAccessible(form) && form.GetDocument().GetFrame()
-             ? form
-             : WebFormElement();
+WebFormElement GetFormByRendererId(const WebDocument& document,
+                                   FormRendererId form_renderer_id) {
+  return GetElementByRendererId<WebFormElement>(document, form_renderer_id);
 }
 
 WebFormControlElement GetFormControlByRendererId(
+    const WebDocument& document,
     FieldRendererId queried_form_control) {
-  if (!queried_form_control) {
-    return WebFormControlElement();
-  }
-  WebNode node = WebNode::FromDomNodeId(queried_form_control.value());
-  WebFormControlElement form_control = node.DynamicTo<WebFormControlElement>();
-  return form_control && IsAccessible(form_control) &&
-                 form_control.GetDocument().GetFrame()
-             ? form_control
-             : WebFormControlElement();
+  return GetElementByRendererId<WebFormControlElement>(document,
+                                                       queried_form_control);
 }
 
-WebElement GetContentEditableByRendererId(FieldRendererId field_renderer_id) {
+WebElement GetContentEditableByRendererId(const WebDocument& document,
+                                          FieldRendererId field_renderer_id) {
   WebElement field =
-      WebNode::FromDomNodeId(*field_renderer_id).DynamicTo<WebElement>();
+      base::FeatureList::IsEnabled(features::kAutofillRequireSameDocument)
+          ? GetElementByRendererId<WebElement>(document, field_renderer_id)
+          : WebNode::FromDomNodeId(*field_renderer_id).DynamicTo<WebElement>();
   return field && field.IsContentEditable() ? field : WebElement();
 }
 
@@ -3142,8 +3186,9 @@ std::u16string GetAriaDescriptionForTesting(  // IN-TEST
 }
 
 void InferLabelForElementsForTesting(  // IN-TEST
+    const WebDocument& document,
     base::span<FormFieldData> fields) {
-  InferLabelForElements(fields);
+  InferLabelForElements(document, fields);
 }
 
 std::vector<WebFormControlElement> GetOwnedFormControlsForTesting(  // IN-TEST

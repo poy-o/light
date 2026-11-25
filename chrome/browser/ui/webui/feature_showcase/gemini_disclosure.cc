@@ -14,25 +14,13 @@
 
 namespace {
 
-constexpr char16_t kGeminiAppsActivityUrl[] =
-    u"https://myactivity.google.com/product/gemini";
-constexpr char16_t kGeminiActivitySettingsUrl[] =
-    u"https://support.google.com/gemini/?p=activity_settings";
-
-constexpr char16_t kGoogleTermsUrl[] = u"https://policies.google.com/terms";
-constexpr char16_t kGeminiPrivacyNoticeUrl[] =
-    u"https://support.google.com/gemini/answer/13594961";
-constexpr char16_t kKoreanLocationTermsUrl[] =
-    u"https://www.google.com/intl/ko/policies/terms/location";
-
-constexpr char16_t kGoogleWorkspaceDataNoticeUrl[] =
-    u"https://knowledge.workspace.google.com/admin/generative-ai/"
-    u"generative-ai-in-google-workspace-privacy-hub";
-
 std::u16string GetFirstParagraph(std::string_view country_code,
                                  bool is_managed) {
   const bool is_us = (country_code == "us");
   if (is_managed) {
+    static constexpr char16_t kGoogleWorkspaceDataNoticeUrl[] =
+        u"https://knowledge.workspace.google.com/admin/generative-ai/"
+        u"generative-ai-in-google-workspace-privacy-hub";
     const int message_id =
         is_us ? IDS_FEATURE_SHOWCASE_GEMINI_DISCLOSURE_1_ENTERPRISE_US
               : IDS_FEATURE_SHOWCASE_GEMINI_DISCLOSURE_1_ENTERPRISE_ROW;
@@ -40,14 +28,26 @@ std::u16string GetFirstParagraph(std::string_view country_code,
                                       kGoogleWorkspaceDataNoticeUrl);
   }
 
+  static constexpr char16_t kGeminiAppsActivityUrl[] =
+      u"https://myactivity.google.com/product/gemini";
+  static constexpr char16_t kGeminiLocationInfoUrl[] =
+      u"https://support.google.com/gemini?p=gemini_mobile_app_location_info";
+  static constexpr char16_t kGeminiChoicesUrl[] =
+      u"https://support.google.com/gemini?p=your_choices";
   const int message_id = is_us ? IDS_FEATURE_SHOWCASE_GEMINI_DISCLOSURE_1_US
                                : IDS_FEATURE_SHOWCASE_GEMINI_DISCLOSURE_1_ROW;
   return l10n_util::GetStringFUTF16(message_id, kGeminiAppsActivityUrl,
-                                    kGeminiActivitySettingsUrl);
+                                    kGeminiLocationInfoUrl, kGeminiChoicesUrl);
 }
 
 std::u16string GetSecondParagraph(std::string_view country_code) {
+  static constexpr char16_t kGoogleTermsUrl[] =
+      u"https://policies.google.com/terms";
+  static constexpr char16_t kGeminiPrivacyNoticeUrl[] =
+      u"https://support.google.com/gemini/answer/13594961";
   if (country_code == "kr") {
+    static constexpr char16_t kKoreanLocationTermsUrl[] =
+        u"https://www.google.com/intl/ko/policies/terms/location";
     return l10n_util::GetStringFUTF16(
         IDS_FEATURE_SHOWCASE_GEMINI_DISCLOSURE_2_KR, kGoogleTermsUrl,
         kKoreanLocationTermsUrl, kGeminiPrivacyNoticeUrl);

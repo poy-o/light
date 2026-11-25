@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">Deel wagwoorde</translation>
 <translation id="1554043146674176775">Skakel KI-modus af</translation>
 <translation id="1554477036522844996">Nuwe venster</translation>
+<translation id="1555014818414775661">Voeg prente by</translation>
 <translation id="1557806604681757705">jou rekenaar</translation>
 <translation id="1558391695376153246">Maak Incognito-oortjies toe</translation>
 <translation id="1560153516220021659">Ingevoude sekondêrenutsbalkknoppie</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">Maak <ph name="BEGIN_BOLD" />Safari-instellings<ph name="END_BOLD" /> oop</translation>
 <translation id="3858860766373142691">Naam</translation>
 <translation id="386224966259596343">Jy sal die kans kry om hierdie inligting in Wallet te stoor wanneer jy weer ’n relevante vorm invul.</translation>
-<translation id="3868495844258915202">Wys volle URL</translation>
 <translation id="3870931306085184145">Geen gestoorde wagwoorde vir <ph name="DOMAIN" /> nie</translation>
 <translation id="3875783148670536197">Wys my hoe</translation>
 <translation id="3878657761594430423">Bladgryper</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">Skakel kennisgewings in jou iOS-instellings aan om prysnasporingkennisgewings te kry.</translation>
 <translation id="528857768909044842">Oortjiegroepe word hier gestoor</translation>
 <translation id="5294624619177114121">Mobiele kennisgewings</translation>
-<translation id="5295239312320826323">Verwyder <ph name="USER_EMAIL" /> se rekening?</translation>
 <translation id="5300589172476337783">Wys</translation>
 <translation id="5311061401280561833">Kamera- en mikrofoontoegang word toegelaat</translation>
 <translation id="5313967007315987356">Voeg werf by</translation>
@@ -1788,6 +1787,7 @@ Oorgee moet ook in die Algemene afdeling van Instellings geaktiveer word, en jou
 <translation id="6504541289630702018">Kry maklik toegang tot jou werkskermoortjiegroepe</translation>
 <translation id="6505334220040167806">Vou oortjiegroep in.</translation>
 <translation id="6506996418997555004">Deel “<ph name="GROUP_NAME" />”-oortjiegroep</translation>
+<translation id="650770261448122895">Soek wat jy sien met Lens</translation>
 <translation id="6507973708545996744">Meld aan om jou leeslys op al jou toestelle te kry.</translation>
 <translation id="6518133107902771759">Verifieer</translation>
 <translation id="6523575793810663688">Wys my hoe</translation>
@@ -2147,7 +2147,6 @@ Jy kan enige tyd herbegin.</translation>
 <translation id="7603852183842204213">Opspringers geblokkeer (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Sinkronisering werk nie</translation>
 <translation id="760667371114328991">Skakel kennisgewings vir veiligheidskontrole af</translation>
-<translation id="7612619742409846846">By Google aangemeld as</translation>
 <translation id="7612849887607288481">Maak KI-prototipekieslys oop</translation>
 <translation id="7618220760967055820">Kies watter knoppie in die nutsbalk gewys moet word</translation>
 <translation id="7620522820075868385">Kanselleer</translation>
@@ -2430,6 +2429,7 @@ Jy kan enige tyd herbegin.</translation>
 <translation id="8439758443371991593">Versteek Voeg by leeslys</translation>
 <translation id="8443986842926457191">URL is meer as 2 048 karakters.</translation>
 <translation id="8449869326050867919">Wagwoord is gedeel</translation>
+<translation id="8473367210869452063">Onderbreek die huidige taak of wag dat Gemini klaar werk om met hierdie werf interaksie te hê</translation>
 <translation id="8473815223723723001">Redigeer prent met Gemini</translation>
 <translation id="8473863474539038330">Adresse en meer</translation>
 <translation id="8474378002946546633">Laat kennisgewings toe</translation>

@@ -247,7 +247,7 @@
             }
           },
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 51
+          "shards": 44
         },
         "test": "browser_tests",
         "test_id_prefix": "ninja://chrome/test:browser_tests/"
@@ -1754,7 +1754,7 @@
             "os": "Windows-10-19045"
           },
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 5
+          "shards": 4
         },
         "test": "updater_tests",
         "test_id_prefix": "ninja://chrome/updater:updater_tests/"
@@ -1774,7 +1774,7 @@
           },
           "hard_timeout": 7200,
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 9
+          "shards": 8
         },
         "test": "updater_tests_system",
         "test_id_prefix": "ninja://chrome/updater:updater_tests_system/"
@@ -2030,7 +2030,7 @@
             "os": "Windows-10-19045"
           },
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 7
+          "shards": 3
         },
         "test": "blink_wpt_tests",
         "test_id_prefix": "ninja://:blink_wpt_tests/"
@@ -2419,6 +2419,76 @@
         },
         "test": "views_perftests",
         "test_id_prefix": "ninja://ui/views:views_perftests/"
+      },
+      {
+        "args": [
+          "--enable-websocket-h3",
+          "--flag-specific=websocket-h3",
+          "--num-retries=3",
+          "external/wpt/websockets",
+          "--write-run-histories-to=${ISOLATED_OUTDIR}/run_histories.json"
+        ],
+        "ci_only": true,
+        "experiment_percentage": 100,
+        "isolate_profile_data": true,
+        "merge": {
+          "args": [
+            "--verbose"
+          ],
+          "script": "//third_party/blink/tools/merge_web_test_results.py"
+        },
+        "module_name": "//:blink_wpt_tests",
+        "module_scheme": "webtest",
+        "name": "websocket_h3_content_shell_wpt_tests",
+        "resultdb": {
+          "enable": true,
+          "has_native_resultdb_integration": true
+        },
+        "results_handler": "layout tests",
+        "swarming": {
+          "dimensions": {
+            "cpu": "x86-64",
+            "os": "Windows-10-19045"
+          },
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "blink_wpt_tests",
+        "test_id_prefix": "ninja://:blink_wpt_tests/"
+      },
+      {
+        "args": [
+          "--enable-websocket-h3",
+          "--flag-specific=websocket-h3",
+          "--no-virtual-tests",
+          "--inverted-test-launcher-filter-file=../../third_party/blink/web_tests/TestLists/content_shell.filter",
+          "external/wpt/websockets"
+        ],
+        "ci_only": true,
+        "experiment_percentage": 100,
+        "isolate_profile_data": true,
+        "merge": {
+          "args": [
+            "--verbose"
+          ],
+          "script": "//third_party/blink/tools/merge_web_test_results.py"
+        },
+        "module_name": "//:headless_shell_wpt",
+        "module_scheme": "webtest",
+        "name": "websocket_h3_headless_shell_wpt_tests",
+        "resultdb": {
+          "enable": true,
+          "has_native_resultdb_integration": true
+        },
+        "results_handler": "layout tests",
+        "swarming": {
+          "dimensions": {
+            "cpu": "x86-64",
+            "os": "Windows-10-19045"
+          },
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "headless_shell_wpt",
+        "test_id_prefix": "ninja://:headless_shell_wpt/"
       },
       {
         "isolate_profile_data": true,

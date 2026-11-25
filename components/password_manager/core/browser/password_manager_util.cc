@@ -335,7 +335,8 @@ bool IsSavingBlockedByRecoverableError(
 }
 
 bool ShouldShowTrustedVaultErrorInAutofill(
-    const password_manager::PasswordManagerClient* client) {
+    const password_manager::PasswordManagerClient* client,
+    const password_manager::PasswordManagerDriver* driver) {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS)
   if (!base::FeatureList::IsEnabled(
@@ -353,12 +354,16 @@ bool ShouldShowTrustedVaultErrorInAutofill(
     return false;
   }
 
-  const GURL& url = client->GetLastCommittedURL();
-  if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS()) {
+  auto is_eligible_url = [](const GURL& url) {
+    return url.is_valid() && url.SchemeIsHTTPOrHTTPS() &&
+           !google_util::IsGoogleDomainUrl(
+               url, google_util::ALLOW_SUBDOMAIN,
+               google_util::ALLOW_NON_STANDARD_PORTS);
+  };
+  if (!is_eligible_url(client->GetLastCommittedURL())) {
     return false;
   }
-  if (google_util::IsGoogleDomainUrl(url, google_util::ALLOW_SUBDOMAIN,
-                                     google_util::ALLOW_NON_STANDARD_PORTS)) {
+  if (driver && !is_eligible_url(driver->GetLastCommittedOrigin().GetURL())) {
     return false;
   }
 
@@ -517,7 +522,7 @@ const PasswordForm* FindFormByUsername(base::span<const PasswordForm> forms,
 }
 
 const PasswordForm* FindFormByUsername(
-    const std::vector<raw_ptr<const PasswordForm, VectorExperimental>>& forms,
+    const std::vector<raw_ptr<const PasswordForm>>& forms,
     const std::u16string& username_value) {
   for (const PasswordForm* form : forms) {
     if (form->username_value == username_value) {
@@ -539,8 +544,7 @@ const StoredCredential* FindCredentialByUsername(
 }
 
 const StoredCredential* FindCredentialByUsername(
-    const std::vector<raw_ptr<const StoredCredential, VectorExperimental>>&
-        forms,
+    const std::vector<raw_ptr<const StoredCredential>>& forms,
     const std::u16string& username_value) {
   for (const StoredCredential* form : forms) {
     if (form->username_value == username_value) {
@@ -565,8 +569,7 @@ const password_manager::StoredCredential* FindChangedPasswordLoginWithBackup(
 
 const StoredCredential* GetMatchForUpdating(
     const PasswordForm& submitted_form,
-    const std::vector<raw_ptr<const StoredCredential, VectorExperimental>>&
-        credentials,
+    const std::vector<raw_ptr<const StoredCredential>>& credentials,
     bool username_updated_in_bubble) {
   // This is the case for the credential management API. It should not depend on
   // form managers. Once that's the case, this should be turned into a DCHECK.

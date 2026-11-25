@@ -13,6 +13,7 @@
 #include "components/autofill/core/browser/form_parsing/parsing_test_util.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/form_field_data.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 namespace autofill {
 
@@ -97,7 +98,7 @@ TEST_F(AddressFieldParserTest, ParseStreetNameAndHouseNumberAptPL) {
 // Tests that fields are classified as |ADDRESS_HOME_STREET_NAME| and
 // |ADDRESS_HOME_HOUSE_NUMBER| when they are labeled accordingly and
 // both are present.
-TEST_F(AddressFieldParserTest, ParseStreetNameAndHouseNumbertPL) {
+TEST_F(AddressFieldParserTest, ParseStreetNameAndHouseNumberPL) {
   AddTextFormFieldData("street", "ulica", ADDRESS_HOME_STREET_NAME);
   AddTextFormFieldData("house-number", "Nr domu", ADDRESS_HOME_HOUSE_NUMBER);
   ClassifyAndVerify(ParseResult::kParsed, GeoIpCountryCode("PL"),
@@ -107,7 +108,7 @@ TEST_F(AddressFieldParserTest, ParseStreetNameAndHouseNumbertPL) {
 // Tests that fields are classified as |ADDRESS_HOME_STREET_NAME|,
 // |ADDRESS_HOME_HOUSE_NUMBER| and |ADDRESS_HOME_APT_NUM|  when they are labeled
 // accordingly and both are present.
-TEST_F(AddressFieldParserTest, ParseStreetNameHouseNumbertAndAptNumPL) {
+TEST_F(AddressFieldParserTest, ParseStreetNameHouseNumberAndAptNumPL) {
   AddTextFormFieldData("street", "ulica", ADDRESS_HOME_STREET_NAME);
   AddTextFormFieldData("house-number", "Nr domu", ADDRESS_HOME_HOUSE_NUMBER);
   AddTextFormFieldData("apartment", "Nr lokalu", ADDRESS_HOME_APT_NUM);
@@ -141,22 +142,10 @@ TEST_F(AddressFieldParserTest,
 // Tests that an address field after a |ADDRESS_HOME_STREET_NAME|,
 // |ADDRESS_HOME_HOUSE_NUMBER| combination is classified as
 // |ADDRESS_HOME_LINE2| instead of |ADDRESS_HOME_LINE1|.
-TEST_F(AddressFieldParserTest, ParseAsAddressLine2AfterStreetNameNotEnabled) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(
-      features::kAutofillStructuredFieldsDisableAddressLines);
+TEST_F(AddressFieldParserTest, ParseAsAddressLine2AfterStreetName) {
   AddTextFormFieldData("street", "Street", ADDRESS_HOME_STREET_NAME);
   AddTextFormFieldData("house-number", "House no.", ADDRESS_HOME_HOUSE_NUMBER);
   AddTextFormFieldData("address", "Address", ADDRESS_HOME_LINE2);
-  ClassifyAndVerify();
-}
-
-TEST_F(AddressFieldParserTest, ParseAsAddressLine2AfterStreetNameEnabled) {
-  base::test::ScopedFeatureList scoped_feature_list(
-      features::kAutofillStructuredFieldsDisableAddressLines);
-  AddTextFormFieldData("street", "Street", ADDRESS_HOME_STREET_NAME);
-  AddTextFormFieldData("house-number", "House no.", ADDRESS_HOME_HOUSE_NUMBER);
-  AddTextFormFieldData("address", "Address", UNKNOWN_TYPE);
   ClassifyAndVerify();
 }
 

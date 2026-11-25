@@ -1,0 +1,39 @@
+Tests debug(fn) console command.
+
+Running test: testSetSimpleBreakpoint
+Breakpoint added.
+Set timer for test function.
+Script execution paused.
+Reason for pause: debugCommand
+Call stack:
+    0) simpleTestFunction (debug-console-command.js:4)
+    1)  (:1)
+Breakpoint removed.
+Script execution resumed.
+
+Running test: testSetBreakpointOnFirstFunctionInLine
+Breakpoint added.
+Set timer for test function.
+Script execution paused.
+Reason for pause: debugCommand
+Call stack:
+    0) simpleTestFunction1 (debug-console-command.js:7)
+    1)  (:1)
+Breakpoint removed.
+Script execution resumed.
+
+Running test: testSetBreakpointOnLastFunctionInLine
+Breakpoint added.
+Set timer for test function.
+Script execution paused.
+Reason for pause: debugCommand
+Call stack:
+    0) simpleTestFunction2 (debug-console-command.js:7)
+    1)  (:1)
+Breakpoint removed.
+Script execution resumed.
+
+Running test: testRemoveBreakpoint
+Script execution paused.
+Reason for pause: debugger statement.
+

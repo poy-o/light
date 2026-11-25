@@ -64,6 +64,7 @@ include_rules = [
   "+components/background_sync",
   "+components/background_task_scheduler",
   "+components/base32",
+  "+components/bidi_mapper",
   "+components/blocked_content",
   "+components/bookmarks/browser",
   "+components/bookmarks/common",
@@ -621,6 +622,9 @@ specific_include_rules = {
   "input_method_engine.cc": [
     # For GetVirtualKeyboardController.
     "+ash/keyboard/ui/keyboard_ui_controller.h",
+  ],
+  r"chrome_browser_field_trials_unittest\.cc": [
+    "+chrome/chrome_elf/nt_registry/nt_registry.h",
   ],
   "chrome_browsing_data_remover_delegate_unittest.cc": [
     "+services/network/network_context.h",

@@ -66,7 +66,6 @@
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
-#import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/fullscreen_commands.h"
 #import "ios/chrome/browser/shared/public/commands/lens_commands.h"
@@ -105,7 +104,7 @@ namespace {
 const int kExpectedExitAnimationCount = 2;
 
 // TODO(crbug.com/399297003): Use the value provided by the dynamic framework.
-// The ammount of padding needed to compensate for the top header.
+// The amount of padding needed to compensate for the top header.
 const CGFloat kTopHeaderPadding = 52;
 
 // The delay for showing the search with camera tooltip hint.
@@ -779,7 +778,7 @@ const base::TimeDelta kSearchWithCameraTooltipHintDelay = base::Seconds(2.0);
   _associatedTabHelper->UpdateSnapshot();
   if (self.browser &&
       IsLensOverlaySameTabNavigationEnabled(self.profile->GetPrefs())) {
-    _associatedTabHelper->ClearInvokationNavigationId();
+    _associatedTabHelper->ClearInvocationNavigationId();
   }
 }
 
@@ -1009,7 +1008,7 @@ const base::TimeDelta kSearchWithCameraTooltipHintDelay = base::Seconds(2.0);
   // navigation (e.g., user taps the "Learn More" button) to preserve the
   // current state.
   if (_associatedTabHelper) {
-    _associatedTabHelper->RecordViewportSnaphot();
+    _associatedTabHelper->RecordViewportSnapshot();
   }
   [_metricsRecorder recordOverflowMenuOpened];
 }
@@ -1022,7 +1021,7 @@ const base::TimeDelta kSearchWithCameraTooltipHintDelay = base::Seconds(2.0);
   // the storage until the web state is marked hidden, as by that point all
   // other updates should be issued.
   if (_associatedTabHelper) {
-    _associatedTabHelper->RecordViewportSnaphot();
+    _associatedTabHelper->RecordViewportSnapshot();
     _associatedTabHelper->RecordSheetDimensionState(
         _resultsPagePresenter.sheetDimension);
   }
@@ -1045,7 +1044,7 @@ const base::TimeDelta kSearchWithCameraTooltipHintDelay = base::Seconds(2.0);
     return;
   }
 
-  _associatedTabHelper->RecordViewportSnaphot();
+  _associatedTabHelper->RecordViewportSnapshot();
   _associatedTabHelper->RecordSheetDimensionState(
       _resultsPagePresenter.sheetDimension);
   _associatedTabHelper->UpdateSnapshotStorage();
@@ -1303,7 +1302,7 @@ const base::TimeDelta kSearchWithCameraTooltipHintDelay = base::Seconds(2.0);
 
   /// Record a snapshot of the current viewport before navigating to the URL.
   if (_associatedTabHelper) {
-    _associatedTabHelper->RecordViewportSnaphot();
+    _associatedTabHelper->RecordViewportSnapshot();
   }
 
   UIImage* viewportSnapshot =
@@ -1470,13 +1469,18 @@ const base::TimeDelta kSearchWithCameraTooltipHintDelay = base::Seconds(2.0);
 
 // Enters the fullscreen state.
 - (void)enterFullscreen {
+  CHECK(IsFullscreenRefactoringEnabled());
   Browser* browser = self.browser;
   if (!browser) {
     return;
   }
-  id<BrowserCoordinatorCommands> handler = HandlerForProtocol(
-      browser->GetCommandDispatcher(), BrowserCoordinatorCommands);
-  [handler forceFullscreenMode:FullscreenModeTransitionTrigger::kForcedByCode];
+  // TODO(crbug.com/500414020): Force fullscreen with
+  // `ForceFullscreenFeature::kLensOverlay` instead of simply entering it.
+  id<FullscreenCommands> fullscreenHandler =
+      HandlerForProtocol(browser->GetCommandDispatcher(), FullscreenCommands);
+  [fullscreenHandler
+      enterFullscreenWithTrigger:FullscreenModeTransitionTrigger::kForcedByCode
+                        animated:YES];
 }
 
 // Ends the lifecycle of the presented result bottom sheet.

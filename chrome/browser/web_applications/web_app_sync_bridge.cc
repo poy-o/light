@@ -134,7 +134,9 @@ BASE_FEATURE(kDeleteBadWebAppSyncEntitites, base::FEATURE_DISABLED_BY_DEFAULT);
 
 std::unique_ptr<syncer::EntityData> CreateSyncEntityData(const WebApp& app) {
   // The Sync System doesn't allow empty entity_data name.
-  CHECK(!app.untranslated_name().empty(), base::NotFatalUntil::M162);
+  // TODO(crbug.com/589235737): CHECK-exclusion: Convert to a CHECK once we
+  // are confident it won't be triggered.
+  DCHECK(!app.untranslated_name().empty());
 
   auto entity_data = std::make_unique<syncer::EntityData>();
   entity_data->name = app.untranslated_name();
@@ -186,7 +188,9 @@ void WebAppSyncBridge::SetProvider(base::PassKey<WebAppProvider> pass_key,
 
 [[nodiscard]] ScopedRegistryUpdate WebAppSyncBridge::BeginUpdate(
     CommitCallback callback) {
-  CHECK(database_->is_opened(), base::NotFatalUntil::M162);
+  // TODO(crbug.com/589657736): CHECK-exclusion: Convert to a CHECK once we are
+  // confident it won't be triggered.
+  DCHECK(database_->is_opened());
 
   CHECK(!is_in_update_, base::NotFatalUntil::M162);
   is_in_update_ = true;

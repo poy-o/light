@@ -1065,7 +1065,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
       const base::flat_map<GURL, base::FilePath>& url_map,
       const base::flat_map<blink::FrameToken, base::FilePath>& frame_token_map,
       bool save_with_empty_url,
-      mojo::PendingRemote<mojom::FrameHTMLSerializerHandler>
+      mojo::PendingRemote<blink::mojom::FrameHTMLSerializerHandler>
           serializer_handler);
 
   // Returns the associated WebUI or null if none applies.
@@ -1110,6 +1110,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
   bool is_local_root_subframe() const {
     return !is_main_frame() && is_local_root();
   }
+
+  // Returns the local root RenderFrameHostImpl for this frame (the nearest
+  // ancestor, including `this`, that owns a RenderWidgetHost).
+  RenderFrameHostImpl* GetLocalRoot();
 
   // The unique ID of the latest NavigationEntry that this RenderFrameHost is
   // showing. This may change even when this frame hasn't committed a page,
@@ -2331,8 +2335,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void ForEachRenderFrameHostImplIncludingSpeculative(
       base::FunctionRef<void(RenderFrameHostImpl*)> on_frame);
 
-  bool DocumentUsedWebOTP() override;
-
   scoped_refptr<WebAuthRequestSecurityCheckerImpl>
   GetWebAuthRequestSecurityCheckerImpl();
 
@@ -2632,6 +2634,17 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   DocumentAssociatedData& document_associated_data() {
     return *document_associated_data_;
+  }
+
+  const std::string& crash_reporting_group() const {
+    return crash_reporting_group_;
+  }
+
+  // Marks that crash report generation has been attempted for the current live
+  // RenderFrame and returns false if it was already attempted since the
+  // RenderFrame was created.
+  bool MarkCrashReportAttempted() {
+    return !std::exchange(crash_report_attempted_, true);
   }
 
   // Called when we commit speculative RFH early due to not having an alive
@@ -3973,11 +3986,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
       const SubresourceLoaderFactoriesConfig& config,
       const base::flat_set<url::Origin>& isolated_world_origins);
 
-  // Based on the process termination |info|, may generate a crash report to be
-  // routed to the Reporting API.
-  void MaybeGenerateCrashReport(const ChildProcessTerminationInfo& info);
-  base::DictValue ReadCrashReportAPIBody();
-
   // Bitfield values for recording navigation frame-type (main or subframe)
   // combined with whether a sudden termination disabler is present. Currently
   // it only covers unload.
@@ -5306,14 +5314,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // RenderFrameHost. This will be a valid ID if so, and invalid otherwise.
   FrameTreeNodeId inner_tree_main_frame_tree_node_id_;
 
-  // Indicates whether navigator.credentials.get({otp: {transport:"sms"}}) has
-  // been used on a document (regardless of the outcome).
-  // Note that WebOTP is not allowed in iframes for security reasons. i.e. this
-  // will not be set in such case which is expected. In addition, since the
-  // RenderFrameHost may persist across navigations, we need to reset the bit
-  // to make sure that it's used per document.
-  bool document_used_web_otp_ = false;
-
   // The browsing context's required CSP as defined by
   // https://w3c.github.io/webappsec-cspee/#required-csp,
   // stored when the frame commits the navigation.
@@ -5557,7 +5557,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // `ResetChildren()` destroying descendant frames before their observer
   // notifications run, but enforces a stronger per-frame invariant if that
   // ordering or cleanup ever changes.
-  bool has_reported_crash_ = false;
+  bool crash_report_attempted_ = false;
 
   PrerenderStateChangedCallback prerender_state_callback_;
 

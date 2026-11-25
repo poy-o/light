@@ -53,6 +53,20 @@ String ConvertCreateTranslatorErrorToDebugString(CreateTranslatorError error) {
     case CreateTranslatorError::kNotEnoughDiskSpace:
       return "There is not enough free disk space to download the translation "
              "model.";
+    case CreateTranslatorError::kOffline:
+      return "The translation model must be downloaded, but the device is "
+             "offline.";
+    case CreateTranslatorError::kUnsupportedDevice:
+      return "Translation is not supported on this device.";
+    case CreateTranslatorError::kDataSaverEnabled:
+      return "The translation model must be downloaded, but Data Saver is "
+             "enabled.";
+    case CreateTranslatorError::kExceedsLanguagePackCountLimitation:
+      return "The number of installed translation language packs exceeded the "
+             "limitation.";
+    case CreateTranslatorError::kMeteredConnectionBlocked:
+      return "The translation model must be downloaded, but downloads on "
+             "metered connections are disabled.";
   }
 }
 
@@ -81,6 +95,9 @@ String ConvertCanCreateTranslatorResultToDebugString(
     case CanCreateTranslatorResult::kNoInvalidStoragePartition:
       equivalent_error = CreateTranslatorError::kInvalidStoragePartition;
       break;
+    case CanCreateTranslatorResult::kNoUnsupportedDevice:
+      equivalent_error = CreateTranslatorError::kUnsupportedDevice;
+      break;
   }
   return ConvertCreateTranslatorErrorToDebugString(equivalent_error);
 }
@@ -100,6 +117,7 @@ bool RequiresUserActivation(CanCreateTranslatorResult result) {
     case CanCreateTranslatorResult::kNoDisallowedByPolicy:
     case CanCreateTranslatorResult::kNoExceedsServiceCountLimitation:
     case CanCreateTranslatorResult::kNoInvalidStoragePartition:
+    case CanCreateTranslatorResult::kNoUnsupportedDevice:
       return false;
   }
 }
@@ -118,6 +136,7 @@ bool TranslatorIsUnavailable(CanCreateTranslatorResult result) {
     case CanCreateTranslatorResult::kNoDisallowedByPolicy:
     case CanCreateTranslatorResult::kNoExceedsServiceCountLimitation:
     case CanCreateTranslatorResult::kNoInvalidStoragePartition:
+    case CanCreateTranslatorResult::kNoUnsupportedDevice:
       return true;
   }
 }
@@ -159,7 +178,8 @@ void CreateTranslatorClient::Trace(Visitor* visitor) const {
 void CreateTranslatorClient::OnResult(
     mojom::blink::CreateTranslatorResultPtr result,
     mojom::blink::TranslatorLanguageCodePtr source_language,
-    mojom::blink::TranslatorLanguageCodePtr target_language) {
+    mojom::blink::TranslatorLanguageCodePtr target_language,
+    std::optional<uint64_t> input_quota) {
   // Call `Cleanup` when this function returns.
   RunOnDestruction run_on_destruction(
       BindOnce(&CreateTranslatorClient::Cleanup, WrapWeakPersistent(this)));
@@ -174,6 +194,7 @@ void CreateTranslatorClient::OnResult(
     CHECK(result->is_error());
     CHECK(!source_language);
     CHECK(!target_language);
+    CHECK(!input_quota);
 
     GetExecutionContext()->AddConsoleMessage(
         mojom::blink::ConsoleMessageSource::kJavaScript,
@@ -197,7 +218,7 @@ void CreateTranslatorClient::OnResult(
   GetResolver()->Resolve(MakeGarbageCollected<Translator>(
       GetScriptState(), std::move(result->get_translator()), task_runner_,
       std::move(source_language_), std::move(target_language_),
-      GetAbortSignal()));
+      GetAbortSignal(), input_quota));
 }
 
 void CreateTranslatorClient::OnGotAvailability(

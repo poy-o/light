@@ -168,7 +168,9 @@ public class TabGroupRowMediatorUnitTest {
 
     private PropertyModel buildTestModel(boolean isShared, GURL... urls) {
         Long archivalTime = mSyncGroup != null ? mSyncGroup.archivalTimeMs : null;
-        mSyncGroup = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID1, GROUP_ID1);
+        mSyncGroup =
+                mSyncedGroupTestHelper.newTabGroup(
+                        SYNC_GROUP_ID1, TabGroupId.fromRawToken(GROUP_ID1));
         mSyncGroup.collaborationId = isShared ? COLLABORATION_ID1 : null;
         mSyncGroup.title = TITLE;
         mSyncGroup.savedTabs = SyncedGroupTestHelper.tabsFromUrls(urls);
@@ -341,7 +343,10 @@ public class TabGroupRowMediatorUnitTest {
 
     @Test
     public void testOpen_InAnother() {
-        doAnswer(invocationOnMock -> mSyncGroup.localId = new LocalTabGroupId(GROUP_ID1))
+        doAnswer(
+                        invocationOnMock ->
+                                mSyncGroup.localId =
+                                        new LocalTabGroupId(TabGroupId.fromRawToken(GROUP_ID1)))
                 .when(mTabGroupUiActionHandler)
                 .openTabGroup(SYNC_GROUP_ID1);
         when(mFetchGroupState.get()).thenReturn(GroupWindowState.IN_ANOTHER);
@@ -360,8 +365,11 @@ public class TabGroupRowMediatorUnitTest {
         MultiWindowTestUtils.enableMultiInstance();
         TabWindowManager tabWindowManager = mock(TabWindowManager.class);
         TabWindowManagerSingleton.setTabWindowManagerForTesting(tabWindowManager);
-        when(tabWindowManager.findWindowIdForTabGroup(eq(GROUP_ID1))).thenReturn(2);
-        when(tabWindowManager.findWindowIdForTabGroup(eq(GROUP_ID1), anyBoolean())).thenReturn(2);
+        when(tabWindowManager.findWindowIdForTabGroup(eq(TabGroupId.fromRawToken(GROUP_ID1))))
+                .thenReturn(2);
+        when(tabWindowManager.findWindowIdForTabGroup(
+                        eq(TabGroupId.fromRawToken(GROUP_ID1)), anyBoolean()))
+                .thenReturn(2);
         TabModelSelector otherSelector = mock(TabModelSelector.class);
         TabModel otherModel = mock(TabModel.class);
         when(tabWindowManager.getTabModelSelectorById(2)).thenReturn(otherSelector);
@@ -393,9 +401,10 @@ public class TabGroupRowMediatorUnitTest {
     private void setupOtherWindowGroupNotFound() {
         TabWindowManager tabWindowManager = mock(TabWindowManager.class);
         TabWindowManagerSingleton.setTabWindowManagerForTesting(tabWindowManager);
-        when(tabWindowManager.findWindowIdForTabGroup(eq(GROUP_ID1)))
+        when(tabWindowManager.findWindowIdForTabGroup(eq(TabGroupId.fromRawToken(GROUP_ID1))))
                 .thenReturn(TabWindowManager.INVALID_WINDOW_ID);
-        when(tabWindowManager.findWindowIdForTabGroup(eq(GROUP_ID1), anyBoolean()))
+        when(tabWindowManager.findWindowIdForTabGroup(
+                        eq(TabGroupId.fromRawToken(GROUP_ID1)), anyBoolean()))
                 .thenReturn(TabWindowManager.INVALID_WINDOW_ID);
         when(mTabModel.containsTabGroup(TabGroupId.fromOptionalToken(GROUP_ID1))).thenReturn(false);
 
@@ -411,7 +420,8 @@ public class TabGroupRowMediatorUnitTest {
 
         doAnswer(
                         inv -> {
-                            mSyncGroup.localId = new LocalTabGroupId(GROUP_ID1);
+                            mSyncGroup.localId =
+                                    new LocalTabGroupId(TabGroupId.fromRawToken(GROUP_ID1));
                             when(mTabModel.containsTabGroup(
                                             TabGroupId.fromOptionalToken(GROUP_ID1)))
                                     .thenReturn(true);
@@ -460,7 +470,10 @@ public class TabGroupRowMediatorUnitTest {
     public void testOpen_InAnother_FallbackNotInTabModel_RecordsHistogram() {
         setupOtherWindowGroupNotFound();
 
-        doAnswer(inv -> mSyncGroup.localId = new LocalTabGroupId(GROUP_ID1))
+        doAnswer(
+                        inv ->
+                                mSyncGroup.localId =
+                                        new LocalTabGroupId(TabGroupId.fromRawToken(GROUP_ID1)))
                 .when(mTabGroupUiActionHandler)
                 .openTabGroup(SYNC_GROUP_ID1);
 
@@ -486,7 +499,10 @@ public class TabGroupRowMediatorUnitTest {
 
     @Test
     public void testOpen_Hidden() {
-        doAnswer(invocationOnMock -> mSyncGroup.localId = new LocalTabGroupId(GROUP_ID1))
+        doAnswer(
+                        invocationOnMock ->
+                                mSyncGroup.localId =
+                                        new LocalTabGroupId(TabGroupId.fromRawToken(GROUP_ID1)))
                 .when(mTabGroupUiActionHandler)
                 .openTabGroup(SYNC_GROUP_ID1);
         when(mFetchGroupState.get()).thenReturn(GroupWindowState.HIDDEN);
@@ -536,7 +552,10 @@ public class TabGroupRowMediatorUnitTest {
 
     @Test
     public void testOpen_Hidden_NotInTabModel_RecordsHistogram() {
-        doAnswer(inv -> mSyncGroup.localId = new LocalTabGroupId(GROUP_ID1))
+        doAnswer(
+                        inv ->
+                                mSyncGroup.localId =
+                                        new LocalTabGroupId(TabGroupId.fromRawToken(GROUP_ID1)))
                 .when(mTabGroupUiActionHandler)
                 .openTabGroup(SYNC_GROUP_ID1);
 
@@ -563,7 +582,7 @@ public class TabGroupRowMediatorUnitTest {
         when(mFetchGroupState.get()).thenReturn(GroupWindowState.HIDDEN);
         when(mTabModel.containsTabGroup(TabGroupId.fromOptionalToken(GROUP_ID1))).thenReturn(false);
         PropertyModel propertyModel = buildTestModel(/* isShared= */ true, mUrl1);
-        LocalTabGroupId localId = new LocalTabGroupId(GROUP_ID1);
+        LocalTabGroupId localId = new LocalTabGroupId(TabGroupId.fromRawToken(GROUP_ID1));
         mSyncGroup.localId = localId;
 
         propertyModel.get(OPEN_RUNNABLE).run();

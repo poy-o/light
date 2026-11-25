@@ -167,10 +167,17 @@ BASE_DECLARE_FEATURE(kGeic);
 // Allows the GEiC surface to be turned off from within the kGeic study without
 // having to disable the study itself.
 extern const base::FeatureParam<bool> kGeicEnabledParam;
+// Product brand name interpolated into GEiC-specific overlay strings (e.g.
+// "Gemini Enterprise", or "Gemini" under brand unification).
+extern const base::FeatureParam<std::string> kGeicProductName;
 // The Gemini Enterprise guest URL. Intentionally empty by default: running in
 // GEiC mode without an explicit GEiC URL is a misconfiguration, so callers
 // error rather than fall back to the consumer Gemini URL.
 extern const base::FeatureParam<std::string> kGeicGuestURL;
+// Optional JSON array of selectable rollout stages
+// (`[{"id":"...","label":"...","url":"..."}]`) for switching between Finch
+// guest URLs.
+extern const base::FeatureParam<std::string> kGeicSelectableStages;
 // Enables the Gemini Enterprise in Chrome (GEiC) first-run experience (FRE).
 // When enabled for a GEiC profile, Chrome stores FRE completion per GE instance
 // in `geic.completed_fre`, exposes it to the GE web app, and gates GEiC
@@ -202,6 +209,12 @@ BASE_DECLARE_FEATURE(kGeicProviderChangePrompt);
 // they've been switched. Independent of `kGeicProviderChangePrompt`. Requires
 // `kGeic`.
 BASE_DECLARE_FEATURE(kGeicProviderSwitchNotice);
+
+// Keeps the Gemini Enterprise (GEiC) entry point visible, in an error state,
+// for profiles that completed the GEiC FRE (`geic.completed_fre`) but fail a
+// Glic requirement. GEiC counterpart of
+// `kGlicAnchorEntryPointForOnboardedUsers`, which must also be enabled.
+BASE_DECLARE_FEATURE(kGeicAnchorEntryPointForOnboardedUsers);
 
 BASE_DECLARE_FEATURE(kGlicHotkeyLocalScope);
 BASE_DECLARE_FEATURE(kGlicKeyboardPrint);
@@ -259,6 +272,10 @@ BASE_DECLARE_FEATURE(kGlicNativeFreAndroid);
 #endif  // BUILDFLAG(IS_ANDROID)
 
 BASE_DECLARE_FEATURE(kGlicActionFirstFRE);
+
+// Enables pre-consent Action First FRE chip selection for the tab the panel
+// targets.
+BASE_DECLARE_FEATURE(kGlicActionFirstSuggestions);
 
 BASE_DECLARE_FEATURE(kGlicWarmOnNudge);
 
@@ -334,6 +351,12 @@ extern const base::FeatureParam<base::TimeDelta>
 // sending it via `glic-bootstrap` postMessage.
 BASE_DECLARE_FEATURE(kGlicApiBundleResource);
 
+// Lets Glic show Chrome's modal Google Drive picker
+// (chrome://drive-picker-host) by advertising `HostCapability::kDrivePicker`
+// to the web client, starting in M160. This does not turn on Drive upload in
+// Glic by itself: the web client decides server-side whether to offer "Add
+// from Drive", and whether to open this modal picker or its own in-panel
+// picker. Kept as a kill switch for the modal picker.
 BASE_DECLARE_FEATURE(kGlicDrivePicker);
 
 // Enables loading the Google-internal CiC client inside the Glic guest via a

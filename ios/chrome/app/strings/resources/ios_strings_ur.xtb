@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">پاس ورڈز کا اشتراک کریں</translation>
 <translation id="1554043146674176775">‏‫AI وضع آف کریں</translation>
 <translation id="1554477036522844996">نئی ونڈو</translation>
+<translation id="1555014818414775661">تصاویر شامل کریں</translation>
 <translation id="1557806604681757705">آپ کا کمپیوٹر</translation>
 <translation id="1558391695376153246">پوشیدگی ٹیبز بند کریں</translation>
 <translation id="1560153516220021659">ثانوی ٹول بار کا بٹن سکیڑا گیا</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">‏‫<ph name="BEGIN_BOLD" />Safari کی ترتیبات<ph name="END_BOLD" /> کھولیں</translation>
 <translation id="3858860766373142691">نام</translation>
 <translation id="386224966259596343">اگلی بار جب آپ کوئی متعلقہ فارم پُر کریں گے تو آپ کو اس معلومات کو والٹ میں محفوظ کرنے کا موقع ملے گا۔</translation>
-<translation id="3868495844258915202">‏مکمل URL دکھائیں</translation>
 <translation id="3870931306085184145"><ph name="DOMAIN" /> کے لئے کوئی محفوظ کردہ پاس ورڈ نہیں</translation>
 <translation id="3875783148670536197">مجھے طریقہ دکھائیں</translation>
 <translation id="3878657761594430423">شیٹ گریبر</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">‏قیمت کی ٹریکنگ کی اطلاعات حاصل کرنے کے لیے، اپنے iOS کی ترتیبات میں اطلاعات کو آن کریں۔</translation>
 <translation id="528857768909044842">ٹیب گروپس یہاں محفوظ ہیں</translation>
 <translation id="5294624619177114121">موبائل اطلاعات</translation>
-<translation id="5295239312320826323"><ph name="USER_EMAIL" /> اکاؤنٹ ہٹائیں؟</translation>
 <translation id="5300589172476337783">دکھائیں</translation>
 <translation id="5311061401280561833">کیمرے اور مائیکروفون تک رسائی کی اجازت ہے</translation>
 <translation id="5313967007315987356">سائٹ شامل کریں</translation>
@@ -1788,6 +1787,7 @@ Handoff ترتیبات کے عام سیکشن میں بھی فعال ہونی ض
 <translation id="6504541289630702018">اپنے ڈیسک ٹاپ ٹیب گروپس تک آسانی سے رسائی حاصل کریں</translation>
 <translation id="6505334220040167806">ٹیب گروپ کو سکیڑیں۔</translation>
 <translation id="6506996418997555004">‫"<ph name="GROUP_NAME" />" ٹیب گروپ کا اشتراک کریں</translation>
+<translation id="650770261448122895">نظر آنے والی چیزوں کو لینز سے تلاش کریں</translation>
 <translation id="6507973708545996744">اپنے سبھی آلات پر اپنی پڑھنے کی فہرست حاصل کرنے کے لیے سائن ان کریں۔</translation>
 <translation id="6518133107902771759">توثیق کریں</translation>
 <translation id="6523575793810663688">مجھے طریقہ دکھائیں</translation>
@@ -2147,7 +2147,6 @@ Handoff ترتیبات کے عام سیکشن میں بھی فعال ہونی ض
 <translation id="7603852183842204213">پاپ اپس کو مسدود کر دیا گیا (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">مطابقت پذیری کام نہیں کر رہی ہے</translation>
 <translation id="760667371114328991">سیفٹی چیک کی اطلاعات کو آف کریں</translation>
-<translation id="7612619742409846846">‏Google میں سائن ان ہے بطور</translation>
 <translation id="7612849887607288481">‏‫AI پروٹو ٹائپنگ مینو کھولیں</translation>
 <translation id="7618220760967055820">منتخب کریں کہ ٹول بار میں کون سا بٹن دکھانا ہے</translation>
 <translation id="7620522820075868385">منسوخ کریں</translation>
@@ -2430,6 +2429,7 @@ Handoff ترتیبات کے عام سیکشن میں بھی فعال ہونی ض
 <translation id="8439758443371991593">'پڑھنے کی فہرست میں شامل کریں' کو چھپائیں</translation>
 <translation id="8443986842926457191">‏URL ‏2048 حروف سے زیادہ ہے</translation>
 <translation id="8449869326050867919">پاس ورڈ کا اشتراک کر دیا گیا</translation>
+<translation id="8473367210869452063">‏اس سائٹ کا استعمال کرنے کے لیے، موجودہ ٹاسک کو روکیں یا Gemini کا کام ختم ہونے کا انتظار کریں</translation>
 <translation id="8473815223723723001">‏‫Gemini کے ساتھ تصویر میں ترمیم کریں</translation>
 <translation id="8473863474539038330">پتے وغیرہ</translation>
 <translation id="8474378002946546633">اطلاعات کی اجازت دیں</translation>

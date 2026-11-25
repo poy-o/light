@@ -185,6 +185,7 @@ public class AwSettings {
     private boolean mSpatialNavigationEnabled; // Default depends on device features.
     private boolean mDownloadFaviconsEnabled = true;
     private boolean mEnableSupportedHardwareAcceleratedFeatures;
+    private boolean mClearBfCacheOnHardwareAcceleration = true;
     private boolean mWebGraphicsEnabled = true;
     private int mMixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW;
 
@@ -339,6 +340,11 @@ public class AwSettings {
         void updateWebkitPreferencesLocked() {
             runOnUiThreadBlockingAndLocked(
                     AwSettings.this::updateWebkitPreferencesOnUiThreadLocked);
+        }
+
+        void updateWebkitPreferencesLocked(boolean flushBackForwardCache) {
+            runOnUiThreadBlockingAndLocked(
+                    () -> updateWebkitPreferencesOnUiThreadLocked(flushBackForwardCache));
         }
 
         void updateCookiePolicyLocked() {
@@ -784,12 +790,24 @@ public class AwSettings {
         return mSpatialNavigationEnabled;
     }
 
+    /**
+     * Whether turning the supported hardware accelerated features on or off flushes the
+     * back/forward cache. They follow the WebView's window, so they change on every attach and
+     * detach.
+     */
+    public void setClearBfCacheOnHardwareAcceleration(boolean clear) {
+        synchronized (mAwSettingsLock) {
+            mClearBfCacheOnHardwareAcceleration = clear;
+        }
+    }
+
     @VisibleForTesting
     public void setEnableSupportedHardwareAcceleratedFeatures(boolean enable) {
         synchronized (mAwSettingsLock) {
             if (mEnableSupportedHardwareAcceleratedFeatures != enable) {
                 mEnableSupportedHardwareAcceleratedFeatures = enable;
-                mEventHandler.updateWebkitPreferencesLocked();
+                mEventHandler.updateWebkitPreferencesLocked(
+                        /* flushBackForwardCache= */ mClearBfCacheOnHardwareAcceleration);
             }
         }
     }
@@ -809,11 +827,12 @@ public class AwSettings {
         }
     }
 
-    void setForceFullscreenUnsupported(boolean forceUnsupported) {
+    @VisibleForTesting
+    public void setForceFullscreenUnsupported(boolean forceUnsupported) {
         synchronized (mAwSettingsLock) {
             if (mForceFullscreenUnsupported != forceUnsupported) {
                 mForceFullscreenUnsupported = forceUnsupported;
-                mEventHandler.updateWebkitPreferencesLocked();
+                mEventHandler.updateWebkitPreferencesLocked(/* flushBackForwardCache= */ false);
             }
         }
     }
@@ -924,15 +943,14 @@ public class AwSettings {
             final AwUserAgentMetadata overrideUaMetadata =
                     AwUserAgentMetadata.fromMap(
                             uaMetadataMap, LazyDefaultUserAgentMetadata.sInstance);
-            if (!mAwUserAgentMetadata.equals(overrideUaMetadata)) {
+            final boolean hasOverrides = (uaMetadataMap != null && !uaMetadataMap.isEmpty());
+            // Also check mHasUserAgentMetadataOverrides != hasOverrides so that passing non-empty
+            // metadata matching the system defaults still enables high-entropy client hints when a
+            // custom user-agent string is set (and passing null/empty clears it).
+            if (!mAwUserAgentMetadata.equals(overrideUaMetadata)
+                    || mHasUserAgentMetadataOverrides != hasOverrides) {
                 mAwUserAgentMetadata = overrideUaMetadata;
-                // We only consider it has override when the input is not empty and has difference
-                // with the existing user-agent metadata. e.g. user overrides the user-agent with a
-                // totally different value, initially they provide the user-agent metadata
-                // overrides, we should only generate low-entropy user-agent client hints once users
-                // clear the user-agent metadata overrides.
-                mHasUserAgentMetadataOverrides =
-                        (uaMetadataMap != null && !uaMetadataMap.isEmpty());
+                mHasUserAgentMetadataOverrides = hasOverrides;
                 mEventHandler.runOnUiThreadBlockingAndLocked(
                         () -> updateUserAgentOnUiThreadLocked());
             }
@@ -2224,9 +2242,13 @@ public class AwSettings {
     }
 
     private void updateWebkitPreferencesOnUiThreadLocked() {
+        updateWebkitPreferencesOnUiThreadLocked(/* flushBackForwardCache= */ true);
+    }
+
+    private void updateWebkitPreferencesOnUiThreadLocked(boolean flushBackForwardCache) {
         assert mEventHandler.mHandler != null;
         ThreadUtils.assertOnUiThread();
-        flushBackForwardCache();
+        if (flushBackForwardCache) flushBackForwardCache();
         if (mNativeAwSettings != null) {
             AwSettingsJni.get().updateWebkitPreferencesLocked(mNativeAwSettings, AwSettings.this);
         }
@@ -2479,14 +2501,14 @@ public class AwSettings {
         }
     }
 
-    public boolean getWebGraphicsEnabled() {
+    public boolean isWebGraphicsEnabled() {
         synchronized (mAwSettingsLock) {
-            return getWebGraphicsEnabledLocked();
+            return isWebGraphicsEnabledLocked();
         }
     }
 
     @CalledByNative
-    private boolean getWebGraphicsEnabledLocked() {
+    private boolean isWebGraphicsEnabledLocked() {
         assert Thread.holdsLock(mAwSettingsLock);
         return mWebGraphicsEnabled;
     }

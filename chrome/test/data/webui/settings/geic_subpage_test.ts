@@ -10,6 +10,9 @@ import type {CrButtonElement, SettingsGeicSubpageElement, SettingsToggleButtonEl
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {TestOpenWindowProxy} from 'chrome://webui-test/test_open_window_proxy.js';
 import {isVisible, microtasksFinished} from 'chrome://webui-test/test_util.js';
+// <if expr="not is_chromeos">
+import {eventToPromise} from 'chrome://webui-test/test_util.js';
+// </if>
 
 import {TestGlicBrowserProxy} from './test_glic_browser_proxy.js';
 import {TestLifetimeBrowserProxy} from './test_lifetime_browser_proxy.js';
@@ -169,11 +172,82 @@ suite('GeicSubpage', function() {
               .value);
     });
 
+    test('IntroSectionAlwaysVisible', () => {
+      const introSection =
+          page.shadowRoot.querySelector<HTMLElement>('#introSection');
+      assertTrue(!!introSection);
+      assertTrue(isVisible(introSection));
+      const introHeading =
+          page.shadowRoot.querySelector<HTMLElement>('#introHeading');
+      const introDescription =
+          page.shadowRoot.querySelector<HTMLElement>('#introDescription');
+      assertTrue(!!introHeading);
+      assertTrue(!!introDescription);
+      assertEquals(
+          page.i18n('geicIntroHeading'), introHeading.textContent.trim());
+      assertEquals(
+          page.i18n('geicIntroDescription'),
+          introDescription.textContent.trim());
+    });
+
     test('DevicePolicyRowHiddenByDefault', () => {
       assertFalse(
+          !!page.shadowRoot.querySelector<HTMLElement>('#devicePolicySection'));
+      assertFalse(
           !!page.shadowRoot.querySelector<HTMLElement>('#devicePolicyRow'));
+      assertFalse(!!page.shadowRoot.querySelector<HTMLElement>(
+          '#devicePolicyConsider'));
       assertFalse(!!page.shadowRoot.querySelector<CrButtonElement>(
           '#devicePolicyButton'));
+    });
+
+    test('DevicePolicyConsiderBulletsShown', async () => {
+      await createPage(/*showDevicePolicyToggle=*/ true);
+
+      const label =
+          page.shadowRoot.querySelector<HTMLElement>('#devicePolicyLabel');
+      const sublabel =
+          page.shadowRoot.querySelector<HTMLElement>('#devicePolicySublabel');
+      const button =
+          page.shadowRoot.querySelector<CrButtonElement>('#devicePolicyButton');
+      assertTrue(!!label);
+      assertTrue(!!sublabel);
+      assertTrue(!!button);
+      assertEquals(
+          page.i18n('geicDevicePolicyToggle'), label.textContent.trim());
+      assertEquals(
+          page.i18n('geicDevicePolicyToggleSublabel'),
+          sublabel.textContent.trim());
+      assertEquals(
+          page.i18n('geicDevicePolicyButton'), button.textContent.trim());
+
+      const consider =
+          page.shadowRoot.querySelector<HTMLElement>('#devicePolicyConsider');
+      assertTrue(!!consider);
+      assertTrue(isVisible(consider));
+      assertEquals(
+          page.i18n('columnHeadingConsider'),
+          consider.querySelector('.description-header')?.textContent.trim());
+      const bullets = consider.querySelectorAll('ul.icon-bulleted-list > li');
+      assertEquals(3, bullets.length);
+      assertEquals(
+          'settings20:draft-spark',
+          bullets[0]!.querySelector('cr-icon')?.getAttribute('icon'));
+      assertEquals(
+          'settings20:shield-spark',
+          bullets[1]!.querySelector('cr-icon')?.getAttribute('icon'));
+      assertEquals(
+          'settings20:chat-spark',
+          bullets[2]!.querySelector('cr-icon')?.getAttribute('icon'));
+      assertEquals(
+          page.i18n('geicDevicePolicyConsider1'),
+          bullets[0]!.querySelector('.secondary')?.textContent.trim());
+      assertEquals(
+          page.i18n('geicDevicePolicyConsider2'),
+          bullets[1]!.querySelector('.secondary')?.textContent.trim());
+      assertEquals(
+          page.i18n('geicSwitchConsiderChatHistory'),
+          bullets[2]!.querySelector('.secondary')?.textContent.trim());
     });
 
     test('DevicePolicyButtonDisablesGeicAndRestarts', async () => {
@@ -210,10 +284,7 @@ suite('GeicSubpage', function() {
       assertDeepEquals(['switchAssistantSelection', 'restart'], calls);
       assertEquals(0, lifetimeBrowserProxy.getCallCount('relaunch'));
       assertEquals(GlicAssistantSelection.CONSUMER, selection);
-
-      page.onRelaunchDialogClose(new Event('close'));
-      await microtasksFinished();
-      assertFalse(button.disabled);
+      assertTrue(button.disabled);
     });
 
     // <if expr="not is_chromeos">
@@ -231,9 +302,42 @@ suite('GeicSubpage', function() {
       const dialog =
           page.shadowRoot.querySelector('relaunch-confirmation-dialog');
       assertTrue(!!dialog);
+      // Not switched until the restart is confirmed.
+      assertEquals(
+          0, glicBrowserProxy.getCallCount('switchAssistantSelection'));
+
       dialog.$.confirm.click();
+      assertEquals(
+          GlicAssistantSelection.CONSUMER,
+          await glicBrowserProxy.whenCalled('switchAssistantSelection'));
       await lifetimeBrowserProxy.whenCalled('restart');
       assertEquals(0, lifetimeBrowserProxy.getCallCount('relaunch'));
+      await microtasksFinished();
+      assertTrue(button.disabled);
+    });
+
+    test('DevicePolicyButtonCancelDialogKeepsSelection', async () => {
+      lifetimeBrowserProxy.setShouldShowRelaunchConfirmationDialog(true);
+      await createPage(/*showDevicePolicyToggle=*/ true);
+
+      const button =
+          page.shadowRoot.querySelector<CrButtonElement>('#devicePolicyButton');
+      assertTrue(!!button);
+      button.click();
+      await lifetimeBrowserProxy.whenCalled('shouldShowRelaunchDialog');
+      await microtasksFinished();
+
+      const dialog =
+          page.shadowRoot.querySelector('relaunch-confirmation-dialog');
+      assertTrue(!!dialog);
+      dialog.$.cancel.click();
+      await eventToPromise('close', dialog);
+      await microtasksFinished();
+
+      assertEquals(
+          0, glicBrowserProxy.getCallCount('switchAssistantSelection'));
+      assertEquals(0, lifetimeBrowserProxy.getCallCount('restart'));
+      assertFalse(button.disabled);
     });
     // </if>
   });

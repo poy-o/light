@@ -350,40 +350,6 @@ IN_PROC_BROWSER_TEST_F(InitialWebUINavigationBrowserTest,
                             "'toolbar-app')).display"));
 }
 
-// Verifies that when only `WebUIReloadButton` is enabled (the `InitialWebUI`
-// startup configuration), chrome://webui-toolbar.top-chrome/ only defines
-// `<toolbar-app>` and the main-bundle navigation buttons without loading or
-// defining non-navigation toolbar custom elements from `lazy_load.js`.
-IN_PROC_BROWSER_TEST_F(InitialWebUINavigationBrowserTest,
-                       ReloadOnlyToolbarSkipsLazyControls) {
-  GURL url(chrome::kChromeUIWebUIToolbarURL);
-  WebUIToolbarInitializer initializer(browser());
-  std::unique_ptr<content::WebContents> web_contents =
-      CreateAndNavigateWebContents(url, &initializer);
-  ASSERT_TRUE(content::WaitForLoadStop(web_contents.get()));
-
-  EXPECT_EQ(true, content::EvalJs(web_contents.get(), R"(
-      customElements.whenDefined('toolbar-app').then(
-          () => !!customElements.get('reload-button') &&
-                !!customElements.get('back-forward-button') &&
-                !!customElements.get('home-button') &&
-                !!customElements.get('split-tabs-button') &&
-                !!document.querySelector('toolbar-app').shadowRoot))"));
-  // `lazy_load.js` would be requested from an idle callback registered by
-  // `<toolbar-app>`, so wait for a later idle callback before checking that
-  // it was never requested.
-  EXPECT_EQ(false, content::EvalJs(web_contents.get(), R"(
-      new Promise(resolve => requestIdleCallback(resolve, {timeout: 1000}))
-          .then(() =>
-              !!document.querySelector('script[src$="lazy_load.js"]') ||
-              !!customElements.get('location-bar') ||
-              !!customElements.get('readonly-omnibox') ||
-              !!customElements.get('app-menu-button') ||
-              !!customElements.get('avatar-button') ||
-              !!customElements.get('webui-toolbar-extensions') ||
-              !!customElements.get('pinned-toolbar-actions')))"));
-}
-
 // Initial WebUI process should not be shared with non-Initial WebUI per
 // https://crrev.com/c/7508984.
 // However, both should have the TopChrome WebUI flag set.
@@ -633,8 +599,8 @@ IN_PROC_BROWSER_TEST_F(PrewarmedWebUINavigationTimelineBrowserTest,
 
   // 2) Create a new browser window. This should trigger pre-warming of the
   // toolbar WebUI.
-  CreateBrowserWindow(BrowserWindowCreateParams(browser()->GetProfile(),
-                                                /*from_user_gesture=*/true));
+  CreateBrowserWindowForTesting(BrowserWindowCreateParams(
+      browser()->GetProfile(), /*from_user_gesture=*/true));
 
   // Wait for the navigation to commit and record UKM.
   if (ukm_recorder().GetEntriesByName(NavigationTimeline::kEntryName).empty()) {
@@ -765,7 +731,8 @@ IN_PROC_BROWSER_TEST_F(InitialWebUINavigationBrowserTest,
 
   BrowserWindowCreateParams params(browser()->GetProfile(),
                                    /*from_user_gesture=*/true);
-  BrowserWindowInterface* new_browser = CreateBrowserWindow(std::move(params));
+  BrowserWindowInterface* new_browser =
+      CreateBrowserWindowForTesting(std::move(params));
   ASSERT_TRUE(InitialWebUIWindowMetricsManager::From(new_browser));
   AddBlankTabAndShow(new_browser);
 
@@ -899,6 +866,15 @@ IN_PROC_BROWSER_TEST_F(InitialWebUIWindowCreationSourceBrowserTest,
   ASSERT_TRUE(restored_browser);
   EXPECT_EQ(GetCreationSource(restored_browser),
             waap::NewWindowCreationSource::kSessionRestore);
+}
+
+IN_PROC_BROWSER_TEST_F(InitialWebUIWindowCreationSourceBrowserTest,
+                       CreateBrowserTestHelper) {
+  BrowserWindowInterface* const new_browser =
+      CreateBrowser(browser()->GetProfile());
+  ASSERT_TRUE(new_browser);
+  EXPECT_EQ(GetCreationSource(new_browser),
+            waap::NewWindowCreationSource::kTest);
 }
 
 // TODO(crbug.com/490810407): Verify that `NavigationTimeline` UKM is recorded.
@@ -1336,7 +1312,7 @@ IN_PROC_BROWSER_TEST_F(InitialWebUISameStartupPopupBrowserTest,
   BrowserWindowCreateParams normal_params(BrowserWindowInterface::TYPE_NORMAL,
                                           profile, /*from_user_gesture=*/true);
   BrowserWindowInterface* normal_browser =
-      CreateBrowserWindow(std::move(normal_params));
+      CreateBrowserWindowForTesting(std::move(normal_params));
   ASSERT_TRUE(normal_browser);
 
   auto* popup_manager = InitialWebUIWindowMetricsManager::From(popup_browser);
@@ -1754,11 +1730,11 @@ IN_PROC_BROWSER_TEST_F(InitialWebUIProfilePrewarmRefillBrowserTest,
 
   base::HistogramTester histogram_tester;
   // Create 3 normal windows back to back without waiting for paints.
-  BrowserWindowInterface* w1 = CreateBrowserWindow(
+  BrowserWindowInterface* w1 = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(profile, /*from_user_gesture=*/true));
-  BrowserWindowInterface* w2 = CreateBrowserWindow(
+  BrowserWindowInterface* w2 = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(profile, /*from_user_gesture=*/true));
-  BrowserWindowInterface* w3 = CreateBrowserWindow(
+  BrowserWindowInterface* w3 = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(profile, /*from_user_gesture=*/true));
   ASSERT_TRUE(w1);
   ASSERT_TRUE(w2);

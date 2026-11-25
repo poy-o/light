@@ -37,6 +37,7 @@
 #include "components/autofill/core/browser/data_manager/personal_data_manager.h"
 #include "components/autofill/core/browser/data_model/addresses/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/addresses/autofill_structured_address_component.h"
+#include "components/autofill/core/browser/data_model/autofill_ai/entity_instance.h"
 #include "components/autofill/core/browser/data_model/payments/credit_card.h"
 #include "components/autofill/core/browser/data_quality/autofill_data_util.h"
 #include "components/autofill/core/browser/data_quality/validation.h"
@@ -46,6 +47,7 @@
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/form_types.h"
 #include "components/autofill/core/browser/foundations/autofill_client.h"
+#include "components/autofill/core/browser/integrators/autofill_ai/metrics/autofill_ai_metrics.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics_util.h"
 #include "components/autofill/core/browser/metrics/form_events/form_event_logger_base.h"
 #include "components/autofill/core/browser/metrics/form_events/form_events.h"
@@ -644,9 +646,18 @@ void AutofillMetrics::LogEditedAutofilledFieldAtSubmission(
         "Autofill.Ai.EditedAutofilledFieldAtSubmission", editing_metric);
     if (std::optional<FieldType> field_type = field.autofilled_type()) {
       // Record the type specific UMA statistics.
+      const int bucket =
+          GetFieldTypeUserEditStatusMetric(*field_type, editing_metric);
       base::UmaHistogramSparse(
-          "Autofill.Ai.EditedAutofilledFieldAtSubmission.ByFieldType",
-          GetFieldTypeUserEditStatusMetric(*field_type, editing_metric));
+          "Autofill.Ai.EditedAutofilledFieldAtSubmission.ByFieldType", bucket);
+      if (std::optional<EntityInstance::RecordType> record_type =
+              field.filled_entity_record_type()) {
+        base::UmaHistogramSparse(
+            base::StrCat(
+                {"Autofill.Ai.EditedAutofilledFieldAtSubmission.ByFieldType.",
+                 EntityRecordTypeToMetricsString(*record_type)}),
+            bucket);
+      }
     }
   }
 
@@ -1501,18 +1512,37 @@ const char* AutofillMetrics::GetMetricsSyncStateSuffix(
 }
 
 // static
-void AutofillMetrics::LogWebOTPPhoneCollectionMetricStateUkm(
-    ukm::UkmRecorder* recorder,
+void AutofillMetrics::LogWebOtpPhoneCollection(
+    ukm::UkmRecorder* ukm_recorder,
     ukm::SourceId source_id,
-    uint32_t phone_collection_metric_state) {
-  // UKM recording is not supported for WebViews.
-  if (!recorder || source_id == ukm::kInvalidSourceId) {
-    return;
+    bool has_observed_phone_number_field,
+    bool has_observed_one_time_code_field,
+    bool used_web_otp) {
+  constexpr uint32_t kOtcUsed = 1 << 0;
+  constexpr uint32_t kWebOtpUsed = 1 << 1;
+  constexpr uint32_t kPhoneCollected = 1 << 2;
+  constexpr uint32_t kMaxValue = kOtcUsed | kWebOtpUsed | kPhoneCollected;
+
+  uint32_t phone_collection_metric_state = 0;
+  if (has_observed_phone_number_field) {
+    phone_collection_metric_state |= kPhoneCollected;
+  }
+  if (has_observed_one_time_code_field) {
+    phone_collection_metric_state |= kOtcUsed;
+  }
+  if (used_web_otp) {
+    phone_collection_metric_state |= kWebOtpUsed;
   }
 
-  ukm::builders::WebOTPImpact builder(source_id);
-  builder.SetPhoneCollection(phone_collection_metric_state);
-  builder.Record(recorder);
+  base::UmaHistogramExactLinear("Autofill.WebOTP.PhonePlusWebOTPPlusOTC",
+                                phone_collection_metric_state, kMaxValue + 1);
+
+  // UKM recording is not supported for WebViews.
+  if (ukm_recorder && source_id != ukm::kInvalidSourceId) {
+    ukm::builders::WebOTPImpact(source_id)
+        .SetPhoneCollection(phone_collection_metric_state)
+        .Record(ukm_recorder);
+  }
 }
 
 void AutofillMetrics::LogVerificationStatusOfNameTokensOnProfileUsage(

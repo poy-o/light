@@ -5,10 +5,12 @@
 #import "ios/chrome/browser/settings/autofill/autofill_ai/coordinator/autofill_ai_entity_edit_mediator.h"
 
 #import "base/apple/foundation_util.h"
+#import "base/i18n/language_tag.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/bind.h"
 #import "base/test/ios/wait_util.h"
 #import "base/test/metrics/histogram_tester.h"
+#import "components/autofill/core/browser/country_type.h"
 #import "components/autofill/core/browser/data_manager/autofill_ai/entity_data_manager.h"
 #import "components/autofill/core/browser/data_model/autofill_ai/entity_instance.h"
 #import "components/autofill/core/browser/integrators/autofill_ai/metrics/autofill_ai_metrics.h"
@@ -18,7 +20,9 @@
 #import "components/autofill/core/common/autofill_features.h"
 #import "components/consent_auditor/fake_consent_auditor.h"
 #import "components/signin/public/base/consent_level.h"
+#import "components/signin/public/identity_manager/account_capabilities_test_mutator.h"
 #import "components/signin/public/identity_manager/identity_test_environment.h"
+#import "components/signin/public/identity_manager/identity_test_utils.h"
 #import "components/strings/grit/components_strings.h"
 #import "components/sync/protocol/user_consent_types.pb.h"
 #import "components/sync/test/test_sync_service.h"
@@ -98,6 +102,23 @@ class AutofillAIEntityEditMediatorTest : public PlatformTest {
     PlatformTest::TearDown();
   }
 
+  // Sets the account capability determining whether equally weighted buttons
+  // must be shown for private passes.
+  void SetMustShowEquallyWeightedButtonsCapability(bool value) {
+    CoreAccountInfo core_account_info =
+        identity_test_env_.identity_manager()->GetPrimaryAccountInfo(
+            signin::ConsentLevel::kSignin);
+    AccountInfo account_info =
+        identity_test_env_.identity_manager()->FindExtendedAccountInfo(
+            core_account_info);
+    AccountCapabilitiesTestMutator mutator(&account_info);
+    mutator
+        .set_must_show_equally_weighted_buttons_for_private_passes_in_autofill(
+            value);
+    signin::UpdateAccountInfoForAccount(identity_test_env_.identity_manager(),
+                                        account_info);
+  }
+
   // Helper method to create a mediator with a given entity instance and mode.
   void CreateMediator(
       autofill::EntityInstance instance,
@@ -110,7 +131,9 @@ class AutofillAIEntityEditMediatorTest : public PlatformTest {
                 consentAuditor:&fake_consent_auditor_
                identityManager:identity_test_env_.identity_manager()
                   reauthModule:mockReauthModule_
-                     userEmail:@"test@example.com"];
+                     userEmail:@"test@example.com"
+                     appLocale:base::i18n::GetKnownLanguageTag("en-US")
+              geoIpCountryCode:autofill::GeoIpCountryCode("US")];
     mediator_.consumer = consumer_;
     mediator_.delegate = fake_delegate_;
   }
@@ -812,4 +835,86 @@ TEST_F(AutofillAIEntityEditMediatorTest,
 
   CreateMediator(std::move(wallet_instance),
                  AutofillAIEntityEditMode::kViewAndEdit);
+}
+
+// Tests that creating a private pass shows the explicit decline button when the
+// regional refinement feature is enabled and the account capability is true.
+TEST_F(AutofillAIEntityEditMediatorTest,
+       PrivatePass_CreateMode_ShowsExplicitDeclineButton_WhenCapabilityTrue) {
+  base::test::ScopedFeatureList feature_list{
+      autofill::features::kAutofillRegionalizedPrivatePassesUxRefine};
+  SetMustShowEquallyWeightedButtonsCapability(true);
+
+  CreateMediator(autofill::test::GetPassportEntityInstance(),
+                 AutofillAIEntityEditMode::kCreate);
+  EXPECT_TRUE(consumer_.showsExplicitDeclineButton);
+}
+
+// Tests that creating a private pass shows the explicit decline button when the
+// account capability is unknown, since `MustShowEquallyWeightedButtons()`
+// treats an unknown capability as requiring equally weighted buttons.
+TEST_F(
+    AutofillAIEntityEditMediatorTest,
+    PrivatePass_CreateMode_ShowsExplicitDeclineButton_WhenCapabilityUnknown) {
+  base::test::ScopedFeatureList feature_list{
+      autofill::features::kAutofillRegionalizedPrivatePassesUxRefine};
+
+  CreateMediator(autofill::test::GetPassportEntityInstance(),
+                 AutofillAIEntityEditMode::kCreate);
+  EXPECT_TRUE(consumer_.showsExplicitDeclineButton);
+}
+
+// Tests that creating a private pass keeps the explicit decline button disabled
+// when the account capability is false.
+TEST_F(AutofillAIEntityEditMediatorTest,
+       PrivatePass_CreateMode_HidesExplicitDeclineButton_WhenCapabilityFalse) {
+  base::test::ScopedFeatureList feature_list{
+      autofill::features::kAutofillRegionalizedPrivatePassesUxRefine};
+  SetMustShowEquallyWeightedButtonsCapability(false);
+
+  CreateMediator(autofill::test::GetPassportEntityInstance(),
+                 AutofillAIEntityEditMode::kCreate);
+  EXPECT_FALSE(consumer_.showsExplicitDeclineButton);
+}
+
+// Tests that creating a private pass keeps the explicit decline button disabled
+// when the feature flag is disabled.
+TEST_F(AutofillAIEntityEditMediatorTest,
+       PrivatePass_CreateMode_HidesExplicitDeclineButton_WhenFlagDisabled) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(
+      autofill::features::kAutofillRegionalizedPrivatePassesUxRefine);
+  SetMustShowEquallyWeightedButtonsCapability(true);
+
+  CreateMediator(autofill::test::GetPassportEntityInstance(),
+                 AutofillAIEntityEditMode::kCreate);
+  EXPECT_FALSE(consumer_.showsExplicitDeclineButton);
+}
+
+// Tests that creating a public pass keeps the explicit decline button disabled
+// even when the capability is true.
+TEST_F(
+    AutofillAIEntityEditMediatorTest,
+    PublicPass_CreateMode_HidesExplicitDeclineButton_EvenWhenCapabilityTrue) {
+  base::test::ScopedFeatureList feature_list{
+      autofill::features::kAutofillRegionalizedPrivatePassesUxRefine};
+  SetMustShowEquallyWeightedButtonsCapability(true);
+
+  CreateMediator(autofill::test::GetFlightReservationEntityInstance(),
+                 AutofillAIEntityEditMode::kCreate);
+  EXPECT_FALSE(consumer_.showsExplicitDeclineButton);
+}
+
+// Tests that viewing or editing an existing private pass keeps the explicit
+// decline button disabled even when the capability is true.
+TEST_F(
+    AutofillAIEntityEditMediatorTest,
+    PrivatePass_ViewAndEditMode_HidesExplicitDeclineButton_EvenWhenCapabilityTrue) {
+  base::test::ScopedFeatureList feature_list{
+      autofill::features::kAutofillRegionalizedPrivatePassesUxRefine};
+  SetMustShowEquallyWeightedButtonsCapability(true);
+
+  CreateMediator(autofill::test::GetPassportEntityInstance(),
+                 AutofillAIEntityEditMode::kViewAndEdit);
+  EXPECT_FALSE(consumer_.showsExplicitDeclineButton);
 }

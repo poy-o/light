@@ -9,6 +9,7 @@
 
 #include "base/notreached.h"
 
+// LINT.IfChange(GetToastName)
 std::string_view GetToastName(ToastId toast_id) {
   switch (toast_id) {
     case ToastId::kLinkCopied:
@@ -74,7 +75,7 @@ std::string_view GetToastName(ToastId toast_id) {
     case ToastId::kSkillSavedWithoutInvokeButton:
       return "SkillSavedWithoutInvokeButton";
     case ToastId::kSendTabToSelfTabOpened:
-      return "SendTabToSelfOpened";
+      return "SendTabToSelfTabOpened";
     case ToastId::kSendTabToSelfTabsOpenedInBackground:
       return "SendTabToSelfTabsOpenedInBackground";
     case ToastId::kSendTabToSelfSuccess:
@@ -147,7 +148,10 @@ std::string_view GetToastName(ToastId toast_id) {
       return "TtcSpeakerMuted";
     case ToastId::kTtcSpeakerVolumeLow:
       return "TtcSpeakerVolumeLow";
+    case ToastId::kContextualTasksCitationNotFound:
+      return "ContextualTasksCitationNotFound";
   }
 
   NOTREACHED();
 }
+// LINT.ThenChange(//tools/metrics/histograms/metadata/toasts/histograms.xml:ToastName)

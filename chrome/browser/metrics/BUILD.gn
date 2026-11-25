@@ -72,6 +72,8 @@ source_set("metrics") {
     "//components/sync",
     "//components/ukm:observers",
     "//components/unified_consent",
+    "//components/variations",
+    "//components/variations/feature_list_creator",
     "//components/variations/service",
     "//components/webui/flags",
     "//pdf:buildflags",
@@ -356,9 +358,6 @@ source_set("impl") {
       "//chrome/browser/prefs/android:jni_cc",
       "//chrome/browser/ui/browser_window",
     ]
-    if (current_cpu == "arm") {
-      deps += [ "//third_party/cpu_features:ndk_compat" ]
-    }
   }
 
   if (!is_android) {
@@ -592,6 +591,7 @@ source_set("unit_tests") {
     "//chrome/browser/performance_manager:test_support",
     "//chrome/browser/sync",
     "//chrome/browser/ui:ui_features",
+    "//chrome/common:constants",
     "//chrome/test:test_support",
     "//chrome/test/base:chrome_render_view_host_test_harness",
     "//chrome/test/base:testing_browser_process",
@@ -607,6 +607,7 @@ source_set("unit_tests") {
     "//components/ukm",
     "//components/ukm:test_support",
     "//components/ukm:ukm_test_helper",
+    "//components/variations",
     "//content/test:test_support",
     "//services/resource_coordinator/public/cpp/memory_instrumentation:browser",
     "//testing/gmock",
@@ -628,7 +629,6 @@ source_set("unit_tests") {
     deps += [
       "//chrome/services/util_win:lib",
       "//components/tabs:test_support",
-      "//components/variations",
       "//ui/accessibility",
     ]
   }
@@ -793,6 +793,7 @@ source_set("platform_browser_tests") {
     "//chrome/browser/net",
     "//chrome/test:test_support",
     "//chrome/test/base:chrome_test_utils",
+    "//components/webui/flags:switches",
     "//content/test:test_support",
     "//media:test_support",
     "//testing/gtest",
@@ -828,6 +829,7 @@ if (!is_android) {
     defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
 
     sources = [
+      "chrome_feature_list_creator_browsertest.cc",
       "dwa_browsertest.cc",
       "metrics_consent_migration_browsertest.cc",
       "metrics_reporting_state_browsertest.cc",
@@ -849,6 +851,7 @@ if (!is_android) {
       ":test_support",
       "//base",
       "//chrome/browser:chrome_browser_main",
+      "//chrome/browser:flags",
       "//chrome/browser/metrics/structured:test_support",
       "//chrome/browser/sync",
       "//chrome/browser/sync/test/integration:sync_integration_test_support",
@@ -868,7 +871,10 @@ if (!is_android) {
       "//components/policy/core/browser",
       "//components/policy/core/common",
       "//components/policy/core/common:test_support",
+      "//components/variations",
       "//components/webui/chrome_urls",
+      "//components/webui/flags",
+      "//components/webui/flags:switches",
       "//content/test:browsertest_support",
       "//content/test:test_support",
       "//extensions/buildflags",

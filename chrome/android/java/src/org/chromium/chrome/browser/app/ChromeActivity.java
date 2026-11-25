@@ -233,6 +233,7 @@ import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.browser.translate.TranslateBridge;
 import org.chromium.chrome.browser.ui.BottomContainer;
 import org.chromium.chrome.browser.ui.ChromeActivitySnackbarHelper;
+import org.chromium.chrome.browser.ui.ExclusiveAccessManager;
 import org.chromium.chrome.browser.ui.RootUiCoordinator;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuBlocker;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuDelegate;
@@ -483,6 +484,14 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     // {@link onPictureInPictureModeChanged} from the platform.  This might disagree with the value
     // returned by {@link isInPictureInPictureMode}.
     private boolean mLastPictureInPictureModeForTesting;
+
+    /**
+     * Whether this Activity is currently in Picture-in-Picture mode, updated via {@link
+     * #onPictureInPictureModeChanged} and synced with {@link #isInPictureInPictureMode()} on
+     * startup.
+     */
+    private final SettableNonNullObservableSupplier<Boolean> mInPictureInPictureModeSupplier =
+            ObservableSuppliers.createNonNull(false);
 
     private @Nullable TextBubbleBackPressHandler mTextBubbleBackPressHandler;
     private @Nullable SelectionPopupBackPressHandler mSelectionPopupBackPressHandler;
@@ -739,6 +748,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
             assert windowAndroid != null;
             var modalDialogManager = getModalDialogManager();
             assert modalDialogManager != null;
+            mInPictureInPictureModeSupplier.set(isInPictureInPictureMode());
             SnackbarManager snackbarManager =
                     new SnackbarManager(
                             this,
@@ -746,7 +756,8 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
                             windowAndroid,
                             mChromeActivitySnackbarHelper.getBottomMarginSupplier(),
                             modalDialogManager,
-                            getFullscreenManager().getPersistentFullscreenModeSupplier());
+                            getFullscreenManager().getPersistentFullscreenModeSupplier(),
+                            mInPictureInPictureModeSupplier);
 
             mSnackbarManagerSupplier.set(snackbarManager);
             mChromeActivitySnackbarHelper.setSnackbarManager(snackbarManager);
@@ -1600,6 +1611,12 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         super.onPictureInPictureUiStateChanged(pipState);
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
         if (isActivityFinishingOrDestroyed()) return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM
+                && pipState.isTransitioningToPip()) {
+            // Hide the notice before the transition starts, so that it is not visible while the
+            // window animates into picture-in-picture.
+            hideExclusiveAccessBubble();
+        }
         FullscreenVideoPictureInPictureController controller =
                 ensureFullscreenVideoPictureInPictureController();
         if (controller != null) {
@@ -1614,6 +1631,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     @Override
     public void onPictureInPictureModeChanged(boolean inPicture, Configuration newConfig) {
         super.onPictureInPictureModeChanged(inPicture, newConfig);
+        mInPictureInPictureModeSupplier.set(inPicture);
         Log.i(
                 TAG,
                 "Picture in picture mode changed, inPicture: %b custom tabs: %b",
@@ -1621,6 +1639,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
                 wasInPictureInPictureForMinimizedCustomTabs());
         if (wasInPictureInPictureForMinimizedCustomTabs()) return;
         if (inPicture) {
+            hideExclusiveAccessBubble();
             mLastPictureInPictureModeForTesting = true;
             maybeCreateActorPipController();
             if (mActorPipController != null && mActorPipController.shouldEnterPip()) return;
@@ -1642,6 +1661,17 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     }
 
     /**
+     * Hides the exclusive access notice (e.g. the fullscreen exit instructions), which must not
+     * cover the content of a picture-in-picture window.
+     */
+    private void hideExclusiveAccessBubble() {
+        if (mRootUiCoordinator == null) return;
+        ExclusiveAccessManager exclusiveAccessManager =
+                mRootUiCoordinator.getExclusiveAccessManager();
+        if (exclusiveAccessManager != null) exclusiveAccessManager.hideExclusiveAccessBubble();
+    }
+
+    /**
      * Returns whether the {@link #onPictureInPictureModeChanged} call with `inPicture=true` was
      * received because the Activity was put in picture-in-picture by the Minimized Custom Tabs
      * feature. The other reason the Activity may be in PiP is because a fullscreen video was
@@ -1659,6 +1689,11 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
      */
     public boolean getLastPictureInPictureModeForTesting() {
         return mLastPictureInPictureModeForTesting;
+    }
+
+    /** Returns a supplier indicating whether this activity is in Picture-in-Picture mode. */
+    public NonNullObservableSupplier<Boolean> getInPictureInPictureModeSupplier() {
+        return mInPictureInPictureModeSupplier;
     }
 
     @Override
@@ -3337,7 +3372,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
                                     AppMenuPropertiesDelegateImpl.BOOKMARK_ID_BUNDLE_KEY));
             BookmarkOpener opener =
                     new BookmarkOpenerImpl(
-                            mBookmarkModelSupplier,
+                            mTabModelProfileSupplier,
                             this,
                             getComponentName(),
                             /* multiInstanceManager= */ null,

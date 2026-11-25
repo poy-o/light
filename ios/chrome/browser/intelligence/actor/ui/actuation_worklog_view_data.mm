@@ -234,11 +234,14 @@ constexpr NSUInteger kMaxColumnActionCount = 3;
 
 @implementation ActuationHeaderContent
 
-- (instancetype)initWithTitle:(NSString*)title subtitle:(NSString*)subtitle {
+- (instancetype)initWithTitle:(NSString*)title
+                     subtitle:(NSString*)subtitle
+                  primaryItem:(IntelligenceHeaderItem*)primaryItem {
   self = [super init];
   if (self) {
     _title = [title copy];
     _subtitle = [subtitle copy];
+    _primaryItem = primaryItem;
   }
   return self;
 }
@@ -296,24 +299,31 @@ constexpr NSUInteger kMaxColumnActionCount = 3;
 
 - (instancetype)
     initWithActuationActive:(BOOL)actuationActive
-        headerPrimaryAction:(ActuationHeaderPrimaryAction)headerPrimaryAction
               headerContent:(ActuationHeaderContentVariants*)headerContent
                     entries:(NSArray<ActuationWorklogEntry*>*)entries
                intervention:(ActuationInterventionData*)intervention
                 suggestions:(NSArray<ActorFormSuggestion*>*)suggestions
+    selectedSuggestionIndex:(NSInteger)selectedSuggestionIndex
            suggestionsEntry:(ActuationWorklogEntry*)suggestionsEntry {
   CHECK(headerContent);
   CHECK(entries);
   CHECK_EQ(!suggestions, !suggestionsEntry);
-  CHECK(!suggestions || suggestions.count > 0);
+  if (suggestions) {
+    CHECK_GT(suggestions.count, 0u);
+    CHECK_GE(selectedSuggestionIndex, 0);
+    CHECK_LT(static_cast<NSUInteger>(selectedSuggestionIndex),
+             suggestions.count);
+  } else {
+    CHECK_EQ(selectedSuggestionIndex, NSNotFound);
+  }
   self = [super init];
   if (self) {
     _actuationActive = actuationActive;
-    _headerPrimaryAction = headerPrimaryAction;
     _headerContent = headerContent;
     _entries = [entries copy];
     _intervention = intervention;
     _suggestions = [suggestions copy];
+    _selectedSuggestionIndex = selectedSuggestionIndex;
     _suggestionsEntry = suggestionsEntry;
   }
   return self;

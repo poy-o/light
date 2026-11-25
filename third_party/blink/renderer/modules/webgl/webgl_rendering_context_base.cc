@@ -142,7 +142,6 @@
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_non_2d_resource_provider.h"
-#include "third_party/blink/renderer/platform/graphics/canvas_resource.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/canvas_utils.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/image_extractor.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
@@ -1992,6 +1991,7 @@ WebGLRenderingContextBase::ClearIfComposited(
   }
 
   GetDrawingBuffer()->SetBufferClearNeeded(false);
+  copied_contents_are_stale_ = true;
 
   return combined_clear ? kCombinedClear : kJustClear;
 }
@@ -2144,7 +2144,7 @@ WebGLRenderingContextBase::PaintRenderingResultsToSnapshot(
     return nullptr;
   }
 
-  bool cleared_content = ClearIfComposited(kClearCallerOther) != kSkipped;
+  ClearIfComposited(kClearCallerOther);
 
   if (Host()->LowLatencyEnabled() &&
       GetDrawingBuffer()->SupportsNoCopyExportForLowLatency()) {
@@ -2166,7 +2166,7 @@ WebGLRenderingContextBase::PaintRenderingResultsToSnapshot(
   // The host's ResourceProvider is purged to save memory when the tab
   // is backgrounded.
 
-  if (!copied_contents_are_stale_ && !cleared_content) {
+  if (!copied_contents_are_stale_) {
     if (resource_provider_.get()) {
       // `resource_provider_` already has the current contents.
       return resource_provider_->Snapshot();
@@ -2254,13 +2254,12 @@ WebGLRenderingContextBase::PaintRenderingResultsToResource(
     return nullptr;
   }
 
-  bool cleared_content = ClearIfComposited(kClearCallerOther) != kSkipped;
+  ClearIfComposited(kClearCallerOther);
 
   if (Host()->LowLatencyEnabled() &&
       GetDrawingBuffer()->SupportsNoCopyExportForLowLatency()) {
     return GetDrawingBuffer()->ExportLowLatencyCanvasResource();
   }
-
 
   if (resource_provider_.get() &&
       resource_provider_.get()->Size() != GetDrawingBuffer()->Size()) {
@@ -2268,8 +2267,7 @@ WebGLRenderingContextBase::PaintRenderingResultsToResource(
     Host()->DiscardResources();
   }
 
-  if (!copied_contents_are_stale_ && !cleared_content &&
-      resource_provider_.get()) {
+  if (!copied_contents_are_stale_ && resource_provider_.get()) {
     // `resource_provider_` already has the current contents.
     return resource_provider_->ProduceCanvasResource();
   }
@@ -2336,9 +2334,6 @@ WebGLRenderingContextBase::GetSharedImageResourceProvider() {
     did_fail_to_create_resource_provider_ = true;
     return nullptr;
   }
-
-  base::UmaHistogramEnumeration("Blink.Canvas.ResourceProviderType",
-                                CanvasResourceProviderType::kSharedImage);
 
   return resource_provider_.get();
 }
@@ -3381,7 +3376,12 @@ void WebGLRenderingContextBase::deleteFramebuffer(
 }
 
 void WebGLRenderingContextBase::deleteProgram(WebGLProgram* program) {
-  DeleteObject(program);
+  if (!DeleteObject(program)) {
+    return;
+  }
+  if (!program->HasObject()) {
+    removeProgramCompletionQuery(program);
+  }
   // We don't reset m_currentProgram to 0 here because the deletion of the
   // current program is delayed.
 }
@@ -5210,6 +5210,8 @@ void WebGLRenderingContextBase::linkProgram(WebGLProgram* program) {
         "program being used by one or more active transform feedback objects");
     return;
   }
+
+  removeProgramCompletionQuery(program);
 
   GLuint query = 0u;
   if (ExtensionEnabled(kKHRParallelShaderCompileName)) {
@@ -7635,8 +7637,12 @@ void WebGLRenderingContextBase::useProgram(WebGLProgram* program) {
   }
 
   if (current_program_ != program) {
-    if (current_program_)
+    if (current_program_) {
       current_program_->OnDetached(ContextGL());
+      if (!current_program_->HasObject()) {
+        removeProgramCompletionQuery(current_program_);
+      }
+    }
     current_program_ = program;
     ContextGL()->UseProgram(ObjectOrZero(program));
     if (program)
@@ -9599,16 +9605,7 @@ WebGLRenderingContextBase::getHTMLOrOffscreenCanvas(
 
 void WebGLRenderingContextBase::addProgramCompletionQuery(WebGLProgram* program,
                                                           GLuint query) {
-  auto old_query = program_completion_query_map_.find(program);
-  if (old_query != program_completion_query_map_.end()) {
-    ContextGL()->DeleteQueriesEXT(1, &old_query->value);
-    // If this program's been inserted into the map already, then it
-    // exists in the list, too. Clear it out from there so that its
-    // new addition doesn't introduce a duplicate.
-    wtf_size_t old_index = program_completion_query_list_.Find(program);
-    DCHECK_NE(old_index, kNotFound);
-    program_completion_query_list_.EraseAt(old_index);
-  }
+  removeProgramCompletionQuery(program);
   program_completion_query_map_.Set(program, query);
   program_completion_query_list_.push_back(program);
   if (program_completion_query_map_.size() > kMaxProgramCompletionQueries) {
@@ -9619,6 +9616,21 @@ void WebGLRenderingContextBase::addProgramCompletionQuery(WebGLProgram* program,
     ContextGL()->DeleteQueriesEXT(1, &program_iter->value);
     program_completion_query_map_.erase(program_iter);
     program_completion_query_list_.EraseAt(0);
+  }
+}
+
+void WebGLRenderingContextBase::removeProgramCompletionQuery(
+    WebGLProgram* program) {
+  auto old_query = program_completion_query_map_.find(program);
+  if (old_query != program_completion_query_map_.end()) {
+    ContextGL()->DeleteQueriesEXT(1, &old_query->value);
+    program_completion_query_map_.erase(old_query);
+    // If this program's been inserted into the map already, then it
+    // exists in the list, too. Clear it out from there so that its
+    // new addition doesn't introduce a duplicate.
+    wtf_size_t old_index = program_completion_query_list_.Find(program);
+    DCHECK_NE(old_index, kNotFound);
+    program_completion_query_list_.EraseAt(old_index);
   }
 }
 

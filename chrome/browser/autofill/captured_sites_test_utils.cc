@@ -14,6 +14,7 @@
 
 #include "base/base_switches.h"
 #include "base/check_deref.h"
+#include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
@@ -768,11 +769,13 @@ bool WebPageReplayServerWrapper::Start(
     on_connect_complete.Run(connect_result);
   });
 
+  bool connected = false;
   // Called on the IO thread once connection has completed. Destroys the
   // `client_socket`, which may or may not be the object invoking the callback.
   on_connect_complete = base::BindLambdaForTesting([&](int connect_result) {
     client_socket.reset();
-    if (connect_result == net::OK || connect_attempts > 30) {
+    connected = (connect_result == net::OK);
+    if (connected || connect_attempts > 90) {
       wpr_launch_waiter.Quit();
     } else {
       base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
@@ -785,6 +788,11 @@ bool WebPageReplayServerWrapper::Start(
 
   if (!web_page_replay_server_.IsValid()) {
     ADD_FAILURE() << "Failed to start the WPR replay server!";
+    return false;
+  }
+  if (!connected) {
+    ADD_FAILURE() << "Timed out waiting for the WPR replay server to accept "
+                     "connections!";
     return false;
   }
 
@@ -837,6 +845,22 @@ bool WebPageReplayServerWrapper::RunWebPageReplayCmd(
   base::ScopedAllowBlockingForTesting allow_blocking;
 
   base::LaunchOptions options = base::LaunchOptionsForTest();
+// The #if is the same as in `test_launcher_utils::OverrideUserDataDir()`.
+#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_MAC)
+  // Keep Go's build cache between tests, so that `run_wpr.py` does not
+  // recompile WPR in every test.
+  //
+  // Go's build cache defaults to `$XDG_CACHE_HOME/go-build`. Browser tests
+  // point `XDG_CACHE_HOME` at the per-test user data directory
+  // (`test_launcher_utils::OverrideUserDataDir()`), which the test launcher
+  // deletes after each test. Point Go at its usual directory instead.
+  if (!base::Environment().HasVar("GOCACHE")) {
+    options.environment.insert_or_assign("GOCACHE", base::GetHomeDir()
+                                                        .AppendASCII(".cache")
+                                                        .AppendASCII("go-build")
+                                                        .value());
+  }
+#endif
   base::FilePath src_dir;
   if (!base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &src_dir)) {
     ADD_FAILURE() << "Failed to extract the Chromium source directory!";

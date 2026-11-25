@@ -458,15 +458,18 @@ void NavigateEvent::CommitNow() {
   // |type| being a reload type makes it do none of the spec-relevant
   // steps. Instead it does stuff like the loading spinner and use counters.
 
-  // Pass the original initiator origin to ensure that security checks for the
-  // committed navigation (e.g., Scroll-to-Text Fragment restrictions) are
-  // evaluated against the actual initiator, even though the navigation was
-  // intercepted by this document.
+  // Pass the original initiator origin and transient user activation state to
+  // ensure that security checks and user-gesture attribution for the committed
+  // navigation (e.g., Scroll-to-Text Fragment restrictions and
+  // NavigationHandle::HasUserGesture()) reflect the actual initiator at
+  // navigation start rather than this target document's live state at commit
+  // time.
   DomWindow()->document()->Loader()->RunURLAndHistoryUpdateSteps(
       dispatch_params_->url, dispatch_params_->destination_item,
       mojom::blink::SameDocumentNavigationType::kNavigationApiIntercept,
       state_object, ToWebFrameLoadType(navigation_type_), fire_popstate,
       dispatch_params_->should_skip_screenshot, dispatch_params_->involvement,
+      dispatch_params_->has_transient_user_activation,
       dispatch_params_->interaction_id, dispatch_params_->is_browser_initiated,
       dispatch_params_->is_synchronously_committed_same_document,
       dispatch_params_->initiator_origin.get());
@@ -527,7 +530,9 @@ void NavigateEvent::ReactDone(ScriptState* script_state,
 
   if (intercept_state_ == InterceptState::kIntercepted) {
     CHECK(!did_fulfill);
-    window->GetFrame()->Client()->DidFailAsyncSameDocumentCommit();
+    if (!dispatch_params_->is_synchronously_committed_same_document) {
+      window->GetFrame()->Client()->DidFailAsyncSameDocumentCommit();
+    }
   }
 
   if (intercept_state_ >= InterceptState::kCommitted) {
@@ -576,7 +581,9 @@ void NavigateEvent::Abort(ScriptState* script_state, ScriptValue error) {
         if (frame->IsLoading()) {
           frame->Loader().Progress().ProgressCompleted();
         }
-        frame->Client()->DidFailAsyncSameDocumentCommit();
+        if (!dispatch_params_->is_synchronously_committed_same_document) {
+          frame->Client()->DidFailAsyncSameDocumentCommit();
+        }
         break;
       }
       case InterceptState::kCommitted:
@@ -607,8 +614,9 @@ void NavigateEvent::FinalizeNavigationActionPromisesList() {
     TaskAttributionTopLevelOverrideScope override_scope(
         DomWindow(), GetTaskAttributionScopeType(dispatch_params_),
         TaskAttributionTopLevelOverrideScope::PassKeyType{});
-    if (function->Invoke(this).To(&result))
+    if (function->Invoke(this).To(&result)) {
       navigation_action_promises_list_.push_back(result);
+    }
   }
 }
 
@@ -620,8 +628,9 @@ void NavigateEvent::PotentiallyResetTheFocus() {
 
   // If focus has changed since intercept() was invoked, don't reset
   // focus.
-  if (did_change_focus_during_intercept_)
+  if (did_change_focus_during_intercept_) {
     return;
+  }
 
   // If we're in "navigation API mode" per the above, then either leaving focus
   // reset behavior as the default, or setting it to "after-transition"

@@ -102,7 +102,12 @@ CrossOriginOpenerPolicyStatus::CrossOriginOpenerPolicyStatus(
           frame_tree_node_->current_frame_host()->GetLastCommittedOrigin()),
       current_url_(
           frame_tree_node_->current_frame_host()->GetLastCommittedURL()),
+      // Best effort: history (including restore) and reload navigations reuse a
+      // stored URL that may differ from what the current document knows, so
+      // they never count as navigation sources. This may hide
+      // `nextResponseURL` in some cases where it was safe, which is fine.
       is_navigation_source_(
+          !navigation_request->IsHistory() && !navigation_request->IsReload() &&
           navigation_request->common_params().initiator_origin.has_value() &&
           navigation_request->common_params()
               .initiator_origin->IsSameOriginWith(
@@ -358,18 +363,16 @@ void CrossOriginOpenerPolicyStatus::SetReportingEndpoints(
     return;
   if (!navigation_request_->response())
     return;
-  if (!navigation_request_->response()->parsed_headers->reporting_endpoints)
+  const base::flat_map<std::string, std::string>& reporting_endpoints =
+      navigation_request_->response()->parsed_headers->reporting_endpoints;
+  if (reporting_endpoints.empty()) {
     return;
+  }
+
   // Process Reporting-Endpoints header immediately before the document is
   // loaded so COOP reports can be sent to response origin's configured
   // endpoint. The configured endpoints should only be used to send COOP reports
   // for this navigation and will be removed when the navigation finishes.
-  base::flat_map<std::string, std::string>& reporting_endpoints =
-      *(navigation_request_->response()->parsed_headers->reporting_endpoints);
-
-  if (reporting_endpoints.empty())
-    return;
-
   storage_partition->GetNetworkContext()->SetDocumentReportingEndpoints(
       reporting_source, response_origin, isolation_info, reporting_endpoints);
   // Record the new reporting source.

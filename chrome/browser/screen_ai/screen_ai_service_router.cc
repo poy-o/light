@@ -13,15 +13,12 @@
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
-#include "base/metrics/histogram_functions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
-#include "chrome/browser/screen_ai/screen_ai_install_state.h"
 #include "chrome/browser/screen_ai/screen_ai_library_provider.h"
-#include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/service_process_host.h"
 #include "content/public/browser/service_process_host_passkeys.h"
 #include "mojo/public/mojom/base/file_path.mojom.h"
@@ -33,64 +30,28 @@
 #include "base/strings/utf_string_conversions.h"
 #endif
 
-namespace {
-
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-// If any value is added, please update `ComponentAvailability` in `enums.xml`.
-enum class ComponentAvailability {
-  kAvailable = 0,
-  kUnavailableWithNetwork = 1,
-  kUnavailableWithoutNetwork = 2,
-
-  kMaxValue = kUnavailableWithoutNetwork,
-};
-
-
-void RecordComponentAvailability(bool available) {
-  bool network = !content::GetNetworkConnectionTracker()->IsOffline();
-  base::UmaHistogramEnumeration(
-      "Accessibility.ScreenAI.Component.Available2",
-      available
-          ? ComponentAvailability::kAvailable
-          : (network ? ComponentAvailability::kUnavailableWithNetwork
-                     : ComponentAvailability::kUnavailableWithoutNetwork));
-}
-
-}  // namespace
-
 namespace screen_ai {
 
 ScreenAIServiceRouter::ScreenAIServiceRouter(
-    std::unique_ptr<ScreenAILibraryProvider> library_provider)
-    : library_provider_(std::move(library_provider)) {
+    ScreenAILibraryProvider* library_provider)
+    : library_provider_(library_provider) {
   CHECK(library_provider_);
 }
 
 ScreenAIServiceRouter::~ScreenAIServiceRouter() = default;
 
-// static
-// LINT.IfChange(SuggestedWaitTimeBeforeReAttempt)
-base::TimeDelta ScreenAIServiceRouter::SuggestedWaitTimeBeforeReAttempt(
-    uint32_t reattempt_number) {
-  return base::Minutes(reattempt_number * reattempt_number);
-}
-// LINT.ThenChange(//chrome/browser/ash/app_list/search/local_image_search/image_annotation_worker.cc:SuggestedWaitTimeBeforeReAttempt)
-
 ScreenAIServiceHandlerBase* ScreenAIServiceRouter::GetHandler(Service service) {
   switch (service) {
     case Service::kMainContentExtraction:
       if (!mce_handler_) {
-        mce_handler_ =
-            std::make_unique<ScreenAIServiceHandlerMainContentExtraction>(
-                library_provider_.get());
+        mce_handler_ = std::make_unique<MainContentExtractionServiceHandler>(
+            library_provider_);
       }
       return mce_handler_.get();
 
     case Service::kOCR:
       if (!ocr_handler_) {
-        ocr_handler_ = std::make_unique<ScreenAIServiceHandlerOCR>(
-            library_provider_.get());
+        ocr_handler_ = std::make_unique<OcrServiceHandler>(library_provider_);
       }
       return ocr_handler_.get();
   }
@@ -99,61 +60,7 @@ ScreenAIServiceHandlerBase* ScreenAIServiceRouter::GetHandler(Service service) {
 void ScreenAIServiceRouter::GetServiceStateAsync(
     Service service,
     ServiceStateCallback callback) {
-  std::optional<bool> service_state =
-      GetHandler(service)->GetServiceStateAsync(std::move(callback));
-
-  // If `service_state` has value, either the service is already initialized or
-  // disabled. In both cases we can can assume the component was ready.
-  // Otherwise its download should be triggered.
-  if (service_state) {
-    RecordComponentAvailability(true);
-    return;
-  }
-
-  auto* install_state = ScreenAIInstallState::GetInstance();
-
-  // If download has previously failed, reset it.
-  if (install_state->get_state() ==
-      ScreenAIInstallState::State::kDownloadFailed) {
-    install_state->SetState(ScreenAIInstallState::State::kNotDownloaded);
-  }
-
-  // Observe component state if not already observed, otherwise trigger
-  // download. (Adding observer also triggers download.)
-  if (!component_ready_observer_.IsObserving()) {
-    component_ready_observer_.Observe(install_state);
-  } else {
-    install_state->DownloadComponent();
-  }
-}
-
-void ScreenAIServiceRouter::StateChanged(ScreenAIInstallState::State state) {
-  bool available = true;
-  switch (state) {
-    case ScreenAIInstallState::State::kNotDownloaded:
-    case ScreenAIInstallState::State::kDownloading:
-      return;
-
-    case ScreenAIInstallState::State::kDownloadFailed:
-      available = false;
-      ABSL_FALLTHROUGH_INTENDED;
-    case ScreenAIInstallState::State::kDownloaded:
-      if (mce_handler_) {
-        mce_handler_->OnLibraryAvailablityChanged(available);
-      }
-      if (ocr_handler_) {
-        ocr_handler_->OnLibraryAvailablityChanged(available);
-      }
-      RecordComponentAvailability(available);
-      break;
-  }
-
-  // No need to observe after library is downloaded or download has failed.
-  component_ready_observer_.Reset();
-}
-
-void ScreenAIServiceRouter::OnScreenAIInstallStateDestroying() {
-  component_ready_observer_.Reset();
+  GetHandler(service)->GetServiceStateAsync(std::move(callback));
 }
 
 void ScreenAIServiceRouter::BindScreenAIAnnotator(

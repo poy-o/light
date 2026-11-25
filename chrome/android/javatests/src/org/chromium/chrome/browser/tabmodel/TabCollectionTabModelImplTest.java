@@ -38,10 +38,12 @@ import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.RequiresRestart;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.layouts.LayoutTestUtils;
 import org.chromium.chrome.browser.tab.Tab;
@@ -54,6 +56,11 @@ import org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.transit.AutoResetCtaTransitTestRule;
 import org.chromium.chrome.test.transit.ChromeTransitTestRules;
+import org.chromium.chrome.test.transit.ntp.IncognitoNewTabPageStation;
+import org.chromium.chrome.test.transit.page.WebPageStation;
+import org.chromium.components.split_tabs.SplitTabId;
+import org.chromium.components.split_tabs.SplitTabLayout;
+import org.chromium.components.split_tabs.SplitTabVisualData;
 import org.chromium.components.tab_groups.TabGroupColorId;
 import org.chromium.components.tab_groups.TabGroupId;
 import org.chromium.components.tab_groups.TabGroupsFeatureMap;
@@ -72,6 +79,7 @@ import java.util.concurrent.atomic.AtomicReference;
 /** Integration test for {@link TabCollectionTabModelImpl}. */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add(ChromeSwitches.DISABLE_STARTUP_PROMOS)
+@EnableFeatures({ChromeFeatureList.ENABLE_ANDROID_SPLIT_VIEW})
 @DisableFeatures({TabGroupsFeatureMap.UPDATE_TAB_GROUP_COLORS})
 @Batch(Batch.PER_CLASS)
 public class TabCollectionTabModelImplTest {
@@ -87,6 +95,7 @@ public class TabCollectionTabModelImplTest {
     @Mock private TabGroupCollectionData mTabGroupCollectionData;
 
     private String mTestUrl;
+    private WebPageStation mInitialPageStation;
     private TabModelSelector mTabModelSelector;
     private TabModel mRegularModel;
     private TabCollectionTabModelImpl mCollectionModel;
@@ -98,7 +107,7 @@ public class TabCollectionTabModelImplTest {
         mActivityTestRule.getActivity().getSnackbarManager().disableForTesting();
 
         mTestUrl = mActivityTestRule.getTestServer().getURL("/chrome/test/data/android/ok.txt");
-        mActivityTestRule.startOnBlankPage();
+        mInitialPageStation = mActivityTestRule.startOnBlankPage();
         mTabModelSelector = mActivityTestRule.getActivity().getTabModelSelector();
         mRegularModel = mTabModelSelector.getModel(/* incognito= */ false);
         if (mRegularModel instanceof TabCollectionTabModelImpl collectionModel) {
@@ -251,6 +260,34 @@ public class TabCollectionTabModelImplTest {
                     tab0.destroy();
                     mCollectionModel.removeObserver(observer);
                 });
+    }
+
+    @Test
+    @MediumTest
+    public void testRemoveTab_TabInSplitView() {
+        // Arrange:
+        Tab tab1 = createTab();
+        Tab tab2 = createTab();
+        var visualData =
+                new SplitTabVisualData(
+                        SplitTabLayout.SIDE_BY_SIDE, SplitTabVisualData.DEFAULT_SPLIT_RATIO);
+        SplitTabId splitTabId =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.createSplit(List.of(tab1, tab2), visualData));
+        assertNotNull(splitTabId);
+
+        // Act:
+        ThreadUtils.runOnUiThreadBlocking(() -> mCollectionModel.removeTab(tab1));
+
+        // Assert:
+        assertNull(tab1.getSplitTabId());
+        assertNull(tab2.getSplitTabId());
+        assertTrue(ThreadUtils.runOnUiThreadBlocking(mRegularModel::listSplits).isEmpty());
+        assertNull(
+                ThreadUtils.runOnUiThreadBlocking(() -> mRegularModel.getSplitTabData(splitTabId)));
+
+        // Cleanup:
+        ThreadUtils.runOnUiThreadBlocking(tab1::destroy);
     }
 
     @Test
@@ -834,7 +871,9 @@ public class TabCollectionTabModelImplTest {
                             "getTabGroupCount should be 1.",
                             1,
                             mCollectionModel.getTabGroupCount());
-                    assertFalse(mCollectionModel.detachedTabGroupExists(groupId0));
+                    assertFalse(
+                            mCollectionModel.detachedTabGroupExists(
+                                    TabGroupId.fromRawToken(groupId0)));
 
                     // Group 1 should be removed as it's now also empty.
                     mCollectionModel.moveTabOutOfGroupInDirection(
@@ -848,7 +887,9 @@ public class TabCollectionTabModelImplTest {
                             "getTabGroupCount should be 0 again.",
                             0,
                             mCollectionModel.getTabGroupCount());
-                    assertFalse(mCollectionModel.detachedTabGroupExists(groupId1));
+                    assertFalse(
+                            mCollectionModel.detachedTabGroupExists(
+                                    TabGroupId.fromRawToken(groupId1)));
                 });
     }
 
@@ -1455,23 +1496,19 @@ public class TabCollectionTabModelImplTest {
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    Token tabGroupId = mCollectionModel.createTabGroup(List.of(tab1, tab2));
+                    TabGroupId tabGroupId = mCollectionModel.createTabGroup(List.of(tab1, tab2));
                     assertNotNull(tabGroupId);
                     mCollectionModel.setIndex(
                             mCollectionModel.indexOf(tab0), TabSelectionType.FROM_USER);
-                    mCollectionModel.setTabGroupCollapsed(
-                            TabGroupId.fromRawToken(tabGroupId), /* isCollapsed= */ true);
-                    assertTrue(
-                            mCollectionModel.getTabGroupCollapsed(
-                                    TabGroupId.fromRawToken(tabGroupId)));
+                    mCollectionModel.setTabGroupCollapsed(tabGroupId, /* isCollapsed= */ true);
+                    assertTrue(mCollectionModel.getTabGroupCollapsed(tabGroupId));
 
                     mCollectionModel.setIndex(
                             mCollectionModel.indexOf(tab2), TabSelectionType.FROM_USER);
                     assertEquals(tab2, mCollectionModel.getCurrentTabSupplier().get());
                     assertFalse(
                             "Selecting a tab should expand its collapsed group.",
-                            mCollectionModel.getTabGroupCollapsed(
-                                    TabGroupId.fromRawToken(tabGroupId)));
+                            mCollectionModel.getTabGroupCollapsed(tabGroupId));
                 });
     }
 
@@ -1487,14 +1524,13 @@ public class TabCollectionTabModelImplTest {
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    Token groupA = mCollectionModel.createTabGroup(List.of(tab1, tab2));
-                    Token groupB = mCollectionModel.createTabGroup(List.of(tab3, tab4));
+                    TabGroupId groupA = mCollectionModel.createTabGroup(List.of(tab1, tab2));
+                    TabGroupId groupB = mCollectionModel.createTabGroup(List.of(tab3, tab4));
                     assertNotNull(groupA);
                     assertNotNull(groupB);
                     mCollectionModel.setIndex(
                             mCollectionModel.indexOf(tab0), TabSelectionType.FROM_USER);
-                    mCollectionModel.setTabGroupCollapsed(
-                            TabGroupId.fromRawToken(groupA), /* isCollapsed= */ true);
+                    mCollectionModel.setTabGroupCollapsed(groupA, /* isCollapsed= */ true);
 
                     // Select the last tab in the collapsed group, then close it.
                     mCollectionModel.setIndex(
@@ -1558,7 +1594,8 @@ public class TabCollectionTabModelImplTest {
         mCollectionModel.addTabGroupObserver(observer);
 
         try {
-            mCollectionModel.setTabGroupVisualData(tabGroupId, newTitle, newColor, newCollapsed);
+            mCollectionModel.setTabGroupVisualData(
+                    TabGroupId.fromRawToken(tabGroupId), newTitle, newColor, newCollapsed);
 
             assertEquals(newTitle, TabGroupVisualDataStore.getTabGroupTitle(tabGroupId));
             assertEquals(newColor, TabGroupVisualDataStore.getTabGroupColor(tabGroupId));
@@ -1595,7 +1632,8 @@ public class TabCollectionTabModelImplTest {
         final int color = TabGroupColorId.BLUE;
         final boolean collapsed = false;
 
-        mCollectionModel.setTabGroupVisualData(tabGroupId, title, color, collapsed);
+        mCollectionModel.setTabGroupVisualData(
+                TabGroupId.fromRawToken(tabGroupId), title, color, collapsed);
 
         CallbackHelper callbackHelper = new CallbackHelper();
         TabGroupObserver observer =
@@ -1619,7 +1657,8 @@ public class TabCollectionTabModelImplTest {
         mCollectionModel.addTabGroupObserver(observer);
 
         try {
-            mCollectionModel.setTabGroupVisualData(tabGroupId, title, color, collapsed);
+            mCollectionModel.setTabGroupVisualData(
+                    TabGroupId.fromRawToken(tabGroupId), title, color, collapsed);
             assertEquals(
                     "Observers should not be called when values are unchanged",
                     0,
@@ -1812,7 +1851,8 @@ public class TabCollectionTabModelImplTest {
         mCollectionModel.addTabGroupObserver(observer);
 
         try {
-            mCollectionModel.setTabGroupVisualData(tabGroupId, newTitle, newColor, newCollapsed);
+            mCollectionModel.setTabGroupVisualData(
+                    TabGroupId.fromRawToken(tabGroupId), newTitle, newColor, newCollapsed);
 
             assertEquals(
                     TabGroupColorUtils.INVALID_COLOR_ID,
@@ -1859,7 +1899,8 @@ public class TabCollectionTabModelImplTest {
         mCollectionModel.addTabGroupObserver(observer);
 
         try {
-            mCollectionModel.setTabGroupVisualData(tabGroupId, newTitle, newColor, newCollapsed);
+            mCollectionModel.setTabGroupVisualData(
+                    TabGroupId.fromRawToken(tabGroupId), newTitle, newColor, newCollapsed);
 
             assertEquals(
                     UNSET_TAB_GROUP_TITLE, TabGroupVisualDataStore.getTabGroupTitle(tabGroupId));
@@ -1895,7 +1936,8 @@ public class TabCollectionTabModelImplTest {
         TabGroupVisualDataStore.cacheGroups(new TabGroupCollectionData[] {mTabGroupCollectionData});
 
         try {
-            mCollectionModel.setTabGroupVisualData(tabGroupId, title, color, collapsed);
+            mCollectionModel.setTabGroupVisualData(
+                    TabGroupId.fromRawToken(tabGroupId), title, color, collapsed);
 
             assertFalse(TabGroupVisualDataStore.isTabGroupCachedForRestore(tabGroupId));
 
@@ -2727,7 +2769,9 @@ public class TabCollectionTabModelImplTest {
                             mCollectionModel
                                     .getTabsInGroup(TabGroupId.fromOptionalToken(groupId2))
                                     .size());
-                    assertTrue(mCollectionModel.detachedTabGroupExists(groupId1));
+                    assertTrue(
+                            mCollectionModel.detachedTabGroupExists(
+                                    TabGroupId.fromRawToken(groupId1)));
                     // The group is detached, but not closed yet. The containsTabGroup check is
                     // based on number of tabs so it will be false.
                     assertFalse(
@@ -3063,10 +3107,14 @@ public class TabCollectionTabModelImplTest {
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    assertTrue(mCollectionModel.detachedTabGroupExists(groupId1Ref.get()));
+                    assertTrue(
+                            mCollectionModel.detachedTabGroupExists(
+                                    TabGroupId.fromRawToken(groupId1Ref.get())));
 
                     mCollectionModel.undoGroupOperationExpired(undoGroupMetadataRef.get());
-                    assertFalse(mCollectionModel.detachedTabGroupExists(groupId1Ref.get()));
+                    assertFalse(
+                            mCollectionModel.detachedTabGroupExists(
+                                    TabGroupId.fromRawToken(groupId1Ref.get())));
                 });
     }
 
@@ -3101,7 +3149,9 @@ public class TabCollectionTabModelImplTest {
                                 List.of(tab0),
                                 tab1,
                                 TabGroupMergeNotificationType.NOTIFY_IF_NOT_NEW_GROUP);
-                        assertTrue(mCollectionModel.detachedTabGroupExists(groupId1Ref.get()));
+                        assertTrue(
+                                mCollectionModel.detachedTabGroupExists(
+                                        TabGroupId.fromRawToken(groupId1Ref.get())));
 
                         // 2. Merge group 2 into group 3 while throttled.
                         // Replacing pending metadata while throttled must automatically expire
@@ -3110,13 +3160,19 @@ public class TabCollectionTabModelImplTest {
                                 List.of(tab0, tab1),
                                 tab2,
                                 TabGroupMergeNotificationType.NOTIFY_IF_NOT_NEW_GROUP);
-                        assertFalse(mCollectionModel.detachedTabGroupExists(groupId1Ref.get()));
-                        assertTrue(mCollectionModel.detachedTabGroupExists(groupId2Ref.get()));
+                        assertFalse(
+                                mCollectionModel.detachedTabGroupExists(
+                                        TabGroupId.fromRawToken(groupId1Ref.get())));
+                        assertTrue(
+                                mCollectionModel.detachedTabGroupExists(
+                                        TabGroupId.fromRawToken(groupId2Ref.get())));
                     } finally {
                         // 3. Destroying the controller while throttled must expire group 2.
                         controller.destroy();
                     }
-                    assertFalse(mCollectionModel.detachedTabGroupExists(groupId2Ref.get()));
+                    assertFalse(
+                            mCollectionModel.detachedTabGroupExists(
+                                    TabGroupId.fromRawToken(groupId2Ref.get())));
 
                     // Verify tab0 and tab1 remain permanently merged in group 3.
                     assertEquals(tab2.getTabGroupId(), tab0.getTabGroupId());
@@ -3154,14 +3210,18 @@ public class TabCollectionTabModelImplTest {
                                 List.of(tab0),
                                 tab1,
                                 TabGroupMergeNotificationType.NOTIFY_IF_NOT_NEW_GROUP);
-                        assertTrue(mCollectionModel.detachedTabGroupExists(groupId1Ref.get()));
+                        assertTrue(
+                                mCollectionModel.detachedTabGroupExists(
+                                        TabGroupId.fromRawToken(groupId1Ref.get())));
 
                         // Moving a tab out of the group triggers willMoveTabOutOfGroup ->
                         // dismissSnackbars().
                         // This must automatically expire the pending detached group 1.
                         mCollectionModel.moveTabOutOfGroupInDirection(
                                 tab0.getId(), /* trailing= */ true);
-                        assertFalse(mCollectionModel.detachedTabGroupExists(groupId1Ref.get()));
+                        assertFalse(
+                                mCollectionModel.detachedTabGroupExists(
+                                        TabGroupId.fromRawToken(groupId1Ref.get())));
 
                         // Verify tab0 was permanently moved out of the group and tab1 remains in
                         // group 2.
@@ -3201,7 +3261,9 @@ public class TabCollectionTabModelImplTest {
                                 List.of(tab0),
                                 tab1,
                                 TabGroupMergeNotificationType.NOTIFY_IF_NOT_NEW_GROUP);
-                        assertTrue(mCollectionModel.detachedTabGroupExists(groupId1Ref.get()));
+                        assertTrue(
+                                mCollectionModel.detachedTabGroupExists(
+                                        TabGroupId.fromRawToken(groupId1Ref.get())));
 
                         // Stop throttling. The snackbar should be shown and the detached group
                         // must NOT be expired.
@@ -3209,7 +3271,8 @@ public class TabCollectionTabModelImplTest {
                         assertTrue(
                                 "Detached group must remain alive when un-throttled so the user can"
                                         + " undo.",
-                                mCollectionModel.detachedTabGroupExists(groupId1Ref.get()));
+                                mCollectionModel.detachedTabGroupExists(
+                                        TabGroupId.fromRawToken(groupId1Ref.get())));
                     } finally {
                         controller.destroy();
                     }
@@ -3226,16 +3289,13 @@ public class TabCollectionTabModelImplTest {
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    Token newGroupId = mCollectionModel.addTabsToGroup(null, List.of(tab0, tab1));
+                    TabGroupId newGroupId =
+                            mCollectionModel.addTabsToGroup(null, List.of(tab0, tab1));
                     assertNotNull(newGroupId);
-                    assertEquals(newGroupId, tab0.getTabGroupId());
-                    assertEquals(newGroupId, tab1.getTabGroupId());
+                    assertEquals(newGroupId.getToken(), tab0.getTabGroupId());
+                    assertEquals(newGroupId.getToken(), tab1.getTabGroupId());
                     assertNull(tab2.getTabGroupId());
-                    assertEquals(
-                            2,
-                            mCollectionModel
-                                    .getTabsInGroup(TabGroupId.fromOptionalToken(newGroupId))
-                                    .size());
+                    assertEquals(2, mCollectionModel.getTabsInGroup(newGroupId).size());
                     assertTabsInOrderAre(List.of(tab0, tab1, tab2));
                 });
     }
@@ -3254,9 +3314,10 @@ public class TabCollectionTabModelImplTest {
                     Token groupId = tab0.getTabGroupId();
                     assertNotNull(groupId);
 
-                    Token returnedGroupId =
-                            mCollectionModel.addTabsToGroup(groupId, List.of(tab1, tab2));
-                    assertEquals(groupId, returnedGroupId);
+                    TabGroupId returnedGroupId =
+                            mCollectionModel.addTabsToGroup(
+                                    TabGroupId.fromRawToken(groupId), List.of(tab1, tab2));
+                    assertEquals(TabGroupId.fromRawToken(groupId), returnedGroupId);
                     assertEquals(groupId, tab0.getTabGroupId());
                     assertEquals(groupId, tab1.getTabGroupId());
                     assertEquals(groupId, tab2.getTabGroupId());
@@ -3288,9 +3349,10 @@ public class TabCollectionTabModelImplTest {
                     assertNotNull(groupId2);
                     assertNotEquals(groupId1, groupId2);
 
-                    Token returnedGroupId =
-                            mCollectionModel.addTabsToGroup(groupId1, List.of(tab1));
-                    assertEquals(groupId1, returnedGroupId);
+                    TabGroupId returnedGroupId =
+                            mCollectionModel.addTabsToGroup(
+                                    TabGroupId.fromRawToken(groupId1), List.of(tab1));
+                    assertEquals(TabGroupId.fromRawToken(groupId1), returnedGroupId);
                     assertEquals(groupId1, tab0.getTabGroupId());
                     assertEquals(groupId1, tab1.getTabGroupId());
                     assertNull(tab2.getTabGroupId());
@@ -3315,7 +3377,7 @@ public class TabCollectionTabModelImplTest {
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    Token newGroupId =
+                    TabGroupId newGroupId =
                             mCollectionModel.addTabsToGroup(null, Collections.emptyList());
                     assertNull(newGroupId);
 
@@ -3323,8 +3385,9 @@ public class TabCollectionTabModelImplTest {
                     Token groupId = tab0.getTabGroupId();
                     assertNotNull(groupId);
 
-                    Token returnedGroupId =
-                            mCollectionModel.addTabsToGroup(groupId, Collections.emptyList());
+                    TabGroupId returnedGroupId =
+                            mCollectionModel.addTabsToGroup(
+                                    TabGroupId.fromRawToken(groupId), Collections.emptyList());
                     assertNull(returnedGroupId);
                     assertEquals(
                             1,
@@ -3348,9 +3411,10 @@ public class TabCollectionTabModelImplTest {
                     Token groupId = tab0.getTabGroupId();
                     assertNotNull(groupId);
 
-                    Token returnedGroupId =
-                            mCollectionModel.addTabsToGroup(groupId, List.of(tab0, tab1));
-                    assertEquals(groupId, returnedGroupId);
+                    TabGroupId returnedGroupId =
+                            mCollectionModel.addTabsToGroup(
+                                    TabGroupId.fromRawToken(groupId), List.of(tab0, tab1));
+                    assertEquals(TabGroupId.fromRawToken(groupId), returnedGroupId);
                     assertEquals(groupId, tab0.getTabGroupId());
                     assertEquals(groupId, tab1.getTabGroupId());
                     assertNull(tab2.getTabGroupId());
@@ -3371,8 +3435,8 @@ public class TabCollectionTabModelImplTest {
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    Token nonExistentGroupId = Token.createRandom();
-                    Token returnedGroupId =
+                    TabGroupId nonExistentGroupId = TabGroupId.generateNew();
+                    TabGroupId returnedGroupId =
                             mCollectionModel.addTabsToGroup(nonExistentGroupId, List.of(tab0));
                     assertNull(returnedGroupId);
                     assertNull(tab0.getTabGroupId());
@@ -4212,7 +4276,9 @@ public class TabCollectionTabModelImplTest {
                     assertTrue(
                             mCollectionModel.isTabGroupHiding(
                                     TabGroupId.fromOptionalToken(tabGroupId)));
-                    assertTrue(mCollectionModel.detachedTabGroupExists(tabGroupId));
+                    assertTrue(
+                            mCollectionModel.detachedTabGroupExists(
+                                    TabGroupId.fromRawToken(tabGroupId)));
                     assertFalse(
                             mCollectionModel.containsTabGroup(
                                     TabGroupId.fromOptionalToken(tabGroupId)));
@@ -4239,7 +4305,9 @@ public class TabCollectionTabModelImplTest {
                     assertFalse(
                             mCollectionModel.isTabGroupHiding(
                                     TabGroupId.fromOptionalToken(tabGroupId)));
-                    assertFalse(mCollectionModel.detachedTabGroupExists(tabGroupId));
+                    assertFalse(
+                            mCollectionModel.detachedTabGroupExists(
+                                    TabGroupId.fromRawToken(tabGroupId)));
                     assertFalse(mCollectionModel.isClosurePending(tab0.getId()));
                     assertFalse(mCollectionModel.isClosurePending(tab1.getId()));
                     assertEquals(tabGroupId, tab0.getTabGroupId());
@@ -4297,7 +4365,9 @@ public class TabCollectionTabModelImplTest {
                     assertTrue(
                             mCollectionModel.isTabGroupHiding(
                                     TabGroupId.fromOptionalToken(tabGroupId)));
-                    assertTrue(mCollectionModel.detachedTabGroupExists(tabGroupId));
+                    assertTrue(
+                            mCollectionModel.detachedTabGroupExists(
+                                    TabGroupId.fromRawToken(tabGroupId)));
                 });
 
         // Commit the closure
@@ -4312,7 +4382,9 @@ public class TabCollectionTabModelImplTest {
                     assertFalse(
                             mCollectionModel.isTabGroupHiding(
                                     TabGroupId.fromOptionalToken(tabGroupId)));
-                    assertFalse(mCollectionModel.detachedTabGroupExists(tabGroupId));
+                    assertFalse(
+                            mCollectionModel.detachedTabGroupExists(
+                                    TabGroupId.fromRawToken(tabGroupId)));
                     assertFalse(mCollectionModel.isClosurePending(tab0.getId()));
                     assertFalse(mCollectionModel.isClosurePending(tab1.getId()));
                     assertTrue(tab0.isDestroyed());
@@ -4367,7 +4439,9 @@ public class TabCollectionTabModelImplTest {
                     assertFalse(
                             mCollectionModel.isTabGroupHiding(
                                     TabGroupId.fromOptionalToken(tabGroupId)));
-                    assertFalse(mCollectionModel.detachedTabGroupExists(tabGroupId));
+                    assertFalse(
+                            mCollectionModel.detachedTabGroupExists(
+                                    TabGroupId.fromRawToken(tabGroupId)));
                     assertTrue(tab0.isDestroyed());
                     assertTrue(tab1.isDestroyed());
 
@@ -4417,7 +4491,9 @@ public class TabCollectionTabModelImplTest {
                     assertTrue(
                             mCollectionModel.containsTabGroup(
                                     TabGroupId.fromOptionalToken(tabGroupId)));
-                    assertFalse(mCollectionModel.detachedTabGroupExists(tabGroupId));
+                    assertFalse(
+                            mCollectionModel.detachedTabGroupExists(
+                                    TabGroupId.fromRawToken(tabGroupId)));
 
                     mCollectionModel.removeTabGroupObserver(groupObserver);
                 });
@@ -4474,12 +4550,16 @@ public class TabCollectionTabModelImplTest {
                             mCollectionModel.isTabGroupHiding(
                                     TabGroupId.fromOptionalToken(tabGroupId)));
                     // A detached group is still created for undo.
-                    assertTrue(mCollectionModel.detachedTabGroupExists(tabGroupId));
+                    assertTrue(
+                            mCollectionModel.detachedTabGroupExists(
+                                    TabGroupId.fromRawToken(tabGroupId)));
 
                     mCollectionModel.commitTabClosure(tab0.getId());
                     mCollectionModel.commitTabClosure(tab1.getId());
 
-                    assertFalse(mCollectionModel.detachedTabGroupExists(tabGroupId));
+                    assertFalse(
+                            mCollectionModel.detachedTabGroupExists(
+                                    TabGroupId.fromRawToken(tabGroupId)));
 
                     mCollectionModel.removeTabGroupObserver(groupObserver);
                 });
@@ -4526,9 +4606,9 @@ public class TabCollectionTabModelImplTest {
                     Token groupId0 = tab0.getTabGroupId();
                     assertNotNull(groupId0);
 
-                    List<Token> groupIds = mCollectionModel.listTabGroups();
+                    List<TabGroupId> groupIds = mCollectionModel.listTabGroups();
                     assertEquals("Should be 1 group.", 1, groupIds.size());
-                    assertThat(groupIds).containsExactly(groupId0);
+                    assertThat(groupIds).containsExactly(TabGroupId.fromRawToken(groupId0));
 
                     mCollectionModel.createSingleTabGroup(tab1);
                     Token groupId1 = tab1.getTabGroupId();
@@ -4537,7 +4617,10 @@ public class TabCollectionTabModelImplTest {
                     groupIds = mCollectionModel.listTabGroups();
                     assertEquals("Should be 2 groups.", 2, groupIds.size());
                     // Order is not guaranteed by the underlying API.
-                    assertThat(groupIds).containsExactly(groupId0, groupId1);
+                    assertThat(groupIds)
+                            .containsExactly(
+                                    TabGroupId.fromRawToken(groupId0),
+                                    TabGroupId.fromRawToken(groupId1));
                 });
     }
 
@@ -4552,16 +4635,14 @@ public class TabCollectionTabModelImplTest {
                 () -> {
                     assertTrue(mCollectionModel.listTabGroups().isEmpty());
 
-                    Token groupId = mCollectionModel.createTabGroup(tabs);
+                    TabGroupId groupId = mCollectionModel.createTabGroup(tabs);
                     assertNotNull(groupId);
 
-                    assertTrue(
-                            mCollectionModel.containsTabGroup(
-                                    TabGroupId.fromOptionalToken(groupId)));
-                    assertEquals(groupId, tab0.getTabGroupId());
-                    assertEquals(groupId, tab1.getTabGroupId());
+                    assertTrue(mCollectionModel.containsTabGroup(groupId));
+                    assertEquals(groupId.getToken(), tab0.getTabGroupId());
+                    assertEquals(groupId.getToken(), tab1.getTabGroupId());
 
-                    List<Token> groupIds = mCollectionModel.listTabGroups();
+                    List<TabGroupId> groupIds = mCollectionModel.listTabGroups();
                     assertEquals(1, groupIds.size());
                     assertThat(groupIds).containsExactly(groupId);
                 });
@@ -4577,7 +4658,7 @@ public class TabCollectionTabModelImplTest {
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    Token groupId = mCollectionModel.createTabGroup(tabs);
+                    TabGroupId groupId = mCollectionModel.createTabGroup(tabs);
                     assertNotNull(groupId);
 
                     int[] tabIndices = mCollectionModel.getTabGroupTabIndices(groupId);
@@ -4610,7 +4691,7 @@ public class TabCollectionTabModelImplTest {
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     mCollectionModel.addTabGroupObserver(observer);
-                    createdTabGroupId.set(mCollectionModel.createTabGroup(tabs));
+                    createdTabGroupId.set(mCollectionModel.createTabGroup(tabs).getToken());
                     // Closing the tabs will remove the tab group.
                     mCollectionModel.closeTabs(
                             TabClosureParams.closeTabs(tabs).allowUndo(false).build());
@@ -4644,7 +4725,7 @@ public class TabCollectionTabModelImplTest {
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     mCollectionModel.addTabGroupObserver(observer);
-                    tabGroupId.set(mCollectionModel.createTabGroup(tabs));
+                    tabGroupId.set(mCollectionModel.createTabGroup(tabs).getToken());
                     mCollectionModel.setTabGroupTitle(
                             TabGroupId.fromRawToken(tabGroupId.get()), "New Title");
                 });
@@ -4675,7 +4756,7 @@ public class TabCollectionTabModelImplTest {
         ThreadUtils.runOnUiThreadBlocking(
                 () ->
                         mCollectionModel.setTabGroupVisualData(
-                                tabGroupId.get(),
+                                TabGroupId.fromRawToken(tabGroupId.get()),
                                 "Other Title",
                                 TabGroupColorId.RED,
                                 /* isCollapsed= */ false));
@@ -4829,5 +4910,415 @@ public class TabCollectionTabModelImplTest {
                     tab2.destroy();
                     tab3.destroy();
                 });
+    }
+
+    @Test
+    @MediumTest
+    @DisableFeatures(ChromeFeatureList.ENABLE_ANDROID_SPLIT_VIEW)
+    public void testCreateSplit_FeatureFlagDisabled_SplitNotCreated() {
+        // Arrange:
+        Tab tab1 = createTab();
+        Tab tab2 = createTab();
+        var visualData =
+                new SplitTabVisualData(
+                        SplitTabLayout.SIDE_BY_SIDE, SplitTabVisualData.DEFAULT_SPLIT_RATIO);
+
+        // Act:
+        SplitTabId splitTabId =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.createSplit(List.of(tab1, tab2), visualData));
+
+        // Assert:
+        assertNull(splitTabId);
+        assertNull(tab1.getSplitTabId());
+        assertNull(tab2.getSplitTabId());
+        assertTrue(ThreadUtils.runOnUiThreadBlocking(mRegularModel::listSplits).isEmpty());
+    }
+
+    @Test
+    @MediumTest
+    public void testCreateSplit_RejectInvalidTabs() {
+        // Arrange:
+        Tab tab1 = createTab();
+        Tab tab2 = createTab();
+        Tab tab3 = createTab();
+        Tab closedTab = createTab();
+        Tab pinnedTab = createTab();
+        Tab groupedTab = createTab();
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    // Pending-closure tabs are removed from TabModel.
+                    mRegularModel
+                            .getTabRemover()
+                            .closeTabs(
+                                    TabClosureParams.closeTab(closedTab).allowUndo(true).build(),
+                                    /* allowDialog= */ false);
+                    mRegularModel.pinTab(pinnedTab.getId(), /* showUngroupDialog= */ false);
+                    mRegularModel.createSingleTabGroup(groupedTab);
+                });
+        assertTrue(pinnedTab.getIsPinned());
+        assertNotNull(groupedTab.getTabGroupId());
+        var visualData =
+                new SplitTabVisualData(
+                        SplitTabLayout.SIDE_BY_SIDE, SplitTabVisualData.DEFAULT_SPLIT_RATIO);
+
+        // Act & Assert:
+        // Fewer than two tabs.
+        assertNull(
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.createSplit(List.of(), visualData)));
+        assertNull(
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.createSplit(List.of(tab1), visualData)));
+
+        // More than two tabs.
+        assertNull(
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.createSplit(List.of(tab1, tab2, tab3), visualData)));
+
+        // Two identical tabs.
+        assertNull(
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.createSplit(List.of(tab1, tab1), visualData)));
+
+        // Tab not in TabModel.
+        assertNull(
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.createSplit(List.of(tab1, closedTab), visualData)));
+
+        // TODO(crbug.com/585322252): Support creating a Split View with pinned or grouped tabs.
+        // Pinned tab.
+        assertNull(
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.createSplit(List.of(pinnedTab, tab1), visualData)));
+
+        // Grouped tab.
+        assertNull(
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.createSplit(List.of(groupedTab, tab1), visualData)));
+        assertTrue(ThreadUtils.runOnUiThreadBlocking(mRegularModel::listSplits).isEmpty());
+
+        // Tab already in a Split View.
+        SplitTabId existingSplitTabId =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.createSplit(List.of(tab1, tab2), visualData));
+        assertNotNull(existingSplitTabId);
+        assertNull(
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.createSplit(List.of(tab1, tab3), visualData)));
+        assertEquals(existingSplitTabId, tab1.getSplitTabId());
+        assertEquals(existingSplitTabId, tab2.getSplitTabId());
+        assertNull(tab3.getSplitTabId());
+        assertEquals(
+                Set.of(existingSplitTabId),
+                ThreadUtils.runOnUiThreadBlocking(mRegularModel::listSplits));
+    }
+
+    @Test
+    @MediumTest
+    public void testCreateSplit_CommitPendingClosures() {
+        // Arrange:
+        Tab tab1 = createTab();
+        Tab tab2 = createTab();
+        Tab closedTab = createTab();
+        ThreadUtils.runOnUiThreadBlocking(
+                () ->
+                        mRegularModel
+                                .getTabRemover()
+                                .closeTabs(
+                                        TabClosureParams.closeTab(closedTab)
+                                                .allowUndo(true)
+                                                .build(),
+                                        /* allowDialog= */ false));
+        assertTrue(
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.isClosurePending(closedTab.getId())));
+        assertFalse(closedTab.isDestroyed());
+        var visualData =
+                new SplitTabVisualData(
+                        SplitTabLayout.SIDE_BY_SIDE, SplitTabVisualData.DEFAULT_SPLIT_RATIO);
+
+        // Act:
+        SplitTabId splitTabId =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.createSplit(List.of(tab1, tab2), visualData));
+
+        // Assert:
+        assertNotNull(splitTabId);
+        assertFalse(
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.isClosurePending(closedTab.getId())));
+        assertTrue(closedTab.isDestroyed());
+    }
+
+    @Test
+    @MediumTest
+    public void testCreateSplit_AdjacentTabs() {
+        // Arrange:
+        Tab tab1 = createTab();
+        Tab tab2 = createTab();
+        var visualData =
+                new SplitTabVisualData(
+                        SplitTabLayout.SIDE_BY_SIDE, SplitTabVisualData.DEFAULT_SPLIT_RATIO);
+        assertNull(tab1.getSplitTabId());
+        assertNull(tab2.getSplitTabId());
+        assertTrue(ThreadUtils.runOnUiThreadBlocking(mRegularModel::listSplits).isEmpty());
+
+        // Act:
+        SplitTabId splitTabId =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.createSplit(List.of(tab1, tab2), visualData));
+
+        // Assert:
+        assertNotNull(splitTabId);
+        assertEquals(splitTabId, tab1.getSplitTabId());
+        assertEquals(splitTabId, tab2.getSplitTabId());
+        assertEquals(
+                Set.of(splitTabId), ThreadUtils.runOnUiThreadBlocking(mRegularModel::listSplits));
+
+        var expectedSplitTabData = new SplitTabData(splitTabId, List.of(tab1, tab2), visualData);
+        assertEquals(
+                expectedSplitTabData,
+                ThreadUtils.runOnUiThreadBlocking(() -> mRegularModel.getSplitTabData(splitTabId)));
+    }
+
+    @Test
+    @MediumTest
+    public void testCreateSplit_NonadjacentTabs_SecondTabIsAfterFirstTab() {
+        // Arrange:
+        Tab tab0 = getTabAt(0);
+        Tab tab1 = createTab();
+        Tab tab2 = createTab();
+        Tab tab3 = createTab();
+        assertTabsInOrderAre(List.of(tab0, tab1, tab2, tab3));
+        var visualData =
+                new SplitTabVisualData(
+                        SplitTabLayout.SIDE_BY_SIDE, SplitTabVisualData.DEFAULT_SPLIT_RATIO);
+
+        // Act:
+        SplitTabId splitTabId =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.createSplit(List.of(tab1, tab3), visualData));
+
+        // Assert:
+        assertNotNull(splitTabId);
+        assertTabsInOrderAre(List.of(tab0, tab1, tab3, tab2));
+        assertEquals(
+                Set.of(splitTabId), ThreadUtils.runOnUiThreadBlocking(mRegularModel::listSplits));
+
+        var expectedSplitTabData = new SplitTabData(splitTabId, List.of(tab1, tab3), visualData);
+        assertEquals(
+                expectedSplitTabData,
+                ThreadUtils.runOnUiThreadBlocking(() -> mRegularModel.getSplitTabData(splitTabId)));
+    }
+
+    @Test
+    @MediumTest
+    public void testCreateSplit_NonadjacentTabs_SecondTabIsBeforeFirstTab() {
+        // Arrange:
+        Tab tab0 = getTabAt(0);
+        Tab tab1 = createTab();
+        Tab tab2 = createTab();
+        Tab tab3 = createTab();
+        assertTabsInOrderAre(List.of(tab0, tab1, tab2, tab3));
+        var visualData =
+                new SplitTabVisualData(
+                        SplitTabLayout.STACKED, SplitTabVisualData.DEFAULT_SPLIT_RATIO);
+
+        // Act:
+        SplitTabId splitTabId =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.createSplit(List.of(tab3, tab1), visualData));
+
+        // Assert:
+        assertNotNull(splitTabId);
+        assertTabsInOrderAre(List.of(tab0, tab2, tab3, tab1));
+        assertEquals(
+                Set.of(splitTabId), ThreadUtils.runOnUiThreadBlocking(mRegularModel::listSplits));
+
+        var expectedSplitTabData = new SplitTabData(splitTabId, List.of(tab3, tab1), visualData);
+        assertEquals(
+                expectedSplitTabData,
+                ThreadUtils.runOnUiThreadBlocking(() -> mRegularModel.getSplitTabData(splitTabId)));
+    }
+
+    @Test
+    @MediumTest
+    public void testCreateSplit_ResetPendingTabClosureState() {
+        // Arrange:
+        Tab tab0 = getTabAt(0);
+        Tab tab1 = createTab();
+        Tab tab2 = createTab();
+        Tab tab3 = createTab();
+        assertTabsInOrderAre(List.of(tab0, tab1, tab2, tab3));
+        var visualData =
+                new SplitTabVisualData(
+                        SplitTabLayout.SIDE_BY_SIDE, SplitTabVisualData.DEFAULT_SPLIT_RATIO);
+
+        // Act:
+        // Creating a non-adjacent split that reorders tabs to [tab0, tab1, tab3, tab2]. This should
+        // reset PendingTabClosureManager's rewound list, so if we close tab2 then undo it, tab2
+        // should be restored at index 3.
+        SplitTabId splitTabId =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.createSplit(List.of(tab1, tab3), visualData));
+        assertNotNull(splitTabId);
+        ThreadUtils.runOnUiThreadBlocking(
+                () ->
+                        mRegularModel
+                                .getTabRemover()
+                                .closeTabs(
+                                        TabClosureParams.closeTab(tab2).allowUndo(true).build(),
+                                        /* allowDialog= */ false));
+        ThreadUtils.runOnUiThreadBlocking(() -> mRegularModel.cancelTabClosure(tab2.getId()));
+
+        // Assert:
+        assertTabsInOrderAre(List.of(tab0, tab1, tab3, tab2));
+    }
+
+    @Test
+    @MediumTest
+    public void testCreateSplit_IncognitoTabModel() {
+        // Arrange:
+        IncognitoNewTabPageStation incognitoPage =
+                mInitialPageStation.openNewIncognitoTabOrWindowFast();
+        TabModel incognitoModel =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> incognitoPage.getTabModelSelector().getModel(/* incognito= */ true));
+        Tab incognitoTab1 = ThreadUtils.runOnUiThreadBlocking(incognitoPage::getTab);
+        Tab incognitoTab2 =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () ->
+                                incognitoModel
+                                        .getTabCreator()
+                                        .createNewTab(
+                                                new LoadUrlParams("about:blank"),
+                                                TabLaunchType.FROM_CHROME_UI,
+                                                /* parent= */ null));
+        var visualData =
+                new SplitTabVisualData(
+                        SplitTabLayout.SIDE_BY_SIDE, SplitTabVisualData.DEFAULT_SPLIT_RATIO);
+
+        // Act:
+        SplitTabId splitTabId =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () ->
+                                incognitoModel.createSplit(
+                                        List.of(incognitoTab1, incognitoTab2), visualData));
+
+        // Assert:
+        assertNotNull(splitTabId);
+        assertEquals(splitTabId, incognitoTab1.getSplitTabId());
+        assertEquals(splitTabId, incognitoTab2.getSplitTabId());
+        assertEquals(
+                Set.of(splitTabId), ThreadUtils.runOnUiThreadBlocking(incognitoModel::listSplits));
+        assertTrue(ThreadUtils.runOnUiThreadBlocking(mRegularModel::listSplits).isEmpty());
+
+        var expectedSplitTabData =
+                new SplitTabData(splitTabId, List.of(incognitoTab1, incognitoTab2), visualData);
+        assertEquals(
+                expectedSplitTabData,
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> incognitoModel.getSplitTabData(splitTabId)));
+    }
+
+    @Test
+    @MediumTest
+    public void testGetSplitTabData_NonExistentSplitId() {
+        // Arrange:
+        Tab tab1 = createTab();
+        Tab tab2 = createTab();
+        var visualData =
+                new SplitTabVisualData(
+                        SplitTabLayout.SIDE_BY_SIDE, SplitTabVisualData.DEFAULT_SPLIT_RATIO);
+        SplitTabId existingSplitTabId =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.createSplit(List.of(tab1, tab2), visualData));
+        assertNotNull(existingSplitTabId);
+
+        // Act:
+        SplitTabData splitTabData =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.getSplitTabData(SplitTabId.generateNew()));
+
+        // Assert:
+        assertNull(splitTabData);
+    }
+
+    @Test
+    @MediumTest
+    public void testUnsplit_SeparateTabsInPlace() {
+        // Arrange:
+        Tab tab0 = getTabAt(/* index= */ 0);
+        Tab tab1 = createTab();
+        Tab tab2 = createTab();
+        Tab tab3 = createTab();
+        var visualData =
+                new SplitTabVisualData(
+                        SplitTabLayout.SIDE_BY_SIDE, SplitTabVisualData.DEFAULT_SPLIT_RATIO);
+        SplitTabId splitTabId =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.createSplit(List.of(tab1, tab3), visualData));
+        assertNotNull(splitTabId);
+        assertTabsInOrderAre(List.of(tab0, tab1, tab3, tab2));
+
+        // Act & Assert:
+        // Unsplitting a non-existent SplitTabId is a no-op.
+        ThreadUtils.runOnUiThreadBlocking(() -> mRegularModel.unsplit(SplitTabId.generateNew()));
+        assertEquals(splitTabId, tab1.getSplitTabId());
+        assertEquals(splitTabId, tab3.getSplitTabId());
+        assertEquals(
+                Set.of(splitTabId), ThreadUtils.runOnUiThreadBlocking(mRegularModel::listSplits));
+
+        // Unsplitting the existing Split View separates tabs in place.
+        ThreadUtils.runOnUiThreadBlocking(() -> mRegularModel.unsplit(splitTabId));
+        assertTabsInOrderAre(List.of(tab0, tab1, tab3, tab2));
+        assertEquals(
+                List.of(tab0, tab1, tab3, tab2),
+                ThreadUtils.runOnUiThreadBlocking(
+                        mCollectionModel::getAllTabsFromNativeForTesting));
+        assertNull(tab1.getSplitTabId());
+        assertNull(tab3.getSplitTabId());
+        assertTrue(ThreadUtils.runOnUiThreadBlocking(mRegularModel::listSplits).isEmpty());
+    }
+
+    @Test
+    @MediumTest
+    public void testUnsplit_PreservePendingClosures() {
+        // Arrange:
+        Tab tab0 = getTabAt(0);
+        Tab tab1 = createTab();
+        Tab tab2 = createTab();
+        Tab closedTab = createTab();
+        var visualData =
+                new SplitTabVisualData(
+                        SplitTabLayout.SIDE_BY_SIDE, SplitTabVisualData.DEFAULT_SPLIT_RATIO);
+        SplitTabId splitTabId =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.createSplit(List.of(tab1, tab2), visualData));
+        assertNotNull(splitTabId);
+        ThreadUtils.runOnUiThreadBlocking(
+                () ->
+                        mRegularModel
+                                .getTabRemover()
+                                .closeTabs(
+                                        TabClosureParams.closeTab(closedTab)
+                                                .allowUndo(true)
+                                                .build(),
+                                        /* allowDialog= */ false));
+        assertTrue(
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.isClosurePending(closedTab.getId())));
+
+        // Act:
+        ThreadUtils.runOnUiThreadBlocking(() -> mRegularModel.unsplit(splitTabId));
+
+        // Assert:
+        assertTrue(
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mRegularModel.isClosurePending(closedTab.getId())));
+        assertFalse(closedTab.isDestroyed());
+        ThreadUtils.runOnUiThreadBlocking(() -> mRegularModel.cancelTabClosure(closedTab.getId()));
+        assertTabsInOrderAre(List.of(tab0, tab1, tab2, closedTab));
     }
 }

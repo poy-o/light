@@ -266,12 +266,24 @@ BASE_FEATURE(kAutofillEnableWalletBrandingV2,
 // When enabled, direct offers synced via Google Wallet will be available for
 // autofill into merchant promo code fields during checkout.
 BASE_FEATURE(kAutofillEnableWalletDirectOffers,
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#else
              base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS)
 
 // When enabled, an offer notification bubble will be shown for wallet
 // direct offers if any are available for the current merchant page.
 BASE_FEATURE(kAutofillEnableWalletDirectOffersNotificationBubble,
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#else
              base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS)
 
 // When enabled, offers from the user's Gmail are synced via Google Wallet in
 // addition to direct offers.
@@ -283,6 +295,13 @@ BASE_FEATURE(kAutofillEnableWalletGmailOffers,
 // re-auth, VCN, or card save) do not take precedence.
 BASE_FEATURE(kAutofillEnableWalletReminderNotice,
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// When enabled, the virtual card enrollment strike database is checked when
+// deciding whether to offer downstream virtual card enrollment. This allows
+// other post-submission flows (e.g., cardholder name update or CVC save) to be
+// offered as a fallback when virtual card enrollment is blocked by strikes.
+BASE_FEATURE(kAutofillFixVcnStrikeDatabaseFallback,
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_IOS)
 // When enabled, skips empty CVCs in AutofillWalletCredentialSyncBridge instead
@@ -340,6 +359,13 @@ BASE_FEATURE(kAutofillSkipSaveCardForTabModalPopup,
 // When enabled, eWallet accounts are synced from the Google Payments servers
 // and displayed on the payment methods settings page.
 BASE_FEATURE(kAutofillSyncEwalletAccounts, base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Kill switch for binding the Touch To Fill payment method target to the form
+// and field for which the sheet was shown. When disabled, selections fill the
+// most recently queried form and field instead.
+// TODO(crbug.com/584778198): Clean up after M163 branch.
+BASE_FEATURE(kAutofillTouchToFillPaymentsBindTargetFieldIds,
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_ANDROID)
 
 // Controls offering credit card upload to Google Payments. Cannot ever be

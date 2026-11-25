@@ -78,6 +78,7 @@ namespace autofill {
 #if BUILDFLAG(IS_ANDROID)
 // TODO(crbug.com/364089352): When //c/b/ui/android/autofill gets modularized,
 // //c/b/ui/autofill/ can depend directly on it.
+class AutofillAiAttributionVerificationSheetBridge;
 class AutofillAiSaveUpdateEntityFlowManager;
 class AutofillSnackbarControllerImpl;
 class SaveUpdateAddressProfileFlowManager;
@@ -156,7 +157,6 @@ class ChromeAutofillClient : public ContentAutofillClient {
   AutocompleteHistoryManager* GetAutocompleteHistoryManager() final;
   AutofillComposeDelegate* GetComposeDelegate() final;
   AtMemoryQueryService* GetAtMemoryQueryService() override;
-  AtMemoryManager* GetAtMemoryManager() override;
   personal_context::PersonalContextEligibilityState
   GetPersonalContextEligibilityState() const override;
   personal_context::PersonalContextEligibilityService*
@@ -319,6 +319,11 @@ class ChromeAutofillClient : public ContentAutofillClient {
   void ShowAutofillAiSuggestionRemovedNotification(
       const EntityInstance& entity,
       base::OnceClosure on_undo_clicked) final;
+  void ShowAutofillAiAttributionVerification(
+      const EntityInstance& entity,
+      const GURL& source_url,
+      const gfx::RectF& field_bounds,
+      AutofillAiVerificationDecisionCallback decision_cb) final;
   void ShowEmailVerifiedToast(const GURL& issuer) final;
   void ShowEmailVerificationPopup(
       const gfx::RectF& element_bounds,
@@ -412,7 +417,6 @@ class ChromeAutofillClient : public ContentAutofillClient {
       this};
 
   std::unique_ptr<AutofillAiManager> autofill_ai_manager_;
-  std::unique_ptr<AtMemoryManager> at_memory_manager_;
 
   // These members are initialized lazily in their respective getters.
   // Therefore, do not access the members directly.
@@ -438,6 +442,8 @@ class ChromeAutofillClient : public ContentAutofillClient {
 #if BUILDFLAG(IS_ANDROID)
   std::unique_ptr<AutofillMessageController> autofill_message_controller_;
   std::unique_ptr<AutofillDialogController> autofill_dialog_controller_impl_;
+  std::unique_ptr<AutofillAiAttributionVerificationSheetBridge>
+      autofill_ai_attribution_verification_sheet_bridge_;
   std::unique_ptr<AutofillAiSaveUpdateEntityFlowManager>
       autofill_ai_save_update_entity_flow_manager_;
   std::unique_ptr<SaveUpdateAddressProfileFlowManager>
@@ -495,6 +501,18 @@ class ChromeAutofillClient : public ContentAutofillClient {
     const base::raw_ref<ChromeAutofillClient> client_;
   };
   OtpTabActivityObserver otp_tab_activity_observer_{this};
+
+  // Observes WebOTP API usage and forwards it to the frame's AutofillManager.
+  class WebOtpObserver final : public content::WebContentsObserver {
+   public:
+    explicit WebOtpObserver(content::WebContents* web_contents);
+    ~WebOtpObserver() override;
+
+    // content::WebContentsObserver:
+    void OnDocumentUsedWebOtp(
+        content::RenderFrameHost* render_frame_host) override;
+  };
+  WebOtpObserver web_otp_observer_{web_contents()};
 
   SEQUENCE_CHECKER(sequence_checker_);
 

@@ -14,6 +14,8 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/numerics/byte_conversions.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "media/base/audio_decoder_config.h"
@@ -28,6 +30,7 @@
 #include "media/filters/symphonia_demuxer_bridge.rs.h"
 #include "media/filters/symphonia_demuxer_stream.h"
 #include "media/filters/symphonia_demuxer_util.h"
+#include "media/formats/common/opus_constants.h"
 
 namespace media {
 
@@ -124,6 +127,105 @@ void RecordInitOutcome(SymphoniaDemuxer::InitOutcome outcome) {
                                 outcome);
 }
 
+bool IsPcmCodec(AudioCodec codec) {
+  switch (codec) {
+    case AudioCodec::kPCM:
+    case AudioCodec::kPCM_S16BE:
+    case AudioCodec::kPCM_S24BE:
+    case AudioCodec::kPCM_ALAW:
+    case AudioCodec::kPCM_MULAW:
+      return true;
+    default:
+      return false;
+  }
+}
+
+uint32_t SanitizeSymphoniaChannelMask(AudioCodec codec,
+                                      uint32_t channel_mask,
+                                      uint32_t channels) {
+  // Symphonia's WAV, AIFF, and MP4 LPCM readers synthesize a `(1 << n) - 1`
+  // prefix mask (`Position::from_count(n)`) when a PCM stream has no speaker
+  // mask or `dwChannelMask == 0`. For 4 channels that yields `0xF`
+  // (`CHANNEL_LAYOUT_3_1`) instead of `CHANNEL_LAYOUT_QUAD`. Clear synthesized
+  // prefix masks on PCM tracks so `FromChannelMask()` falls back to `Guess()`,
+  // while keeping explicit `WAVEFORMATEXTENSIBLE` masks like `0x33` or `0x60F`.
+  if (IsPcmCodec(codec) && channels > 0 && channels < 32 &&
+      channel_mask == ((uint32_t{1} << channels) - 1)) {
+    return 0;
+  }
+  return channel_mask;
+}
+
+// TODO(crbug.com/550619039): Switch `codec_delay` to `uint32_t` once
+// `AudioDecoderConfig::Initialize()` takes an unsigned delay.
+int GetCodecDelayFrames(AudioCodec codec,
+                        uint32_t delay_frames,
+                        base::span<const uint8_t> extra_data) {
+  if (codec != AudioCodec::kOpus) {
+    // Only Opus uses pipeline decoder delay in Chromium. For other codecs
+    // (such as AAC and MP3), delay/padding is either discarded via packet
+    // discard padding or handled by the decoder.
+    return 0;
+  }
+  if (delay_frames > 0) {
+    return static_cast<int>(delay_frames);
+  }
+  // TODO(crbug.com/583935554): `symphonia-format-mkv` leaves `Track::delay`
+  // unset when `CodecDelay` is omitted or only present in the `OpusHead`
+  // identification header. Fall back to the 16-bit little-endian pre-skip
+  // field in `OpusHead`.
+  if (extra_data.size() >= OPUS_EXTRADATA_SKIP_SAMPLES_OFFSET + 2) {
+    return base::U16FromLittleEndian(
+        extra_data.subspan<OPUS_EXTRADATA_SKIP_SAMPLES_OFFSET, 2>());
+  }
+  return 0;
+}
+
+base::TimeDelta GetSeekPreroll(AudioCodec codec) {
+  // RFC 7845 Section 5.1 specifies an 80 ms seek preroll for Opus.
+  if (codec == AudioCodec::kOpus) {
+    return base::Milliseconds(80);
+  }
+  return base::TimeDelta();
+}
+
+// Builds the `AudioDecoderConfig` for an audio `track`, or returns
+// `std::nullopt` if its codec is unsupported or the config is invalid.
+std::optional<AudioDecoderConfig> CreateAudioDecoderConfig(
+    const SymphoniaTrackInfo& track) {
+  const AudioCodec codec = SymphoniaCodecToAudioCodec(track.codec);
+  if (codec == AudioCodec::kUnknown) {
+    return std::nullopt;
+  }
+
+  std::vector<uint8_t> extra_data(track.extra_data.begin(),
+                                  track.extra_data.end());
+  const int codec_delay =
+      GetCodecDelayFrames(codec, track.delay_frames, extra_data);
+  const base::TimeDelta seek_preroll = GetSeekPreroll(codec);
+
+  AudioDecoderConfig config;
+  config.Initialize(
+      codec, SymphoniaCodecToSampleFormat(track.codec, track.bits_per_sample),
+      ChannelLayoutConfig::FromChannelMask(
+          SanitizeSymphoniaChannelMask(codec, track.channel_mask,
+                                       track.channels),
+          track.channels),
+      track.sample_rate, std::move(extra_data), EncryptionScheme::kUnencrypted,
+      seek_preroll, codec_delay);
+  if (!config.IsValidConfig()) {
+    return std::nullopt;
+  }
+  return config;
+}
+
+void AcknowledgeResetRequiredOnBlockingSequence(
+    const scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner,
+    SymphoniaDemuxerBridge* demuxer) {
+  CHECK(blocking_task_runner->RunsTasksInCurrentSequence());
+  demuxer->acknowledge_reset_required();
+}
+
 SymphoniaReadPacketResult ReadPacketOnBlockingSequence(
     const scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner,
     SymphoniaDemuxerBridge* demuxer,
@@ -136,10 +238,11 @@ SymphoniaSeekResult SeekOnBlockingSequence(
     const scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner,
     SymphoniaDemuxerBridge* demuxer,
     SymphoniaDataSourceBridge* source,
-    uint64_t time_us) {
+    uint64_t time_us,
+    int64_t track_id) {
   CHECK(blocking_task_runner->RunsTasksInCurrentSequence());
-  // A track ID of -1 lets Symphonia pick the default track to seek on.
-  return demuxer->seek_to(*source, time_us, /*track_id=*/-1);
+  // A negative track ID lets Symphonia pick the default track to seek on.
+  return demuxer->seek_to(*source, time_us, track_id);
 }
 
 // Adapts an owned `rust::Vec<uint8_t>` packet payload into a
@@ -365,6 +468,35 @@ void SymphoniaDemuxer::OnInitializeDone(InitResultOrError result) {
     return;
   }
 
+  // Like `FFmpegDemuxer` for media without a timeline offset, report liveness
+  // as recorded only when the duration is known.
+  const bool duration_known = duration_ != kInfiniteDuration;
+  for (const auto& stream : streams_) {
+    stream->set_liveness(duration_known ? StreamLiveness::kRecorded
+                                        : StreamLiveness::kUnknown);
+  }
+
+  // Help the data source size its buffers. Symphonia does not report container
+  // or stream bitrates, so estimate one from the file size, as `FFmpegDemuxer`
+  // does when FFmpeg reports none.
+  int64_t file_size = 0;
+  if (duration_known && duration_.is_positive() &&
+      data_source_->GetSize(&file_size) && file_size > 0) {
+    // Multiply by `ToHz()` (1 / seconds) in `double` before scaling by 8, so
+    // `file_size * 8` cannot overflow `int64_t` on huge files.
+    const int bitrate = base::ClampRound(file_size * duration_.ToHz() * 8);
+    if (bitrate > 0) {
+      data_source_->SetBitrate(bitrate);
+    }
+  }
+
+  // Chained Ogg streams can change config mid-stream in single-track
+  // audio-only media; see `OnStreamResetRequired()`.
+  if (probed_container == container_names::MediaContainerName::kContainerOgg &&
+      streams_.size() == 1 && result->tracks.size() == 1) {
+    streams_[0]->set_supports_config_changes(true);
+  }
+
   // Publish the tracks, complete initialization, and start prefetching
   // packets.
   RecordInitOutcome(InitOutcome::kSuccess);
@@ -375,11 +507,6 @@ void SymphoniaDemuxer::OnInitializeDone(InitResultOrError result) {
 
 void SymphoniaDemuxer::AddAudioStream(const SymphoniaTrackInfo& track,
                                       MediaTracks& media_tracks) {
-  const AudioCodec codec = SymphoniaCodecToAudioCodec(track.codec);
-  if (codec == AudioCodec::kUnknown) {
-    return;
-  }
-
   // Like `FFmpegDemuxer`, skip tracks that reuse a track ID. A malformed
   // container can declare the same ID twice, and `MediaTracks` requires
   // unique stream IDs.
@@ -388,15 +515,12 @@ void SymphoniaDemuxer::AddAudioStream(const SymphoniaTrackInfo& track,
     return;
   }
 
-  std::vector<uint8_t> extra_data(track.extra_data.begin(),
-                                  track.extra_data.end());
-  AudioDecoderConfig config(
-      codec, SymphoniaCodecToSampleFormat(track.codec, track.bits_per_sample),
-      ChannelLayoutConfig::Guess(track.channels), track.sample_rate,
-      std::move(extra_data), EncryptionScheme::kUnencrypted);
-  if (!config.IsValidConfig()) {
+  std::optional<AudioDecoderConfig> maybe_config =
+      CreateAudioDecoderConfig(track);
+  if (!maybe_config) {
     return;
   }
+  const AudioDecoderConfig& config = *maybe_config;
 
   // Unretained is safe: `this` owns the stream, which runs the callback
   // synchronously and never outlives `this`.
@@ -451,6 +575,9 @@ void SymphoniaDemuxer::AbortPendingReads() {
   if (pending_seek_cb_) {
     std::move(pending_seek_cb_).Run(PIPELINE_OK);
   }
+  if (pending_track_change_cb_) {
+    std::move(pending_track_change_cb_).Run();
+  }
 }
 
 void SymphoniaDemuxer::StartWaitingForSeek(base::TimeDelta seek_time) {}
@@ -479,13 +606,31 @@ void SymphoniaDemuxer::Seek(base::TimeDelta time,
   CHECK(!pending_seek_cb_);
 
   is_eos_ = false;
+  last_buffered_timestamp_ = kNoTimestamp;
   pending_seek_cb_ = std::move(status_cb);
+  int64_t seek_track_id = -1;
   for (const auto& stream : streams_) {
     stream->FlushBuffers();
+    if (seek_track_id < 0 && stream->is_enabled()) {
+      seek_track_id = static_cast<int64_t>(stream->track_id());
+    }
   }
 
+  base::TimeDelta seek_time = std::max(base::TimeDelta(), time);
+  // Like `FFmpegDemuxer`, seek earlier by `seek_preroll()` for Opus so the
+  // decoder receives enough preroll data to reconstruct accurate output at
+  // `time`.
+  for (const auto& stream : streams_) {
+    if (stream->is_enabled() &&
+        stream->audio_decoder_config().codec() == AudioCodec::kOpus) {
+      seek_time =
+          std::max(base::TimeDelta(),
+                   seek_time - stream->audio_decoder_config().seek_preroll());
+      break;
+    }
+  }
   const uint64_t seek_time_us =
-      static_cast<uint64_t>(std::max(int64_t{0}, time.InMicroseconds()));
+      static_cast<uint64_t>(seek_time.InMicroseconds());
 
   // Unretained is safe: the bridges are only destroyed by a task that `Stop()`
   // posts to the same sequenced `blocking_task_runner_`, so they outlive this
@@ -494,7 +639,8 @@ void SymphoniaDemuxer::Seek(base::TimeDelta time,
       FROM_HERE,
       base::BindOnce(&SeekOnBlockingSequence, blocking_task_runner_,
                      base::Unretained(&**demuxer_bridge_),
-                     base::Unretained(source_bridge_.get()), seek_time_us),
+                     base::Unretained(source_bridge_.get()), seek_time_us,
+                     seek_track_id),
       base::BindOnce(&SymphoniaDemuxer::OnSeekDone,
                      weak_factory_.GetWeakPtr()));
 }
@@ -544,6 +690,10 @@ void SymphoniaDemuxer::Stop() {
 
   if (pending_seek_cb_) {
     std::move(pending_seek_cb_).Run(PIPELINE_ERROR_ABORT);
+  }
+
+  if (pending_track_change_cb_) {
+    std::move(pending_track_change_cb_).Run();
   }
 
   for (const auto& stream : streams_) {
@@ -597,21 +747,84 @@ void SymphoniaDemuxer::OnTracksChanged(DemuxerStream::Type track_type,
                                        base::TimeDelta curr_time,
                                        TrackChangeCB change_completed_cb) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // `PipelineController` waits for each track change to finish before it
+  // starts another one.
+  CHECK(!pending_track_change_cb_);
   // Symphonia has no notion of selected tracks: it always demuxes packets for
   // every track, and packets for disabled streams are dropped on enqueue.
-  // TODO(crbug.com/583935964): Seek a re-enabled stream to `curr_time`.
   SymphoniaDemuxerStream* enabled_stream = nullptr;
+  bool newly_enabled = false;
   for (const auto& stream : streams_) {
     if (stream->type() != track_type) {
       continue;
     }
     const bool enable = track_id == stream->media_track_id();
-    stream->SetEnabled(enable);
     if (enable) {
       enabled_stream = stream.get();
+      newly_enabled = !stream->is_enabled();
     }
+    stream->SetEnabled(enable);
   }
-  std::move(change_completed_cb).Run(enabled_stream);
+
+  // A disabled stream dropped its packets, so a newly enabled stream has none
+  // around `curr_time`. Like `FFmpegDemuxer`, seek back to `curr_time` and
+  // flush the newly enabled stream. Other streams receive packets they may
+  // already have, which the pipeline tolerates. A pending seek flushes every
+  // stream and moves the read position anyway, so it covers this case.
+  if (!newly_enabled || is_stopped_ || !demuxer_bridge_ || pending_seek_cb_) {
+    std::move(change_completed_cb).Run(enabled_stream);
+    ReadFrameIfNeeded();
+    return;
+  }
+
+  is_eos_ = false;
+  // Flush before seeking (clearing any prior `end_of_stream_` or `aborted_`
+  // state); packet reads are paused while `pending_track_change_cb_` is set, so
+  // nothing can enqueue until the seek finishes.
+  enabled_stream->FlushBuffers();
+  pending_track_change_cb_ =
+      base::BindOnce(std::move(change_completed_cb), enabled_stream);
+  const uint64_t seek_time_us =
+      static_cast<uint64_t>(std::max(int64_t{0}, curr_time.InMicroseconds()));
+
+  // Unretained is safe: the bridges are only destroyed by a task that `Stop()`
+  // posts to the same sequenced `blocking_task_runner_`, so they outlive this
+  // task.
+  blocking_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(&SeekOnBlockingSequence, blocking_task_runner_,
+                     base::Unretained(&**demuxer_bridge_),
+                     base::Unretained(source_bridge_.get()), seek_time_us,
+                     static_cast<int64_t>(enabled_stream->track_id())),
+      base::BindOnce(&SymphoniaDemuxer::OnTrackChangeSeekDone,
+                     weak_factory_.GetWeakPtr()));
+}
+
+void SymphoniaDemuxer::OnTrackChangeSeekDone(SymphoniaSeekResult seek_result) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK(!is_stopped_);
+  CHECK(pending_track_change_cb_);
+
+  // Re-enabling a track at or past the last packet is not an error: mark every
+  // stream at end of stream, matching `OnSeekDone()`.
+  if (seek_result.status == SymphoniaSeekStatus::OutOfRange) {
+    is_eos_ = true;
+    for (const auto& stream : streams_) {
+      stream->SetEndOfStream();
+    }
+    std::move(pending_track_change_cb_).Run();
+    return;
+  }
+
+  // TODO(crbug.com/550619039): Report seek failures for track changes too.
+  // `FFmpegDemuxer` ignores them as well.
+  if (seek_result.status != SymphoniaSeekStatus::Ok) {
+    MEDIA_LOG(ERROR, media_log_)
+        << GetDisplayName()
+        << ": track change seek failed: " << seek_result.error_str;
+  }
+
+  std::move(pending_track_change_cb_).Run();
   ReadFrameIfNeeded();
 }
 
@@ -634,7 +847,8 @@ std::vector<raw_ptr<DemuxerStream>> SymphoniaDemuxer::GetAllStreams() {
 void SymphoniaDemuxer::ReadFrameIfNeeded() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (is_stopped_ || is_eos_ || is_read_pending_ || pending_seek_cb_ ||
-      !demuxer_bridge_ || !StreamsHaveAvailableCapacity()) {
+      pending_track_change_cb_ || !demuxer_bridge_ ||
+      !StreamsHaveAvailableCapacity()) {
     return;
   }
 
@@ -666,7 +880,7 @@ void SymphoniaDemuxer::OnReadPacketDone(
   is_read_pending_ = false;
 
   // A seek started while this read was in flight; drop the stale packet.
-  if (pending_seek_cb_) {
+  if (pending_seek_cb_ || pending_track_change_cb_) {
     return;
   }
 
@@ -675,11 +889,15 @@ void SymphoniaDemuxer::OnReadPacketDone(
     return;
   }
 
-  // Like `FFmpegDemuxer`, treat any read error as the end of the stream, so
-  // that truncated or partly corrupt media plays up to the point of failure.
-  // DataSource read failures are reported separately by `source_bridge_`.
-  // TODO(crbug.com/583935452): Support chained Ogg streams, which report
-  // `ResetRequired` at each new logical stream.
+  if (packet_result.status == SymphoniaReadPacketStatus::ResetRequired) {
+    OnStreamResetRequired(packet_result.tracks);
+    return;
+  }
+
+  // Like `FFmpegDemuxer`, treat any other read error as the end of the stream,
+  // so that truncated or partly corrupt media plays up to the point of
+  // failure. DataSource read failures are reported separately by
+  // `source_bridge_`.
   if (packet_result.status != SymphoniaReadPacketStatus::Ok) {
     MEDIA_LOG(DEBUG, media_log_)
         << GetDisplayName()
@@ -695,11 +913,19 @@ void SymphoniaDemuxer::OnReadPacketDone(
     return;
   }
 
+  // A chained stream's track may have a new ID; route it to the stream it
+  // continues.
+  uint32_t track_id = packet_result.packet.track_id;
+  if (chained_track_id_ == track_id) {
+    CHECK_EQ(streams_.size(), 1u);
+    track_id = streams_[0]->track_id();
+  }
+
   // Drop packets for tracks without an enabled stream (e.g. video,
   // unsupported audio codecs, or disabled tracks) before inspecting timestamps
   // or updating `max_packet_end_time_`.
-  auto it = std::ranges::find(streams_, packet_result.packet.track_id,
-                              &SymphoniaDemuxerStream::track_id);
+  auto it =
+      std::ranges::find(streams_, track_id, &SymphoniaDemuxerStream::track_id);
   if (it == streams_.end() || !(*it)->is_enabled()) {
     ReadFrameIfNeeded();
     return;
@@ -745,6 +971,36 @@ void SymphoniaDemuxer::OnReadPacketDone(
   }
 
   (*it)->EnqueueBuffer(std::move(buffer));
+  if (duration != kNoTimestamp && duration.is_positive()) {
+    const base::TimeDelta packet_start = std::max(base::TimeDelta(), timestamp);
+    // Connect adjacent packets in the same read run so microsecond rounding
+    // (e.g. at 44.1 kHz) does not leave 1-us holes in `buffered_ranges_`.
+    const base::TimeDelta range_start =
+        (last_buffered_timestamp_ != kNoTimestamp &&
+         last_buffered_timestamp_ <= packet_start)
+            ? last_buffered_timestamp_
+            : packet_start;
+    const base::TimeDelta range_end = timestamp + duration;
+    if (range_end > range_start) {
+      buffered_ranges_.Add(range_start, range_end);
+      last_buffered_timestamp_ = range_end;
+      host_->OnBufferedTimeRangesChanged(buffered_ranges_);
+    }
+  }
+  if (has_chained_stream_ && duration_ != kInfiniteDuration &&
+      max_packet_end_time_ > duration_) {
+    duration_ = max_packet_end_time_;
+    host_->SetDuration(duration_);
+  }
+
+  // Like `FFmpegDemuxer`, raise a known duration if the stream turns out to be
+  // longer. An unknown duration is set at end of stream instead.
+  const base::TimeDelta estimate = (*it)->estimated_duration();
+  if (duration_ != kInfiniteDuration && estimate != kNoTimestamp &&
+      estimate > duration_) {
+    duration_ = estimate;
+    host_->SetDuration(duration_);
+  }
 
   ReadFrameIfNeeded();
 }
@@ -752,16 +1008,64 @@ void SymphoniaDemuxer::OnReadPacketDone(
 void SymphoniaDemuxer::OnEndOfStream() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   is_eos_ = true;
-  // If the container did not report a duration, the end of the latest packet
-  // is the best duration available.
-  if (duration_ == kInfiniteDuration &&
-      max_packet_end_time_ > base::TimeDelta()) {
+  // If the container did not report a duration, or a chained stream ran past
+  // the first link's probed duration, use the end of the latest packet.
+  const bool should_update_duration =
+      max_packet_end_time_.is_positive() &&
+      (duration_ == kInfiniteDuration ||
+       (has_chained_stream_ && max_packet_end_time_ > duration_));
+  if (should_update_duration) {
     duration_ = max_packet_end_time_;
     host_->SetDuration(duration_);
+  }
+  // Close any sub-packet rounding gap between the last demuxed packet and
+  // `duration_`, without marking ranges skipped by a seek as buffered.
+  if (last_buffered_timestamp_ != kNoTimestamp &&
+      duration_ != kInfiniteDuration && duration_ > last_buffered_timestamp_) {
+    buffered_ranges_.Add(last_buffered_timestamp_, duration_);
+    last_buffered_timestamp_ = duration_;
+    host_->OnBufferedTimeRangesChanged(buffered_ranges_);
   }
   for (const auto& stream : streams_) {
     stream->SetEndOfStream();
   }
+}
+
+void SymphoniaDemuxer::OnStreamResetRequired(
+    const rust::Vec<SymphoniaTrackInfo>& tracks) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK(demuxer_bridge_);
+  // Clear `pending_reset_required` before scheduling the next packet read.
+  blocking_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&AcknowledgeResetRequiredOnBlockingSequence,
+                                blocking_task_runner_,
+                                base::Unretained(&**demuxer_bridge_)));
+
+  // Like `FFmpegDemuxer`, only support a new stream (e.g. chained Ogg) in
+  // single-track audio-only media, where it is unambiguous which stream the
+  // new track continues.
+  const SymphoniaTrackInfo* new_track = nullptr;
+  if (streams_.size() == 1 && streams_[0]->SupportsConfigChanges() &&
+      tracks.size() == 1 && tracks[0].track_type == SymphoniaTrackType::Audio) {
+    new_track = &tracks[0];
+  }
+  std::optional<AudioDecoderConfig> config =
+      new_track ? CreateAudioDecoderConfig(*new_track) : std::nullopt;
+  if (!config) {
+    MEDIA_LOG(ERROR, media_log_)
+        << GetDisplayName() << ": unsupported mid-stream track change";
+    is_eos_ = true;
+    OnDemuxerError(PIPELINE_ERROR_DECODE);
+    return;
+  }
+
+  has_chained_stream_ = true;
+  SymphoniaDemuxerStream& stream = *streams_[0];
+  chained_track_id_ = new_track->track_id != stream.track_id()
+                          ? std::optional<uint32_t>(new_track->track_id)
+                          : std::nullopt;
+  stream.ChangeConfig(*std::move(config));
+  ReadFrameIfNeeded();
 }
 
 void SymphoniaDemuxer::OnDemuxerError(PipelineStatus status) {

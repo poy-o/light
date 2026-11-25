@@ -12,7 +12,6 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/tabs/organizer/organizer_panel_utils.h"
-#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/favicon_source.h"
 #include "chrome/browser/ui/webui/metrics_reporter/metrics_reporter_service.h"
 #include "chrome/browser/ui/webui/organizer_panel/foreign_tabs_page_handler.h"
@@ -86,6 +85,7 @@ OrganizerPanelUI::OrganizerPanelUI(content::WebUI* web_ui)
       {"collapse", IDS_ORGANIZER_PANEL_COLLAPSE},
       {"createTabGroup", IDS_ORGANIZER_PANEL_CREATE_TAB_GROUP},
       {"currentlyPlaying", IDS_ORGANIZER_PANEL_CURRENTLY_PLAYING},
+      {"escHint", IDS_ORGANIZER_PANEL_ESC_HINT},
       {"expand", IDS_ORGANIZER_PANEL_EXPAND},
       {"noRecentlyClosedTabs", IDS_ORGANIZER_PANEL_NO_RECENTLY_CLOSED_TABS},
       {"noResults", IDS_ORGANIZER_PANEL_NO_RESULTS},
@@ -121,8 +121,6 @@ OrganizerPanelUI::OrganizerPanelUI(content::WebUI* web_ui)
   ui::Accelerator accelerator(ui::VKEY_A,
                               ui::EF_SHIFT_DOWN | ui::EF_PLATFORM_ACCELERATOR);
   source->AddString("shortcutText", accelerator.GetShortcutText());
-  source->AddBoolean("useTabGroupColorRefresh",
-                     features::IsTabGroupColorRefreshEnabled());
 
   webui::SetupWebUIDataSource(source, kOrganizerPanelResources,
                               IDR_ORGANIZER_PANEL_ORGANIZER_PANEL_HTML);

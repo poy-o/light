@@ -176,25 +176,25 @@ class CAPTURE_EXPORT VideoCaptureDeviceWin : public VideoCaptureDevice,
 
   std::optional<int> camera_rotation_;
 
-  // The DirectShow objects below are declared last and in this order on
-  // purpose; members are destroyed in reverse order of declaration.
+  // The DirectShow objects below are declared in this order on purpose;
+  // members are destroyed in reverse order of declaration.
   //
   // Stop() and Disconnect() don't guarantee that an upstream filter has stopped
   // delivering samples: some filters return from Stop() without joining their
   // streaming thread, and only join it when their last COM reference is
-  // released. Until then that thread may call into |input_sink_pin_| and,
-  // through it, into |this|. Therefore:
-  // - |capture_filter_| must be destroyed after everything else that refers to
-  //   the capture filter, so that its destruction releases the last reference
-  //   and joins the thread.
+  // released. Until then that thread may call into |input_sink_pin_|. It can't
+  // reach |this| any more, because the destructor detaches it from the pin
+  // first (see SinkFilter::Shutdown()). Therefore:
+  // - |capture_filter_| must be released after everything else that refers to
+  //   the capture filter, so that releasing it drops the last reference and
+  //   joins the thread. The destructor does this explicitly, and keeps the
+  //   sink filter alive if the capture filter is still referenced elsewhere.
   // - |sink_filter_| and |input_sink_pin_| must be destroyed after
   //   |capture_filter_|, so the thread never calls into a freed pin.
   // - The graph members must be destroyed after |capture_filter_|, because the
   //   graph owns any intermediate filters it inserted between the capture
   //   filter and the sink (e.g. an AVI decompressor for HDYC), which the thread
   //   may also call into.
-  // - All of them must be declared after the other members, so that |this| is
-  //   still intact if the thread calls FrameReceived() or FrameDropped().
   const scoped_refptr<SinkFilter> sink_filter_;
   const Microsoft::WRL::ComPtr<IPin> input_sink_pin_;
 
@@ -202,7 +202,7 @@ class CAPTURE_EXPORT VideoCaptureDeviceWin : public VideoCaptureDevice,
   Microsoft::WRL::ComPtr<ICaptureGraphBuilder2> capture_graph_builder_;
   Microsoft::WRL::ComPtr<IMediaControl> media_control_;
 
-  const Microsoft::WRL::ComPtr<IBaseFilter> capture_filter_;
+  Microsoft::WRL::ComPtr<IBaseFilter> capture_filter_;
   Microsoft::WRL::ComPtr<IPin> output_capture_pin_;
   Microsoft::WRL::ComPtr<ICameraControl> camera_control_;
   Microsoft::WRL::ComPtr<IVideoProcAmp> video_control_;

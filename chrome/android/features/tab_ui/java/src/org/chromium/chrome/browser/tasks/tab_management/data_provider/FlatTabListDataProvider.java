@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.tasks.tab_management.data_provider;
 
 import org.chromium.base.Token;
 import org.chromium.base.supplier.NonNullObservableSupplier;
+import org.chromium.base.supplier.NullableObservableSupplier;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.tab.Tab;
@@ -20,9 +21,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.function.Predicate;
 
 /**
@@ -32,7 +31,7 @@ import java.util.function.Predicate;
  * <p>The {@link Predicate} filter decides which tabs are shown. Without a {@link Comparator}, the
  * provider keeps its model's tab order. With a {@link Comparator}, it sorts the tabs by it, and a
  * tab moving inside its model doesn't move its card. Observing several models also needs {@code
- * supportsMultipleModels}, and their tabs are merged into one sorted list.
+ * supportsMultipleModels} and a highlight supplier, and their tabs are merged into one sorted list.
  */
 @NullMarked
 public class FlatTabListDataProvider extends TabListDataProvider {
@@ -44,17 +43,22 @@ public class FlatTabListDataProvider extends TabListDataProvider {
      * Constructs a new {@link FlatTabListDataProvider}.
      *
      * @param tabModelListSupplier Supplier of the {@link TabModel}s to show tabs from.
+     * @param highlightTabModelSupplier Supplier of the {@link TabModel} whose current tab is
+     *     highlighted, holding null for no highlight. Required with {@code supportsMultipleModels}.
+     *     When null, the only model's current tab is highlighted.
      * @param filter Predicate to filter tabs, or null for all tabs.
      * @param comparator Order to show tabs in, or null to use the model's order.
      * @param supportsMultipleModels Whether the supplier may hold more than one model. Requires a
-     *     comparator, since one model's tab order can't place tabs from another.
+     *     comparator, since one model's tab order can't place tabs from another, and a highlight
+     *     supplier.
      */
     public FlatTabListDataProvider(
             NonNullObservableSupplier<List<TabModel>> tabModelListSupplier,
+            @Nullable NullableObservableSupplier<TabModel> highlightTabModelSupplier,
             @Nullable Predicate<Tab> filter,
             @Nullable Comparator<Tab> comparator,
             boolean supportsMultipleModels) {
-        super(tabModelListSupplier);
+        super(tabModelListSupplier, highlightTabModelSupplier);
         assert !supportsMultipleModels || comparator != null
                 : "Supporting several TabModels needs a comparator.";
         mFilter = filter;
@@ -107,7 +111,7 @@ public class FlatTabListDataProvider extends TabListDataProvider {
 
                     @Override
                     public void restoreCompleted() {
-                        requestDataReset();
+                        onRestoreCompleted();
                     }
 
                     @Override
@@ -157,14 +161,11 @@ public class FlatTabListDataProvider extends TabListDataProvider {
     protected void rebuildItems() {
         mItems.clear();
 
-        // Keep only the first loaded model's copy of each tab id, checked before the filter, so a
-        // card always shows the copy that getTabById() returns.
-        Set<Integer> seenTabIds = new HashSet<>();
         List<Tab> tabs = new ArrayList<>();
         for (TabModel model : getAttachedTabModels()) {
             if (!model.isTabStateInitialized()) continue;
             for (Tab tab : model) {
-                if (seenTabIds.add(tab.getId()) && shouldShowTab(tab)) tabs.add(tab);
+                if (shouldShowTab(tab)) tabs.add(tab);
             }
         }
         if (mComparator != null) tabs.sort(mComparator);

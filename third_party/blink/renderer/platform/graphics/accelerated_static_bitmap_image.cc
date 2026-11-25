@@ -25,7 +25,6 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_graphics_context_3d_provider.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_image_provider.h"
-#include "third_party/blink/renderer/platform/graphics/canvas_resource.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/canvas_utils.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
@@ -207,16 +206,9 @@ scoped_refptr<StaticBitmapImage> AcceleratedStaticBitmapImage::CreateFromRaster(
   MemoryManagedPaintRecorder recorder(size, /*client=*/nullptr);
   draw_callback(recorder.getRecordingCanvas());
 
-  cc::ImageDecodeCache* cache_f16 = nullptr;
-  if (shared_image->format() == viz::SinglePlaneFormat::kRGBA_F16) {
-    cache_f16 = context_provider_wrapper->ContextProvider().ImageDecodeCache(
-        kRGBA_F16_SkColorType);
-  }
-  cc::ImageDecodeCache* cache_rgba8 =
-      context_provider_wrapper->ContextProvider().ImageDecodeCache(
-          kN32_SkColorType);
   CanvasImageProvider image_provider(
-      cache_rgba8, cache_f16, color_space, shared_image->format(),
+      context_provider_wrapper->ContextProvider().ImageDecodeCache(),
+      color_space, shared_image->format(),
       cc::PlaybackImageProvider::RasterMode::kGpu, context_provider_wrapper);
   if (animated_image_frame_index_map) {
     image_provider.SetAnimatedImageFrameIndexes(

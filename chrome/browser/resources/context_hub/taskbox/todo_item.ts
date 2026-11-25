@@ -78,7 +78,6 @@ export class TodoItemElement extends CrLitElement {
       feedbackMode: {type: Boolean},
       disable_state_mgmt: {type: Boolean},
       disable_feedback: {type: Boolean},
-      canActOnWeb_: {type: Boolean},
       isRunningTask_: {type: Boolean},
       references_: {type: Array},
     };
@@ -98,7 +97,7 @@ export class TodoItemElement extends CrLitElement {
   accessor disable_feedback: boolean = false;
   // TODO(b/586300169): Allow `canActOnWeb_` with `kLaunchpad` once
   // `RunTodoTask` mojom `RuntimeFeature` gating is updated.
-  protected accessor canActOnWeb_: boolean =
+  protected readonly canActOnWeb_: boolean =
       loadTimeData.valueExists('kAutoTodos') &&
       loadTimeData.getBoolean('kAutoTodos') &&
       loadTimeData.valueExists('can_act_on_web') &&
@@ -302,6 +301,12 @@ export class TodoItemElement extends CrLitElement {
       } else if (item.chromeHistoryEntry) {
         url = item.chromeHistoryEntry.url;
         label = item.chromeHistoryEntry.title.trim() || url;
+      } else if (item.searchQuery) {
+        // The browser only surfaces search references it could build a
+        // search URL for (Google is the default search provider). A blank
+        // query has nothing to show, so leave `url` empty to drop it below.
+        label = item.searchQuery.query.trim();
+        url = label ? item.searchQuery.searchUrl : '';
       }
       if (isWebUrl(url)) {
         references.push({label, url});

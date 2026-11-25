@@ -310,6 +310,13 @@ class SessionServiceBase : public sessions::CommandStorageManagerDelegate,
   // Returns true if changes to tabs in the specified window should be tracked.
   bool ShouldTrackChangesToWindow(SessionID window_id) const;
 
+  // Records a baseline metric when a change is tracked for a window.
+  void RecordTrackedWindowChange(SessionID window_id);
+
+  // Records a metric if a change is dropped for an open browser window that
+  // should be tracked.
+  void RecordUntrackedWindowChange(SessionID window_id);
+
   // Returns true if we track changes to the specified browser.
   bool ShouldTrackBrowser(BrowserWindowInterface* browser) const;
 
@@ -388,6 +395,14 @@ class SessionServiceBase : public sessions::CommandStorageManagerDelegate,
   // Tabs belonging to ephemeral/in-memory Light Tab Containers that must never
   // be persisted across browser restarts (even when pinned).
   base::flat_set<SessionID> ephemeral_tab_ids_;
+
+  // Tracked windows that already emitted a baseline metric since the last
+  // rebuild.
+  base::flat_set<SessionID> tracked_windows_recorded_;
+
+  // Trackable windows that were missing from `windows_tracking_` and already
+  // emitted a metric since the last rebuild.
+  base::flat_set<SessionID> untracked_windows_recorded_;
 
   bool is_saving_enabled_ = true;
 

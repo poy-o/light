@@ -359,14 +359,17 @@ GpuImageDecodeCache::InUseCacheKey::InUseCacheKey(const DrawImage& draw_image,
     : frame_key(draw_image.frame_key()),
       upload_scale_mip_level(mip_level),
       filter_quality(CalculateDesiredFilterQuality(draw_image)),
-      target_color_space(draw_image.target_color_space()) {}
+      target_color_space(draw_image.target_color_space()),
+      preserve_image_precision(
+          draw_image.target_color_params().preserve_image_precision) {}
 
 bool GpuImageDecodeCache::InUseCacheKey::operator==(
     const InUseCacheKey& other) const {
   return frame_key == other.frame_key &&
          upload_scale_mip_level == other.upload_scale_mip_level &&
          filter_quality == other.filter_quality &&
-         target_color_space == other.target_color_space;
+         target_color_space == other.target_color_space &&
+         preserve_image_precision == other.preserve_image_precision;
 }
 
 size_t GpuImageDecodeCache::InUseCacheKeyHash::operator()(
@@ -424,7 +427,7 @@ class GpuImageDecodeTaskImpl : public TileTask {
         devtools_instrumentation::ScopedImageDecodeTask::DecodeType::kGpu,
         ImageDecodeCache::ToScopedTaskType(task_type_),
         ImageDecodeCache::ToScopedImageType(image_type));
-    cache_->DecodeImageInTask(image_, task_type_);
+    cache_->DecodeImageInTask(image_);
   }
 
   // Overridden from TileTask:
@@ -505,10 +508,9 @@ class ImageUploadTaskImpl : public TileTask {
 GpuImageDecodeCache::ImageDataBase::ImageDataBase() = default;
 GpuImageDecodeCache::ImageDataBase::~ImageDataBase() = default;
 
-void GpuImageDecodeCache::ImageDataBase::OnSetLockedData(bool out_of_raster) {
+void GpuImageDecodeCache::ImageDataBase::OnSetLockedData() {
   DCHECK_EQ(usage_stats_.lock_count, 1);
   DCHECK(!is_locked_);
-  usage_stats_.first_lock_out_of_raster = out_of_raster;
   is_locked_ = true;
 }
 
@@ -695,8 +697,7 @@ void GpuImageDecodeCache::DecodedImageData::Unlock() {
 }
 
 void GpuImageDecodeCache::DecodedImageData::SetLockedData(
-    base::span<DecodedAuxImageData, kAuxImageCount> aux_image_data,
-    bool out_of_raster) {
+    base::span<DecodedAuxImageData, kAuxImageCount> aux_image_data) {
   for (size_t i = 0; i < kAuxImageCount; ++i) {
     DCHECK(aux_image_data_[i].IsEmpty());
     aux_image_data[i].ValidateImagesMatchPixmaps();
@@ -708,7 +709,7 @@ void GpuImageDecodeCache::DecodedImageData::SetLockedData(
   for (size_t i = 0; i < kAuxImageCount; ++i) {
     aux_image_data_[i].ValidateImagesMatchPixmaps();
   }
-  OnSetLockedData(out_of_raster);
+  OnSetLockedData();
 }
 
 void GpuImageDecodeCache::DecodedImageData::SetBitmapImage(
@@ -757,25 +758,10 @@ void GpuImageDecodeCache::ImageData::
 }
 
 void GpuImageDecodeCache::DecodedImageData::ResetData() {
-  if (aux_image_data_[kAuxImageIndexDefault].data) {
-    ReportUsageStats();
-  }
   for (auto& aux_image_data : aux_image_data_) {
     aux_image_data.ResetData();
   }
   OnResetData();
-}
-
-void GpuImageDecodeCache::DecodedImageData::ReportUsageStats() const {
-  UMA_HISTOGRAM_ENUMERATION("Renderer4.GpuImageDecodeState",
-                            static_cast<ImageUsageState>(UsageState()),
-                            IMAGE_USAGE_STATE_COUNT);
-  UMA_HISTOGRAM_BOOLEAN("Renderer4.GpuImageDecodeState.FirstLockWasted",
-                        usage_stats_.first_lock_wasted);
-  if (usage_stats_.first_lock_out_of_raster)
-    UMA_HISTOGRAM_BOOLEAN(
-        "Renderer4.GpuImageDecodeState.FirstLockWasted.OutOfRaster",
-        usage_stats_.first_lock_wasted);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -788,7 +774,7 @@ void GpuImageDecodeCache::UploadedImageData::SetTransferCacheId(uint32_t id) {
   DCHECK(!transfer_cache_id_);
 
   transfer_cache_id_ = id;
-  OnSetLockedData(false /* out_of_raster */);
+  OnSetLockedData();
 }
 
 void GpuImageDecodeCache::UploadedImageData::Reset() {
@@ -1179,8 +1165,7 @@ DecodedDrawImage GpuImageDecodeCache::GetDecodedImageForDraw(
 
   // We may or may not need to decode and upload the image we've found, the
   // following functions early-out to if we already decoded.
-  DecodeImageAndGenerateDarkModeFilterIfNecessary(draw_image, image_data,
-                                                  TaskType::kInRaster);
+  DecodeImageAndGenerateDarkModeFilterIfNecessary(draw_image, image_data);
   UploadImageIfNecessary(draw_image, image_data);
   // Unref the image decode, but not the image. The image ref will be released
   // in DrawWithImageFinished.
@@ -1520,8 +1505,7 @@ bool GpuImageDecodeCache::OnMemoryDump(
   return true;
 }
 
-void GpuImageDecodeCache::DecodeImageInTask(const DrawImage& draw_image,
-                                            TaskType task_type) {
+void GpuImageDecodeCache::DecodeImageInTask(const DrawImage& draw_image) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "GpuImageDecodeCache::DecodeImage");
   base::AutoLock lock(lock_);
@@ -1529,8 +1513,7 @@ void GpuImageDecodeCache::DecodeImageInTask(const DrawImage& draw_image,
       draw_image, InUseCacheKeyFromDrawImage(draw_image));
   DCHECK(image_data);
   DCHECK(image_data->is_budgeted) << "Must budget an image for pre-decoding";
-  DecodeImageAndGenerateDarkModeFilterIfNecessary(draw_image, image_data,
-                                                  task_type);
+  DecodeImageAndGenerateDarkModeFilterIfNecessary(draw_image, image_data);
 }
 
 void GpuImageDecodeCache::UploadImageInTask(const DrawImage& draw_image) {
@@ -1549,8 +1532,7 @@ void GpuImageDecodeCache::UploadImageInTask(const DrawImage& draw_image) {
   DCHECK(image_data->is_budgeted) << "Must budget an image for pre-decoding";
 
   if (image_data->is_bitmap_backed)
-    DecodeImageAndGenerateDarkModeFilterIfNecessary(draw_image, image_data,
-                                                    TaskType::kInRaster);
+    DecodeImageAndGenerateDarkModeFilterIfNecessary(draw_image, image_data);
   UploadImageIfNecessary(draw_image, image_data);
 }
 
@@ -1924,13 +1906,11 @@ bool GpuImageDecodeCache::NeedsDarkModeFilter(const DrawImage& draw_image,
 
 void GpuImageDecodeCache::DecodeImageAndGenerateDarkModeFilterIfNecessary(
     const DrawImage& draw_image,
-    ImageData* image_data,
-    TaskType task_type) {
+    ImageData* image_data) {
   // Check if image needs dark mode to be applied, based on this image may be
   // decoded again if decoded data is not available.
   bool needs_dark_mode_filter = NeedsDarkModeFilter(draw_image, image_data);
-  DecodeImageIfNecessary(draw_image, image_data, task_type,
-                         needs_dark_mode_filter);
+  DecodeImageIfNecessary(draw_image, image_data, needs_dark_mode_filter);
   if (needs_dark_mode_filter)
     GenerateDarkModeFilter(draw_image, image_data);
 }
@@ -1938,7 +1918,6 @@ void GpuImageDecodeCache::DecodeImageAndGenerateDarkModeFilterIfNecessary(
 void GpuImageDecodeCache::DecodeImageIfNecessary(
     const DrawImage& draw_image,
     ImageData* image_data,
-    TaskType task_type,
     bool needs_decode_for_dark_mode) {
   DCHECK_GT(image_data->decode.ref_count, 0u);
 
@@ -2079,8 +2058,7 @@ void GpuImageDecodeCache::DecodeImageIfNecessary(
     return;
   }
 
-  image_data->decode.SetLockedData(aux_image_data,
-                                   task_type == TaskType::kOutOfRaster);
+  image_data->decode.SetLockedData(aux_image_data);
 }
 
 void GpuImageDecodeCache::GenerateDarkModeFilter(const DrawImage& draw_image,
@@ -2147,7 +2125,6 @@ void GpuImageDecodeCache::UploadImageIfNecessary(const DrawImage& draw_image,
 
   TRACE_EVENT0("cc", "GpuImageDecodeCache::UploadImage");
   DCHECK(image_data->decode.is_locked());
-  image_data->decode.mark_used();
   DCHECK_GT(image_data->decode.ref_count, 0u);
   DCHECK_GT(image_data->upload.ref_count, 0u);
 
@@ -2436,20 +2413,42 @@ std::tuple<SkImageInfo, int> GpuImageDecodeCache::CreateImageInfoForDrawImage(
   // decode into. Default to using the cache's color type.
   SkColorType color_type = color_type_;
 
+  // Do not reduce the precision of the image if the target requests that
+  // precision be preserved, or if reducing the precision of the image would be
+  // destructive.
+  bool preserve_precision =
+      draw_image.target_color_params().preserve_image_precision ||
+      draw_image.paint_image().DecodeCacheColorConversionIsDestructive();
+
   // The PaintImage will identify that its content is high bit depth by setting
   // its SkColorType to kRGBA_F16_SkColorType. Always decode high bit depth WCG
   // and HDR content as high bit depth, to avoid quantization artifacts.
   // https://crbug.com/1363056: See effects of tone mapping applied to dithered
   // low bit depth images.
-  // https://crbug.com/1266456: Do not attempt to decode non high bit depth
-  // images as high bit depth or they might not appear.
   // https://crbug.com/1076568: See historical discussions.
   const auto image_color_type =
       draw_image.paint_image().GetSkImageInfo(aux_image).colorType();
   if (image_color_type == kRGBA_F16_SkColorType &&
       draw_image.paint_image().GetContentColorUsage() !=
           gfx::ContentColorUsage::kSRGB) {
-    color_type = kRGBA_F16_SkColorType;
+    preserve_precision = true;
+  }
+
+  // The color type that most naturally represents the image.
+  const SkColorType natural_color_type =
+      image_color_type == kRGBA_F16_SkColorType ? kRGBA_F16_SkColorType
+                                                : kN32_SkColorType;
+  const int natural_bpp = SkColorTypeBytesPerPixel(natural_color_type);
+  const int cache_bpp = SkColorTypeBytesPerPixel(color_type_);
+
+  // Never store the image at a higher precision than its natural color type.
+  // https://crbug.com/1266456: Do not attempt to decode non high bit depth
+  // images as high bit depth or they might not appear.
+  // If precision is to be preserved, do not store the image at a lower
+  // precision than its natural color type.
+  if (cache_bpp > natural_bpp ||
+      (preserve_precision && cache_bpp < natural_bpp)) {
+    color_type = natural_color_type;
   }
 
   return {SkImageInfo::Make(mip_size.width(), mip_size.height(), color_type,
@@ -2570,6 +2569,18 @@ bool GpuImageDecodeCache::IsCompatible(const ImageData* image_data,
       image_data->target_color_space == draw_image.target_color_space();
   if (!color_is_compatible)
     return false;
+
+  // The image must not be stored at a lower precision than this draw would
+  // use.
+  const auto& rgba_info = image_data->GetImageInfo(AuxImage::kDefault).rgba;
+  if (rgba_info.has_value()) {
+    const SkImageInfo draw_image_info = std::get<0>(
+        CreateImageInfoForDrawImage(draw_image, AuxImage::kDefault));
+    if (SkColorTypeBytesPerPixel(rgba_info->colorType()) <
+        SkColorTypeBytesPerPixel(draw_image_info.colorType())) {
+      return false;
+    }
+  }
 
   return true;
 }

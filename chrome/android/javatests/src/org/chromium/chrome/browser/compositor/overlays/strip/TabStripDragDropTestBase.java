@@ -9,7 +9,6 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 
 import android.content.ClipDescription;
-import android.content.Intent;
 import android.os.Build;
 import android.view.DragEvent;
 import android.view.View;
@@ -19,7 +18,6 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 
-import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.Token;
 import org.chromium.base.test.util.ApplicationTestUtils;
@@ -32,6 +30,7 @@ import org.chromium.chrome.browser.compositor.overlays.strip.reorder.TabStripDra
 import org.chromium.chrome.browser.dragdrop.ChromeDropDataAndroid;
 import org.chromium.chrome.browser.multiwindow.MultiWindowTestHelper;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
+import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tasks.tab_management.TabDragHandlerBase;
 import org.chromium.chrome.test.transit.ChromeTransitTestRules;
 import org.chromium.chrome.test.transit.FreshCtaTransitTestRule;
@@ -39,6 +38,7 @@ import org.chromium.chrome.test.transit.Journeys;
 import org.chromium.chrome.test.transit.page.CtaPageStation;
 import org.chromium.chrome.test.transit.page.WebPageStation;
 import org.chromium.chrome.test.transit.tab_strip.TabStripFacility;
+import org.chromium.chrome.test.transit.tabmodel.TabsPinnedStatusCondition;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.dragdrop.DragDropGlobalState;
 
@@ -56,6 +56,7 @@ public abstract class TabStripDragDropTestBase {
             ChromeTransitTestRules.freshChromeTabbedActivityRule();
 
     protected CtaPageStation mCurrentStation;
+    protected TabStripFacility<CtaPageStation> mTabStrip;
     protected StripLayoutHelper mStripLayoutHelper;
     protected final List<ChromeTabbedActivity> mDestActivities = new ArrayList<>();
 
@@ -109,23 +110,19 @@ public abstract class TabStripDragDropTestBase {
                             /* isIncognito= */ false,
                             WebPageStation::newBuilder);
         }
-        TabStripFacility<CtaPageStation> sourceTabStrip = mCurrentStation.expectTabStrip();
+        mTabStrip = mCurrentStation.expectTabStrip();
         mStripLayoutHelper =
-                sourceTabStrip.stripLayoutHelperManagerElement.value().getActiveStripLayoutHelper();
+                mTabStrip.stripLayoutHelperManagerElement.value().getActiveStripLayoutHelper();
         return sourceActivity;
     }
 
     protected ChromeTabbedActivity setupDestinationWindow(
             ChromeTabbedActivity sourceActivity, int additionalTabs) {
-        Intent newWindowIntent = MultiWindowTestHelper.createNewWindowIntent(sourceActivity);
         CtaPageStation destStation =
                 mCurrentStation
-                        .runTo(
-                                () ->
-                                        ContextUtils.getApplicationContext()
-                                                .startActivity(newWindowIntent))
-                        .inNewTask()
-                        .arriveAt(CtaPageStation.newGenericBuilder().withEntryPoint().build());
+                        .startActivityTo(
+                                MultiWindowTestHelper.createNewWindowIntent(sourceActivity))
+                        .reach(CtaPageStation.newGenericBuilder().inNewWindow());
         if (additionalTabs > 0) {
             destStation =
                     Journeys.createTabsFast(
@@ -137,8 +134,30 @@ public abstract class TabStripDragDropTestBase {
         mCurrentStation = destStation;
         ChromeTabbedActivity destActivity = destStation.getActivity();
         mDestActivities.add(destActivity);
-        destStation.expectTabStrip();
+        mTabStrip = destStation.expectTabStrip();
         return destActivity;
+    }
+
+    /** Pins the tabs at |indices| in the current window and waits for its strip to settle. */
+    protected void pinTabs(int... indices) {
+        TabModel model = mCurrentStation.getTabModel();
+        List<Integer> tabIds = new ArrayList<>();
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    for (int index : indices) {
+                        tabIds.add(model.getTabAt(index).getId());
+                    }
+                });
+        mCurrentStation
+                .runOnUiThreadTo(
+                        () -> {
+                            for (int tabId : tabIds) {
+                                model.pinTab(tabId, /* showUngroupDialog= */ false);
+                            }
+                        })
+                .waitForAnd(
+                        new TabsPinnedStatusCondition(model, tabIds, /* shouldBePinned= */ true))
+                .reach(mTabStrip.settled());
     }
 
     protected void startSimulatedDrag(

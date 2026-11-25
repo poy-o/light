@@ -8,7 +8,7 @@
 #include <stdint.h>
 
 #include <limits>
-#include <map>
+#include <utility>
 
 #include "base/check_op.h"
 #include "base/containers/heap_array.h"
@@ -18,6 +18,7 @@
 #include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
 #include "build/build_config.h"
+#include "third_party/abseil-cpp/absl/container/flat_hash_map.h"
 #include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkFont.h"
 #include "third_party/skia/include/core/SkTypeface.h"
@@ -32,7 +33,7 @@ namespace {
 class TypefaceData;
 
 // Maps from code points to glyph indices in a font.
-using GlyphCache = std::map<uint32_t, uint16_t>;
+using GlyphCache = absl::flat_hash_map<uint32_t, uint16_t>;
 
 // Wraps a custom user data attached to a hb_font object. Font data provider for
 // HarfBuzz using Skia. Copied from Blink.
@@ -275,11 +276,10 @@ class TypefaceData {
     DCHECK(face_);
   }
 
-  TypefaceData(TypefaceData&& data) {
-    face_ = data.face_;
-    glyphs_ = std::move(data.glyphs_);
-    data.face_ = nullptr;
-  }
+  TypefaceData(TypefaceData&& data)
+      : glyphs_(std::move(data.glyphs_)),
+        face_(std::exchange(data.face_, nullptr)),
+        sk_typeface_(std::move(data.sk_typeface_)) {}
 
   TypefaceData(const TypefaceData&) = delete;
   TypefaceData& operator=(const TypefaceData&) = delete;

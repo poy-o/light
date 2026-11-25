@@ -22,6 +22,7 @@
 #include "base/check_op.h"
 #include "base/containers/flat_set.h"
 #include "base/feature_list.h"
+#include "base/i18n/language_tag.h"
 #include "base/notimplemented.h"
 #include "base/notreached.h"
 #include "base/strings/escape.h"
@@ -258,7 +259,7 @@ AttributeInstance::~AttributeInstance() = default;
 
 std::u16string AttributeInstance::GetInfo(
     std::optional<FieldType> unnormalized_field_type,
-    std::string_view app_locale,
+    const base::i18n::LanguageTag& app_locale,
     base::optional_ref<const AutofillFormatString> format_string) const {
   FieldType field_type = GetNormalizedFieldType(unnormalized_field_type);
   std::optional<AutofillFormatString> compatible_format_string =
@@ -354,7 +355,7 @@ personal_context::proto::TypedValue AttributeInstance::GetTypedValue() const {
 void AttributeInstance::SetInfo(
     std::optional<FieldType> unnormalized_field_type,
     const std::u16string& value,
-    std::string_view app_locale,
+    const base::i18n::LanguageTag& app_locale,
     base::optional_ref<const AutofillFormatString> format_string,
     VerificationStatus status) {
   FieldType field_type = GetNormalizedFieldType(unnormalized_field_type);
@@ -383,8 +384,8 @@ void AttributeInstance::SetInfo(
             if (!name.GetSupportedTypes().contains(field_type)) {
               return;
             }
-            name.SetInfoWithVerificationStatus(field_type, value, app_locale,
-                                               status);
+            name.SetInfoWithVerificationStatus(field_type, value,
+                                               app_locale.tag_string(), status);
           },
           [&](const StateInfo&) { SetRawInfo(field_type, value, status); },
           [&](std::u16string&) { SetRawInfo(field_type, value, status); }},
@@ -487,7 +488,8 @@ std::ostream& operator<<(std::ostream& os,
 
 std::ostream& operator<<(std::ostream& os, const AttributeInstance& a) {
   os << a.type() << ": " << '"'
-     << a.GetInfo(a.type().field_type(), /*app_locale=*/"en-US",
+     << a.GetInfo(a.type().field_type(),
+                  /*app_locale=*/base::i18n::GetKnownLanguageTag("en-US"),
                   /*format_string=*/std::nullopt)
      << '"';
   return os;

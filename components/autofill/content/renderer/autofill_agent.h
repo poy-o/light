@@ -24,13 +24,16 @@
 #include "base/timer/timer.h"
 #include "base/types/optional_ref.h"
 #include "base/types/strong_alias.h"
+#include "build/build_config.h"
 #include "components/autofill/content/common/mojom/autofill_agent.mojom.h"
 #include "components/autofill/content/common/mojom/autofill_driver.mojom.h"
 #include "components/autofill/content/renderer/email_verification_handler.h"
 #include "components/autofill/content/renderer/form_autofill_util.h"
 #include "components/autofill/content/renderer/form_cache.h"
 #include "components/autofill/content/renderer/form_submission_tracker.h"
+#if !BUILDFLAG(IS_ANDROID)
 #include "components/autofill/content/renderer/javascript_autofill_tracker.h"
+#endif
 #include "components/autofill/content/renderer/timing.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/dense_set.h"
@@ -298,7 +301,8 @@ class AutofillAgent : public content::RenderFrameObserver,
   bool IsPrerendering() const;
 
   blink::WebFormControlElement last_queried_element() const {
-    return form_util::GetFormControlByRendererId(last_queried_element_id_);
+    return form_util::GetFormControlByRendererId(GetDocument(),
+                                                 last_queried_element_id_);
   }
 
   FieldDataManager& field_data_manager() const {
@@ -312,9 +316,11 @@ class AutofillAgent : public content::RenderFrameObserver,
   CustomFormControlScriptExecutor* custom_form_control_script_executor();
 
   // Extracts the `FormData` for the form with `form_id` (or the unowned form if
-  // `form_id.is_null()`) in `document`, including any custom form controls
-  // detected by `custom_form_control_script_executor()`.
-  std::optional<FormData> ExtractFormData(const blink::WebDocument& document,
+  // `form_id.is_null()`), including any custom form controls detected by
+  // `custom_form_control_script_executor()`.
+  // TODO(crbug.com/417307428): Remove the `document` parameter once
+  // `features::kAutofillRequireSameDocument` is cleaned up.
+  std::optional<FormData> ExtractFormData(blink::WebDocument document,
                                           FormRendererId form_id,
                                           CallTimerState::CallSite call_site);
 
@@ -417,16 +423,6 @@ class AutofillAgent : public content::RenderFrameObserver,
   void HandleFocusChangeComplete(bool focused_node_was_last_clicked,
                                  const SynchronousFormCache& form_cache);
 
-  // Called when the user has typed in the focused text field and then not typed
-  // for 5 seconds (the field had to be focused for this whole time).
-  // TODO(crbug.com/489659527): The inactivity timer currently only resets on
-  // typing for <input> text fields, and does not consider caret movement as
-  // activity. This is because `ObserveCaret` is only active for
-  // contenteditables and textareas. We could fix this by extending
-  // `ObserveCaret` to all text fields, but that might have performance
-  // implications due to the frequency of selectionchange events.
-  void OnInactivityTimerFired(FieldRendererId field_id);
-
   // Handles scroll offset changes asynchronously because layout may still be
   // updating while the scroll signal is dispatched.
   void DidChangeScrollOffsetImpl();
@@ -476,8 +472,10 @@ class AutofillAgent : public content::RenderFrameObserver,
 
   // Extracts custom form controls in the current document and returns those
   // belonging to `form_id` (or the unowned form if `form_id.is_null()`).
+  // TODO(crbug.com/417307428): Remove the `document` parameter once
+  // `features::kAutofillRequireSameDocument` is cleaned up.
   std::vector<CustomFormControl> ExtractCustomFormControlsForForm(
-      const blink::WebDocument& document,
+      blink::WebDocument document,
       FormRendererId form_id);
 
   // Hides any currently showing Autofill popup.
@@ -491,12 +489,14 @@ class AutofillAgent : public content::RenderFrameObserver,
   void BatchSelectOptionChange(FieldRendererId element_id);
   void BatchDataListOptionChange(FieldRendererId element_id);
 
+#if !BUILDFLAG(IS_ANDROID)
   // Called when a custom JavaScript autofill is detected by
   // `JavaScriptAutofillTracker`.
   void OnJavaScriptAutofillDetected(
       blink::WebFormControlElement trigger_field,
       std::vector<mojom::JavaScriptFieldModificationPtr> field_modifications,
       base::TimeTicks detection_start_timestamp);
+#endif
 
   // Stores immutable configuration this agent was created with. It contains
   // features and settings that are specific to the client using this agent.
@@ -585,9 +585,6 @@ class AutofillAgent : public content::RenderFrameObserver,
   base::OneShotTimer process_forms_after_dynamic_change_timer_;
   base::OneShotTimer process_forms_form_extraction_timer_;
   base::OneShotTimer process_forms_form_extraction_with_response_timer_;
-  // Timer to track inactivity (field editing started and then stopped without
-  // losing focus) for triggering the autosuggest nudge.
-  base::OneShotTimer inactivity_timer_;
 
   // True iff DidDispatchDOMContentLoadedEvent() fired since the last
   // navigation.
@@ -653,9 +650,11 @@ class AutofillAgent : public content::RenderFrameObserver,
 
   EmailVerificationHandler email_verification_handler_;
 
+#if !BUILDFLAG(IS_ANDROID)
   // Tracks when an autofill operation is performed on a form via JavaScript,
   // and not via regular Chrome Autofill.
   JavaScriptAutofillTracker javascript_autofill_tracker_;
+#endif
 
   base::ScopedClosureRunner form_element_intersection_observer_;
 

@@ -210,7 +210,7 @@ bool BrowserNavigatorTest::OpenPOSTURLInNewForegroundTabAndGetTitle(
 BrowserWindowInterface* BrowserNavigatorTest::CreateEmptyBrowserForType(
     BrowserWindowInterface::Type type,
     Profile* profile) {
-  BrowserWindowInterface* browser = CreateBrowserWindow(
+  BrowserWindowInterface* browser = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(type, profile, /*from_user_gesture=*/true));
   chrome::AddTabAt(browser, GURL(), -1, true);
   return browser;
@@ -2432,6 +2432,41 @@ IN_PROC_BROWSER_TEST_P(BrowserNavigatorPictureInPictureTest,
       params.browser));
   EXPECT_NE(BrowserInitState::From(params.browser)->create_params().app_name,
             std::string());
+}
+
+IN_PROC_BROWSER_TEST_P(
+    BrowserNavigatorPictureInPictureTest,
+    Disposition_PictureInPicture_DisallowedWhenIncognitoForced) {
+  auto pip_options = blink::mojom::PictureInPictureWindowOptions::New();
+  WebContents::CreateParams web_contents_params(browser()->GetProfile());
+  web_contents_params.picture_in_picture_options = *pip_options;
+
+  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  ASSERT_TRUE(https_server.Start());
+  WebContents* tab = browser()->GetTabStripModel()->GetActiveWebContents();
+  const GURL url = https_server.GetURL("/simple.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+
+  IncognitoModePrefs::SetAvailability(
+      browser()->GetProfile()->GetPrefs(),
+      policy::IncognitoModeAvailability::kForced);
+
+  NavigateParams params = MakeNavigateParams(browser());
+  params.disposition = ui::mojom::WindowOpenDisposition::kNewPictureInPicture;
+  params.source_contents = tab;
+  params.contents_to_insert = WebContents::Create(web_contents_params);
+  WebContents* child = params.contents_to_insert.get();
+  const size_t browser_count =
+      GlobalBrowserCollection::GetInstance()->GetSize();
+
+  EXPECT_EQ(nullptr, Navigate(&params));
+  EXPECT_EQ(nullptr, params.browser);
+  EXPECT_EQ(nullptr, params.navigated_or_inserted_contents);
+  EXPECT_EQ(child, params.contents_to_insert.get());
+  EXPECT_EQ(browser_count, GlobalBrowserCollection::GetInstance()->GetSize());
+  auto* manager = PictureInPictureWindowManager::GetInstance();
+  EXPECT_EQ(nullptr, manager->GetWebContents());
+  EXPECT_EQ(nullptr, manager->GetChildWebContents());
 }
 
 #if !BUILDFLAG(IS_CHROMEOS)

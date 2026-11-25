@@ -959,7 +959,6 @@ bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
     draw_timer.emplace();
     overlay_processor_->SetFrameSequenceNumber(frame_sequence_number_);
     overlay_processor_->SetIsPageFullscreen(frame.page_fullscreen_mode);
-    renderer_->SetIsPageFullscreen(frame.page_fullscreen_mode);
     renderer_->DrawFrame(&frame.render_pass_list, device_scale_factor_,
                          current_surface_size, display_color_spaces_,
                          std::move(frame.surface_damage_rect_list_),
@@ -1461,6 +1460,12 @@ void Display::SetFrameIntervalOnOutputSurface(
 
 base::ScopedClosureRunner Display::GetCacheBackBufferCb() {
   return output_surface_->GetCacheBackBufferCb();
+}
+#endif
+
+#if BUILDFLAG(IS_MAC)
+void Display::SetVSyncDisplayID(int64_t display_id, bool force_update) {
+  output_surface_->SetVSyncDisplayID(display_id, force_update);
 }
 #endif
 

@@ -123,6 +123,7 @@ robolectric_library("junit") {
     "//chrome/browser/ui/android/theme:java",
     "//chrome/browser/ui/android/toolbar:core_java",
     "//chrome/browser/ui/android/toolbar:java_resources",
+    "//chrome/browser/ui/browser_window/public/android:browser_window_interface_java",
     "//chrome/browser/ui/browser_window/public/android:java",
     "//chrome/test/android:chrome_java_unit_test_support",
     "//components/browser_ui/styles/android:java",
@@ -192,6 +193,7 @@ android_library("javatests") {
     "//third_party/hamcrest:hamcrest_core_java",
     "//third_party/hamcrest:hamcrest_library_java",
     "//third_party/junit",
+    "//ui/android:ui_android_features_java",
     "//ui/android:ui_java",
     "//ui/android:ui_java_test_support",
   ]

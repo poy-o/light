@@ -9,9 +9,12 @@
 
 #include <memory>
 #include <optional>
+#include <set>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
+#include "chrome/browser/tabmodel/jni_headers/SplitTabData_shared_jni.h"
+#include "components/split_tabs/split_tab_id.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "third_party/jni_zero/jni_zero.h"
 
@@ -19,12 +22,11 @@ class Profile;
 class TabAndroid;
 class TabGroup;
 
-namespace base {
-class Token;
-}  // namespace base
+namespace split_tabs {
+class SplitTabVisualData;
+}  // namespace split_tabs
 
 namespace tab_groups {
-class TabGroupId;
 class TabGroupVisualData;
 }  // namespace tab_groups
 
@@ -47,15 +49,16 @@ class TabCollectionTabModelImpl {
 
   // Moves a tab updating its group or pinned state if applicable. Returns the
   // final index of the tab.
-  int MoveTabRecursive(size_t current_index,
-                       size_t new_index,
-                       const std::optional<base::Token>& j_new_tab_group_id,
-                       bool new_is_pinned);
+  int MoveTabRecursive(
+      size_t current_index,
+      size_t new_index,
+      const std::optional<tab_groups::TabGroupId>& new_tab_group_id,
+      bool new_is_pinned);
 
   // Adds a tab to the tab model. Returns the final index of the tab.
   int AddTabRecursive(TabAndroid* tab,
                       size_t index,
-                      const std::optional<base::Token>& j_tab_group_id,
+                      const std::optional<tab_groups::TabGroupId>& tab_group_id,
                       bool is_attaching_group,
                       bool is_pinned);
 
@@ -63,7 +66,7 @@ class TabCollectionTabModelImpl {
   void RemoveTab(TabAndroid* tab);
 
   // Create tab group.
-  void CreateTabGroup(const base::Token& tab_group_id,
+  void CreateTabGroup(const tab_groups::TabGroupId& tab_group_id,
                       const std::u16string& tab_group_title,
                       int32_t j_color_id,
                       bool is_collapsed);
@@ -93,7 +96,7 @@ class TabCollectionTabModelImpl {
   // Returns the index of a tab within its group. Returns -1 if tab is not in a
   // group or not found.
   int GetIndexOfTabInGroup(TabAndroid* tab,
-                           const base::Token& tab_group_id) const;
+                           const tab_groups::TabGroupId& tab_group_id) const;
 
   // Update tab group visual data.
   void UpdateTabGroupVisualData(
@@ -109,10 +112,10 @@ class TabCollectionTabModelImpl {
   bool GetTabGroupCollapsed(const tab_groups::TabGroupId& tab_group_id) const;
 
   // Checks if a detached tab group exists.
-  bool DetachedTabGroupExists(const base::Token& tab_group_id) const;
+  bool DetachedTabGroupExists(const tab_groups::TabGroupId& tab_group_id) const;
 
   // Closes a detached tab group.
-  void CloseDetachedTabGroup(const base::Token& tab_group_id);
+  void CloseDetachedTabGroup(const tab_groups::TabGroupId& tab_group_id);
 
   // Gets a list of all tabs.
   std::vector<TabAndroid*> GetAllTabs() const;
@@ -124,17 +127,36 @@ class TabCollectionTabModelImpl {
   std::vector<TabAndroid*> GetRepresentativeTabList() const;
 
   // Sets the last shown tab for a group.
-  void SetLastShownTabForGroup(const base::Token& tab_group_id,
+  void SetLastShownTabForGroup(const tab_groups::TabGroupId& tab_group_id,
                                TabAndroid* tab_android);
 
   // Gets the last shown tab for a group.
-  TabAndroid* GetLastShownTabForGroup(const base::Token& tab_group_id) const;
+  TabAndroid* GetLastShownTabForGroup(
+      const tab_groups::TabGroupId& tab_group_id) const;
 
   // Returns the index of the first non-pinned tab.
   int GetIndexOfFirstNonPinnedTab() const;
 
   // Returns the TabStripCollection associated with this TabModel.
   jni_zero::JniRawPtr<tabs::TabStripCollection> GetTabStripCollection();
+
+  // Pairs `tabs` into a new Split View. All tabs must belong to the same
+  // parent collection.
+  void CreateSplit(const split_tabs::SplitTabId& split_id,
+                   const std::vector<TabInterface*>& tabs,
+                   split_tabs::SplitTabVisualData visual_data);
+
+  // Separates the Split View with `split_id`, keeping its tabs in place. No-op
+  // if `split_id` does not exist in this TabModel.
+  void Unsplit(split_tabs::SplitTabId split_id);
+
+  // Returns the Java SplitTabData for `split_id`, or nullptr if not found.
+  jni_zero::ScopedJavaLocalRef<JSplitTabData> GetSplitTabData(
+      JNIEnv* env,
+      const split_tabs::SplitTabId& split_id) const;
+
+  // Returns the set of SplitTabIds in this TabModel.
+  std::set<split_tabs::SplitTabId> ListSplits() const;
 
  private:
   // Returns a safe index for adding or moving a tab or tab group.

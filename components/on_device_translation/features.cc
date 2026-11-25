@@ -37,7 +37,21 @@ const base::FeatureParam<base::TimeDelta> kTranslationAPIServiceIdleTimeout{
     base::Minutes(1)};
 
 const base::FeatureParam<size_t> kTranslationAPIMaxServiceCount{
-    &blink::features::kTranslationAPI, "TranslationAPIMaxServiceCount", 10};
+    &blink::features::kTranslationAPI, "TranslationAPIMaxServiceCount",
+#if BUILDFLAG(IS_ANDROID)
+    // Each service is a separate sandboxed process that holds about 79 to 84
+    // MiB per loaded language pair.
+    2
+#else
+    10
+#endif  // BUILDFLAG(IS_ANDROID)
+};
+
+// Require 5 GiB of free disk space by default before starting a new language
+// pack download across all platforms.
+const base::FeatureParam<size_t> kTranslationAPILanguagePackMinFreeDiskSpaceMB{
+    &blink::features::kTranslationAPI,
+    "TranslationAPILanguagePackMinFreeDiskSpaceMB", 5120};
 
 const base::FeatureParam<base::TimeDelta> kTranslationAPIModelIdleUnloadTimeout{
     &blink::features::kTranslationAPI, "TranslationAPIModelIdleUnloadTimeout",
@@ -62,6 +76,31 @@ const base::FeatureParam<int> kTranslationAPIMaxInputSizeBytes{
     0
 #endif  // BUILDFLAG(IS_ANDROID)
 };
+
+const base::FeatureParam<size_t> kTranslationAPIMinPhysicalMemoryMB{
+    &blink::features::kTranslationAPI, "TranslationAPIMinPhysicalMemoryMB",
+#if BUILDFLAG(IS_ANDROID)
+    // Leaves out devices with 2 GB of RAM or less, which report less than
+    // 2048 MB. That includes Android Go devices.
+    2048
+#else
+    0
+#endif  // BUILDFLAG(IS_ANDROID)
+};
+
+const base::FeatureParam<int> kTranslationAPIMaxInstalledLanguagePacks{
+    &blink::features::kTranslationAPI,
+    "TranslationAPIMaxInstalledLanguagePacks",
+#if BUILDFLAG(IS_ANDROID)
+    // Each unpacked language pack uses about 80 MiB on disk.
+    3
+#else
+    0
+#endif  // BUILDFLAG(IS_ANDROID)
+};
+
+BASE_FEATURE(kTranslationAPIBlockDownloadsOnMeteredNetwork,
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kAutoDownloadTranslateLanguagePacks,
              base::FEATURE_DISABLED_BY_DEFAULT);

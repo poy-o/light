@@ -2279,10 +2279,13 @@ void URLLoader::DispatchOnRawRequest(
   // url_request_->isolation_info().site_for_cookies() instead of
   // url_request_->site_for_cookies().
   std::optional<net::CookiePartitionKey> partition_key =
-      net::CookiePartitionKey::FromNetworkIsolationKey(
-          url_request_->isolation_info().network_isolation_key(),
-          url_request_->site_for_cookies(), request_site,
-          is_main_frame_navigation);
+      url_request_->cookie_setting_overrides().Has(
+          net::CookieSettingOverride::kForceDisablePartitionedCookies)
+          ? std::nullopt
+          : net::CookiePartitionKey::FromNetworkIsolationKey(
+                url_request_->isolation_info().network_isolation_key(),
+                url_request_->site_for_cookies(), request_site,
+                is_main_frame_navigation);
   std::optional<bool> site_has_cookie_in_other_partition;
   if (partition_key.has_value()) {
     site_has_cookie_in_other_partition =
@@ -2367,7 +2370,11 @@ void URLLoader::DispatchOnRawResponse() {
       std::move(header_array), raw_response_headers,
       local_network_access_interceptor_.ResponseAddressSpace().value_or(
           mojom::IPAddressSpace::kUnknown),
-      response_headers->response_code(), url_request_->cookie_partition_key());
+      response_headers->response_code(),
+      url_request_->cookie_setting_overrides().Has(
+          net::CookieSettingOverride::kForceDisablePartitionedCookies)
+          ? std::nullopt
+          : url_request_->cookie_partition_key());
 }
 
 void URLLoader::SendUploadProgress(const net::UploadProgress& progress) {
@@ -2495,8 +2502,7 @@ URLLoader::BlockResponseForOrbResult URLLoader::BlockResponseForOrb() {
           : net::ERR_BLOCKED_BY_ORB;
 
   // Send empty body to the real URLLoaderClient. This preserves "ORB v0.1"
-  // behaviour and will also go away once
-  // OpaqueResponseBlockingErrorsForAllFetches is perma-enabled.
+  // behaviour.
   if (blocked_error_code == net::OK) {
     mojo::ScopedDataPipeProducerHandle producer_handle;
     mojo::ScopedDataPipeConsumerHandle consumer_handle;
@@ -2625,43 +2631,24 @@ bool URLLoader::ShouldSendTransferSizeUpdated() const {
 
 bool URLLoader::ShouldSetLoadWithStorageAccess() const {
   CHECK(url_request_);
-  if (!IncludesValidLoadField(url_request_->response_headers())) {
+  if (!is_storage_access_potentially_allowed_ ||
+      !IncludesValidLoadField(url_request_->response_headers())) {
     return false;
   }
-
-  auto determine_storage_access_load_outcome =
-      [&]() -> net::cookie_util::ActivateStorageAccessLoadOutcome {
-    if (!is_storage_access_potentially_allowed_) {
-      return net::cookie_util::ActivateStorageAccessLoadOutcome::
-          kFailureInvalidStatus;
-    }
-    if (!url_request_->storage_access_status().IsSet()) {
-      url_request_->set_storage_access_status(
-          url_request_->CalculateStorageAccessStatus());
-    }
-    if (!url_request_->storage_access_status()
-             .GetStatusForThirdPartyContext()) {
-      return net::cookie_util::ActivateStorageAccessLoadOutcome::
-          kFailureInvalidStatus;
-    }
-    switch (url_request_->storage_access_status()
-                .GetStatusForThirdPartyContext()
-                .value()) {
-      case net::cookie_util::StorageAccessStatus::kNone:
-        return net::cookie_util::ActivateStorageAccessLoadOutcome::
-            kFailureInvalidStatus;
-      case net::cookie_util::StorageAccessStatus::kInactive:
-      case net::cookie_util::StorageAccessStatus::kActive:
-        return net::cookie_util::ActivateStorageAccessLoadOutcome::kSuccess;
-    }
-    NOTREACHED();
-  };
-
-  auto outcome = determine_storage_access_load_outcome();
-  base::UmaHistogramEnumeration(
-      "API.StorageAccessHeader.ActivateStorageAccessLoadOutcome", outcome);
-  return outcome ==
-         net::cookie_util::ActivateStorageAccessLoadOutcome::kSuccess;
+  if (!url_request_->storage_access_status().IsSet()) {
+    url_request_->set_storage_access_status(
+        url_request_->CalculateStorageAccessStatus());
+  }
+  switch (url_request_->storage_access_status()
+              .GetStatusForThirdPartyContext()
+              .value_or(net::cookie_util::StorageAccessStatus::kNone)) {
+    case net::cookie_util::StorageAccessStatus::kNone:
+      return false;
+    case net::cookie_util::StorageAccessStatus::kInactive:
+    case net::cookie_util::StorageAccessStatus::kActive:
+      return true;
+  }
+  NOTREACHED();
 }
 
 const mojom::ClientSecurityState* URLLoader::GetClientSecurityState() {

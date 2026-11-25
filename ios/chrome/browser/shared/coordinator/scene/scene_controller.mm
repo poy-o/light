@@ -154,6 +154,7 @@
 #import "ios/chrome/browser/shared/public/commands/search_image_with_lens_command.h"
 #import "ios/chrome/browser/shared/public/commands/show_signin_command.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
+#import "ios/chrome/browser/shared/public/commands/voice_search_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
@@ -571,9 +572,9 @@ UrlLoadParams UpdateParamsForDinoGame(UrlLoadParams params) {
   switch (action) {
     case START_VOICE_SEARCH:
       return ^{
-        id<BrowserCoordinatorCommands> handler = HandlerForProtocol(
+        id<VoiceSearchCommands> handler = HandlerForProtocol(
             weakSelf.currentInterface.browser->GetCommandDispatcher(),
-            BrowserCoordinatorCommands);
+            VoiceSearchCommands);
         [handler startVoiceSearch];
       };
     case START_QR_CODE_SCANNER:
@@ -764,6 +765,8 @@ UrlLoadParams UpdateParamsForDinoGame(UrlLoadParams params) {
     }
   }
 
+  // TODO(crbug.com/493816082): Adapt for the new startup flow, where
+  // `self.startupParameters` is always nil.
   BOOL forceNewTabForIntentSearch =
       base::FeatureList::IsEnabled(kForceNewTabForIntentSearch) &&
       (self.startupParameters.postOpeningAction == FOCUS_OMNIBOX);
@@ -855,6 +858,16 @@ UrlLoadParams UpdateParamsForDinoGame(UrlLoadParams params) {
   }
 }
 
+// Returns whether the scene was opened with an external intent. In the new
+// startup flow, `self.startupParameters` is never set, so `SceneState` tells
+// it.
+- (BOOL)hasExternalIntent {
+  if (IsEnableNewStartupFlowEnabled()) {
+    return self.sceneState.startupHadExternalIntent;
+  }
+  return self.startupParameters != nil;
+}
+
 - (BOOL)shouldOpenNTPTabOnActivationOfBrowser:(Browser*)browser {
   // Check if there are pending actions that would result in opening a new tab.
   // In that case, it is not useful to open another tab.
@@ -865,7 +878,7 @@ UrlLoadParams UpdateParamsForDinoGame(UrlLoadParams params) {
     }
   }
 
-  if (self.startupParameters) {
+  if ([self hasExternalIntent]) {
     return NO;
   }
 
@@ -978,16 +991,21 @@ UrlLoadParams UpdateParamsForDinoGame(UrlLoadParams params) {
   WrangledBrowser* targetInterface = targetMode == ApplicationMode::NORMAL
                                          ? self.mainInterface
                                          : self.incognitoInterface;
-  AppStartupParameters* startupParameters = self.startupParameters;
-  _imageSearchData = [startupParameters imageSearchData];
-  if (startupParameters && startupParameters.remoteActorRequest) {
-    _remoteActorRequest = startupParameters.remoteActorRequest;
-  } else {
-    _remoteActorRequest.reset();
+  ProceduralBlock startupCompletion = nil;
+  // Only the legacy startup flow sets `self.startupParameters`. The new startup
+  // flow handles image searches, Remote Actor requests and post-opening actions
+  // in its task requests, which pass them in `completion`.
+  if (!IsEnableNewStartupFlowEnabled()) {
+    AppStartupParameters* startupParameters = self.startupParameters;
+    _imageSearchData = [startupParameters imageSearchData];
+    if (startupParameters && startupParameters.remoteActorRequest) {
+      _remoteActorRequest = startupParameters.remoteActorRequest;
+    } else {
+      _remoteActorRequest.reset();
+    }
+    startupCompletion = [self
+        completionBlockForTriggeringAction:startupParameters.postOpeningAction];
   }
-  ProceduralBlock startupCompletion =
-      [self completionBlockForTriggeringAction:[self.startupParameters
-                                                       postOpeningAction]];
 
   ProceduralBlock tabOpenedCompletion = nil;
   if (startupCompletion && completion) {
@@ -1022,6 +1040,8 @@ UrlLoadParams UpdateParamsForDinoGame(UrlLoadParams params) {
       // Voice search, QRScanner, Lens, and the omnibox are presented by the
       // BVC. They must be started after the BVC view is added in the
       // hierarchy.
+      // TODO(crbug.com/493816082): Adapt for the new startup flow, where
+      // `self.startupParameters` is always nil.
       self.NTPActionAfterTabSwitcherDismissal =
           [self.startupParameters postOpeningAction];
       [self setStartupParameters:nil];
@@ -1856,7 +1876,7 @@ UrlLoadParams UpdateParamsForDinoGame(UrlLoadParams params) {
     return NO;
   }
   // Don't show promos if the app was launched from a URL.
-  if (self.startupParameters) {
+  if ([self hasExternalIntent]) {
     return NO;
   }
   // Don't show the promo if the window is not active.
@@ -2143,25 +2163,17 @@ UrlLoadParams UpdateParamsForDinoGame(UrlLoadParams params) {
 }
 
 // Dismisses modal dialogs via the scene handler and optionally dismisses the
-// omnibox and Gemini.
+// omnibox and controls Gemini dismissal.
 - (void)dismissModalDialogsWithCompletion:(ProceduralBlock)completion
                            dismissOmnibox:(BOOL)dismissOmnibox
-                            dismissGemini:(BOOL)dismissGemini {
+                  geminiDismissalBehavior:
+                      (GeminiDismissalBehavior)geminiDismissalBehavior {
   id<SceneCommands> sceneHandler = HandlerForProtocol(
       self.currentBrowserForURLLoading->GetCommandDispatcher(), SceneCommands);
   [sceneHandler dismissModalDialogsWithCompletion:completion
                                    dismissOmnibox:dismissOmnibox
                                  dismissSnackbars:YES
-                                    dismissGemini:dismissGemini];
-}
-
-// Dismisses modal dialogs via the scene handler and optionally dismisses the
-// omnibox.
-- (void)dismissModalDialogsWithCompletion:(ProceduralBlock)completion
-                           dismissOmnibox:(BOOL)dismissOmnibox {
-  [self dismissModalDialogsWithCompletion:completion
-                           dismissOmnibox:dismissOmnibox
-                            dismissGemini:YES];
+                          geminiDismissalBehavior:geminiDismissalBehavior];
 }
 
 // Begins the process of activating the given current model, switching which BVC
@@ -2224,6 +2236,7 @@ UrlLoadParams UpdateParamsForDinoGame(UrlLoadParams params) {
   }
 }
 
+// LINT.IfChange(ShareExtensionLensImageSearch)
 // Starts a lens search for share extension.
 - (void)searchShareExtensionImageWithLens {
   CHECK(_imageSearchData);
@@ -2262,6 +2275,7 @@ UrlLoadParams UpdateParamsForDinoGame(UrlLoadParams params) {
          entryPoint:LensEntrypoint::ContextMenu];
   [lensHandler searchImageWithLens:command];
 }
+// LINT.ThenChange(//ios/chrome/app/task_request_for_xcallback_url_context.mm:ShareExtensionLensImageSearch)
 
 - (void)startQRCodeScanner {
   if (!self.currentInterface.browser) {
@@ -2491,7 +2505,8 @@ UrlLoadParams UpdateParamsForDinoGame(UrlLoadParams params) {
     dismissOmnibox = YES;
   }
 
-  BOOL dismissGemini = YES;
+  GeminiDismissalBehavior geminiDismissalBehavior =
+      GeminiDismissalBehavior::kDefault;
   if (targetMode != ApplicationModeForTabOpening::INCOGNITO) {
     // TODO(crbug.com/493816082): Avoid reading `self.startupParameters` when
     // `kEnableNewStartupFlow` is enabled.
@@ -2499,13 +2514,12 @@ UrlLoadParams UpdateParamsForDinoGame(UrlLoadParams params) {
         self.startupParameters.postOpeningAction;
     if (postOpeningAction == START_GEMINI_AI_SUMMARIZATION ||
         postOpeningAction == TRIGGER_GEMINI_PROMO) {
-      dismissGemini = NO;
+      geminiDismissalBehavior = GeminiDismissalBehavior::kNone;
     }
   }
-
   [self dismissModalDialogsWithCompletion:dismissModalsCompletion
                            dismissOmnibox:dismissOmnibox
-                            dismissGemini:dismissGemini];
+                  geminiDismissalBehavior:geminiDismissalBehavior];
 }
 
 - (void)dismissModalsAndOpenMultipleTabsWithURLs:(const std::vector<GURL>&)URLs
@@ -2532,7 +2546,8 @@ UrlLoadParams UpdateParamsForDinoGame(UrlLoadParams params) {
                            inIncognitoMode:incognitoMode
                                 completion:completion];
       }
-                         dismissOmnibox:dismissOmnibox];
+                         dismissOmnibox:dismissOmnibox
+                geminiDismissalBehavior:GeminiDismissalBehavior::kDefault];
 }
 
 // Note that the current tab of `browserCoordinator`'s BVC will normally be

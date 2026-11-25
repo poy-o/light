@@ -16,6 +16,7 @@
 #include "base/test/bind.h"
 #include "base/test/run_until.h"
 #include "base/test/task_environment.h"
+#include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/x/x11_pointer_grab.h"
@@ -205,6 +206,67 @@ TEST_F(X11WindowOzoneTest, SendPlatformEventToCapturedWindow) {
   EXPECT_TRUE(event.get());
   EXPECT_EQ(EventType::kMousePressed, event->type());
   EXPECT_EQ(gfx::Point(-277, 215), event->AsLocatedEvent()->location());
+}
+
+// XInput 2.4 touchpad pinch events must be dispatched as touchpad pinch
+// gestures whose scale is relative to the previous update.
+TEST_F(X11WindowOzoneTest, TouchpadPinch) {
+  MockPlatformWindowDelegate delegate;
+  gfx::AcceleratedWidget widget;
+  auto window = CreatePlatformWindow(&delegate, gfx::Rect(30, 80, 800, 600),
+                                     &widget, nullptr);
+
+  std::vector<std::pair<EventType, float>> received;
+  EXPECT_CALL(delegate, DispatchEvent(_)).WillRepeatedly([&](Event* event) {
+    ASSERT_TRUE(event->IsGestureEvent());
+    auto* gesture = event->AsGestureEvent();
+    EXPECT_EQ(GestureDeviceType::DEVICE_TOUCHPAD,
+              gesture->details().device_type());
+    EXPECT_EQ(gfx::PointF(100, 50), gesture->location_f());
+    received.emplace_back(gesture->type(),
+                          gesture->type() == EventType::kGesturePinchUpdate
+                              ? gesture->details().scale()
+                              : 0.0f);
+  });
+
+  // XInput 2 sends coordinates and the pinch scale as FP1616 (16.16 fixed
+  // point) values, as it does for all XI2 device and gesture events.
+  auto to_fp1616 = [](double value) {
+    return static_cast<x11::Input::Fp1616>(value * (1 << 16));
+  };
+  auto dispatch_pinch = [&](x11::Input::GesturePinchEvent::Opcode opcode,
+                            uint16_t source_id, double scale) {
+    x11::Input::GesturePinchEvent pinch{
+        .opcode = opcode,
+        .event = static_cast<x11::Window>(widget),
+        .event_x = to_fp1616(100),
+        .event_y = to_fp1616(50),
+        .scale = to_fp1616(scale),
+        .sourceid = static_cast<x11::Input::DeviceId>(source_id),
+    };
+    x11::Connection::Get()->DispatchEvent(x11::Event(false, std::move(pinch)));
+  };
+  // Pinches on two touchpads overlap and must be tracked separately.
+  dispatch_pinch(x11::Input::GesturePinchEvent::Begin, 2, 1.0);
+  dispatch_pinch(x11::Input::GesturePinchEvent::Update, 2, 2.0);
+  dispatch_pinch(x11::Input::GesturePinchEvent::Begin, 3, 1.0);
+  dispatch_pinch(x11::Input::GesturePinchEvent::Update, 3, 0.5);
+  dispatch_pinch(x11::Input::GesturePinchEvent::Update, 2, 3.0);
+  dispatch_pinch(x11::Input::GesturePinchEvent::End, 2, 3.0);
+  dispatch_pinch(x11::Input::GesturePinchEvent::End, 3, 0.5);
+
+  EXPECT_EQ((std::vector<std::pair<EventType, float>>{
+                {EventType::kGesturePinchBegin, 0.0f},
+                {EventType::kGesturePinchUpdate, 2.0f},
+                {EventType::kGesturePinchBegin, 0.0f},
+                {EventType::kGesturePinchUpdate, 0.5f},
+                {EventType::kGesturePinchUpdate, 1.5f},
+                {EventType::kGesturePinchEnd, 0.0f},
+                {EventType::kGesturePinchEnd, 0.0f},
+            }),
+            received);
+
+  EXPECT_CALL(delegate, OnClosed()).Times(1);
 }
 
 // This test case ensures window_manager properly provides X11Window instances
@@ -420,6 +482,166 @@ TEST_F(X11WindowOzoneTest, NoFrameExtentsWhenDecorationInsetsUnsupported) {
   EXPECT_FALSE(GetRawBytesOfProperty(
       static_cast<x11::Window>(widget),
       x11::Connection::Get()->GetAtom("_GTK_FRAME_EXTENTS"), &data, &type));
+}
+
+#if !BUILDFLAG(IS_CHROMEOS)
+TEST_F(X11WindowOzoneTest, ActivateSetsRequestorCurrentlyActiveWindow) {
+  auto* connection = x11::Connection::Get();
+  ASSERT_TRUE(
+      connection->WmSupportsHint(connection->GetAtom("_NET_ACTIVE_WINDOW")));
+  ASSERT_NE(GuessWindowManager(), WM_WMII);
+
+  x11::Connection observer;
+  ASSERT_TRUE(observer.Ready());
+  auto root_events = observer.ScopedSelectEvent(
+      observer.default_root(), x11::EventMask::SubstructureNotify);
+  observer.Sync();
+
+  auto take_active_window_message =
+      [&](x11::Window target_window) -> std::optional<x11::ClientMessageEvent> {
+    connection->Sync();
+    observer.Sync();
+    observer.ReadResponses();
+    const x11::Atom net_active_window = observer.GetAtom("_NET_ACTIVE_WINDOW");
+    std::optional<x11::ClientMessageEvent> found;
+    for (const auto& ev : observer.events()) {
+      if (const auto* msg = ev.As<x11::ClientMessageEvent>();
+          msg && msg->type == net_active_window &&
+          msg->window == target_window) {
+        found = *msg;
+      }
+    }
+    observer.events().clear();
+    return found;
+  };
+
+  auto dispatch_focus = [&](x11::Window target_window, bool focus_in) {
+    x11::FocusEvent focus_event{
+        .opcode = focus_in ? x11::FocusEvent::In : x11::FocusEvent::Out,
+        .detail = x11::NotifyDetail::Nonlinear,
+        .event = target_window,
+        .mode = x11::NotifyMode::Normal,
+    };
+    connection->DispatchEvent(x11::Event(false, focus_event));
+  };
+
+  testing::NiceMock<MockPlatformWindowDelegate> delegate_1;
+  gfx::AcceleratedWidget widget_1;
+  auto window_1 = CreatePlatformWindow(&delegate_1, gfx::Rect(0, 0, 100, 100),
+                                       &widget_1, nullptr);
+  const auto xwindow_1 = static_cast<x11::Window>(widget_1);
+
+  testing::NiceMock<MockPlatformWindowDelegate> delegate_2;
+  gfx::AcceleratedWidget widget_2;
+  auto window_2 = CreatePlatformWindow(&delegate_2, gfx::Rect(200, 0, 100, 100),
+                                       &widget_2, nullptr);
+  const auto xwindow_2 = static_cast<x11::Window>(widget_2);
+
+  window_1->Show(/*inactive=*/true);
+  window_2->Show(/*inactive=*/true);
+  connection->DispatchAll();
+  dispatch_focus(xwindow_1, false);
+  dispatch_focus(xwindow_2, false);
+  observer.events().clear();
+
+  // With no active window, data[2] must be 0 (x11::Window::None).
+  window_2->Activate();
+  auto msg = take_active_window_message(xwindow_2);
+  ASSERT_TRUE(msg.has_value());
+  EXPECT_EQ(msg->data.data32[0], 1u);
+  EXPECT_EQ(msg->data.data32[2], 0u);
+
+  // With `window_1` active, activating `window_2` must pass `window_1` in
+  // data[2].
+  connection->DispatchAll();
+  dispatch_focus(xwindow_2, false);
+  dispatch_focus(xwindow_1, true);
+  ASSERT_TRUE(static_cast<X11Window*>(window_1.get())->IsActive());
+  ASSERT_FALSE(static_cast<X11Window*>(window_2.get())->IsActive());
+  observer.events().clear();
+
+  window_2->Activate();
+  msg = take_active_window_message(xwindow_2);
+  ASSERT_TRUE(msg.has_value());
+  EXPECT_EQ(msg->data.data32[0], 1u);
+  EXPECT_EQ(msg->data.data32[2], static_cast<uint32_t>(xwindow_1));
+
+  // Deactivating `window_1` before re-activating it must not report `window_1`
+  // as already active even while `has_window_focus_` has not yet cleared.
+  connection->DispatchAll();
+  dispatch_focus(xwindow_2, false);
+  dispatch_focus(xwindow_1, true);
+  window_1->Deactivate();
+  ASSERT_FALSE(static_cast<X11Window*>(window_1.get())->IsActive());
+  observer.events().clear();
+
+  window_1->Activate();
+  msg = take_active_window_message(xwindow_1);
+  ASSERT_TRUE(msg.has_value());
+  EXPECT_EQ(msg->data.data32[0], 1u);
+  EXPECT_EQ(msg->data.data32[2], 0u);
+}
+#endif  // !BUILDFLAG(IS_CHROMEOS)
+
+TEST_F(X11WindowOzoneTest, ShowMapsWindowWithoutExplicitSync) {
+  testing::NiceMock<MockPlatformWindowDelegate> delegate;
+  gfx::AcceleratedWidget widget;
+  auto window = CreatePlatformWindow(&delegate, gfx::Rect(0, 0, 100, 100),
+                                     &widget, nullptr);
+  auto* x11_window = static_cast<X11Window*>(window.get());
+  auto* connection = x11::Connection::Get();
+  connection->Sync();
+  connection->DispatchAll();
+  connection->Sync();
+  connection->DispatchAll();
+
+  window->Show(/*inactive=*/true);
+  EXPECT_TRUE(x11_window->IsMapPending());
+  EXPECT_TRUE(
+      base::test::RunUntil([&]() { return !x11_window->IsMapPending(); }));
+}
+
+// Verifies that once a window with a window manager frame is mapped, moves
+// requested by other clients (e.g. `xdotool windowmove`) position the frame,
+// while moves requested by Chrome position the client window
+// (https://crbug.com/338741570).
+TEST_F(X11WindowOzoneTest, MoveWithWindowManagerFrame) {
+  testing::NiceMock<MockPlatformWindowDelegate> delegate;
+  gfx::AcceleratedWidget widget;
+  EXPECT_CALL(delegate, OnAcceleratedWidgetAvailable(_))
+      .WillOnce(StoreWidget(&widget));
+  X11Window window(&delegate);
+  window.Initialize(
+      PlatformWindowInitProperties(gfx::Rect(100, 100, 300, 200)));
+  window.SetUseNativeFrame(true);
+  window.Show(/*inactive=*/false);
+  ASSERT_TRUE(base::test::RunUntil([&] { return !window.IsMapPending(); }));
+  auto* connection = x11::Connection::Get();
+  connection->Sync();
+  connection->DispatchAll();
+  const gfx::Rect bounds = window.GetBoundsInPixels();
+  const gfx::Vector2d frame_offset =
+      bounds.origin() - window.GetOuterBounds().origin();
+  if (frame_offset.IsZero()) {
+    GTEST_SKIP() << "The window manager does not provide a frame.";
+  }
+  // StaticGravity places the client window, not the frame, at the requested
+  // position. The window manager may ignore the position (Openbox does while
+  // windows of parallel test processes are there), so don't expect it.
+  EXPECT_NE(window.GetOuterBounds().origin(), gfx::Point(100, 100));
+
+  // Move the window like another X client would.
+  connection->ConfigureWindow(
+      {.window = static_cast<x11::Window>(widget), .x = 0, .y = 0});
+  ASSERT_TRUE(base::test::RunUntil(
+      [&] { return window.GetBoundsInPixels().origin() != bounds.origin(); }));
+  EXPECT_EQ(window.GetBoundsInPixels().origin(), gfx::Point() + frame_offset);
+
+  constexpr gfx::Point kOrigin(150, 120);
+  window.SetBoundsInPixels(gfx::Rect(kOrigin, bounds.size()));
+  ASSERT_TRUE(
+      base::test::RunUntil([&] { return !window.IsWmSyncActiveForTest(); }));
+  EXPECT_EQ(window.GetBoundsInPixels().origin(), kOrigin);
 }
 
 namespace {

@@ -13,6 +13,7 @@
 #include "base/compiler_specific.h"
 #include "base/containers/span.h"
 #include "base/memory/raw_ptr.h"
+#include "base/test/gtest_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -574,6 +575,86 @@ TEST_F(ProgramInfoManagerTest, GetActiveUniformsivCached) {
     EXPECT_EQ(data_es2.uniforms[ii].name_length + 1,
               static_cast<uint32_t>(name_length[ii]));
   }
+}
+
+// ES2 uniform parameters must not be read when the cached ES2 info does not
+// match the ES3 uniform count that `indices` were validated against.
+TEST_F(ProgramInfoManagerTest, GetUniformsivChecksES2MatchesES3Count) {
+  UniformsES3Data data_es3;
+  SetupUniformsES3Data(&data_es3);
+  std::vector<int8_t> result(sizeof(data_es3));
+  base::as_writable_byte_span(result).copy_from(
+      base::byte_span_from_ref(data_es3));
+  program_->UpdateES3Uniformsiv(result);
+  ASSERT_TRUE(program_->IsCached(ProgramInfoManager::kES3Uniformsiv));
+  ASSERT_FALSE(program_->IsCached(ProgramInfoManager::kES2));
+
+  const uint32_t count = data_es3.header.num_uniforms;
+  ASSERT_GT(count, 0u);
+  std::vector<GLuint> indices(count);
+  for (uint32_t ii = 0; ii < count; ++ii) {
+    indices[ii] = ii;
+  }
+  std::vector<GLint> params(count);
+  for (GLenum pname :
+       {GL_UNIFORM_SIZE, GL_UNIFORM_TYPE, GL_UNIFORM_NAME_LENGTH}) {
+    EXPECT_CHECK_DEATH(program_->GetUniformsiv(
+        static_cast<GLsizei>(count), indices.data(), pname, params.data()));
+  }
+}
+
+TEST_F(ProgramInfoManagerTest, UpdateProgramInfoIgnoresStaleLinkCount) {
+  ASSERT_NE(nullptr, program_);
+  EXPECT_EQ(1u, program_->link_count());
+
+  ProgramES2Data link1_data;
+  SetupProgramES2Data(&link1_data);
+  link1_data.uniforms[0].type = GL_INT;
+  std::vector<int8_t> link1_result(sizeof(link1_data));
+  base::as_writable_byte_span(link1_result)
+      .copy_from(base::byte_span_from_ref(link1_data));
+
+  ProgramES2Data link2_data;
+  SetupProgramES2Data(&link2_data);
+  link2_data.uniforms[0].type = GL_FLOAT_MAT4;
+  std::vector<int8_t> link2_result(sizeof(link2_data));
+  base::as_writable_byte_span(link2_result)
+      .copy_from(base::byte_span_from_ref(link2_data));
+
+  UniformBlocksData stale_blocks_data;
+  SetupUniformBlocksData(&stale_blocks_data);
+  std::vector<int8_t> stale_blocks_result(sizeof(stale_blocks_data));
+  base::as_writable_byte_span(stale_blocks_result)
+      .copy_from(base::byte_span_from_ref(stale_blocks_data));
+
+  // Relink the same program before Link 1's async return data arrives.
+  program_ = nullptr;
+  program_info_manager_->CreateInfo(kClientProgramId);
+  {
+    base::AutoLock auto_lock(program_info_manager_->lock_);
+    program_ = program_info_manager_->GetProgramInfo(nullptr, kClientProgramId,
+                                                     ProgramInfoManager::kNone);
+    ASSERT_NE(nullptr, program_);
+    EXPECT_EQ(2u, program_->link_count());
+  }
+
+  // Stale Link 1 updates must be ignored.
+  program_info_manager_->UpdateProgramInfo(kClientProgramId, 1u, link1_result,
+                                           ProgramInfoManager::kES2);
+  program_info_manager_->UpdateProgramInfo(
+      kClientProgramId, 1u, stale_blocks_result,
+      ProgramInfoManager::kES3UniformBlocks);
+  EXPECT_FALSE(program_->IsCached(ProgramInfoManager::kES2));
+  EXPECT_FALSE(program_->IsCached(ProgramInfoManager::kES3UniformBlocks));
+
+  // Current Link 2 update must be accepted and cached.
+  program_info_manager_->UpdateProgramInfo(kClientProgramId, 2u, link2_result,
+                                           ProgramInfoManager::kES2);
+  EXPECT_TRUE(program_->IsCached(ProgramInfoManager::kES2));
+
+  const Program::UniformInfo* info = program_->GetUniformInfo(0);
+  ASSERT_NE(nullptr, info);
+  EXPECT_EQ(static_cast<GLenum>(GL_FLOAT_MAT4), info->type);
 }
 
 }  // namespace gles2

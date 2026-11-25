@@ -9,6 +9,7 @@
 #import <CoreVideo/CoreVideo.h>
 #import <ScreenCaptureKit/ScreenCaptureKit.h>
 
+#include <algorithm>
 #include <atomic>
 #include <unordered_map>
 #include <utility>
@@ -16,11 +17,14 @@
 #include "base/check.h"
 #include "base/containers/span.h"
 #include "base/features.h"
+#include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/task/bind_post_task.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "content/browser/media/capture/desktop_capture_util_mac.h"
 #include "content/browser/media/capture/native_screen_capture_picker.h"
@@ -28,6 +32,7 @@
 #include "content/browser/screenlock_monitor/screenlock_monitor.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/desktop_media_id.h"
+#include "media/base/media_switches.h"
 #include "media/capture/video/video_capture_device.h"
 #include "skia/ext/skia_utils_mac.h"
 #include "third_party/abseil-cpp/absl/container/flat_hash_map.h"
@@ -376,6 +381,15 @@ CGFloat GetBackingScaleFactorForRect(CGRect rect) {
 
 API_AVAILABLE(macos(14.0))
 std::atomic<NativeScreenCapturePickerMac*> g_instance{nullptr};
+
+base::TimeDelta GetMaxCachedSessionIdleTimeout() {
+  const base::TimeDelta max_timeout =
+      media::kMacNativeScreenCapturePickerSessionCacheMaxIdleTimeout.Get();
+  return (max_timeout.is_positive() && !max_timeout.is_inf())
+             ? max_timeout
+             : media::kMacNativeScreenCapturePickerSessionCacheMaxIdleTimeout
+                   .default_value;
+}
 }  // namespace
 
 // static
@@ -796,6 +810,12 @@ NativeScreenCapturePickerMac::CreateDevice(const DesktopMediaID& source) {
     return nullptr;
   }
   CaptureSession& session = *it->second;
+  if (session.is_retained_for_screenshots) {
+    VLOG(1) << "NSCPM::CreateDevice: session is retained for screenshots, "
+               "source.id = "
+            << source.id;
+    return nullptr;
+  }
   session.cleanup_timer.Stop();
   active_source_ids_.insert(source.id);
   SCContentSharingPicker* picker = [SCContentSharingPicker sharedPicker];
@@ -841,6 +861,13 @@ void NativeScreenCapturePickerMac::CleanupContentFilter(DesktopMediaID::Id id) {
           << ", stream_to_id_map_.count = " << stream_to_id_map_.size();
 }
 
+void NativeScreenCapturePickerMac::OnRetainedSessionIdleTimeout(
+    DesktopMediaID::Id id) {
+  CHECK(device_task_runner_->RunsTasksInCurrentSequence());
+  CleanupContentFilter(id);
+  MaybeDeactivatePicker();
+}
+
 NativeScreenCapturePickerMac::CaptureSession&
 NativeScreenCapturePickerMac::GetOrCreateCaptureSession(DesktopMediaID::Id id) {
   CHECK(device_task_runner_->RunsTasksInCurrentSequence(),
@@ -850,6 +877,48 @@ NativeScreenCapturePickerMac::GetOrCreateCaptureSession(DesktopMediaID::Id id) {
     session = std::make_unique<CaptureSession>();
   }
   return *session;
+}
+
+bool NativeScreenCapturePickerMac::RetainSessionForScreenshots(
+    DesktopMediaID::Id session_id,
+    base::TimeDelta idle_timeout) {
+  CHECK(device_task_runner_->RunsTasksInCurrentSequence());
+  if (!idle_timeout.is_positive()) {
+    return false;
+  }
+
+  // Look the session up without creating it. A session created here for an
+  // unknown id would have neither a filter nor a timer to clean it up.
+  auto it = sessions_.find(session_id);
+  if (it == sessions_.end() || !it->second->filter) {
+    VLOG(1) << "NSCPM::RetainSessionForScreenshots: no content filter for "
+               "source id = "
+            << session_id;
+    return false;
+  }
+
+  // Retained sessions are mutually exclusive with active capture devices so the
+  // idle timer cannot drop the filter or stream mapping of a live capture.
+  if (active_source_ids_.contains(session_id)) {
+    VLOG(1) << "NSCPM::RetainSessionForScreenshots: active capture device for "
+               "source id = "
+            << session_id;
+    return false;
+  }
+
+  CaptureSession& session = *it->second;
+  session.is_retained_for_screenshots = true;
+  session.idle_timeout =
+      std::min(idle_timeout, GetMaxCachedSessionIdleTimeout());
+  session.cleanup_timer.Start(
+      FROM_HERE, session.idle_timeout,
+      base::BindOnce(
+          &NativeScreenCapturePickerMac::OnRetainedSessionIdleTimeout,
+          // Passing `this` is safe since `sessions_` is owned by `this`.
+          base::Unretained(this), session_id));
+  VLOG(1) << "NSCPM::RetainSessionForScreenshots: source id = " << session_id
+          << ", idle timeout = " << session.idle_timeout;
+  return true;
 }
 
 void NativeScreenCapturePickerMac::CaptureScreenshot(

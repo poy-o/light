@@ -22,6 +22,7 @@ import {                             //
   ResponseStopCause,                 //
   SbThreatType,                      //
   ScreenshotEncryptionScheme,        //
+  ScriptToolRejectionReason,         //
   ScrollToErrorReason,               //
   TooltipImpressionType,             //
   WebClientMode,                     //
@@ -43,6 +44,7 @@ import type {                                  //
              PageMetadata,                     //
              PanelOpeningData,                 //
              PanelState,                       //
+             ScriptToolRejection,              //
              ScrollToError,                    //
              TabContextResult,                 //
              TabData,                          //
@@ -1470,23 +1472,24 @@ class ApiTests extends ApiTestFixtureBase {
     assertDefined(this.host.getPanelState);
     assertDefined(this.host.detachPanel);
     assertDefined(this.host.canAttachPanel);
-    const isGeic = Boolean((this.initData as any)?.isGeic);
+    const pinOnBindEnabled = Boolean(this.initData?.pinOnBindEnabled);
     const link = document.createElement('a');
     link.setAttribute('href', 'https://www.chromium.org');
     link.setAttribute('target', '_blank');
     document.body.appendChild(link);
     link.click();
-    if (isGeic) {
-      // In GEiC, the opened tab is daisy-chained (bound) but not auto-pinned.
+    if (pinOnBindEnabled) {
+      // The opened tab should be pinned.
+      await observeSequence(this.host.getPinnedTabs())
+          .waitFor(tabs => tabs.length === 2);
+    } else {
+      // When pin-on-bind is disabled, the opened tab is daisy-chained (bound)
+      // but not auto-pinned.
       await observeSequence(this.host.getFocusedTabStateV2())
           .waitFor(
               state => state.hasNoFocus?.tabFocusCandidateData?.url ===
                   'https://www.chromium.org/');
       assertEquals(1, this.host.getPinnedTabs().getCurrentValue()?.length);
-    } else {
-      // The opened tab should be pinned.
-      await observeSequence(this.host.getPinnedTabs())
-          .waitFor(tabs => tabs.length === 2);
     }
 
     // Detach panel
@@ -1745,23 +1748,24 @@ class ApiTests extends ApiTestFixtureBase {
   async testCreateTabByClickingOnLinkDaisyChains() {
     assertDefined(this.host.getFocusedTabStateV2);
     assertDefined(this.host.getPinnedTabs);
-    const isGeic = Boolean((this.initData as any)?.isGeic);
+    const pinOnBindEnabled = Boolean(this.initData?.pinOnBindEnabled);
     const link = document.createElement('a');
     link.setAttribute('href', 'https://www.chromium.org');
     link.setAttribute('target', '_blank');
     document.body.appendChild(link);
     link.click();
-    if (isGeic) {
-      // In GEiC, the opened tab is daisy-chained (bound) but not auto-pinned.
+    if (pinOnBindEnabled) {
+      // The opened tab should be pinned.
+      await observeSequence(this.host.getPinnedTabs())
+          .waitFor(tabs => tabs.length === 2);
+    } else {
+      // When pin-on-bind is disabled, the opened tab is daisy-chained (bound)
+      // but not auto-pinned.
       await observeSequence(this.host.getFocusedTabStateV2())
           .waitFor(
               state => state.hasNoFocus?.tabFocusCandidateData?.url ===
                   'https://www.chromium.org/');
       assertEquals(1, this.host.getPinnedTabs().getCurrentValue()?.length);
-    } else {
-      // The opened tab should be pinned.
-      await observeSequence(this.host.getPinnedTabs())
-          .waitFor(tabs => tabs.length === 2);
     }
   }
 
@@ -1930,6 +1934,55 @@ class ApiTests extends ApiTestFixtureBase {
     assertDefined(metadata);
     assertEquals(1, metadata.frameMetadata.length);
     assertEquals(0, metadata.frameMetadata[0]!.metaTags.length);
+  }
+
+  /**
+   * Verifies that unsubscribing from getPageMetadata clears the cached metadata
+   * so re-subscribing after a navigation does not replay stale metadata from
+   * the previous page.
+   */
+  async testGetPageMetadataResubscribeAfterNavigation() {
+    assertDefined(this.host.getPageMetadata);
+    assertDefined(this.host.getFocusedTabStateV2);
+
+    const focus =
+        await observeSequence(this.host.getFocusedTabStateV2()).next();
+    const tabId = checkDefined(focus.hasFocus?.tabData.tabId);
+
+    const metadataObservable =
+        this.host.getPageMetadata(tabId, ['author', 'description']);
+    assertDefined(metadataObservable);
+    const metadataSequence1 = observeSequence(metadataObservable);
+
+    // Initial page has author="George".
+    const metadata1: PageMetadata = await metadataSequence1.next();
+    assertEquals(1, metadata1.frameMetadata.length);
+    const authorTag =
+        metadata1.frameMetadata[0]!.metaTags.find(tag => tag.name === 'author');
+    assertDefined(authorTag);
+    assertEquals('George', authorTag.content);
+
+    // Unsubscribe and verify the stored value is cleared immediately.
+    metadataSequence1.unsubscribe();
+    assertTrue(metadataObservable.getCurrentValue() === undefined);
+
+    // Navigate while unsubscribed to a page with no meta tags.
+    assertTrue(
+        await this.browser.navigateTab(tabId, this.getUrl('/title1.html')));
+
+    // Re-requesting the observable for the same tab returns the cached
+    // instance without a stale stored value, and subscribing emits the new
+    // page's metadata first rather than replaying 'George'.
+    const metadataObservable2 =
+        this.host.getPageMetadata(tabId, ['author', 'description']);
+    assertTrue(metadataObservable === metadataObservable2);
+    assertTrue(metadataObservable2.getCurrentValue() === undefined);
+
+    const metadataSequence2 = observeSequence(metadataObservable2);
+    const metadata2: PageMetadata = await metadataSequence2.next();
+    assertEquals(1, metadata2.frameMetadata.length);
+    assertEquals(0, metadata2.frameMetadata[0]!.metaTags.length);
+    metadataSequence2.unsubscribe();
   }
 
   /**
@@ -2235,6 +2288,51 @@ class ApiTests extends ApiTestFixtureBase {
 
   async testProcessCounterAbuseVerdictIsUndefinedWhenFeatureDisabled() {
     assertTrue(this.host.processCounterAbuseVerdict === undefined);
+  }
+
+  async testReportScriptToolRejections() {
+    assertDefined(this.host.reportScriptToolRejections);
+    const rejections: ScriptToolRejection[] = [
+      {
+        reason: ScriptToolRejectionReason.SECURITY,
+        documents: [
+          {
+            tabId: '1',
+            documentId: '00112233445566778899AABBCCDDEEFF',
+            toolNames: ['bookFlight', 'cancelOrder'],
+          },
+        ],
+      },
+      {
+        reason: ScriptToolRejectionReason.THROTTLING,
+        documents: [],
+      },
+      {
+        reason: ScriptToolRejectionReason.QUALITY,
+        documents: [
+          {
+            tabId: 'invalid-tab-id',
+            documentId: '112233445566778899AABBCCDDEEFF00',
+            toolNames: ['searchCatalog'],
+          },
+        ],
+      },
+      {
+        reason: ScriptToolRejectionReason.SCAN_PENDING,
+        documents: [
+          {
+            documentId: '2233445566778899AABBCCDDEEFF0011',
+            toolNames: ['checkStatus'],
+          },
+        ],
+      },
+      {
+        reason: ScriptToolRejectionReason.UNSPECIFIED,
+        documents: [],
+      },
+    ];
+    this.host.reportScriptToolRejections(rejections);
+    this.host.reportScriptToolRejections([]);
   }
 
   async testScrollToFindsText() {
@@ -3142,6 +3240,27 @@ class ApiTests extends ApiTestFixtureBase {
     } else {
       assertTrue(false, 'Unexpected testParams');
     }
+  }
+
+  async testActionFirstSuggestionsUndefinedWhenFeatureDisabled() {
+    assertUndefined(this.host.getActionFirstSuggestions);
+  }
+
+  async testGetActionFirstSuggestions() {
+    assertDefined(this.host.getActionFirstSuggestions);
+    const observable = this.host.getActionFirstSuggestions();
+    // Subscribing makes Chrome send the current value, which is undefined.
+    const first = observeSequence(observable);
+    assertUndefined(await first.next());
+    // A second subscriber shares the subscription.
+    const second = observeSequence(observable);
+    assertUndefined(await second.next());
+
+    // Once everyone unsubscribes, a new subscriber waits for a fresh value.
+    first.unsubscribe();
+    second.unsubscribe();
+    const third = observeSequence(observable);
+    assertUndefined(await third.next());
   }
 }
 

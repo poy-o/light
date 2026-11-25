@@ -60,7 +60,7 @@
 #include "chrome/test/base/chrome_test_path_utils.h"
 #include "chrome/test/base/chrome_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/enterprise/isolated_mode/isolated_mode_features.h"
+#include "components/enterprise/isolated_mode/scoped_isolated_mode_override_for_testing.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/base/signin_pref_names.h"
@@ -214,9 +214,16 @@ bool AppMenuBrowserTest::VerifyUi() {
 
   const auto* const test_info =
       testing::UnitTest::GetInstance()->current_test_info();
+  std::string screenshot_name = test_info->name();
+  if (std::string_view(test_info->test_suite_name()) ==
+          "AppMenuAiRingBrowserTest" &&
+      base::StartsWith(screenshot_name, "InvokeUi_profile_menu_in_app_menu_")) {
+    // Baseline Gerrit CL number of the most recent CL that modified the UI.
+    screenshot_name += "_8622683";
+  }
   return VerifyPixelUi(menu_item->GetSubmenu()->GetScrollViewContainer(),
                        test_info->test_suite_name(),
-                       test_info->name()) != ui::test::ActionResult::kFailed;
+                       screenshot_name) != ui::test::ActionResult::kFailed;
 }
 
 void AppMenuBrowserTest::WaitForUserDismissal() {
@@ -324,18 +331,14 @@ IN_PROC_BROWSER_TEST_F(AppMenuBrowserTest, DISABLED_InvokeUi_main_incognito) {
 }
 
 class AppMenuBrowserIsolatedModeTest : public AppMenuBrowserTest {
- public:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    AppMenuBrowserTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch(
-        enterprise_isolated_mode::switches::
-            kForceEnterpriseIsolatedModeReplacesIncognito);
-  }
+ private:
+  enterprise_isolated_mode::ScopedIsolatedModeOverrideForTesting
+      scoped_isolated_mode_;
 };
 
 IN_PROC_BROWSER_TEST_F(AppMenuBrowserIsolatedModeTest,
                        DISABLED_InvokeUi_main_isolated) {
-  // Incognito browser with isolated mode enabled by switch.
+  // Incognito browser with isolated mode replacing incognito.
   auto browser_resetter = SetBrowser(CreateIncognitoBrowser());
   ShowAndVerifyUi();
 }

@@ -150,7 +150,6 @@ Untuk mendapatkan lebih banyak tetapan yang menggunakan data untuk meningkatkan 
 <translation id="1543035591122163372">Log masuk untuk mendapatkan kata laluan anda dan pelbagai lagi daripada <ph name="DEVICE_TYPE" /></translation>
 <translation id="1544084554881119930">Kaedah pembayaran dan alamat tidak akan disulitkan. Sejarah penyemakan imbas daripada Chrome tidak akan disegerakkan.
 Orang yang mengetahui ungkapan laluan anda sahaja yang dapat membaca data anda yang disulitkan. Ungkapan laluan tidak dihantar kepada atau disimpan oleh Google. Jika anda terlupa ungkapan laluan anda atau mahu menukar tetapan ini, <ph name="BEGIN_LINK" />kosongkan data Chrome dalam akaun anda<ph name="END_LINK" />.</translation>
-<translation id="1544826120773021464">Untuk mengurus Google Account anda, ketik butang "Urus akaun"</translation>
 <translation id="1549000191223877751">Alihkan ke tetingkap lain</translation>
 <translation id="1553358976309200471">Kemas Kini Chrome</translation>
 <translation id="1554352084785952638"><ph name="SEARCH_ENGINE" /> untuk "<ph name="SEARCH_TERMS" />"</translation>
@@ -167,7 +166,6 @@ Orang yang mengetahui ungkapan laluan anda sahaja yang dapat membaca data anda y
 <translation id="1600756129506222718"><ph name="TAB_TITLE" />, Tab Perkongsian</translation>
 <translation id="1601378265092360672">Data semakan imbas termasuk sejarah penyemakan imbas, kuki dan data laman lain, imej dan fail dicache serta tab terbuka anda</translation>
 <translation id="160275202205869636">Apabila dihidupkan, gunakan dan simpan data dalam Google Account anda. Apabila dimatikan, data disimpan pada peranti ini sahaja.</translation>
-<translation id="160403827062749147">Selamat datang ke Google Chrome, penyemak imbas paling selamat di dunia</translation>
 <translation id="1628019612362412531">{NUM_SELECTED,plural, =1{Alih keluar 1 item yang dipilih}other{Alih keluar # item yang dipilih}}</translation>
 <translation id="1639239467298939599">Memuatkan</translation>
 <translation id="1641113438599504367">Penyemakan Imbas Selamat</translation>
@@ -283,6 +281,7 @@ Orang yang mengetahui ungkapan laluan anda sahaja yang dapat membaca data anda y
 <translation id="2122601567107267586">Tidak dapat membuka apl</translation>
 <translation id="2128579426409352593"><ph name="TAB_TITLE" />, Tab Perkongsian Yang Tersemat Dengan Berbilang Pilihan</translation>
 <translation id="213279576345780926"><ph name="TAB_TITLE" /> tertutup</translation>
+<translation id="2133857665503360653">Cuba semula <ph name="FILE_NAME" /></translation>
 <translation id="2138283760993967204">Urus ikon</translation>
 <translation id="2138632817776076519"><ph name="TAB_TITLE" />, Tab Rakaman Yang Dipilih</translation>
 <translation id="2141396931810938595">Berdasarkan penggunaan anda</translation>
@@ -450,6 +449,7 @@ Orang yang mengetahui ungkapan laluan anda sahaja yang dapat membaca data anda y
 <translation id="2762000892062317888">sebentar tadi</translation>
 <translation id="276378135349383280">Papar Gemini dlm bar alat bawah</translation>
 <translation id="276969039800130567">Log masuk sebagai <ph name="USER_EMAIL_ADDRESS" />.</translation>
+<translation id="2770082596325051055">Jeda <ph name="FILE_NAME" /></translation>
 <translation id="2777555524387840389"><ph name="SECONDS" /> saat lagi</translation>
 <translation id="2779651927720337254">gagal</translation>
 <translation id="2781151931089541271">1 saat lagi</translation>
@@ -791,6 +791,7 @@ Orang yang mengetahui ungkapan laluan anda sahaja yang dapat membaca data anda y
 <translation id="4121654769234887259">Anda tidak perlu mengingati kata laluan ini. Kata laluan ini akan disimpan pada Google Password Manager untuk <ph name="USERNAME" />.</translation>
 <translation id="4128312955780560730">Kunci tab Inkognito anda</translation>
 <translation id="4132137475637520539">Benarkan sesiapa sahaja yang mempunyai pautan untuk menyertai kumpulan</translation>
+<translation id="4132969033912447558">Sambung semula <ph name="FILE_NAME" /></translation>
 <translation id="4136632885151622181"><ph name="TAB_TITLE" />, Tab Rakaman Yang Tersemat Dengan Berbilang Pilihan</translation>
 <translation id="4137746084635924146">Bahasa peranti semasa</translation>
 <translation id="414128724510021958">Laman desktop diminta secara lalai</translation>
@@ -866,7 +867,6 @@ Orang yang mengetahui ungkapan laluan anda sahaja yang dapat membaca data anda y
 <translation id="4374192654218566997">\n\nAnda juga boleh mengalih keluar data ini daripada peranti ini:</translation>
 <translation id="4378154925671717803">Telefon</translation>
 <translation id="4380055775103003110">Jika masalah ini tetap berlaku, anda boleh mencuba cara lain untuk meneruskan pada <ph name="SITE_ETLD_PLUS_ONE" />.</translation>
-<translation id="4381351546374507910">Log masuk untuk mendapatkan penanda halaman, kata laluan dan maklumat Autolengkap anda merentas semua peranti anda.</translation>
 <translation id="4384468725000734951">Menggunakan Sogou untuk carian</translation>
 <translation id="4387647248986092471">Buat kunci profil kereta</translation>
 <translation id="4387817230000841154">Buka Muat Turun</translation>
@@ -1908,7 +1908,6 @@ Untuk menukar tetapan ini, <ph name="BEGIN_LINK" />padamkan data Chrome dalam ak
 <translation id="8210770465353466621">Anda akan menemukan tab anda di sini</translation>
 <translation id="8212799748012101103">Buka carian tab</translation>
 <translation id="8215740705341534369">Helaian sisi</translation>
-<translation id="8218622182176210845">Urus akaun anda</translation>
 <translation id="8221985041778490865">Memadamkan data semakan imbas</translation>
 <translation id="8223642481677794647">Menu kad suapan</translation>
 <translation id="82296173028782770">Edit pertanyaan carian: <ph name="SEARCH_QUERY" /></translation>
@@ -2039,6 +2038,7 @@ Untuk menukar tetapan ini, <ph name="BEGIN_LINK" />padamkan data Chrome dalam ak
 <translation id="8676789164135894283">Pengesahan log masuk</translation>
 <translation id="867914734596684889">Tunjukkan atau sembunyikan bar Penanda Halaman</translation>
 <translation id="8683039184091909753">imej</translation>
+<translation id="8687103160920393343">Batalkan <ph name="FILE_NAME" /></translation>
 <translation id="8688183792442786085"><ph name="TAB_TITLE" />, Tab yang Dipilih</translation>
 <translation id="8694622119922491927"><ph name="APP_NAME" /> memerlukan kebenaran untuk mengakses peranti antara muka manusia (HID) untuk laman ini. Anda boleh menukar tetapan ini kemudian dalam Tetapan &gt; Apl &gt; Akses apl khas.</translation>
 <translation id="8696297579102085705">Hantar kepada peranti anda</translation>

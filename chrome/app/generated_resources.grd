@@ -1420,6 +1420,12 @@ are declared in tools/grit/grit_args.gni.
         <message name="IDS_APP_MENU_TOOLS_AND_ACTIONS_HEADER" desc="Header title for the Tools and actions section in the main App Menu">
           Tools and actions
         </message>
+        <message name="IDS_FIND_EDIT_AND_MORE_TOOLS_MENU" desc="The text label of the Find, edit, and more tools submenu item in the main App Menu">
+          &amp;Find, edit, and more tools
+        </message>
+        <message name="IDS_APP_MENU_MORE_TOOLS_HEADER" desc="Header title for the More tools section inside the Find, edit, and more tools submenu">
+          More tools
+        </message>
         <message name="IDS_APP_MENU_BLOCK_INCOGNITO" desc="Label with a keyboard mnemonic for the Incognito block button in the main App Menu">
           &amp;Incognito
         </message>
@@ -4970,9 +4976,6 @@ are declared in tools/grit/grit_args.gni.
       <message name="IDS_EXTENSION_PROMPT_EXTENSION_CONNECT_FROM_INCOGNITO" desc="Shown when a website tries to connect to an extension from Incognito mode, prompting the user to allow or deny the request.">
         <ph name="ORIGIN">$1<ex>http://www.google.com</ex></ph> wants to communicate with the extension "<ph name="EXTENSION_NAME">$2<ex>Gmail Checker</ex></ph>"
       </message>
-      <message name="IDS_EXTENSION_PROMPT_ALLOW_SITE_ACCESS_TITLE" desc="Title of the section in the extension or app installation prompt that allows the user to choose site access permissions.">
-        Allow site access
-      </message>
 
       <message name="IDS_EXTENSION_PERMISSION_LINE" desc="Template for item in list of privileges that an extension or app has">
           • <ph name="PERMISSION">$1<ex>Read and change all your data on all websites</ex></ph>
@@ -7200,8 +7203,11 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_NTP_CUSTOM_LINKS_REMOVE" desc="The text label of the custom link remove button on the edit shortcut dialog. (On the New Tab Page)">
         Remove
       </message>
-      <message name="IDS_NTP_CUSTOM_LINKS_REORDER" desc="The text label of the shortcut reorder button on the action menu. (On the New Tab Page)">
-        Reorder
+      <message name="IDS_NTP_CUSTOM_LINKS_REARRANGE" desc="The text label of the shortcut reorder button on the action menu. (On the New Tab Page)">
+        Rearrange
+      </message>
+      <message name="IDS_NTP_CUSTOM_LINKS_REARRANGE_TOOLTIP" desc="Tooltip shown when entering shortcut reorder mode instructing the user how to rearrange shortcuts. (On the New Tab Page)">
+        Drag or use arrow keys to rearrange
       </message>
       <message name="IDS_NTP_SHORTCUT_REORDER_A11Y" is_accessibility_with_no_ui="true" desc="The accessible label of a most visited tile when reordering shortcuts. (On the New Tab Page)">
         <ph name="SHORTCUT_TITLE">$1<ex>YouTube</ex></ph>, use the Left and Right arrow keys to move the shortcut. Press Enter or Escape to finish.
@@ -7544,6 +7550,15 @@ Keep your key file in a safe place. You will need it to create new versions of y
       </message>
       <message name="IDS_NTP_THREADS_CLOSE_SIDEBAR_LABEL" desc="Tooltip and accessible label for the button that closes the expanded AI Mode threads sidebar on the New Tab Page.">
         Close sidebar
+      </message>
+      <message name="IDS_NTP_THREADS_OFFLINE_TITLE" desc="Title of the error shown in the expanded AI Mode history panel on the New Tab Page when it could not load because the browser is offline or the network is too slow.">
+        No internet connection
+      </message>
+      <message name="IDS_NTP_THREADS_OFFLINE_DESCRIPTION" desc="Description shown below IDS_NTP_THREADS_OFFLINE_TITLE in the expanded AI Mode history panel on the New Tab Page, asking the user to check their network connection and retry.">
+        Check your connection, then try again.
+      </message>
+      <message name="IDS_NTP_THREADS_RETRY_LABEL" desc="Label of the button in the expanded AI Mode history panel on the New Tab Page that reloads the panel after it failed to load.">
+        Try again
       </message>
       <message name="IDS_NTP_THREADS_NEW_SEARCH_LABEL" desc="Label for starting a new AI Mode query.">
         Start new search
@@ -9931,6 +9946,9 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_ORGANIZER_PANEL" desc="The name of the organizer panel announced by screenreaders." is_accessibility_with_no_ui="true">
         Organizer
       </message>
+      <message name="IDS_ORGANIZER_PANEL_ESC_HINT" desc="Spoken by screen readers and not visually rendered: accessibility description for the search input in the organizer panel to tell the user that pressing the Escape key closes the panel." is_accessibility_with_no_ui="true">
+        Press Escape to close
+      </message>
       <message name="IDS_ORGANIZER_PANEL_NO_RESULTS" desc="Text shown in an organizer panel list section when a search yields no matching items.">
         No results
       </message>
@@ -9962,7 +9980,7 @@ Keep your key file in a safe place. You will need it to create new versions of y
         Create tab group
       </message>
       <message name="IDS_ORGANIZER_PANEL_CROSS_DEVICE_TABS" desc="The label on the organizer panel list section corresponding to tabs on other devices.">
-        Tabs on other devices
+        Tabs by device
       </message>
       <message name="IDS_ORGANIZER_PANEL_RECENTLY_CLOSED" desc="The label on the organizer panel list section corresponding to recently closed tabs.">
         Recently closed
@@ -13773,6 +13791,64 @@ This can include information about installed software, files, your browser, the 
         <message name="IDS_ACCOUNT_PREVIEW_RECENT_TABS_PROMO_SUBTITLE_EXTENSIONS" desc="Subtitle of the recent tabs sign-in promo informing the user they can access their tabs and extensions on all their devices.">
           To get your tabs from your other devices, sign in and sync history. You’ll also get your extensions and more on all your devices. You can stop syncing anytime in settings. Google may personalize Search and other services based on your history.
         </message>
+
+        <!-- Smart Account Switching Startup Prompt & Confirmation Bubble Strings -->
+        <!-- TODO(crbug.com/590057691): Finalize copy with UXW, remove translateable="false", and add translation screenshots. -->
+        <message name="IDS_ACCOUNT_SWITCHING_IN_PROFILE_BUBBLE_TITLE_WITH_DEVICE" translateable="false" desc="Title of the Smart Account Switching startup prompt bubble (in-profile switch) when the recommended account is active on another known device.">
+          Pick up where you left off on <ph name="DEVICE">$1<ex>your phone</ex></ph>
+        </message>
+        <message name="IDS_ACCOUNT_SWITCHING_IN_PROFILE_BUBBLE_TITLE" translateable="false" desc="Title of the Smart Account Switching startup prompt bubble (in-profile switch) when no specific other device form factor is available.">
+          Pick up where you left off
+        </message>
+        <message name="IDS_ACCOUNT_SWITCHING_NEW_PROFILE_BUBBLE_TITLE_WITH_DEVICE" translateable="false" desc="Title of the Smart Account Switching startup prompt bubble (new profile) when the recommended account is active on another known device.">
+          Pick up where you left off on <ph name="DEVICE">$1<ex>your phone</ex></ph>
+        </message>
+        <message name="IDS_ACCOUNT_SWITCHING_NEW_PROFILE_BUBBLE_TITLE" translateable="false" desc="Title of the Smart Account Switching startup prompt bubble (new profile) when no specific other device form factor is available.">
+          Pick up where you left off
+        </message>
+        <if expr="use_titlecase">
+          <then>
+            <message name="IDS_ACCOUNT_SWITCHING_IN_PROFILE_BUBBLE_ACCEPT_BUTTON_LABEL" translateable="false" desc="Label of the confirm button in the Smart Account Switching startup prompt bubble (in-profile switch).">
+              Switch in This Window
+            </message>
+            <message name="IDS_ACCOUNT_SWITCHING_NEW_PROFILE_BUBBLE_ACCEPT_BUTTON_LABEL" translateable="false" desc="Label of the confirm button in the Smart Account Switching startup prompt bubble (new profile).">
+              Open in New Window
+            </message>
+            <message name="IDS_ACCOUNT_SWITCHING_BUBBLE_CANCEL_BUTTON_LABEL" translateable="false" desc="Label of the cancel button in the Smart Account Switching startup prompt bubble.">
+              Not Now
+            </message>
+            <message name="IDS_ACCOUNT_SWITCHING_CONFIRMATION_BUBBLE_GOT_IT_BUTTON" translateable="false" desc="Label of the acknowledge button in the Smart Account Switching post-switch confirmation bubble.">
+              Got It
+            </message>
+          </then>
+          <else>
+            <message name="IDS_ACCOUNT_SWITCHING_IN_PROFILE_BUBBLE_ACCEPT_BUTTON_LABEL" translateable="false" desc="Label of the confirm button in the Smart Account Switching startup prompt bubble (in-profile switch).">
+              Switch in this window
+            </message>
+            <message name="IDS_ACCOUNT_SWITCHING_NEW_PROFILE_BUBBLE_ACCEPT_BUTTON_LABEL" translateable="false" desc="Label of the confirm button in the Smart Account Switching startup prompt bubble (new profile).">
+              Open in new window
+            </message>
+            <message name="IDS_ACCOUNT_SWITCHING_BUBBLE_CANCEL_BUTTON_LABEL" translateable="false" desc="Label of the cancel button in the Smart Account Switching startup prompt bubble.">
+              Not now
+            </message>
+            <message name="IDS_ACCOUNT_SWITCHING_CONFIRMATION_BUBBLE_GOT_IT_BUTTON" translateable="false" desc="Label of the acknowledge button in the Smart Account Switching post-switch confirmation bubble.">
+              Got it
+            </message>
+          </else>
+        </if>
+        <message name="IDS_ACCOUNT_SWITCHING_CONFIRMATION_BUBBLE_TITLE" translateable="false" desc="Title of the Smart Account Switching confirmation bubble shown after switching accounts or creating a new profile.">
+          Switched to <ph name="USER_EMAIL">$1<ex>elisa.g.beckett@gmail.com</ex></ph>
+        </message>
+        <message name="IDS_ACCOUNT_SWITCHING_IN_PROFILE_CONFIRMATION_BUBBLE_BODY" translateable="false" desc="Primary body paragraph of the Smart Account Switching confirmation bubble shown after an in-profile account switch.">
+          You can always sign out and manage your accounts here.
+        </message>
+        <message name="IDS_ACCOUNT_SWITCHING_IN_PROFILE_CONFIRMATION_BUBBLE_RELOAD_NOTICE" translateable="false" desc="Secondary body paragraph of the Smart Account Switching confirmation bubble informing the user that open Google web apps may need to be reloaded after switching accounts in place.">
+          You may need to reload your Google apps with your new account.
+        </message>
+        <message name="IDS_ACCOUNT_SWITCHING_NEW_PROFILE_CONFIRMATION_BUBBLE_BODY" translateable="false" desc="Body of the Smart Account Switching confirmation bubble shown in the newly created profile window.">
+          You can always switch between your profiles here.
+        </message>
+
         <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_ENTERPRISE_BUBBLE_DESC_MANAGED_BY_TOKEN" desc="Body of the web signin interception bubble when the new account is managed via a token">
           You just signed in a managed account, creating a new managed profile will allow you to access some resources linked to that account.
         </message>
@@ -15685,6 +15761,15 @@ Please help our engineers fix this problem. Tell us what happened right before y
       <message name="IDS_TAB_AX_ANNOUNCE_TAB_REMOVED_FROM_NAMED_GROUP" is_accessibility_with_no_ui="true" desc="Screen reader announcement when the user inputs a hotkey for moving the currently-selected tab and it results in the tab being removed from a tab group with a title">
         Tab removed from group <ph name="GROUP_NAME">$1</ph> - <ph name="GROUP_CONTENTS">$2<ex>Google Search and 3 other tabs</ex></ph>
       </message>
+      <message name="IDS_TAB_GROUP_AX_ANNOUNCE_FOCUSED_NAMED_GROUP" is_accessibility_with_no_ui="true" desc="Screen reader announcement when focusing on a named tab group in focus mode.">
+        Focused on group <ph name="GROUP_NAME">$1<ex>Work</ex></ph>
+      </message>
+      <message name="IDS_TAB_GROUP_AX_ANNOUNCE_FOCUSED_UNNAMED_GROUP" is_accessibility_with_no_ui="true" desc="Screen reader announcement when focusing on an unnamed tab group in focus mode.">
+        Focused on unnamed group - <ph name="GROUP_CONTENTS">$1<ex>Google Search and 3 other tabs</ex></ph>
+      </message>
+      <message name="IDS_TAB_GROUP_AX_ANNOUNCE_FOCUSED_EPHEMERAL_GROUP" is_accessibility_with_no_ui="true" desc="Screen reader announcement when entering focus mode on one or more ungrouped tabs. [ICU Syntax]">
+        {NUM_TABS, plural, =1 {Focused on 1 tab} other {Focused on # tabs}}
+      </message>
       <message name="IDS_PAGE_LOADING_AX_TITLE_FORMAT" is_accessibility_with_no_ui="true" desc="Screen reader announcement when the back/forward button is focused and has been pressed. If the title of the page can be obtained, it will be included. Example: 'Loading Google News'.">
           Loading <ph name="WINDOW_TITLE">$1<ex>Google News</ex></ph>
       </message>
@@ -16853,6 +16938,16 @@ Please help our engineers fix this problem. Tell us what happened right before y
       <message name="IDS_WEBAUTHN_GPM_SETTINGS" desc="The label in a button that opens Google Password Manager settings.">
         Settings
       </message>
+      <if expr="is_macosx">
+        <message name="IDS_WEBAUTHN_GPM_CHANGE_PIN_AUTHENTICATION_PROMPT_BIOMETRIC_SUFFIX" translateable="false" desc="Shown in the macOS system authentication dialog after 'Google Chrome is trying to ' when the user verifies their identity to change their Google Password Manager PIN.">
+          change your Google Password Manager PIN
+        </message>
+      </if>
+      <if expr="is_win or is_chromeos">
+        <message name="IDS_WEBAUTHN_GPM_CHANGE_PIN_AUTHENTICATION_PROMPT" translateable="false" desc="Shown in the OS authentication dialog when the user verifies their identity to change their Google Password Manager PIN.">
+          Verify it's you to change your Google Password Manager PIN
+        </message>
+      </if>
 
       <!-- WebAuthn passkey / password selector UIs -->
       <message name="IDS_AMBIENT_LOGIN_TITLE" desc="The title of a prompt that tells the user to choose an account to sign in with.">

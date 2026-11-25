@@ -48,7 +48,7 @@ public class GroupedTabListDataProvider extends TabListDataProvider {
     public GroupedTabListDataProvider(
             NonNullObservableSupplier<List<TabModel>> tabModelListSupplier,
             boolean supportsGroupExpansion) {
-        super(tabModelListSupplier);
+        super(tabModelListSupplier, /* highlightTabModelSupplier= */ null);
         mSupportsGroupExpansion = supportsGroupExpansion;
         mRemovingTabGroupIds = new HashSet<>();
 
@@ -104,7 +104,7 @@ public class GroupedTabListDataProvider extends TabListDataProvider {
 
                     @Override
                     public void restoreCompleted() {
-                        requestDataReset();
+                        onRestoreCompleted();
                     }
 
                     @Override
@@ -239,13 +239,13 @@ public class GroupedTabListDataProvider extends TabListDataProvider {
     }
 
     @Override
-    protected int indexOfItemForTab(TabModel model, @TabId int tabId) {
-        int index = super.indexOfItemForTab(model, tabId);
+    protected int indexOfItemForTab(@TabId int tabId) {
+        int index = super.indexOfItemForTab(tabId);
         if (index != TabList.INVALID_TAB_INDEX) return index;
 
         // In collapsed-only surfaces (GTS), group tabs map to their parent TabGroupItem.
         if (!mSupportsGroupExpansion) {
-            Tab tab = model.getTabById(tabId);
+            Tab tab = getTabById(tabId);
             Token groupId = tab != null ? tab.getTabGroupId() : null;
             return groupId != null ? indexOfTabGroupId(groupId) : TabList.INVALID_TAB_INDEX;
         }

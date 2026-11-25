@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">שיתוף סיסמאות</translation>
 <translation id="1554043146674176775">‏השבתת מצב AI</translation>
 <translation id="1554477036522844996">חלון חדש</translation>
+<translation id="1555014818414775661">הוספת תמונות</translation>
 <translation id="1557806604681757705">המחשב שלך</translation>
 <translation id="1558391695376153246">סגירת כרטיסיות מצב אנונימי</translation>
 <translation id="1560153516220021659">הכפתור המשני בסרגל הכלים מכווץ</translation>
@@ -360,6 +361,7 @@
 <translation id="2015722694326466240">רוצה להציג את הסיסמאות? תחילה עליך להגדיר קוד גישה במכשיר.</translation>
 <translation id="201759455285471444">הרחבה של קבוצת הכרטיסיות.</translation>
 <translation id="2022431790688770637">‏ניהול ההצעות של Gemini</translation>
+<translation id="2023265063803387188">‏‫Gemini לא זמין במצב פרטי</translation>
 <translation id="2031515492007104071">הרמה הבאה</translation>
 <translation id="2044394949148788042">פתיחה של תצוגת הכרטיסיות</translation>
 <translation id="2044681667265133332">החשבון <ph name="USER_EMAIL" /> מנוהל על ידי <ph name="HOSTED_DOMAIN" />, שיכול להיות שיש לו גישה לחלק מהמידע. <ph name="BEGIN_LINK" />מידע נוסף<ph name="END_LINK" /></translation>
@@ -912,7 +914,6 @@
 <translation id="3857113360369572832">‏פותחים את <ph name="BEGIN_BOLD" />הגדרות Safari<ph name="END_BOLD" /></translation>
 <translation id="3858860766373142691">שם</translation>
 <translation id="386224966259596343">‏יש אפשרות לשמור את הפרטים האלה ב-Wallet בפעם הבאה שממלאים טופס רלוונטי.</translation>
-<translation id="3868495844258915202">‏הצגת כתובת ה-URL המלאה</translation>
 <translation id="3870931306085184145">לא נשמרו סיסמאות בשביל <ph name="DOMAIN" /></translation>
 <translation id="3875783148670536197">איך עושים זאת?</translation>
 <translation id="3878657761594430423">כלי לאיסוף גיליונות</translation>
@@ -1394,7 +1395,6 @@
 <translation id="5282340693022193851">‏כדי לקבל התראות על מעקב מחירים, צריך להפעיל את ההתראות בהגדרות iOS.</translation>
 <translation id="528857768909044842">קבוצות הכרטיסיות נשמרות כאן</translation>
 <translation id="5294624619177114121">התראות בנייד</translation>
-<translation id="5295239312320826323">האם להסיר את החשבון <ph name="USER_EMAIL" />?</translation>
 <translation id="5300589172476337783">הצגה</translation>
 <translation id="5311061401280561833">יש הרשאות גישה למצלמה ולמיקרופון</translation>
 <translation id="5313967007315987356">הוספת אתר</translation>
@@ -1540,7 +1540,7 @@
 <translation id="5756200167514420691">כדי לגלוש באינטרנט עם יותר פרטיות, אפשר לפתוח כרטיסיות במצב פרטי</translation>
 <translation id="5756525336488841345">הסתרת הסימניות</translation>
 <translation id="5758631781033351321">רשימת הקריאה זמינה כאן</translation>
-<translation id="57586589942790530">מספר כרטיס לא חוקי</translation>
+<translation id="57586589942790530">מספר הכרטיס לא תקין</translation>
 <translation id="5758759241456233788">הפצה מקדימה של "מפות" מושבתת. אפשר להפעיל אותה שוב בהגדרות.</translation>
 <translation id="5759484603608560822">הסתרת ההורדות</translation>
 <translation id="5767099457279594162">הסיסמה לא שותפה</translation>
@@ -2146,7 +2146,6 @@
 <translation id="7603852183842204213">חלונות קופצים שנחסמו (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">הסנכרון לא עובד</translation>
 <translation id="760667371114328991">השבתת ההתראות של הטיימר לדיווח על מצב מסוכן</translation>
-<translation id="7612619742409846846">‏התחברת ל-Google בשם</translation>
 <translation id="7612849887607288481">‏פתיחת תפריט אב הטיפוס של ה-AI</translation>
 <translation id="7618220760967055820">בחירת הכפתור שיופיע בסרגל הכלים</translation>
 <translation id="7620522820075868385">ביטול</translation>

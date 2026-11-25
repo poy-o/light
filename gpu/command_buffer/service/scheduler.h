@@ -5,6 +5,7 @@
 #ifndef GPU_COMMAND_BUFFER_SERVICE_SCHEDULER_H_
 #define GPU_COMMAND_BUFFER_SERVICE_SCHEDULER_H_
 
+#include <memory>
 #include <vector>
 
 #include "base/containers/flat_map.h"
@@ -54,7 +55,7 @@ class GPU_COMMAND_BUFFER_SERVICE_EXPORT Scheduler {
 
     Task(SequenceId sequence_id,
          base::OnceClosure task_closure,
-         std::vector<SyncToken> sync_token_fences,
+         std::vector<SyncToken> sync_token_fences = {},
          ReportingCallback report_callback = ReportingCallback());
 
     Task(Task&& other);
@@ -87,12 +88,14 @@ class GPU_COMMAND_BUFFER_SERVICE_EXPORT Scheduler {
     const SequenceId sequence_id_;
   };
 
-  explicit Scheduler(SyncPointManager* sync_point_manager);
+  // Creates the Scheduler implementation.
+  static std::unique_ptr<Scheduler> Create(
+      SyncPointManager* sync_point_manager);
 
   Scheduler(const Scheduler&) = delete;
   Scheduler& operator=(const Scheduler&) = delete;
 
-  ~Scheduler() LOCKS_EXCLUDED(lock());
+  virtual ~Scheduler() LOCKS_EXCLUDED(lock());
 
   // Create a sequence with given priority. Returns an identifier for the
   // sequence that can be used with SyncPointManager for creating sync point
@@ -106,15 +109,16 @@ class GPU_COMMAND_BUFFER_SERVICE_EXPORT Scheduler {
   // Similar to the method above, but also creates a SyncPointClientState
   // associated with the sequence. The SyncPointClientState object is destroyed
   // when the sequence is destroyed.
-  SequenceId CreateSequence(
+  virtual SequenceId CreateSequence(
       SchedulingPriority priority,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       CommandBufferNamespace namespace_id,
-      CommandBufferId command_buffer_id) LOCKS_EXCLUDED(lock());
+      CommandBufferId command_buffer_id) LOCKS_EXCLUDED(lock()) = 0;
 
   // Destroy the sequence and run any scheduled tasks immediately. Sequence
   // could be destroyed outside of GPU thread.
-  void DestroySequence(SequenceId sequence_id) LOCKS_EXCLUDED(lock());
+  virtual void DestroySequence(SequenceId sequence_id)
+      LOCKS_EXCLUDED(lock()) = 0;
 
   [[nodiscard]] ScopedSyncPointClientState CreateSyncPointClientState(
       SequenceId sequence_id,
@@ -143,13 +147,15 @@ class GPU_COMMAND_BUFFER_SERVICE_EXPORT Scheduler {
   // Returns a task runner that schedules posted tasks on the sequence. It is
   // shared by all users of the sequence and shut down by DestroySequence(),
   // after which posting to it fails.
-  scoped_refptr<base::SequencedTaskRunner> GetTaskRunner(SequenceId sequence_id)
-      LOCKS_EXCLUDED(lock());
+  virtual scoped_refptr<base::SequencedTaskRunner> GetTaskRunner(
+      SequenceId sequence_id) LOCKS_EXCLUDED(lock()) = 0;
 
   // Schedules task to run on the sequence. The task is blocked until the sync
   // token fences are released or determined to be invalid. Tasks are run in the
   // order in which they are submitted.
   void ScheduleTask(Scheduler::Task task) LOCKS_EXCLUDED(lock());
+  void ScheduleTask(SequenceId sequence_id, base::OnceClosure task_closure)
+      LOCKS_EXCLUDED(lock());
 
   void ScheduleTasks(std::vector<Scheduler::Task> tasks) LOCKS_EXCLUDED(lock());
 
@@ -161,16 +167,113 @@ class GPU_COMMAND_BUFFER_SERVICE_EXPORT Scheduler {
       LOCKS_EXCLUDED(lock());
 
   // If the sequence should yield so that a higher priority sequence may run.
-  bool ShouldYield(SequenceId sequence_id) LOCKS_EXCLUDED(lock());
-
-  base::SingleThreadTaskRunner* GetTaskRunnerForTesting(SequenceId sequence_id)
-      LOCKS_EXCLUDED(lock());
+  virtual bool ShouldYield(SequenceId sequence_id) LOCKS_EXCLUDED(lock()) = 0;
 
   bool graph_validation_enabled() const {
     return task_graph_.graph_validation_enabled();
   }
 
   TaskGraph* task_graph() { return &task_graph_; }
+
+ protected:
+  // All public methods except constructor must be accessed under TaskGraph's
+  // lock. Please see locking annotation of individual methods.
+  class GPU_COMMAND_BUFFER_SERVICE_EXPORT Sequence
+      : public TaskGraph::Sequence {
+   public:
+    Sequence(
+        TaskGraph* task_graph,
+        scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+        SchedulingPriority priority,
+        CommandBufferNamespace namespace_id = CommandBufferNamespace::INVALID,
+        CommandBufferId command_buffer_id = {});
+
+    Sequence(const Sequence&) = delete;
+    Sequence& operator=(const Sequence&) = delete;
+
+    ~Sequence() override EXCLUSIVE_LOCKS_REQUIRED(lock());
+
+    base::SingleThreadTaskRunner* task_runner() const {
+      return task_runner_.get();
+    }
+
+    bool enabled() const EXCLUSIVE_LOCKS_REQUIRED(lock()) { return enabled_; }
+
+    SchedulingPriority default_priority() const { return default_priority_; }
+
+    SchedulingPriority current_priority() const
+        EXCLUSIVE_LOCKS_REQUIRED(lock()) {
+      return current_priority_;
+    }
+
+   protected:
+    const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+
+   private:
+    friend class Scheduler;
+
+    // Enables or disables the sequence. Returns true if the enabled state
+    // changed.
+    bool SetEnabled(bool enabled) EXCLUSIVE_LOCKS_REQUIRED(lock());
+
+    // If the sequence is enabled. Sequences are disabled/enabled based on when
+    // the command buffer is descheduled/scheduled.
+    bool enabled_ GUARDED_BY(lock()) = true;
+
+    const SchedulingPriority default_priority_;
+    SchedulingPriority current_priority_ GUARDED_BY(lock());
+  };
+
+  explicit Scheduler(SyncPointManager* sync_point_manager);
+
+  base::Lock& lock() const LOCK_RETURNED(task_graph_.lock()) {
+    return task_graph_.lock();
+  }
+
+  Sequence* GetSequence(SequenceId sequence_id)
+      EXCLUSIVE_LOCKS_REQUIRED(lock());
+
+  virtual void ScheduleTaskLocked(Scheduler::Task task)
+      EXCLUSIVE_LOCKS_REQUIRED(lock()) = 0;
+
+  virtual void OnSequenceEnabledChanged(Sequence* sequence)
+      EXCLUSIVE_LOCKS_REQUIRED(lock()) = 0;
+
+  virtual void OnSequencePriorityChanged() EXCLUSIVE_LOCKS_REQUIRED(lock()) {}
+
+  TaskGraph task_graph_;
+
+  // The Sequence instances in the map are owned by `task_graph_`.
+  base::flat_map<SequenceId, Sequence*> scheduler_sequence_map_
+      GUARDED_BY(lock());
+
+ private:
+  FRIEND_TEST_ALL_PREFIXES(SchedulerTest, StreamPriorities);
+};
+
+// The gpu::Scheduler implementation that runs tasks from a per-thread
+// RunNextTask() loop, picking the next task with a priority-ordered DFS over
+// the sequences' sync token dependencies.
+class GPU_COMMAND_BUFFER_SERVICE_EXPORT SchedulerImpl : public Scheduler {
+ public:
+  explicit SchedulerImpl(SyncPointManager* sync_point_manager);
+
+  SchedulerImpl(const SchedulerImpl&) = delete;
+  SchedulerImpl& operator=(const SchedulerImpl&) = delete;
+
+  ~SchedulerImpl() override LOCKS_EXCLUDED(lock());
+
+  // Scheduler:
+  using Scheduler::CreateSequence;
+  SequenceId CreateSequence(
+      SchedulingPriority priority,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+      CommandBufferNamespace namespace_id,
+      CommandBufferId command_buffer_id) override LOCKS_EXCLUDED(lock());
+  void DestroySequence(SequenceId sequence_id) override LOCKS_EXCLUDED(lock());
+  scoped_refptr<base::SequencedTaskRunner> GetTaskRunner(
+      SequenceId sequence_id) override LOCKS_EXCLUDED(lock());
+  bool ShouldYield(SequenceId sequence_id) override LOCKS_EXCLUDED(lock());
 
  private:
   struct SchedulingState {
@@ -196,10 +299,10 @@ class GPU_COMMAND_BUFFER_SERVICE_EXPORT Scheduler {
   // All public methods except constructor must be accessed under TaskGraph's
   // lock. Please see locking annotation of individual methods.
   class GPU_COMMAND_BUFFER_SERVICE_EXPORT Sequence
-      : public TaskGraph::Sequence {
+      : public Scheduler::Sequence {
    public:
     Sequence(
-        Scheduler* scheduler,
+        SchedulerImpl* scheduler,
         scoped_refptr<base::SingleThreadTaskRunner> task_runner,
         SchedulingPriority priority,
         CommandBufferNamespace namespace_id = CommandBufferNamespace::INVALID,
@@ -209,12 +312,6 @@ class GPU_COMMAND_BUFFER_SERVICE_EXPORT Scheduler {
     Sequence& operator=(const Sequence&) = delete;
 
     ~Sequence() override EXCLUSIVE_LOCKS_REQUIRED(lock());
-
-    base::SingleThreadTaskRunner* task_runner() const {
-      return task_runner_.get();
-    }
-
-    bool enabled() const EXCLUSIVE_LOCKS_REQUIRED(lock()) { return enabled_; }
 
     bool scheduled() const EXCLUSIVE_LOCKS_REQUIRED(lock()) {
       return running_state_ == SCHEDULED;
@@ -239,9 +336,6 @@ class GPU_COMMAND_BUFFER_SERVICE_EXPORT Scheduler {
     // cached scheduling state for comparison.
     bool ShouldYieldTo(const Sequence* other) const
         EXCLUSIVE_LOCKS_REQUIRED(lock());
-
-    // Enables or disables the sequence.
-    void SetEnabled(bool enabled) EXCLUSIVE_LOCKS_REQUIRED(lock());
 
     // Sets running state to SCHEDULED. Returns scheduling state for this
     // sequence used for inserting in the scheduling queue.
@@ -270,19 +364,10 @@ class GPU_COMMAND_BUFFER_SERVICE_EXPORT Scheduler {
     void OnFrontTaskUnblocked(uint64_t order_num) override
         EXCLUSIVE_LOCKS_REQUIRED(lock());
 
-    SchedulingPriority current_priority() const
-        EXCLUSIVE_LOCKS_REQUIRED(lock()) {
-      return current_priority_;
-    }
-
    private:
-    friend class Scheduler;
+    friend class SchedulerImpl;
 
     enum RunningState { IDLE, SCHEDULED, RUNNING };
-
-    // If the sequence is enabled. Sequences are disabled/enabled based on when
-    // the command buffer is descheduled/scheduled.
-    bool enabled_ GUARDED_BY(lock()) = true;
 
     // TODO(elgarawany): This is no longer needed. Replace with bool running_.
     RunningState running_state_ GUARDED_BY(lock()) = IDLE;
@@ -293,16 +378,12 @@ class GPU_COMMAND_BUFFER_SERVICE_EXPORT Scheduler {
 
     // Uses UnprotectedInRelease for performance reasons: no release-build
     // overhead. See raw_ptr.h for more info.
-    const raw_ptr<Scheduler, UnprotectedInRelease> scheduler_ = nullptr;
-    const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+    const raw_ptr<SchedulerImpl, UnprotectedInRelease> scheduler_ = nullptr;
 
-    // Created lazily by Scheduler::GetTaskRunner() and shut down in
+    // Created lazily by SchedulerImpl::GetTaskRunner() and shut down in
     // DestroySequence().
     scoped_refptr<SchedulerTaskRunner> scheduler_task_runner_
         GUARDED_BY(lock());
-
-    const SchedulingPriority default_priority_;
-    SchedulingPriority current_priority_ GUARDED_BY(lock());
   };
 
   // Each thread will have its own priority queue to schedule sequences
@@ -329,17 +410,16 @@ class GPU_COMMAND_BUFFER_SERVICE_EXPORT Scheduler {
     base::TimeTicks run_next_task_scheduled;
   };
 
-  base::Lock& lock() const LOCK_RETURNED(task_graph_.lock()) {
-    return task_graph_.lock();
-  }
+  // Scheduler:
+  void ScheduleTaskLocked(Scheduler::Task task) override
+      EXCLUSIVE_LOCKS_REQUIRED(lock());
+  void OnSequenceEnabledChanged(Scheduler::Sequence* sequence) override
+      EXCLUSIVE_LOCKS_REQUIRED(lock());
 
   Sequence* GetSequence(SequenceId sequence_id)
       EXCLUSIVE_LOCKS_REQUIRED(lock());
 
   PerThreadState& GetThreadState(base::SingleThreadTaskRunner* task_runner)
-      EXCLUSIVE_LOCKS_REQUIRED(lock());
-
-  void ScheduleTaskHelper(Scheduler::Task task)
       EXCLUSIVE_LOCKS_REQUIRED(lock());
 
   void TryScheduleSequence(Sequence* sequence) EXCLUSIVE_LOCKS_REQUIRED(lock());
@@ -380,20 +460,11 @@ class GPU_COMMAND_BUFFER_SERVICE_EXPORT Scheduler {
   // ordering the dependencies by priority and order_num.
   void RunNextTask() LOCKS_EXCLUDED(lock());
 
-  TaskGraph task_graph_;
-
-  // The Sequence instances in the map are owned by `task_graph_`.
-  base::flat_map<SequenceId, Sequence*> scheduler_sequence_map_
-      GUARDED_BY(lock());
-
   base::flat_map<base::SingleThreadTaskRunner*, PerThreadState>
       per_thread_state_map_ GUARDED_BY(lock());
 
   // Accumulated time the thread was blocked during running task
   base::TimeDelta total_blocked_time_ GUARDED_BY(lock());
-
- private:
-  FRIEND_TEST_ALL_PREFIXES(SchedulerTest, StreamPriorities);
 };
 
 }  // namespace gpu

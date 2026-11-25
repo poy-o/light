@@ -190,7 +190,7 @@ class DesktopNativeWidgetTopLevelHandler : public aura::WindowObserver,
     // realign `child_window_` back to (0, 0). Otherwise preserve the legacy
     // `native_window` `WindowObserver` path.
     if (base::FeatureList::IsEnabled(
-            views::features::kChildWindowRealignedOnWidgetMove)) {
+            ::features::kChildWindowRealignedOnWidgetMove)) {
       top_level_handler->top_level_widget_observation_.Observe(
           top_level_handler->top_level_widget_);
     } else {
@@ -1721,10 +1721,6 @@ void DesktopNativeWidgetAura::OnWindowActivated(
     native_widget_delegate_->OnNativeWidgetActivationChanged(
         content_window_activated);
   }
-
-  // Give the native widget a chance to handle any specific changes it needs.
-  desktop_window_tree_host_->OnActiveWindowChanged(
-      content_window_->Contains(gained_active));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

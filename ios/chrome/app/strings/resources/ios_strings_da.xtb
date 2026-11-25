@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">Del adgangskoder</translation>
 <translation id="1554043146674176775">Deaktiver AI-tilstand</translation>
 <translation id="1554477036522844996">Nyt vindue</translation>
+<translation id="1555014818414775661">Tilføj billeder</translation>
 <translation id="1557806604681757705">din computer</translation>
 <translation id="1558391695376153246">Luk inkognitofaner</translation>
 <translation id="1560153516220021659">Den sekundære knap til værktøjslinjen er skjult</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">Åbn <ph name="BEGIN_BOLD" />Safari-indstillinger<ph name="END_BOLD" /></translation>
 <translation id="3858860766373142691">Navn</translation>
 <translation id="386224966259596343">Du får mulighed for at gemme disse oplysninger i Wallet, næste gang du udfylder en relevant formular.</translation>
-<translation id="3868495844258915202">Vis hele webadressen</translation>
 <translation id="3870931306085184145">Der er ingen gemte adgangskoder til <ph name="DOMAIN" /></translation>
 <translation id="3875783148670536197">Vis mig hvordan</translation>
 <translation id="3878657761594430423">Regnarksværktøj</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">Du kan få notifikationer om prissporing ved at aktivere notifikationer i iOS-indstillingerne.</translation>
 <translation id="528857768909044842">Fanegrupper gemmes her</translation>
 <translation id="5294624619177114121">Mobilnotifikationer</translation>
-<translation id="5295239312320826323">Vil du fjerne kontoen <ph name="USER_EMAIL" />?</translation>
 <translation id="5300589172476337783">Vis</translation>
 <translation id="5311061401280561833">Der er givet adgang til kameraet og mikrofonen</translation>
 <translation id="5313967007315987356">Tilføj website</translation>
@@ -1788,6 +1787,7 @@ Handoff skal være aktiveret i afsnittet Generelt i Indstillinger, og dine enhed
 <translation id="6504541289630702018">Få nem adgang til dine fanegrupper på computeren</translation>
 <translation id="6505334220040167806">Skjul fanegruppe.</translation>
 <translation id="6506996418997555004">Del fanegruppen "<ph name="GROUP_NAME" />"</translation>
+<translation id="650770261448122895">Søg efter det, du ser, via Lens</translation>
 <translation id="6507973708545996744">Log ind for at se din læseliste på alle dine enheder.</translation>
 <translation id="6518133107902771759">Verificer</translation>
 <translation id="6523575793810663688">Vis mig hvordan</translation>
@@ -2147,7 +2147,6 @@ Du kan til enhver tid genstarte.</translation>
 <translation id="7603852183842204213">Pop op-vinduer er blokeret (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Synkronisering fungerer ikke</translation>
 <translation id="760667371114328991">Deaktiver Notifikationer om Sikkerhedstjek</translation>
-<translation id="7612619742409846846">Du er logget ind på Google som</translation>
 <translation id="7612849887607288481">Åbn menuen for AI-prototyper</translation>
 <translation id="7618220760967055820">Vælg, hvilken knap der skal vises på værktøjslinjen</translation>
 <translation id="7620522820075868385">Annuller</translation>
@@ -2430,6 +2429,7 @@ Du kan til enhver tid genstarte.</translation>
 <translation id="8439758443371991593">Skjul Føj til læseliste</translation>
 <translation id="8443986842926457191">Webadressen indeholder mere end 2.048 tegn</translation>
 <translation id="8449869326050867919">Adgangskoden er delt</translation>
+<translation id="8473367210869452063">Hvis du vil interagere med dette website, skal du stoppe den aktuelle opgave eller vente, til Gemini er færdig med den</translation>
 <translation id="8473815223723723001">Rediger billedet med Gemini</translation>
 <translation id="8473863474539038330">Adresser m.m.</translation>
 <translation id="8474378002946546633">Tillad notifikationer</translation>

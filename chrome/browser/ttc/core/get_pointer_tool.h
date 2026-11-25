@@ -11,7 +11,7 @@
 #include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/elapsed_timer.h"
-#include "chrome/browser/ttc/core/pointer_context_capturer.h"
+#include "chrome/browser/actor/tools/get_pointer/pointer_context_capturer.h"
 #include "chrome/browser/ttc/core/pointer_tracker.h"
 #include "components/ttc/app/public/tool_types.h"
 
@@ -25,11 +25,10 @@ class SessionControllerImpl;
 
 // The get_pointer tool of a session: tells the model what the user pointed at
 // during their turn, with an image of the page around it and a description of
-// the element there. See BuildGetPointerResponse() for the answer.
+// the element there. See actor::BuildGetPointerResult() for the answer.
 //
-// TODO(crbug.com/571268337): Make this an actor tool once actor tools can
-// return data and an image to the session; today they return a result code
-// and a message. The same holds for get_screenshot.
+// TODO(crbug.com/587484155): Make this an actor tool. Its answer is built by
+// code in actor already.
 class GetPointerTool {
  public:
   // The tool's feature must be enabled. `session_controller` must outlive this
@@ -57,7 +56,7 @@ class GetPointerTool {
                   std::vector<PointerTracker::Location> locations,
                   base::ElapsedTimer capture_timer,
                   ToolResponseCallback callback,
-                  PointerContextCapturer::Result context);
+                  actor::PointerContextCapturer::Result context);
   void OnResponseBuilt(base::WeakPtr<content::Page> page,
                        ToolResponseCallback callback,
                        ToolResponse response);
@@ -71,7 +70,7 @@ class GetPointerTool {
   const raw_ref<SessionControllerImpl> session_controller_;
 
   // Set while the page is being captured.
-  std::unique_ptr<PointerContextCapturer> capturer_;
+  std::unique_ptr<actor::PointerContextCapturer> capturer_;
 
   base::WeakPtrFactory<GetPointerTool> weak_factory_{this};
 };

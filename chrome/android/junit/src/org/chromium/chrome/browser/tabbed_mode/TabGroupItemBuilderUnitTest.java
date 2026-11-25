@@ -490,14 +490,14 @@ public class TabGroupItemBuilderUnitTest {
         Token token2 = Token.createRandom();
 
         SavedTabGroup group1 = new SavedTabGroup();
-        group1.localId = new LocalTabGroupId(token1);
+        group1.localId = new LocalTabGroupId(TabGroupId.fromRawToken(token1));
         group1.title = "Group 1";
         group1.updateTimeMs = 100L;
         group1.color = TabGroupColorId.BLUE;
         group1.savedTabs.add(new SavedTabGroupTab());
 
         SavedTabGroup group2 = new SavedTabGroup();
-        group2.localId = new LocalTabGroupId(token2);
+        group2.localId = new LocalTabGroupId(TabGroupId.fromRawToken(token2));
         group2.title = "Group 2";
         group2.updateTimeMs = 200L;
         group2.color = TabGroupColorId.RED;
@@ -547,14 +547,14 @@ public class TabGroupItemBuilderUnitTest {
         Token token2 = Token.createRandom();
 
         SavedTabGroup group1 = new SavedTabGroup();
-        group1.localId = new LocalTabGroupId(token1);
+        group1.localId = new LocalTabGroupId(TabGroupId.fromRawToken(token1));
         group1.title = "Group 1";
         group1.updateTimeMs = 100L;
         group1.color = TabGroupColorId.BLUE;
         group1.savedTabs.add(new SavedTabGroupTab());
 
         SavedTabGroup group2 = new SavedTabGroup();
-        group2.localId = new LocalTabGroupId(token2);
+        group2.localId = new LocalTabGroupId(TabGroupId.fromRawToken(token2));
         group2.title = "Group 2";
         group2.updateTimeMs = 200L;
         group2.color = TabGroupColorId.RED;
@@ -626,7 +626,7 @@ public class TabGroupItemBuilderUnitTest {
     public void testBuildSubmenuForTabGroupsParent_sharesGroupWindowChecker() {
         Token token1 = Token.createRandom();
         SavedTabGroup group1 = new SavedTabGroup();
-        group1.localId = new LocalTabGroupId(token1);
+        group1.localId = new LocalTabGroupId(TabGroupId.fromRawToken(token1));
         group1.title = "Group 1";
         group1.updateTimeMs = 100L;
         group1.color = TabGroupColorId.BLUE;
@@ -681,14 +681,14 @@ public class TabGroupItemBuilderUnitTest {
         Token token2 = Token.createRandom();
 
         SavedTabGroup group1 = new SavedTabGroup();
-        group1.localId = new LocalTabGroupId(token1);
+        group1.localId = new LocalTabGroupId(TabGroupId.fromRawToken(token1));
         group1.title = "Group 1";
         group1.updateTimeMs = 100L;
         group1.color = TabGroupColorId.BLUE;
         group1.savedTabs.add(new SavedTabGroupTab());
 
         SavedTabGroup group2 = new SavedTabGroup();
-        group2.localId = new LocalTabGroupId(token2);
+        group2.localId = new LocalTabGroupId(TabGroupId.fromRawToken(token2));
         group2.title = "Group 2";
         group2.updateTimeMs = 200L;
         group2.color = TabGroupColorId.RED;
@@ -721,8 +721,11 @@ public class TabGroupItemBuilderUnitTest {
 
         // TabWindowManager has group2 in window 2.
         TabWindowManagerSingleton.setTabWindowManagerForTesting(mTabWindowManager);
-        when(mTabWindowManager.findWindowIdForTabGroup(eq(token2), anyBoolean())).thenReturn(2);
-        when(mTabWindowManager.getGroupedTabsByWindow(2, token2, false)).thenReturn(List.of(tab2));
+        when(mTabWindowManager.findWindowIdForTabGroup(
+                        eq(TabGroupId.fromRawToken(token2)), anyBoolean()))
+                .thenReturn(2);
+        when(mTabWindowManager.getGroupedTabsByWindow(2, TabGroupId.fromRawToken(token2), false))
+                .thenReturn(List.of(tab2));
         when(mTabWindowManager.getTabModelSelectorById(2)).thenReturn(mSelectorWindow2);
         when(mSelectorWindow2.getModel(false)).thenReturn(mModelWindow2);
         when(mModelWindow2.getTabModelType()).thenReturn(TabModelType.STANDARD);
@@ -1013,7 +1016,7 @@ public class TabGroupItemBuilderUnitTest {
 
         SavedTabGroup localGroup = new SavedTabGroup();
         localGroup.syncId = "local_id";
-        localGroup.localId = new LocalTabGroupId(token1);
+        localGroup.localId = new LocalTabGroupId(TabGroupId.fromRawToken(token1));
         localGroup.title = "Local Group";
         localGroup.color = TabGroupColorId.BLUE;
         localGroup.updateTimeMs = 100L;
@@ -1080,7 +1083,7 @@ public class TabGroupItemBuilderUnitTest {
 
         SavedTabGroup closingGroup = new SavedTabGroup();
         closingGroup.syncId = "closing_id";
-        closingGroup.localId = new LocalTabGroupId(token1);
+        closingGroup.localId = new LocalTabGroupId(TabGroupId.fromRawToken(token1));
         closingGroup.title = "Saved Title";
         closingGroup.color = TabGroupColorId.BLUE;
         closingGroup.updateTimeMs = 100L;
@@ -1152,7 +1155,7 @@ public class TabGroupItemBuilderUnitTest {
 
         SavedTabGroup closingGroup = new SavedTabGroup();
         closingGroup.syncId = "closing_cross_window_id";
-        closingGroup.localId = new LocalTabGroupId(token1);
+        closingGroup.localId = new LocalTabGroupId(TabGroupId.fromRawToken(token1));
         closingGroup.title = "Saved Title";
         closingGroup.color = TabGroupColorId.BLUE;
         closingGroup.updateTimeMs = 100L;
@@ -1168,7 +1171,9 @@ public class TabGroupItemBuilderUnitTest {
         when(mTabModel.isIncognito()).thenReturn(false);
 
         TabWindowManagerSingleton.setTabWindowManagerForTesting(mTabWindowManager);
-        when(mTabWindowManager.findWindowIdForTabGroup(eq(token1), anyBoolean())).thenReturn(2);
+        when(mTabWindowManager.findWindowIdForTabGroup(
+                        eq(TabGroupId.fromRawToken(token1)), anyBoolean()))
+                .thenReturn(2);
 
         when(mModelWindow2.getTabModelType()).thenReturn(TabModelType.STANDARD);
         when(mModelWindow2.isIncognito()).thenReturn(false);
@@ -1237,7 +1242,7 @@ public class TabGroupItemBuilderUnitTest {
         Token token1 = Token.createRandom();
         SavedTabGroup hiddenGroup = new SavedTabGroup();
         hiddenGroup.syncId = "hidden_id";
-        hiddenGroup.localId = new LocalTabGroupId(token1);
+        hiddenGroup.localId = new LocalTabGroupId(TabGroupId.fromRawToken(token1));
         hiddenGroup.title = "Hidden Group";
         hiddenGroup.color = TabGroupColorId.BLUE;
         hiddenGroup.savedTabs = List.of(new SavedTabGroupTab());
@@ -1250,7 +1255,9 @@ public class TabGroupItemBuilderUnitTest {
         when(mTabModel.getComprehensiveModel()).thenReturn(mComprehensiveTabList);
 
         TabWindowManagerSingleton.setTabWindowManagerForTesting(mTabWindowManager);
-        when(mTabWindowManager.findWindowIdForTabGroup(eq(token1), anyBoolean())).thenReturn(2);
+        when(mTabWindowManager.findWindowIdForTabGroup(
+                        eq(TabGroupId.fromRawToken(token1)), anyBoolean()))
+                .thenReturn(2);
         when(mTabWindowManager.getTabModelSelectorById(2)).thenReturn(mSelectorWindow2);
         when(mSelectorWindow2.getModel(false)).thenReturn(mModelWindow2);
         when(mModelWindow2.containsTabGroup(TabGroupId.fromOptionalToken(token1)))
@@ -1282,7 +1289,7 @@ public class TabGroupItemBuilderUnitTest {
         Token token1 = Token.createRandom();
         SavedTabGroup hiddenGroup = new SavedTabGroup();
         hiddenGroup.syncId = "hidden_id";
-        hiddenGroup.localId = new LocalTabGroupId(token1);
+        hiddenGroup.localId = new LocalTabGroupId(TabGroupId.fromRawToken(token1));
         hiddenGroup.title = "Hidden Group";
         hiddenGroup.color = TabGroupColorId.BLUE;
         hiddenGroup.savedTabs = List.of(new SavedTabGroupTab());
@@ -1295,7 +1302,9 @@ public class TabGroupItemBuilderUnitTest {
         when(mTabModel.getComprehensiveModel()).thenReturn(mComprehensiveTabList);
 
         TabWindowManagerSingleton.setTabWindowManagerForTesting(mTabWindowManager);
-        when(mTabWindowManager.findWindowIdForTabGroup(eq(token1), anyBoolean())).thenReturn(2);
+        when(mTabWindowManager.findWindowIdForTabGroup(
+                        eq(TabGroupId.fromRawToken(token1)), anyBoolean()))
+                .thenReturn(2);
         when(mTabWindowManager.getTabModelSelectorById(2)).thenReturn(mSelectorWindow2);
         when(mSelectorWindow2.getModel(false)).thenReturn(mModelWindow2);
         when(mModelWindow2.containsTabGroup(TabGroupId.fromOptionalToken(token1)))
@@ -1334,7 +1343,7 @@ public class TabGroupItemBuilderUnitTest {
         Token token1 = Token.createRandom();
         SavedTabGroup headlessGroup = new SavedTabGroup();
         headlessGroup.syncId = "headless_id";
-        headlessGroup.localId = new LocalTabGroupId(token1);
+        headlessGroup.localId = new LocalTabGroupId(TabGroupId.fromRawToken(token1));
         headlessGroup.title = "Headless Group";
         headlessGroup.color = TabGroupColorId.BLUE;
         headlessGroup.savedTabs = List.of(new SavedTabGroupTab());
@@ -1347,7 +1356,9 @@ public class TabGroupItemBuilderUnitTest {
         when(mTabModel.getComprehensiveModel()).thenReturn(mComprehensiveTabList);
 
         TabWindowManagerSingleton.setTabWindowManagerForTesting(mTabWindowManager);
-        when(mTabWindowManager.findWindowIdForTabGroup(eq(token1), anyBoolean())).thenReturn(2);
+        when(mTabWindowManager.findWindowIdForTabGroup(
+                        eq(TabGroupId.fromRawToken(token1)), anyBoolean()))
+                .thenReturn(2);
         when(mTabWindowManager.getTabModelSelectorById(2)).thenReturn(mSelectorWindow2);
         when(mSelectorWindow2.getModel(false)).thenReturn(mModelWindow2);
         when(mModelWindow2.getTabModelType()).thenReturn(TabModelType.HEADLESS);
@@ -1379,7 +1390,7 @@ public class TabGroupItemBuilderUnitTest {
         Token token1 = Token.createRandom();
         SavedTabGroup headlessGroup = new SavedTabGroup();
         headlessGroup.syncId = "headless_id";
-        headlessGroup.localId = new LocalTabGroupId(token1);
+        headlessGroup.localId = new LocalTabGroupId(TabGroupId.fromRawToken(token1));
         headlessGroup.title = "Headless Group";
         headlessGroup.color = TabGroupColorId.BLUE;
         headlessGroup.savedTabs = List.of(new SavedTabGroupTab());
@@ -1392,7 +1403,9 @@ public class TabGroupItemBuilderUnitTest {
         when(mTabModel.getComprehensiveModel()).thenReturn(mComprehensiveTabList);
 
         TabWindowManagerSingleton.setTabWindowManagerForTesting(mTabWindowManager);
-        when(mTabWindowManager.findWindowIdForTabGroup(eq(token1), anyBoolean())).thenReturn(2);
+        when(mTabWindowManager.findWindowIdForTabGroup(
+                        eq(TabGroupId.fromRawToken(token1)), anyBoolean()))
+                .thenReturn(2);
         when(mTabWindowManager.getTabModelSelectorById(2)).thenReturn(mSelectorWindow2);
         when(mSelectorWindow2.getModel(false)).thenReturn(mModelWindow2);
         when(mModelWindow2.getTabModelType()).thenReturn(TabModelType.HEADLESS);
@@ -1530,7 +1543,9 @@ public class TabGroupItemBuilderUnitTest {
         when(mTabModel.getComprehensiveModel()).thenReturn(mComprehensiveTabList);
 
         TabWindowManagerSingleton.setTabWindowManagerForTesting(mTabWindowManager);
-        when(mTabWindowManager.findWindowIdForTabGroup(eq(token1), anyBoolean())).thenReturn(2);
+        when(mTabWindowManager.findWindowIdForTabGroup(
+                        eq(TabGroupId.fromRawToken(token1)), anyBoolean()))
+                .thenReturn(2);
         when(mTabWindowManager.getTabModelSelectorById(2)).thenReturn(mSelectorWindow2);
         when(mSelectorWindow2.getModel(false)).thenReturn(mModelWindow2);
         when(mModelWindow2.getTabModelType()).thenReturn(TabModelType.HEADLESS);
@@ -1914,8 +1929,10 @@ public class TabGroupItemBuilderUnitTest {
         Tab tabWindow2 =
                 createMockTab(201, "Another Tab", JUnitTestGURLs.URL_2, tokenWindow2, false);
         TabWindowManagerSingleton.setTabWindowManagerForTesting(mTabWindowManager);
-        when(mTabWindowManager.findWindowIdForTabGroup(tokenWindow2)).thenReturn(2);
-        when(mTabWindowManager.findWindowIdForTabGroup(eq(tokenWindow2), anyBoolean()))
+        when(mTabWindowManager.findWindowIdForTabGroup(TabGroupId.fromRawToken(tokenWindow2)))
+                .thenReturn(2);
+        when(mTabWindowManager.findWindowIdForTabGroup(
+                        eq(TabGroupId.fromRawToken(tokenWindow2)), anyBoolean()))
                 .thenReturn(2);
         when(mTabWindowManager.getTabModelSelectorById(2)).thenReturn(mSelectorWindow2);
         when(mSelectorWindow2.getModel(false)).thenReturn(mModelWindow2);
@@ -2202,7 +2219,8 @@ public class TabGroupItemBuilderUnitTest {
         TabWindowManagerSingleton.setTabWindowManagerForTesting(mTabWindowManager);
         when(mTabWindowManager.getAllTabModelSelectors())
                 .thenReturn(List.of(mTabModelSelector, mSelectorWindow2));
-        when(mTabWindowManager.findWindowIdForTabGroup(eq(tokenWindow2), anyBoolean()))
+        when(mTabWindowManager.findWindowIdForTabGroup(
+                        eq(TabGroupId.fromRawToken(tokenWindow2)), anyBoolean()))
                 .thenReturn(2);
         when(mTabWindowManager.getTabModelSelectorById(2)).thenReturn(mSelectorWindow2);
         when(mSelectorWindow2.getModel(false)).thenReturn(mModelWindow2);
@@ -2365,7 +2383,7 @@ public class TabGroupItemBuilderUnitTest {
             List<SavedTabGroupTab> savedTabs) {
         SavedTabGroup group = new SavedTabGroup();
         group.syncId = syncId;
-        group.localId = new LocalTabGroupId(localToken);
+        group.localId = new LocalTabGroupId(TabGroupId.fromRawToken(localToken));
         group.title = title;
         group.color = color;
         group.updateTimeMs = updateTimeMs;
@@ -2456,8 +2474,10 @@ public class TabGroupItemBuilderUnitTest {
         Tab tabWindow2 =
                 createMockTab(201, "Another Tab", JUnitTestGURLs.URL_2, tokenAnother, false);
         TabWindowManagerSingleton.setTabWindowManagerForTesting(mTabWindowManager);
-        when(mTabWindowManager.findWindowIdForTabGroup(tokenAnother)).thenReturn(2);
-        when(mTabWindowManager.findWindowIdForTabGroup(eq(tokenAnother), anyBoolean()))
+        when(mTabWindowManager.findWindowIdForTabGroup(TabGroupId.fromRawToken(tokenAnother)))
+                .thenReturn(2);
+        when(mTabWindowManager.findWindowIdForTabGroup(
+                        eq(TabGroupId.fromRawToken(tokenAnother)), anyBoolean()))
                 .thenReturn(2);
         when(mTabWindowManager.getTabModelSelectorById(2)).thenReturn(mSelectorWindow2);
         when(mSelectorWindow2.getModel(false)).thenReturn(mModelWindow2);
@@ -2543,8 +2563,10 @@ public class TabGroupItemBuilderUnitTest {
         Tab tabWindow2 =
                 createMockTab(201, "Another Tab", JUnitTestGURLs.URL_2, tokenWindow2, false);
         TabWindowManagerSingleton.setTabWindowManagerForTesting(mTabWindowManager);
-        when(mTabWindowManager.findWindowIdForTabGroup(tokenWindow2)).thenReturn(2);
-        when(mTabWindowManager.findWindowIdForTabGroup(eq(tokenWindow2), anyBoolean()))
+        when(mTabWindowManager.findWindowIdForTabGroup(TabGroupId.fromRawToken(tokenWindow2)))
+                .thenReturn(2);
+        when(mTabWindowManager.findWindowIdForTabGroup(
+                        eq(TabGroupId.fromRawToken(tokenWindow2)), anyBoolean()))
                 .thenReturn(2);
         when(mTabWindowManager.getTabModelSelectorById(2)).thenReturn(mSelectorWindow2);
         when(mSelectorWindow2.getModel(false)).thenReturn(mModelWindow2);

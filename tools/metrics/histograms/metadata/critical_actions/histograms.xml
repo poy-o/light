@@ -52,7 +52,8 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <!-- LINT.ThenChange(
-    //chrome/browser/ui/webui/history/browsing_history_handler.cc:OpenConversationSourceToHistogramSuffix,
+    //chrome/browser/critical_actions/critical_action_ui_utils.cc:OpenConversationSourceToHistogramSuffix,
+    //components/critical_actions/core/browser/critical_action_types.h:OpenConversationSource,
     //ui/webui/resources/cr_components/history/history.mojom:OpenConversationSource,
 ) -->
 
@@ -94,7 +95,7 @@ chromium-metrics-reviews@google.com.
 <histogram
     name="CriticalActions.ConversationIdDeferredResolutionOutcome.{ActionSource}"
     enum="CriticalActionConversationIdDeferredResolutionOutcome"
-    expires_after="2027-01-01">
+    expires_after="2027-11-01">
   <owner>kutylbeky@google.com</owner>
   <owner>polonium@google.com</owner>
   <summary>

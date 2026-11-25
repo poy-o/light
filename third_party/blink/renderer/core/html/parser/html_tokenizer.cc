@@ -29,6 +29,8 @@
 
 #include <array>
 
+#include "base/feature_list.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/core/html/parser/html_entity_parser.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html/parser/html_tree_builder.h"
@@ -38,6 +40,10 @@
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/text/ascii_ctype.h"
 #include "third_party/blink/renderer/platform/wtf/text/unicode.h"
+
+#if defined(BLINK_ENABLE_VECTORIZED_HTML_SCANNING)
+#include "third_party/highway/src/hwy/highway.h"
+#endif
 
 namespace blink {
 
@@ -152,13 +158,200 @@ static inline bool VectorEqualsString(
 #define HTML_SWITCH_TO(stateName) SWITCH_TO(HTMLTokenizer, stateName)
 
 HTMLTokenizer::HTMLTokenizer(const HTMLParserOptions& options)
+    : HTMLTokenizer(
+          options,
+#if defined(BLINK_ENABLE_VECTORIZED_HTML_SCANNING)
+          base::FeatureList::IsEnabled(features::kHTMLTokenizerSimdScan)
+#else
+          false
+#endif
+      ) {
+}
+
+HTMLTokenizer::HTMLTokenizer(const HTMLParserOptions& options,
+                             bool simd_scan_enabled)
     : truncated_markup_declaration_enabled_(
           RuntimeEnabledFeatures::
               HTMLParserTruncatedMarkupDeclarationEnabled()),
+      simd_scan_script_data_enabled_(
+          simd_scan_enabled &&
+          features::kHTMLTokenizerSimdScanScriptData.Get()),
+      simd_scan_rawtext_enabled_(simd_scan_enabled &&
+                                 features::kHTMLTokenizerSimdScanRawtext.Get()),
+      simd_scan_attribute_value_enabled_(
+          simd_scan_enabled &&
+          features::kHTMLTokenizerSimdScanAttributeValue.Get()),
+      simd_scan_min_length_(
+          simd_scan_enabled ? features::kHTMLTokenizerSimdScanMinLength.Get()
+                            : 0),
       options_(options),
       input_stream_preprocessor_(this) {
   Reset();
 }
+
+#if defined(BLINK_ENABLE_VECTORIZED_HTML_SCANNING)
+namespace {
+
+template <typename CharType, size_t N>
+HWY_ATTR size_t SimdScan(base::span<const CharType> span,
+                         const std::array<CharType, N>& stop_chars,
+                         UChar* bitwise_or_out = nullptr) {
+  static_assert(N > 0);
+  static_assert(sizeof(CharType) == 1 || sizeof(CharType) == 2);
+  if constexpr (sizeof(CharType) == 2) {
+    CHECK(bitwise_or_out);
+  }
+  namespace hw = hwy::HWY_NAMESPACE;
+  using LaneType = std::conditional_t<sizeof(CharType) == 1, uint8_t, uint16_t>;
+  constexpr size_t kLanes = 16 / sizeof(CharType);
+  const hw::FixedTag<LaneType, kLanes> tag;
+  constexpr size_t kStride = hw::MaxLanes(tag);
+
+  std::array<hw::Vec<decltype(tag)>, N> stop_vecs;
+  for (size_t i = 0; i < N; ++i) {
+    stop_vecs[i] = hw::Set(tag, static_cast<LaneType>(stop_chars[i]));
+  }
+
+  [[maybe_unused]] const auto kHighByteMask =
+      hw::Set(tag, static_cast<LaneType>(sizeof(CharType) == 2 ? 0xff00 : 0));
+  [[maybe_unused]] auto or_accum = hw::Zero(tag);
+  [[maybe_unused]] UChar scalar_or = 0;
+
+  const size_t size = span.size();
+  size_t pos = 0;
+  for (; pos + kStride <= size; pos += kStride) {
+    // SAFETY: `pos + kStride <= size` guarantees `kStride` readable elements.
+    const auto input = hw::LoadU(tag, reinterpret_cast<const LaneType*>(
+                                          UNSAFE_BUFFERS(span.data() + pos)));
+    auto mask = hw::Eq(input, stop_vecs[0]);
+    for (size_t i = 1; i < N; ++i) {
+      mask = hw::Or(mask, hw::Eq(input, stop_vecs[i]));
+    }
+    if (const intptr_t index = hw::FindFirstTrue(tag, mask); index != -1) {
+      const size_t hit = pos + static_cast<size_t>(index);
+      if constexpr (sizeof(CharType) == 2) {
+        for (size_t i = pos; i < hit; ++i) {
+          scalar_or |= span[i];
+        }
+        if (!hw::AllTrue(
+                tag, hw::Eq(hw::And(or_accum, kHighByteMask), hw::Zero(tag)))) {
+          scalar_or |= 0x100;
+        }
+        *bitwise_or_out = scalar_or;
+      }
+      return hit;
+    }
+    if constexpr (sizeof(CharType) == 2) {
+      or_accum = hw::Or(or_accum, input);
+    }
+  }
+
+  if constexpr (sizeof(CharType) == 2) {
+    if (!hw::AllTrue(tag,
+                     hw::Eq(hw::And(or_accum, kHighByteMask), hw::Zero(tag)))) {
+      scalar_or |= 0x100;
+    }
+  }
+  for (; pos < size; ++pos) {
+    const CharType c = span[pos];
+    for (size_t i = 0; i < N; ++i) {
+      if (c == stop_chars[i]) {
+        if constexpr (sizeof(CharType) == 2) {
+          *bitwise_or_out = scalar_or;
+        }
+        return pos;
+      }
+    }
+    if constexpr (sizeof(CharType) == 2) {
+      scalar_or |= c;
+    }
+  }
+  if constexpr (sizeof(CharType) == 2) {
+    *bitwise_or_out = scalar_or;
+  }
+  return size;
+}
+
+}  // namespace
+
+bool HTMLTokenizer::TrySimdScanScriptOrRawtext(SegmentedString& source) {
+  // Callers check `cc != '\n'` after InputStreamPreprocessor::Peek(), which
+  // excludes both '\n' and '\r' (normalized to '\n'), so `skip_next_new_line_`
+  // is guaranteed to be false here.
+  DCHECK(!input_stream_preprocessor_.SkipNextNewLine());
+  if (source.IsCurrentSubstring8Bit()) {
+    const base::span<const LChar> remaining =
+        source.CurrentSubstringRemainingSpan8();
+    if (remaining.size() < simd_scan_min_length_) {
+      return false;
+    }
+    const size_t count = SimdScan<LChar, 4>(remaining, {'<', '\n', '\r', '\0'});
+    if (count == 0) {
+      return false;
+    }
+    token_.EnsureIsCharacterToken();
+    token_.AppendToCharacter(remaining.first(count));
+    source.AdvancePastNonNewlinesInCurrentSubstring(
+        base::checked_cast<wtf_size_t>(count));
+    return true;
+  }
+
+  const base::span<const UChar> remaining =
+      source.CurrentSubstringRemainingSpan16();
+  if (remaining.size() < simd_scan_min_length_) {
+    return false;
+  }
+  UChar bitwise_or = 0;
+  const size_t count =
+      SimdScan<UChar, 4>(remaining, {'<', '\n', '\r', '\0'}, &bitwise_or);
+  if (count == 0) {
+    return false;
+  }
+  token_.EnsureIsCharacterToken();
+  token_.AppendToCharacter(remaining.first(count), bitwise_or);
+  source.AdvancePastNonNewlinesInCurrentSubstring(
+      base::checked_cast<wtf_size_t>(count));
+  return true;
+}
+
+bool HTMLTokenizer::TrySimdScanQuotedAttributeValue(SegmentedString& source,
+                                                    char quote_char) {
+  DCHECK(!input_stream_preprocessor_.SkipNextNewLine());
+  if (source.IsCurrentSubstring8Bit()) {
+    const base::span<const LChar> remaining =
+        source.CurrentSubstringRemainingSpan8();
+    if (remaining.size() < simd_scan_min_length_) {
+      return false;
+    }
+    const size_t count = SimdScan<LChar, 5>(
+        remaining, {static_cast<LChar>(quote_char), '&', '\n', '\r', '\0'});
+    if (count == 0) {
+      return false;
+    }
+    token_.AppendToAttributeValue(remaining.first(count));
+    source.AdvancePastNonNewlinesInCurrentSubstring(
+        base::checked_cast<wtf_size_t>(count));
+    return true;
+  }
+
+  const base::span<const UChar> remaining =
+      source.CurrentSubstringRemainingSpan16();
+  if (remaining.size() < simd_scan_min_length_) {
+    return false;
+  }
+  UChar bitwise_or = 0;
+  const size_t count = SimdScan<UChar, 5>(
+      remaining, {static_cast<UChar>(quote_char), '&', '\n', '\r', '\0'},
+      &bitwise_or);
+  if (count == 0) {
+    return false;
+  }
+  token_.AppendToAttributeValue(remaining.first(count), bitwise_or);
+  source.AdvancePastNonNewlinesInCurrentSubstring(
+      base::checked_cast<wtf_size_t>(count));
+  return true;
+}
+#endif  // defined(BLINK_ENABLE_VECTORIZED_HTML_SCANNING)
 
 HTMLTokenizer::~HTMLTokenizer() = default;
 
@@ -328,11 +521,21 @@ bool HTMLTokenizer::NextTokenImpl(SegmentedString& source) {
     END_STATE()
 
     HTML_BEGIN_STATE(kRAWTEXTState) {
-      if (cc == '<')
+      if (cc == '<') {
         HTML_ADVANCE_PAST_NON_NEWLINE_TO(kRAWTEXTLessThanSignState);
-      else if (cc == kEndOfFileMarker)
+      } else if (cc == kEndOfFileMarker) {
         return EmitEndOfFile(source);
-      else {
+      } else {
+#if defined(BLINK_ENABLE_VECTORIZED_HTML_SCANNING)
+        if (simd_scan_rawtext_enabled_ && cc != '\n' &&
+            TrySimdScanScriptOrRawtext(source)) {
+          if (source.IsEmpty() ||
+              !input_stream_preprocessor_.Peek(source, cc)) {
+            return HaveBufferedCharacterToken();
+          }
+          goto kRAWTEXTState;
+        }
+#endif
         BufferCharacter(cc);
         HTML_CONSUME(kRAWTEXTState);
       }
@@ -340,11 +543,21 @@ bool HTMLTokenizer::NextTokenImpl(SegmentedString& source) {
     END_STATE()
 
     HTML_BEGIN_STATE(kScriptDataState) {
-      if (cc == '<')
+      if (cc == '<') {
         HTML_ADVANCE_PAST_NON_NEWLINE_TO(kScriptDataLessThanSignState);
-      else if (cc == kEndOfFileMarker)
+      } else if (cc == kEndOfFileMarker) {
         return EmitEndOfFile(source);
-      else {
+      } else {
+#if defined(BLINK_ENABLE_VECTORIZED_HTML_SCANNING)
+        if (simd_scan_script_data_enabled_ && cc != '\n' &&
+            TrySimdScanScriptOrRawtext(source)) {
+          if (source.IsEmpty() ||
+              !input_stream_preprocessor_.Peek(source, cc)) {
+            return HaveBufferedCharacterToken();
+          }
+          goto kScriptDataState;
+        }
+#endif
         BufferCharacter(cc);
         HTML_CONSUME(kScriptDataState);
       }
@@ -974,6 +1187,16 @@ bool HTMLTokenizer::NextTokenImpl(SegmentedString& source) {
         }
         HTML_RECONSUME_IN(kDataState);
       } else {
+#if defined(BLINK_ENABLE_VECTORIZED_HTML_SCANNING)
+        if (simd_scan_attribute_value_enabled_ && cc != '\n' &&
+            TrySimdScanQuotedAttributeValue(source, '"')) {
+          if (source.IsEmpty() ||
+              !input_stream_preprocessor_.Peek(source, cc)) {
+            return HaveBufferedCharacterToken();
+          }
+          goto kAttributeValueDoubleQuotedState;
+        }
+#endif
         token_.AppendToAttributeValue(cc);
         HTML_CONSUME(kAttributeValueDoubleQuotedState);
       }
@@ -999,6 +1222,16 @@ bool HTMLTokenizer::NextTokenImpl(SegmentedString& source) {
         }
         HTML_RECONSUME_IN(kDataState);
       } else {
+#if defined(BLINK_ENABLE_VECTORIZED_HTML_SCANNING)
+        if (simd_scan_attribute_value_enabled_ && cc != '\n' &&
+            TrySimdScanQuotedAttributeValue(source, '\'')) {
+          if (source.IsEmpty() ||
+              !input_stream_preprocessor_.Peek(source, cc)) {
+            return HaveBufferedCharacterToken();
+          }
+          goto kAttributeValueSingleQuotedState;
+        }
+#endif
         token_.AppendToAttributeValue(cc);
         HTML_CONSUME(kAttributeValueSingleQuotedState);
       }

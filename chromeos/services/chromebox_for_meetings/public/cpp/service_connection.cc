@@ -4,6 +4,8 @@
 
 #include "chromeos/services/chromebox_for_meetings/public/cpp/service_connection.h"
 
+#include <cstdint>
+
 namespace chromeos {
 namespace cfm {
 
@@ -24,6 +26,15 @@ ServiceConnection* ServiceConnection::GetInstance() {
 void ServiceConnection::UseFakeServiceConnectionForTesting(
     ServiceConnection* const fake_service_connection) {
   g_fake_service_connection_for_testing = fake_service_connection;
+}
+
+void ServiceConnection::BindRestrictedServiceContext(
+    mojo::PendingReceiver<chromeos::cfm::mojom::CfmServiceContext> receiver) {
+  // Connections that do not support restricted contexts report the service
+  // as unavailable.
+  receiver.ResetWithReason(
+      static_cast<uint32_t>(mojom::DisconnectReason::kServiceUnavailableCode),
+      mojom::DisconnectReason::kServiceUnavailableMessage);
 }
 
 }  // namespace cfm

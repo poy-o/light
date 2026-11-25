@@ -96,6 +96,10 @@ export enum FormControlType {
 // Definitions from
 // third_party/blink/public/mojom/content_extraction/ai_page_content.mojom
 
+// If a corresponding Blink APC change needs to be done as a follow-up, please
+// add a TODO and/or file a bug to track the work.
+// LINT.IfChange(AIPageContentMojomTypes)
+
 // The numbers are aligned with the ContentAttributeType enum in
 // components/optimization_guide/proto/features/common_quality_data.proto.
 export enum PageContentAttributeType {
@@ -121,6 +125,8 @@ export enum PageContentAttributeType {
   VIDEO = 27,
   DIALOG_MODAL = 28,
   DIALOG_MODELESS = 29,
+  // 30 (MATH) is skipped.
+  LABEL = 31,
 }
 
 // The numbers are aligned with the CssPosition enum in
@@ -458,6 +464,7 @@ export interface PageContentOptions {
   mainFrameViewRectInDips: Rect;
   includePasswordsForRedaction: boolean;
 }
+// LINT.ThenChange(//third_party/blink/public/mojom/content_extraction/ai_page_content.mojom:AIPageContentMojomTypes)
 
 /**
  * Enum representing accessibility roles.

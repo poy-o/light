@@ -236,7 +236,6 @@ static_library("common_lib") {
     "//components/variations/net",
     "//components/visitedlink/common",
     "//components/web_distiller/core",
-    "//components/webui/flags:switches",
     "//content/public/common:buildflags",
     "//google_apis",
     "//gpu/command_buffer/service",
@@ -340,8 +339,8 @@ static_library("common_lib") {
     public_deps += [ "//ash/keyboard/ui" ]
     deps += [
       "//ash/constants",
-      "//chrome/common/chromeos/extensions",
       "//chromeos/ash/components/logging",
+      "//chromeos/ash/experiences/extensions/common/telemetry",
     ]
   }
 
@@ -555,8 +554,6 @@ static_library("constants") {
     "chrome_paths.h",
     "chrome_paths_internal.h",
     "chrome_result_codes.h",
-    "pref_font_script_names-inl.h",
-    "pref_font_webkit_names.h",
     "pref_names.h",
   ]
 
@@ -565,6 +562,7 @@ static_library("constants") {
     ":chrome_features",
     ":non_code_constants",
     "//components/compose:buildflags",
+    "//components/content_settings/core/common:pref_names",
     "//components/signin/public/base:signin_buildflags",
     "//content/public/common:buildflags",
     "//content/public/common:result_codes",

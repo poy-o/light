@@ -2343,6 +2343,48 @@ public class BottomSheetCoordinatorUnitTest {
                 contentContainer.getPaddingBottom());
     }
 
+    @Test
+    public void testSetBottomMargin_AppliesEdgeToEdgePaddingImmediately() {
+        mActivity.getWindow().getDecorView().layout(0, 0, 1080, 2000);
+        measureAndLayoutContainer(1080, 2000);
+        mBottomSheet.setEdgeToEdgeBottomInsetSupplierForTesting(() -> 24);
+        int edgeToEdgeBottomInset = ViewUtils.dpToPx(mActivity, 24);
+        TouchRestrictingFrameLayout contentContainer =
+                mBottomSheet.getView().findViewById(R.id.bottom_sheet_content);
+
+        // The margin equals the inset here, as when the bottom controls are only the edge-to-edge
+        // chin, but only whether it is 0 matters. A non-zero margin keeps the sheet above the
+        // bottom controls, so getEdgeToEdgeBottomInset() returns 0 and no padding is needed. No
+        // content is showing yet, so this call has nothing to update.
+        mBottomSheet.setBottomMargin(edgeToEdgeBottomInset);
+        mBottomSheet.showContent(
+                buildContent(
+                        /* supportsLargeFormFactor= */ false,
+                        HeightMode.DISABLED,
+                        HeightMode.WRAP_CONTENT));
+        mBottomSheet.setSheetState(SheetState.FULL, false);
+        assertEquals(
+                "The edge-to-edge inset does not apply while the container has a bottom margin.",
+                0,
+                contentContainer.getPaddingBottom());
+
+        // With no margin the sheet reaches the bottom of the screen, so the inset applies. The
+        // padding must be updated by this call, before the next layout pass.
+        mBottomSheet.setBottomMargin(0);
+        assertEquals(
+                "Removing the bottom margin must apply the edge-to-edge padding before the"
+                        + " container is laid out again.",
+                edgeToEdgeBottomInset,
+                contentContainer.getPaddingBottom());
+
+        // A non-zero margin again: the inset no longer applies, so the padding is removed.
+        mBottomSheet.setBottomMargin(edgeToEdgeBottomInset);
+        assertEquals(
+                "Restoring the bottom margin must remove the edge-to-edge padding right away.",
+                0,
+                contentContainer.getPaddingBottom());
+    }
+
     /**
      * Verifies that when the shared {@link BottomSheetCoordinator} instance on a large-form-factor
      * device switches from a sheet with desktop UI ({@code supportsLargeFormFactor() == true},
@@ -3848,5 +3890,66 @@ public class BottomSheetCoordinatorUnitTest {
         // In HALF state, target height = 1952 * 0.5f = 976px.
         int expectedHeight = Math.round((2000 - 2 * lffSheet.getContainerBottomMargin()) * 0.5f);
         assertEquals(expectedHeight, lffSheet.getProjectedContentHeightForIme());
+    }
+
+    @Test
+    public void testGetProjectedContentHeightForIme_AttachedContainer_NonConsumedTopInset() {
+        int contentTop = setUpAttachedContainerHalfSheet(/* rootPaddingTop= */ 100);
+
+        // Container height = 2000 - contentTop - 100 (root padding) - 800 (IME).
+        int expected = Math.round(0.7f * (2000 - contentTop - 100 - 800));
+        assertEquals(expected, mBottomSheet.getProjectedContentHeightForIme());
+    }
+
+    @Test
+    public void
+            testGetProjectedContentHeightForIme_AttachedContainer_PendingTopInsetBeforeLayout() {
+        int contentTop = setUpAttachedContainerHalfSheet(/* rootPaddingTop= */ 0);
+
+        // Omit a follow-up layout pass so containerLoc[1] - decorLoc[1] stays at contentTop and
+        // Math.max(containerLoc[1] - decorLoc[1], mTopInset) picks the pending mTopInset floor.
+        mBottomSheet.onTopInsetChanged(contentTop + 100);
+
+        int expected = Math.round(0.7f * (2000 - contentTop - 100 - 800));
+        assertEquals(expected, mBottomSheet.getProjectedContentHeightForIme());
+    }
+
+    @Test
+    public void testGetProjectedContentHeightForIme_AttachedContainer_ConsumedTopInsetZeroMargin() {
+        int contentTop = setUpAttachedContainerHalfSheet(/* rootPaddingTop= */ 0);
+
+        // When root padding and topMargin are both 0, statusBars().top is not subtracted.
+        int expected = Math.round(0.7f * (2000 - contentTop - 800));
+        assertEquals(expected, mBottomSheet.getProjectedContentHeightForIme());
+    }
+
+    private int setUpAttachedContainerHalfSheet(int rootPaddingTop) {
+        ((ViewGroup) mSheetContainer.getParent()).removeView(mSheetContainer);
+        FrameLayout root = new FrameLayout(mActivity);
+        root.setPadding(0, rootPaddingTop, 0, 0);
+        mSheetContainer.setLayoutParams(
+                new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        root.addView(mSheetContainer);
+        mActivity.setContentView(root);
+
+        View decorView = mActivity.getWindow().getDecorView();
+        decorView.measure(
+                View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(2000, View.MeasureSpec.EXACTLY));
+        decorView.layout(0, 0, 1080, 2000);
+
+        BottomSheetContent content =
+                buildContent(/* supportsLargeFormFactor= */ false, 0.7f, HeightMode.RESIZE_CONTENT);
+        mBottomSheet.showContent(content);
+        mBottomSheet.setSheetState(SheetState.HALF, false);
+
+        WindowInsetsCompat insets =
+                new WindowInsetsCompat.Builder()
+                        .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.of(0, 100, 0, 0))
+                        .setInsets(WindowInsetsCompat.Type.ime(), Insets.of(0, 0, 0, 800))
+                        .build();
+        when(mInsetObserver.getLastRawWindowInsets()).thenReturn(insets);
+        return ((View) root.getParent()).getTop();
     }
 }

@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">Salasanojen jakaminen</translation>
 <translation id="1554043146674176775">Laita tekoälytila pois päältä</translation>
 <translation id="1554477036522844996">Uusi ikkuna</translation>
+<translation id="1555014818414775661">Lisää kuvia</translation>
 <translation id="1557806604681757705">tietokoneella</translation>
 <translation id="1558391695376153246">Sulje incognito-välilehdet</translation>
 <translation id="1560153516220021659">Tiivistetty toissijaisen yläpalkin painike</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">Avaa <ph name="BEGIN_BOLD" />Safarin asetukset<ph name="END_BOLD" /></translation>
 <translation id="3858860766373142691">Nimi</translation>
 <translation id="386224966259596343">Voit tallentaa tiedot Walletiin seuraavan kerran, kun täytät asiaankuuluvan lomakkeen.</translation>
-<translation id="3868495844258915202">Näytä täysi URL-osoite</translation>
 <translation id="3870931306085184145">Ei tallennettuja salasanoja: <ph name="DOMAIN" /></translation>
 <translation id="3875783148670536197">Näytä miten</translation>
 <translation id="3878657761594430423">Paneelin koonmuuttaja</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">Jos haluat saada hintaseurantailmoituksia, laita ilmoitukset päälle iOS-asetuksista.</translation>
 <translation id="528857768909044842">Välilehtiryhmät tallennetaan tänne</translation>
 <translation id="5294624619177114121">Mobiili-ilmoitukset</translation>
-<translation id="5295239312320826323">Poistetaanko tili <ph name="USER_EMAIL" />?</translation>
 <translation id="5300589172476337783">Näytä</translation>
 <translation id="5311061401280561833">Pääsy kameraan ja mikrofoniin myönnetty</translation>
 <translation id="5313967007315987356">Lisää sivusto</translation>
@@ -1788,6 +1787,7 @@ Handoff täytyy ottaa käyttöön myös Asetusten Yleiset-osiossa. Lisäksi mole
 <translation id="6504541289630702018">Käytä tietokoneen välilehtiryhmiä helposti</translation>
 <translation id="6505334220040167806">Tiivistä välilehtiryhmä.</translation>
 <translation id="6506996418997555004">Jaa välilehtiryhmä "<ph name="GROUP_NAME" />"</translation>
+<translation id="650770261448122895">Hae näkemääsi Lensin avulla</translation>
 <translation id="6507973708545996744">Kirjaudu sisään, niin näet lukulistan kaikilla laitteillasi.</translation>
 <translation id="6518133107902771759">Vahvista</translation>
 <translation id="6523575793810663688">Näytä miten</translation>
@@ -2147,7 +2147,6 @@ Voit aloittaa uudelleen milloin tahansa.</translation>
 <translation id="7603852183842204213">Ponn.ikk. estetty (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Synkronointi ei toimi</translation>
 <translation id="760667371114328991">Laita turvatarkistusilmoitukset pois päältä</translation>
-<translation id="7612619742409846846">Olet kirjautunut Googleen käyttäjänä</translation>
 <translation id="7612849887607288481">Avaa AI-prototyyppivalikko</translation>
 <translation id="7618220760967055820">Valitse yläpalkissa näkyvä painike</translation>
 <translation id="7620522820075868385">Peru</translation>
@@ -2430,6 +2429,7 @@ Voit aloittaa uudelleen milloin tahansa.</translation>
 <translation id="8439758443371991593">Piilota "Lisää lukulistalle"</translation>
 <translation id="8443986842926457191">URL-osoitteessa on yli 2 048 merkkiä</translation>
 <translation id="8449869326050867919">Salasana jaettu</translation>
+<translation id="8473367210869452063">Jos haluat käyttää tätä sivustoa, lopeta nykyinen tehtävä tai odota, että Gemini on valmis</translation>
 <translation id="8473815223723723001">Muokkaa kuvaa Geminillä</translation>
 <translation id="8473863474539038330">Osoitteet ja muita tietoja</translation>
 <translation id="8474378002946546633">Salli ilmoitukset</translation>

@@ -45,7 +45,6 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
-import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -64,11 +63,11 @@ import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.omnibox.OmniboxCapabilities;
 import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.components.search_engines.TemplateUrlService;
-import org.chromium.components.signin.SigninFeatures;
 import org.chromium.content_public.common.ContentSwitches;
 import org.chromium.ui.base.ActivityKeyboardVisibilityDelegate;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.DeviceInput;
+import org.chromium.url.GURL;
 
 import java.util.Map;
 import java.util.Set;
@@ -111,6 +110,8 @@ public class LocationBarTest {
                 () -> {
                     TemplateUrlServiceFactory.setInstanceForTesting(mTemplateUrlService);
                     LocaleManager.getInstance().setDelegateForTest(mLocaleManagerDelegate);
+                    doReturn(GURL.emptyGURL()).when(mGoogleSearchEngine).getFaviconURL();
+                    doReturn(GURL.emptyGURL()).when(mNonGoogleSearchEngine).getFaviconURL();
                 });
     }
 
@@ -396,7 +397,6 @@ public class LocationBarTest {
 
     @Test
     @MediumTest
-    @EnableFeatures(SigninFeatures.SIGNIN_LEVEL_UP_BUTTON)
     @Restriction(DeviceFormFactor.TABLET_OR_DESKTOP)
     public void testFocusLogic_buttonVisibilityTablet_DesktopDisabled() {
         OmniboxCapabilities.setHasDesktopExperienceForTesting(false);
@@ -407,7 +407,6 @@ public class LocationBarTest {
 
     @Test
     @MediumTest
-    @EnableFeatures(SigninFeatures.SIGNIN_LEVEL_UP_BUTTON)
     @Restriction(DeviceFormFactor.TABLET_OR_DESKTOP)
     public void testFocusLogic_buttonVisibilityTablet_DesktopEnabled() {
         OmniboxCapabilities.setHasDesktopExperienceForTesting(true);

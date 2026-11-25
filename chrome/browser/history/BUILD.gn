@@ -117,6 +117,7 @@ if (is_android) {
     deps = [
       "//base:base_java",
       "//chrome/browser/flags:java",
+      "//third_party/androidx:androidx_annotation_annotation_java",
     ]
   }
 
@@ -128,6 +129,8 @@ if (is_android) {
     sources = [
       "java/src/org/chromium/chrome/browser/history/AppHistoryInfoHeaderPref.java",
       "java/src/org/chromium/chrome/browser/history/AppHistoryUmaRecorder.java",
+      "java/src/org/chromium/chrome/browser/history/AppInfoCache.java",
+      "java/src/org/chromium/chrome/browser/history/AppSpecificHistoryIphController.java",
       "java/src/org/chromium/chrome/browser/history/BrowserHistoryInfoHeaderPref.java",
       "java/src/org/chromium/chrome/browser/history/BrowsingHistoryBridge.java",
       "java/src/org/chromium/chrome/browser/history/CriticalAction.java",
@@ -143,7 +146,12 @@ if (is_android) {
       "java/src/org/chromium/chrome/browser/history/FilterSheetViewBinder.java",
       "java/src/org/chromium/chrome/browser/history/HistoryDeletionBridge.java",
       "java/src/org/chromium/chrome/browser/history/HistoryDeletionInfo.java",
+      "java/src/org/chromium/chrome/browser/history/HistoryDesktopNavigationCoordinator.java",
+      "java/src/org/chromium/chrome/browser/history/HistoryDesktopNavigationMediator.java",
+      "java/src/org/chromium/chrome/browser/history/HistoryFilterChip.java",
       "java/src/org/chromium/chrome/browser/history/HistoryItem.java",
+      "java/src/org/chromium/chrome/browser/history/HistoryItemView.java",
+      "java/src/org/chromium/chrome/browser/history/HistoryManagerToolbar.java",
       "java/src/org/chromium/chrome/browser/history/HistoryProvider.java",
       "java/src/org/chromium/chrome/browser/history/HistoryTabHelper.java",
       "java/src/org/chromium/chrome/browser/history/HistoryUmaRecorder.java",
@@ -153,23 +161,31 @@ if (is_android) {
     ]
 
     deps = [
+      ":features_java",
       ":java_resources",
       "//base:base_java",
       "//chrome/app:java_strings_grd",
+      "//chrome/browser/feature_engagement:java",
       "//chrome/browser/flags:java",
       "//chrome/browser/preferences:java",
       "//chrome/browser/profiles/android:java",
       "//chrome/browser/tab:java",
       "//chrome/browser/tabmodel:java",
+      "//chrome/browser/ui/android/favicon:java",
+      "//chrome/browser/user_education:java",
       "//components/browser_ui/bottomsheet/android:java",
+      "//components/browser_ui/util/android:java",
       "//components/browser_ui/widget/android:java",
       "//components/browsing_data/core:java",
       "//components/critical_actions/core/browser:critical_actions_enums_java",
+      "//components/favicon/android:java",
+      "//components/feature_engagement/public:public_java",
       "//content/public/android:content_java",
       "//third_party/androidx:androidx_annotation_annotation_java",
       "//third_party/androidx:androidx_appcompat_appcompat_resources_java",
       "//third_party/androidx:androidx_core_core_java",
       "//third_party/androidx:androidx_recyclerview_recyclerview_java",
+      "//third_party/androidx:androidx_vectordrawable_vectordrawable_java",
       "//third_party/jni_zero:jni_zero_java",
       "//ui/android:ui_full_java",
       "//url:gurl_java",
@@ -188,15 +204,23 @@ if (is_android) {
 
   android_resources("java_resources") {
     sources = [
+      "java/res/drawable/ic_block_red.xml",
       "java/res/layout/filter_sheet_content.xml",
       "java/res/layout/filter_sheet_header.xml",
+      "java/res/layout/history_filter_chips.xml",
       "java/res/layout/history_item_critical_action.xml",
       "java/res/layout/history_item_critical_actions.xml",
+      "java/res/layout/history_item_view.xml",
+      "java/res/layout/history_toolbar.xml",
       "java/res/layout/incognito_history_disclaimer_popup.xml",
+      "java/res/menu/app_specific_history_manager_menu.xml",
+      "java/res/menu/history_manager_menu.xml",
       "java/res/values/dimens.xml",
+      "java/res/values/ids.xml",
     ]
     deps = [
       "//chrome/app:java_strings_grd",
+      "//chrome/browser/ui/android/favicon:java_resources",
       "//chrome/browser/ui/android/strings:ui_strings_grd",
       "//components/browser_ui/styles/android:java_resources",
       "//components/browser_ui/theme/android:java_resources",
@@ -209,6 +233,7 @@ if (is_android) {
     resources_package = "org.chromium.chrome.browser.history"
 
     sources = [
+      "java/src/org/chromium/chrome/browser/history/AppSpecificHistoryIphControllerUnitTest.java",
       "java/src/org/chromium/chrome/browser/history/BrowsingHistoryBridgeTest.java",
       "java/src/org/chromium/chrome/browser/history/CriticalActionsCoordinatorTest.java",
       "java/src/org/chromium/chrome/browser/history/CriticalActionsExpansionAnimatorTest.java",
@@ -216,6 +241,8 @@ if (is_android) {
       "java/src/org/chromium/chrome/browser/history/CriticalActionsViewBinderTest.java",
       "java/src/org/chromium/chrome/browser/history/FilterSheetCoordinatorTest.java",
       "java/src/org/chromium/chrome/browser/history/HistoryDeletionBridgeTest.java",
+      "java/src/org/chromium/chrome/browser/history/HistoryDesktopNavigationMediatorUnitTest.java",
+      "java/src/org/chromium/chrome/browser/history/HistoryFilterChipUnitTest.java",
       "java/src/org/chromium/chrome/browser/history/IncognitoHistoryDisclaimerCoordinatorAnchorUnitTest.java",
       "java/src/org/chromium/chrome/browser/history/IncognitoHistoryDisclaimerCoordinatorUnitTest.java",
     ]
@@ -226,14 +253,18 @@ if (is_android) {
       "//base:base_java",
       "//base:base_java_test_support",
       "//base:base_junit_test_support",
-      "//chrome/android:chrome_app_java_resources",
+      "//chrome/browser/feature_engagement:java",
       "//chrome/browser/flags:java",
       "//chrome/browser/profiles/android:java",
       "//chrome/browser/tabmodel:java",
+      "//chrome/browser/user_education:java",
       "//components/browser_ui/bottomsheet/android:java",
       "//components/browser_ui/theme/android:java_resources",
+      "//components/browser_ui/widget/android:java",
       "//components/browsing_data/core:java",
       "//components/critical_actions/core/browser:critical_actions_enums_java",
+      "//components/feature_engagement/public:public_java",
+      "//third_party/androidx:androidx_appcompat_appcompat_resources_java",
       "//third_party/androidx:androidx_test_core_java",
       "//third_party/androidx:androidx_test_ext_junit_java",
       "//third_party/junit",

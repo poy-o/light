@@ -114,7 +114,6 @@
 #include "third_party/blink/public/web/web_document_loader.h"
 #include "third_party/blink/public/web/web_frame_load_type.h"
 #include "third_party/blink/public/web/web_frame_serializer.h"
-#include "third_party/blink/public/web/web_frame_serializer_client.h"
 #include "third_party/blink/public/web/web_history_commit_type.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
@@ -535,7 +534,6 @@ class CONTENT_EXPORT RenderFrameImpl
   void RunScriptsAtDocumentIdle() override;
   void DidHandleOnloadEvents() override;
   void DidFinishLoad() override;
-  void DidFinishLoadForPrinting() override;
   void DidFinishSameDocumentNavigation(
       blink::WebHistoryCommitType commit_type,
       bool is_synchronously_committed,
@@ -554,9 +552,6 @@ class CONTENT_EXPORT RenderFrameImpl
   void DidChangeSelection(bool is_empty_selection,
                           blink::SyncCondition force_sync) override;
   void FocusedElementChanged(const blink::WebElement& element) override;
-  void OnMainFrameRectangleChanged(const gfx::Rect& main_frame_rect) override;
-  void OnMainFrameViewportRectangleChanged(
-      const gfx::Rect& main_frame_viewport_rect) override;
   void FinalizeRequest(blink::WebURLRequest& request) override;
   std::optional<blink::WebURL> WillSendRequest(
       const blink::WebURL& target,
@@ -566,9 +561,6 @@ class CONTENT_EXPORT RenderFrameImpl
       const blink::WebURL& upstream_url) override;
   void OnOverlayPopupAdDetected() override;
   void OnLargeStickyAdDetected() override;
-  void DidLoadResourceFromMemoryCache(
-      const blink::WebURLRequest& request,
-      const blink::WebURLResponse& response) override;
   void DidCreateScriptContext(v8::Local<v8::Context> context,
                               int world_id) override;
   void WillReleaseScriptContext(v8::Local<v8::Context> context,
@@ -591,7 +583,6 @@ class CONTENT_EXPORT RenderFrameImpl
   blink::URLLoaderThrottleProvider* GetURLLoaderThrottleProvider() override;
   scoped_refptr<blink::WebBackgroundResourceFetchAssets>
   MaybeGetBackgroundResourceFetchAssets() override;
-  void OnStopLoading() override;
   const blink::BrowserInterfaceBrokerProxy& GetBrowserInterfaceBroker()
       override;
   blink::WebView* CreateNewWindow(
@@ -632,7 +623,6 @@ class CONTENT_EXPORT RenderFrameImpl
   void DidMeaningfulLayout(blink::WebMeaningfulLayout layout_type) override;
 
   blink::WebURL LastCommittedUrlForUKM() override;
-  void ScriptedPrint() override;
 
   // Possibly defers the loading of media resources.
   //
@@ -737,8 +727,6 @@ class CONTENT_EXPORT RenderFrameImpl
   // document) it may be inherited from the parent or opener.
   blink::ChildURLLoaderFactoryBundle* GetLoaderFactoryBundle() override;
 
-  void SetLoadFromMemoryCacheCallback(
-      LoadFromMemoryCacheCallback callback) override;
   void SetDidStartResponseCallback(DidStartResponseCallback callback) override;
   void SetDidCompleteResponseCallback(
       DidCompleteResponseCallback callback) override;
@@ -753,13 +741,12 @@ class CONTENT_EXPORT RenderFrameImpl
     navigation_client_impl_ = std::move(client);
   }
 
-  base::WeakPtr<RenderFrameImpl> GetWeakPtr();
-
  protected:
   explicit RenderFrameImpl(CreateParams params);
 
   bool IsLocalRoot() const;
   const RenderFrameImpl* GetLocalRoot() const;
+  base::WeakPtr<RenderFrameImpl> GetWeakPtr();
 
  private:
   friend class RenderFrameImplTest;
@@ -845,12 +832,6 @@ class CONTENT_EXPORT RenderFrameImpl
   void Delete(mojom::FrameDeleteIntention intent) override;
   void GetInterfaceProvider(
       mojo::PendingReceiver<service_manager::mojom::InterfaceProvider> receiver)
-      override;
-  void GetSerializedHtmlWithLocalLinks(
-      const base::flat_map<GURL, base::FilePath>& url_map,
-      const base::flat_map<blink::FrameToken, base::FilePath>& frame_token_map,
-      bool save_with_empty_url,
-      mojo::PendingRemote<mojom::FrameHTMLSerializerHandler> handler_remote)
       override;
 
   void OnSerializeMHTMLComplete(
@@ -980,8 +961,6 @@ class CONTENT_EXPORT RenderFrameImpl
 
   // Send |callback| our AndroidOverlay routing token.
   void RequestOverlayRoutingToken(media::RoutingTokenCallback callback);
-
-  void BindWebUIReceiver(mojo::PendingReceiver<mojom::WebUI> receiver);
 
   // Build DidCommitProvisionalLoadParams based on the frame internal state.
   mojom::DidCommitProvisionalLoadParamsPtr MakeDidCommitProvisionalLoadParams(
@@ -1198,9 +1177,6 @@ class CONTENT_EXPORT RenderFrameImpl
       base::ObserverListReentrancyPolicy::kAllowReentrancyUntriaged>::Unchecked
       observers_;
 
-  // The callback to send the loaded resource info from memory cache to the
-  // browser process through PageLoadMetrics.
-  LoadFromMemoryCacheCallback load_from_memory_cache_callback_;
   // The callback to handle response. These are used in `DidStartResponse()`,
   // `DidCompleteResponse()`, and `DidCancelResponse()`, respectively.
   DidStartResponseCallback did_start_response_callback_;
@@ -1419,14 +1395,6 @@ class CONTENT_EXPORT RenderFrameImpl
   // |devtools_frame_token_| is only defined by the browser and is never
   // sent back from the renderer in the control calls.
   base::UnguessableToken devtools_frame_token_;
-
-  // Used for tracking a frame's main frame document rectangle and replicating
-  // it to the browser when it changes.
-  std::optional<gfx::Rect> main_frame_rect_;
-
-  // Used for tracking the main frame viewport rectangle (i.e. dimensions and
-  // scroll offset) within the main frame document.
-  std::optional<gfx::Rect> main_frame_viewport_rect_;
 
   std::unique_ptr<blink::WebSocketHandshakeThrottleProvider>
       websocket_handshake_throttle_provider_;

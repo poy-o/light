@@ -406,6 +406,11 @@
       name: "AIPageContentEmitInterestingAria",
       status: "stable",
     },
+    // Emit <label>, <legend>, <caption>, and <figcaption> with kLabel.
+    {
+      name: "AIPageContentIncludeLabel",
+      status: "stable",
+    },
     {
       name: "AIPageContentIncludeMathML",
       status: "stable",
@@ -639,10 +644,6 @@
     {
       name: "AlignZoomToCenter",
       status: "stable",
-    },
-    {
-      name: "AllowContentInitiatedDataUrlNavigations",
-      base_feature: "none",
     },
     {
       name: "AllowPreloadingWithCSPMetaTag",
@@ -1143,6 +1144,12 @@
       status: "stable",
     },
     {
+      // Kill switch for freeing unused 2D canvas recording memory when the
+      // page is hidden.
+      name: "Canvas2dShrinkRecordingWhenHidden",
+      status: "stable",
+    },
+    {
       // https://github.com/WICG/html-in-canvas/blob/main/README.md
       // Note the API name has changed to `drawElementImage`.
       name: "CanvasDrawElement",
@@ -1580,6 +1587,10 @@
     {
       name: "ContentIndex",
       status:  {"Android": "stable", "default": "experimental"},
+    },
+    {
+      name: "ContentVisibilityMediaPlayback",
+      status: "experimental",
     },
     {
       name: "ContextMenu",
@@ -2826,6 +2837,7 @@
     // Enables Document Policy for DedicatedWorkers.
     {
       name: "DocumentPolicyInDedicatedWorker",
+      origin_trial_feature_name: "JSSelfProfilingInDedicatedWorker",
       status: "experimental",
     },
     {
@@ -2931,6 +2943,12 @@
       settable_from_internals: true
     },
     {
+      // See https://crbug.com/574145399 and
+      // https://github.com/w3c/edit-context/issues/156
+      name: "EditContextOnDemand",
+      status: "experimental",
+    },
+    {
       // Update EditContext selectionStart/End before TextUpdateEvent while
       // handling deletion. See https://crbug.com/529413105
       name: "EditContextSelectionUpdateBeforeTextUpdateEvent",
@@ -3017,6 +3035,13 @@
     },
     {
       name: "EndpointInclusiveCommitStyles",
+      status: "stable",
+    },
+    {
+      // Reports violations of the slot assignment recalc rules (R1-R7 in the
+      // SlotAssignment class comment in slot_assignment.h). Violations are
+      // fatal in all builds. Kill switch.
+      name: "EnforceSlotAssignmentInvariants",
       status: "stable",
     },
     // When enabled, the LCP algorithm ignores image entropy for the first
@@ -3519,6 +3544,11 @@
       // a Chromium level feature (kFontDataServiceForCSSLocalFonts).
     },
     {
+      // Kill switch for https://crbug.com/589815780.
+      name: "FontFaceCapabilitiesRangeValidation",
+      status: "stable",
+    },
+    {
       // Kill switch for https://crbug.com/579721442.
       name: "FontFallbackMultiplePriorityFonts",
       status: "stable",
@@ -3783,7 +3813,6 @@
     },
     {
       name: "HarfRustShaping",
-      status: "test",
     },
     {
       name: "HasUAVisualTransition",
@@ -4391,6 +4420,13 @@
       depends_on: ["WebSocketOptionBag"],
     },
     {
+      // Kill switch for https://crbug.com/41293729 which makes the
+      // location.protocol setter stop navigating for non-HTTP(S) schemes,
+      // as required by the HTML spec.
+      name: "LocationProtocolSetterHttpOnly",
+      status: "stable",
+    },
+    {
       name: "LockedMode",
       status: "test",
       // Enabled by features::kLockedMode.
@@ -4741,6 +4777,11 @@
       // This will be shipped in M151, and it can be removed in M153.
       name: "MoveParagraphsPreserveInlineStructure",
       status: "stable",
+    },
+    {
+      // https://github.com/WICG/declarative-partial-updates/blob/main/template-mutation-observer-explainer.md
+      name: "MutationObserverActiveTemplate",
+      status: "experimental",
     },
     {
       // Support Nastaliq script. crbug.com/569667449
@@ -5269,9 +5310,21 @@
       status: "experimental",
     },
     {
+      name: "PermissionsPolicyForDedicatedWorkers",
+      status: "experimental",
+    },
+    {
       name: "PermissionsPolicyForSharedWorkers",
       status: "experimental",
       public: true,
+    },
+    {
+      name: "PermissionsPolicyForWorkers",
+      base_feature: "none",
+      implied_by: [
+        "PermissionsPolicyForDedicatedWorkers",
+        "PermissionsPolicyForSharedWorkers",
+      ],
     },
     {
       name: "PermissionsRequestRevoke",
@@ -5490,6 +5543,7 @@
     {
       // When enabled, dedicated workers can use profiler API
       name: "ProfilerAPIForDedicatedWorker",
+      origin_trial_feature_name: "JSSelfProfilingInDedicatedWorker",
       status: "experimental",
     },
     // Promisify programmatic scroll methods in Element and Window.
@@ -5592,13 +5646,6 @@
       // Defense-in-depth mitigation that strips read-back disallowed (e.g.,
       // cross-origin) content when drawing elements with html-in-canvas.
       name: "ReadBackDisallowedMitigation",
-      status: "stable",
-    },
-    {
-      // getType() on a ClipboardItem triggers the
-      // clipboard read operation, implementing lazy loading for clipboard data.
-      // Chrome status entry - https://chromestatus.com/feature/5203433409871872
-      name: "ReadClipboardDataOnClipboardItemGetType",
       status: "stable",
     },
     {
@@ -5895,6 +5942,10 @@
       origin_trial_feature_name: "RTCDiagnosticLogging",
       status: "experimental",
     },
+    {
+      name: "RTCRequireSessionDescriptionType",
+      status: "experimental",
+    },
     // Enables the use of |RTCRtpEncodingParameters.codec|
     {
       name: "RTCRtpEncodingParametersCodec",
@@ -5911,6 +5962,10 @@
     {
       name: "RTCRtpScriptTransform",
       status: "stable",
+    },
+    {
+      name: "RTCRtpScriptTransformerGenerateKeyFrame",
+      status: "experimental",
     },
     {
       name: "RTCRtpTransport",
@@ -5934,6 +5989,13 @@
       // breaking, so a ruby wraps at an earlier break opportunity first.
       // https://crbug.com/580840306
       name: "RubyOverflowWrapDeferToOuterLine",
+      status: "stable",
+    },
+    {
+      // Prevents PositionLeadingFloats from positioning floats inside ruby
+      // columns, and verifies leading float item indices match in
+      // LineBreaker::HandleFloat. https://crbug.com/589800513
+      name: "RubySkipLeadingFloats",
       status: "stable",
     },
     {
@@ -6239,6 +6301,12 @@
     {
       // Killswitch M141.
       name: "SelectionHandleWithBottomClipped",
+      status: "stable",
+    },
+    {
+      // Skip pseudo-element inline leaves in AbstractLineBox::PositionForPoint.
+      // See https://crbug.com/589812279
+      name: "SelectionLineSkipPseudoElement",
       status: "stable",
     },
     {
@@ -7126,6 +7194,12 @@
     {
       // https://crbug.com/578671521
       name: "TextEncodingDetectorTldHint",
+      status: "stable",
+    },
+    {
+      // Kill switch for https://crbug.com/589853631.
+      name: "TextEncodingDetectorTldHintStripTrailingDot",
+      depends_on: ["TextEncodingDetectorTldHint"],
       status: "stable",
     },
     {
@@ -8364,6 +8438,13 @@
     {
       // Fixes an issue where Ctrl+Right Arrow skips punctuation before a newline.
       name: "WordSkipSpacesPunctuationFix",
+      status: "stable",
+    },
+    {
+      // Runs worker requestAnimationFrame callbacks directly in the BeginFrame
+      // task so that a microtask checkpoint happens between callbacks, matching
+      // window behavior. Kill switch for https://crbug.com/419327007.
+      name: "WorkerRafRunsInBeginFrameTask",
       status: "stable",
     },
     {

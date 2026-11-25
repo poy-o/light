@@ -2,11 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <limits>
+#include <utility>
+#include <variant>
+#include <vector>
+
 #include "base/callback_list.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/memory/weak_ptr.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/strings/strcat.h"
+#include "base/synchronization/lock.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/run_until.h"
@@ -14,6 +23,9 @@
 #include "base/test/test_future.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
+#include "chrome/browser/contextual_tasks/contextual_tasks_panel_controller.h"
+#include "chrome/browser/contextual_tasks/contextual_tasks_ui_service.h"
+#include "chrome/browser/contextual_tasks/contextual_tasks_ui_service_factory.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/glic/glic_pref_names.h"
 #include "chrome/browser/glic/glic_selection_observer.h"
@@ -32,14 +44,19 @@
 #include "chrome/browser/glic/test_support/glic_browser_test.h"
 #include "chrome/browser/glic/test_support/glic_test_util.h"
 #include "chrome/browser/glic/test_support/scoped_page_context_eligibility.h"
+#include "chrome/browser/lens/google_search_prompt_endpoint.h"
 #include "chrome/browser/optimization_guide/mock_optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/selection/features.h"
+#include "chrome/browser/selection/feedback_zip_builder.h"
 #include "chrome/browser/selection/metrics_logger.h"
 #include "chrome/browser/selection/mojom/action.mojom.h"
+#include "chrome/browser/selection/page_context.h"
+#include "chrome/browser/selection/prompt_endpoint.h"
+#include "chrome/browser/selection/suggestion.h"
 #include "chrome/browser/selection/suggestion_service.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/actions/chrome_action_id.h"
@@ -56,10 +73,13 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/search_test_utils.h"
 #include "chrome/test/mojom/echo.test-mojom.h"
+#include "components/contextual_tasks/public/contextual_task.h"
 #include "components/input/native_web_keyboard_event.h"
+#include "components/lens/lens_features.h"
 #include "components/optimization_guide/content/browser/no_response_ai_page_content_agent.h"
 #include "components/optimization_guide/content/browser/page_context_eligibility_observer.h"
 #include "components/optimization_guide/core/feature_registry/feature_keys.h"
+#include "components/optimization_guide/core/feature_registry/feature_registration.h"
 #include "components/optimization_guide/core/hints/optimization_metadata.h"
 #include "components/optimization_guide/core/optimization_guide_proto_util.h"
 #include "components/optimization_guide/proto/features/quick_answers.pb.h"
@@ -83,15 +103,19 @@
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/hit_test_region_observer.h"
+#include "content/public/test/url_loader_interceptor.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/generic_pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/test_support/fake_message_dispatch_context.h"
 #include "mojo/public/cpp/test_support/test_utils.h"
 #include "net/base/network_change_notifier.h"
 #include "net/dns/mock_host_resolver.h"
+#include "services/network/public/mojom/url_loader.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
@@ -102,6 +126,7 @@
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/widget/any_widget_observer.h"
 #include "ui/views/widget/widget.h"
@@ -555,7 +580,7 @@ class FakeSelectionSuggestionTool : public ::selection::SuggestionTool {
   ToolId GetToolId() const override { return tool_id_; }
 
   std::unique_ptr<::selection::Suggestion> CreateSuggestion(
-      const ::selection::AreaOfInterest& processed_area,
+      const ::selection::PageContextWithSelection& context,
       const optimization_guide::proto::SmartSelectionSuggestion&
           server_suggestion) override {
     return std::make_unique<SelectionSuggestion>(
@@ -1273,6 +1298,955 @@ IN_PROC_BROWSER_TEST_F(SelectionOverlayPromptBrowserTest,
   histogram_tester.ExpectUniqueSample(
       "SmartSelection.Submission.Outcome",
       ::selection::SubmissionOutcome::kPromptSubmitted, 1);
+  histogram_tester.ExpectUniqueSample(
+      "SmartSelection.Submission.PromptEndpoint",
+      ::selection::mojom::PromptEndpointId::kGemini, 1);
+}
+
+namespace {
+
+class RecordingPromptEndpoint : public ::selection::PromptEndpoint {
+ public:
+  ::selection::mojom::PromptEndpointId GetId() const override {
+    return ::selection::mojom::PromptEndpointId::kGemini;
+  }
+  bool IsAvailable(tabs::TabInterface& tab) const override { return true; }
+  std::u16string GetDisplayName() const override { return u"Gemini"; }
+  std::u16string GetPlaceholder() const override { return u"Ask Gemini"; }
+  void CancelPendingRequests() override { ++cancel_count; }
+  void Submit(tabs::TabInterface& tab,
+              std::string prompt,
+              ::selection::PageContextWithSelection context) override {
+    ++submit_count;
+    last_encoded_screenshot =
+        std::move(context.page_context.encoded_screenshot);
+    last_screenshot_size = gfx::Size(context.page_context.screenshot.width(),
+                                     context.page_context.screenshot.height());
+    last_aoi = std::move(context.area_of_interest);
+  }
+
+  int submit_count = 0;
+  int cancel_count = 0;
+  std::optional<::selection::PageContext::EncodedScreenshot>
+      last_encoded_screenshot;
+  gfx::Size last_screenshot_size;
+  std::optional<::selection::AreaOfInterest> last_aoi;
+};
+
+}  // namespace
+
+IN_PROC_BROWSER_TEST_F(SelectionOverlayPromptBrowserTest,
+                       NavigationAfterSubmitCancelsPendingEndpointRequests) {
+  tabs::TabInterface* tab = CreateAndActivateTab(GetSimpleTestUrl());
+  content::WebContents* web_contents = tab->GetContents();
+  auto* controller =
+      SelectionOverlayController::FromTabWebContents(web_contents);
+  ASSERT_TRUE(controller);
+
+  auto endpoint = std::make_unique<RecordingPromptEndpoint>();
+  RecordingPromptEndpoint* raw_endpoint = endpoint.get();
+  std::vector<std::unique_ptr<::selection::PromptEndpoint>> endpoints;
+  endpoints.push_back(std::move(endpoint));
+  controller->SetPromptEndpointsForTesting(std::move(endpoints));
+
+  gfx::Rect view_bounds = web_contents->GetViewBounds();
+  gfx::Rect selection_bounds(view_bounds.x() + 10, view_bounds.y() + 10, 100,
+                             50);
+  controller->ShowWithSelection(web_contents->GetPrimaryMainFrame(),
+                                selection_bounds,
+                                selection::InteractionOptions::New(),
+                                ::selection::EntryPoint::kContextMenuText);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return controller->HasPageContextForTesting(); }));
+
+  const int cancel_count_before_submit = raw_endpoint->cancel_count;
+  static_cast<selection::SelectionOverlayPageHandler*>(controller)
+      ->SubmitPrompt("Explain this");
+
+  EXPECT_EQ(controller->state(), SelectionOverlayController::State::kOff);
+  EXPECT_EQ(raw_endpoint->submit_count, 1);
+  EXPECT_EQ(raw_endpoint->cancel_count, cancel_count_before_submit);
+  // Text-only Gemini submit skips copying page-context submission data.
+  EXPECT_FALSE(raw_endpoint->last_encoded_screenshot.has_value());
+  EXPECT_TRUE(raw_endpoint->last_screenshot_size.IsEmpty());
+
+  // Same-document URL changes (`pushState`) and reopening the overlay should
+  // not cancel an already-submitted endpoint request.
+  ASSERT_TRUE(
+      content::ExecJs(web_contents, "history.pushState({}, '', '#same-doc');"));
+  ASSERT_TRUE(base::test::RunUntil([&]() {
+    return web_contents->GetLastCommittedURL().ref() == "same-doc";
+  }));
+  EXPECT_EQ(raw_endpoint->cancel_count, cancel_count_before_submit);
+
+  controller->ShowWithSelection(web_contents->GetPrimaryMainFrame(),
+                                selection_bounds,
+                                selection::InteractionOptions::New(),
+                                ::selection::EntryPoint::kContextMenuText);
+  EXPECT_EQ(raw_endpoint->cancel_count, cancel_count_before_submit);
+  controller->Close();
+  EXPECT_EQ(raw_endpoint->cancel_count, cancel_count_before_submit);
+
+  // Navigating to a new document while `state() == kOff` must still cancel
+  // pending async endpoint requests (e.g. off-thread screenshot encoding /
+  // search URL).
+  ASSERT_TRUE(content::NavigateToURL(web_contents, GetTestUrl("page.html")));
+  EXPECT_GT(raw_endpoint->cancel_count, cancel_count_before_submit);
+}
+
+IN_PROC_BROWSER_TEST_F(SelectionOverlayPromptBrowserTest,
+                       SubmitPromptRejectsInvalidAndOutOfBoundsRegions) {
+  tabs::TabInterface* tab = CreateAndActivateTab(GetSimpleTestUrl());
+  content::WebContents* web_contents = tab->GetContents();
+  auto* controller =
+      SelectionOverlayController::FromTabWebContents(web_contents);
+  ASSERT_TRUE(controller);
+
+  auto endpoint = std::make_unique<RecordingPromptEndpoint>();
+  RecordingPromptEndpoint* raw_endpoint = endpoint.get();
+  std::vector<std::unique_ptr<::selection::PromptEndpoint>> endpoints;
+  endpoints.push_back(std::move(endpoint));
+  controller->SetPromptEndpointsForTesting(std::move(endpoints));
+
+  auto submit_region = [&](selection::RegionShapePtr shape) {
+    raw_endpoint->last_aoi.reset();
+    raw_endpoint->last_encoded_screenshot.reset();
+    raw_endpoint->last_screenshot_size = gfx::Size();
+    controller->Show(/*options=*/nullptr,
+                     ::selection::EntryPoint::kKeyboardShortcut);
+    ASSERT_TRUE(base::test::RunUntil(
+        [&]() { return controller->HasPageContextForTesting(); }));
+
+    auto region = selection::SelectedRegion::New();
+    region->id = base::UnguessableToken::Create();
+    region->shape = std::move(shape);
+    auto* handler =
+        static_cast<selection::SelectionOverlayPageHandler*>(controller);
+    handler->AdjustRegion(std::move(region), /*is_using_keyboard=*/false);
+    handler->SubmitPrompt("Explain this");
+  };
+
+  const float nan = std::numeric_limits<float>::quiet_NaN();
+  const float inf = std::numeric_limits<float>::infinity();
+
+  // NaN polyline point must be rejected cleanly without UB.
+  submit_region(selection::RegionShape::NewPolyline(
+      {gfx::PointF(nan, 0.5f), gfx::PointF(0.5f, 0.5f)}));
+  ASSERT_TRUE(raw_endpoint->last_aoi.has_value());
+  ASSERT_TRUE(
+      std::holds_alternative<gfx::Rect>(raw_endpoint->last_aoi->bounds));
+  EXPECT_TRUE(std::get<gfx::Rect>(raw_endpoint->last_aoi->bounds).IsEmpty());
+
+  // Overflow / out-of-bounds polyline point must be rejected.
+  submit_region(selection::RegionShape::NewPolyline(
+      {gfx::PointF(0.2f, 0.2f), gfx::PointF(1e30f, 0.5f)}));
+  ASSERT_TRUE(raw_endpoint->last_aoi.has_value());
+  ASSERT_TRUE(
+      std::holds_alternative<gfx::Rect>(raw_endpoint->last_aoi->bounds));
+  EXPECT_TRUE(std::get<gfx::Rect>(raw_endpoint->last_aoi->bounds).IsEmpty());
+
+  submit_region(selection::RegionShape::NewPolyline(
+      {gfx::PointF(0.2f, 0.2f), gfx::PointF(1.5f, 0.5f)}));
+  ASSERT_TRUE(raw_endpoint->last_aoi.has_value());
+  ASSERT_TRUE(
+      std::holds_alternative<gfx::Rect>(raw_endpoint->last_aoi->bounds));
+  EXPECT_TRUE(std::get<gfx::Rect>(raw_endpoint->last_aoi->bounds).IsEmpty());
+
+  // Non-finite and out-of-bounds rects must be rejected.
+  submit_region(
+      selection::RegionShape::NewRect(gfx::RectF(nan, 0.5f, 0.2f, 0.2f)));
+  ASSERT_TRUE(raw_endpoint->last_aoi.has_value());
+  ASSERT_TRUE(
+      std::holds_alternative<gfx::Rect>(raw_endpoint->last_aoi->bounds));
+  EXPECT_TRUE(std::get<gfx::Rect>(raw_endpoint->last_aoi->bounds).IsEmpty());
+
+  submit_region(
+      selection::RegionShape::NewRect(gfx::RectF(inf, 0.5f, 0.2f, 0.2f)));
+  ASSERT_TRUE(raw_endpoint->last_aoi.has_value());
+  ASSERT_TRUE(
+      std::holds_alternative<gfx::Rect>(raw_endpoint->last_aoi->bounds));
+  EXPECT_TRUE(std::get<gfx::Rect>(raw_endpoint->last_aoi->bounds).IsEmpty());
+
+  submit_region(
+      selection::RegionShape::NewRect(gfx::RectF(1.2f, 0.5f, 0.4f, 0.2f)));
+  ASSERT_TRUE(raw_endpoint->last_aoi.has_value());
+  ASSERT_TRUE(
+      std::holds_alternative<gfx::Rect>(raw_endpoint->last_aoi->bounds));
+  EXPECT_TRUE(std::get<gfx::Rect>(raw_endpoint->last_aoi->bounds).IsEmpty());
+
+  // Valid in-bounds rect is accepted and converted to non-empty pixel bounds.
+  submit_region(
+      selection::RegionShape::NewRect(gfx::RectF(0.5f, 0.5f, 0.2f, 0.2f)));
+  ASSERT_TRUE(raw_endpoint->last_encoded_screenshot.has_value());
+  EXPECT_FALSE(raw_endpoint->last_encoded_screenshot->data.empty());
+  EXPECT_FALSE(raw_endpoint->last_encoded_screenshot->size.IsEmpty());
+  EXPECT_FALSE(raw_endpoint->last_encoded_screenshot->mime_type.empty());
+  ASSERT_TRUE(raw_endpoint->last_aoi.has_value());
+  ASSERT_TRUE(
+      std::holds_alternative<gfx::Rect>(raw_endpoint->last_aoi->bounds));
+  EXPECT_FALSE(std::get<gfx::Rect>(raw_endpoint->last_aoi->bounds).IsEmpty());
+
+  // Valid in-bounds polyline (including the `(1.0f, 1.0f)` edge clamped to
+  // `width - 1, height - 1`) is accepted and converted to pixel points.
+  submit_region(selection::RegionShape::NewPolyline(
+      {gfx::PointF(0.2f, 0.2f), gfx::PointF(1.0f, 1.0f)}));
+  ASSERT_TRUE(raw_endpoint->last_encoded_screenshot.has_value());
+  EXPECT_FALSE(raw_endpoint->last_encoded_screenshot->data.empty());
+  EXPECT_FALSE(raw_endpoint->last_encoded_screenshot->size.IsEmpty());
+  EXPECT_FALSE(raw_endpoint->last_encoded_screenshot->mime_type.empty());
+  ASSERT_TRUE(raw_endpoint->last_aoi.has_value());
+  ASSERT_TRUE(std::holds_alternative<std::vector<gfx::Point>>(
+      raw_endpoint->last_aoi->bounds));
+  const auto& points =
+      std::get<std::vector<gfx::Point>>(raw_endpoint->last_aoi->bounds);
+  ASSERT_EQ(points.size(), 2u);
+  EXPECT_EQ(points[1].x(), raw_endpoint->last_screenshot_size.width() - 1);
+  EXPECT_EQ(points[1].y(), raw_endpoint->last_screenshot_size.height() - 1);
+}
+
+IN_PROC_BROWSER_TEST_F(SelectionOverlayPromptBrowserTest,
+                       GoogleSearchEndpointUnavailableByDefault) {
+  tabs::TabInterface* tab = CreateAndActivateTab(GetSimpleTestUrl());
+  content::WebContents* web_contents = tab->GetContents();
+  auto* controller =
+      SelectionOverlayController::FromTabWebContents(web_contents);
+  ASSERT_TRUE(controller);
+
+  auto infos = controller->GetAvailablePromptEndpointInfosForTesting();
+  ASSERT_EQ(infos.size(), 1u);
+  EXPECT_EQ(infos[0]->id, ::selection::mojom::PromptEndpointId::kGemini);
+
+  controller->Show(/*options=*/nullptr,
+                   ::selection::EntryPoint::kKeyboardShortcut);
+  EXPECT_EQ(controller->GetActivePromptEndpointIdForTesting(),
+            ::selection::mojom::PromptEndpointId::kGemini);
+
+  // Attempting to select an unavailable endpoint is ignored.
+  static_cast<selection::SelectionOverlayPageHandler*>(controller)
+      ->SetActivePromptEndpoint(
+          ::selection::mojom::PromptEndpointId::kGoogleSearch);
+  EXPECT_EQ(controller->GetActivePromptEndpointIdForTesting(),
+            ::selection::mojom::PromptEndpointId::kGemini);
+  controller->Close();
+}
+
+class SelectionOverlayGoogleSearchBrowserTest
+    : public SelectionOverlayPromptBrowserTest {
+ public:
+  SelectionOverlayGoogleSearchBrowserTest() {
+    google_search_feature_list_.InitAndEnableFeature(
+        lens::kSmartSelectionGoogleSearch);
+  }
+  ~SelectionOverlayGoogleSearchBrowserTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList google_search_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(
+    SelectionOverlayGoogleSearchBrowserTest,
+    SubmitPromptToGoogleSearchOpensSidePanelAndSavesLastUsed) {
+  base::HistogramTester histogram_tester;
+  tabs::TabInterface* tab = CreateAndActivateTab(GetSimpleTestUrl());
+  content::WebContents* web_contents = tab->GetContents();
+  auto* controller =
+      SelectionOverlayController::FromTabWebContents(web_contents);
+  ASSERT_TRUE(controller);
+
+  // Both Gemini and Google Search should be available when Google is the DSE.
+  auto infos = controller->GetAvailablePromptEndpointInfosForTesting();
+  ASSERT_EQ(infos.size(), 2u);
+  EXPECT_EQ(infos[0]->id, ::selection::mojom::PromptEndpointId::kGemini);
+  EXPECT_EQ(infos[1]->id, ::selection::mojom::PromptEndpointId::kGoogleSearch);
+
+  gfx::Rect view_bounds = web_contents->GetViewBounds();
+  gfx::Rect selection_bounds(view_bounds.x() + 10, view_bounds.y() + 10, 100,
+                             50);
+  controller->ShowWithSelection(web_contents->GetPrimaryMainFrame(),
+                                selection_bounds,
+                                selection::InteractionOptions::New(),
+                                ::selection::EntryPoint::kContextMenuText);
+
+  EXPECT_EQ(controller->GetActivePromptEndpointIdForTesting(),
+            ::selection::mojom::PromptEndpointId::kGemini);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return controller->HasPageContextForTesting(); }));
+
+  auto* handler =
+      static_cast<selection::SelectionOverlayPageHandler*>(controller);
+  handler->SetActivePromptEndpoint(
+      ::selection::mojom::PromptEndpointId::kGoogleSearch);
+  EXPECT_EQ(controller->GetActivePromptEndpointIdForTesting(),
+            ::selection::mojom::PromptEndpointId::kGoogleSearch);
+  handler->SubmitPrompt("Identify this equation");
+
+  EXPECT_EQ(controller->state(), SelectionOverlayController::State::kOff);
+  EXPECT_EQ(
+      tab->GetProfile()->GetPrefs()->GetInteger(
+          prefs::kGlicSelectionOverlayLastEndpoint),
+      static_cast<int>(::selection::mojom::PromptEndpointId::kGoogleSearch));
+
+  auto* panel_controller =
+      contextual_tasks::ContextualTasksPanelController::From(
+          tab->GetBrowserWindowInterface());
+  ASSERT_TRUE(panel_controller);
+  EXPECT_TRUE(base::test::RunUntil(
+      [&]() { return panel_controller->IsPanelOpenForContextualTask(); }));
+
+  histogram_tester.ExpectUniqueSample(
+      "SmartSelection.Submission.Outcome",
+      ::selection::SubmissionOutcome::kPromptSubmitted, 1);
+  histogram_tester.ExpectUniqueSample(
+      "SmartSelection.Submission.PromptEndpoint",
+      ::selection::mojom::PromptEndpointId::kGoogleSearch, 1);
+
+  // Starting a subsequent session remembers Google Search as the default
+  // endpoint.
+  controller->ShowWithSelection(web_contents->GetPrimaryMainFrame(),
+                                selection_bounds,
+                                selection::InteractionOptions::New(),
+                                ::selection::EntryPoint::kContextMenuText);
+  EXPECT_EQ(controller->GetActivePromptEndpointIdForTesting(),
+            ::selection::mojom::PromptEndpointId::kGoogleSearch);
+  controller->Close();
+}
+
+IN_PROC_BROWSER_TEST_F(
+    SelectionOverlayGoogleSearchBrowserTest,
+    NavigationWhileSearchUrlPendingClosesAndCleansUpGhostLoader) {
+  // Keep Lens cluster-info (gsessionid) fetches pending so `CreateSearchUrl()`
+  // cannot fail out with `ERR_NAME_NOT_RESOLVED` during `ExecJs()` when
+  // `kLensComposeboxIdentityDelegation` bypasses waiting for an OAuth token.
+  const GURL cluster_info_url(
+      lens::features::GetLensComposeboxClusterInfoEndpointUrl());
+  base::Lock held_requests_lock;
+  struct HeldRequest {
+    mojo::PendingReceiver<network::mojom::URLLoader> loader;
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client;
+  };
+  std::vector<HeldRequest> held_requests;
+  content::URLLoaderInterceptor url_loader_interceptor(
+      base::BindLambdaForTesting(
+          [&](content::URLLoaderInterceptor::RequestParams* params) {
+            const GURL& url = params->url_request.url;
+            if (url.host() == cluster_info_url.host() &&
+                url.path() == cluster_info_url.path()) {
+              base::AutoLock lock(held_requests_lock);
+              held_requests.push_back(
+                  {std::move(params->receiver), params->client.Unbind()});
+              return true;
+            }
+            return false;
+          }));
+
+  tabs::TabInterface* tab = CreateAndActivateTab(GetSimpleTestUrl());
+  content::WebContents* web_contents = tab->GetContents();
+  auto* controller =
+      SelectionOverlayController::FromTabWebContents(web_contents);
+  ASSERT_TRUE(controller);
+
+  auto* panel_controller =
+      contextual_tasks::ContextualTasksPanelController::From(
+          tab->GetBrowserWindowInterface());
+  auto* ui_service =
+      contextual_tasks::ContextualTasksUiServiceFactory::GetForBrowserContext(
+          tab->GetProfile());
+  ASSERT_TRUE(panel_controller);
+  ASSERT_TRUE(ui_service);
+
+  gfx::Rect view_bounds = web_contents->GetViewBounds();
+  gfx::Rect selection_bounds(view_bounds.x() + 10, view_bounds.y() + 10, 100,
+                             50);
+  controller->ShowWithSelection(web_contents->GetPrimaryMainFrame(),
+                                selection_bounds,
+                                selection::InteractionOptions::New(),
+                                ::selection::EntryPoint::kContextMenuText);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return controller->HasPageContextForTesting(); }));
+
+  auto* handler =
+      static_cast<selection::SelectionOverlayPageHandler*>(controller);
+  handler->SetActivePromptEndpoint(
+      ::selection::mojom::PromptEndpointId::kGoogleSearch);
+  handler->SubmitPrompt("Identify this equation");
+
+  // `InitSidePanelWithGhostLoader` synchronously opens the side panel with a
+  // task waiting for its search URL.
+  ASSERT_TRUE(panel_controller->IsPanelOpenForContextualTask());
+  std::optional<contextual_tasks::ContextualTask> pending_task =
+      panel_controller->GetCurrentTask();
+  ASSERT_TRUE(pending_task.has_value());
+  ASSERT_TRUE(ui_service->IsTaskWaitingForUrl(pending_task->GetTaskId()));
+
+  // A same-document URL change (`pushState`) should not close or tear down the
+  // pending ghost loader.
+  ASSERT_TRUE(
+      content::ExecJs(web_contents, "history.pushState({}, '', '#same-doc');"));
+  EXPECT_TRUE(panel_controller->IsPanelOpenForContextualTask());
+  ASSERT_TRUE(panel_controller->GetCurrentTask().has_value());
+  EXPECT_EQ(panel_controller->GetCurrentTask()->GetTaskId(),
+            pending_task->GetTaskId());
+  EXPECT_TRUE(ui_service->IsTaskWaitingForUrl(pending_task->GetTaskId()));
+
+  // Navigating away to a new document while the search URL is still pending
+  // closes the ghost loader and destroys the closed side panel task so the tab
+  // is no longer associated with the aborted task.
+  ASSERT_TRUE(content::NavigateToURL(
+      web_contents, embedded_test_server()->GetURL("/test_data/page.html?2")));
+  EXPECT_FALSE(panel_controller->IsPanelOpenForContextualTask());
+  EXPECT_FALSE(panel_controller->GetCurrentTask().has_value());
+
+  // Wait for the newly navigated document's compositor surface so screenshot
+  // capture is possible, then verify submitting another Google Search prompt
+  // cleanly opens a fresh side panel task.
+  content::WaitForCopyableViewInWebContents(web_contents);
+  gfx::Rect next_view_bounds = web_contents->GetViewBounds();
+  gfx::Rect next_selection_bounds(next_view_bounds.x() + 10,
+                                  next_view_bounds.y() + 10, 100, 50);
+  controller->ShowWithSelection(web_contents->GetPrimaryMainFrame(),
+                                next_selection_bounds,
+                                selection::InteractionOptions::New(),
+                                ::selection::EntryPoint::kContextMenuText);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return controller->HasPageContextForTesting(); }));
+  handler->SubmitPrompt("Identify this new page");
+
+  EXPECT_TRUE(panel_controller->IsPanelOpenForContextualTask());
+  std::optional<contextual_tasks::ContextualTask> next_task =
+      panel_controller->GetCurrentTask();
+  ASSERT_TRUE(next_task.has_value());
+  EXPECT_NE(next_task->GetTaskId(), pending_task->GetTaskId());
+}
+
+IN_PROC_BROWSER_TEST_F(SelectionOverlayGoogleSearchBrowserTest,
+                       InvokeFromSuggestionRoutesToSpecifiedEndpoint) {
+  tabs::TabInterface* tab = CreateAndActivateTab(GetSimpleTestUrl());
+  content::WebContents* web_contents = tab->GetContents();
+  auto* controller =
+      SelectionOverlayController::FromTabWebContents(web_contents);
+  ASSERT_TRUE(controller);
+
+  gfx::Rect view_bounds = web_contents->GetViewBounds();
+  gfx::Rect selection_bounds(view_bounds.x() + 10, view_bounds.y() + 10, 100,
+                             50);
+  controller->ShowWithSelection(web_contents->GetPrimaryMainFrame(),
+                                selection_bounds,
+                                selection::InteractionOptions::New(),
+                                ::selection::EntryPoint::kContextMenuText);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return controller->HasPageContextForTesting(); }));
+
+  controller->InvokeFromSuggestion(
+      "Search this selection",
+      ::selection::mojom::PromptEndpointId::kGoogleSearch);
+
+  EXPECT_EQ(controller->state(), SelectionOverlayController::State::kOff);
+  auto* panel_controller =
+      contextual_tasks::ContextualTasksPanelController::From(
+          tab->GetBrowserWindowInterface());
+  ASSERT_TRUE(panel_controller);
+  EXPECT_TRUE(base::test::RunUntil(
+      [&]() { return panel_controller->IsPanelOpenForContextualTask(); }));
+}
+
+IN_PROC_BROWSER_TEST_F(SelectionOverlayGoogleSearchBrowserTest,
+                       GeminiEndpointUnavailableWhenDisabledByPolicy) {
+  tabs::TabInterface* tab = CreateAndActivateTab(GetSimpleTestUrl());
+  content::WebContents* web_contents = tab->GetContents();
+  auto* controller =
+      SelectionOverlayController::FromTabWebContents(web_contents);
+  ASSERT_TRUE(controller);
+
+  ASSERT_EQ(controller->GetAvailablePromptEndpointInfosForTesting().size(), 2u);
+
+  tab->GetProfile()->GetPrefs()->SetInteger(
+      optimization_guide::prefs::kGeminiSettings,
+      std::to_underlying(
+          optimization_guide::prefs::GeminiSettingsPolicyState::kDisabled));
+
+  auto infos = controller->GetAvailablePromptEndpointInfosForTesting();
+  ASSERT_EQ(infos.size(), 1u);
+  EXPECT_EQ(infos[0]->id, ::selection::mojom::PromptEndpointId::kGoogleSearch);
+}
+
+IN_PROC_BROWSER_TEST_F(SelectionOverlayGoogleSearchBrowserTest,
+                       GoogleSearchEndpointUnavailableWhenDseNotGoogle) {
+  tabs::TabInterface* tab = CreateAndActivateTab(GetSimpleTestUrl());
+  content::WebContents* web_contents = tab->GetContents();
+  auto* controller =
+      SelectionOverlayController::FromTabWebContents(web_contents);
+  ASSERT_TRUE(controller);
+
+  TemplateURLService* template_url_service =
+      TemplateURLServiceFactory::GetForProfile(tab->GetProfile());
+  ASSERT_TRUE(template_url_service);
+  search_test_utils::WaitForTemplateURLServiceToLoad(template_url_service);
+
+  TemplateURLData data;
+  data.SetShortName(u"CustomSearch");
+  data.SetKeyword(u"custom");
+  data.SetURL("https://example.com/search?q={searchTerms}");
+  TemplateURL* custom_dse =
+      template_url_service->Add(std::make_unique<TemplateURL>(data));
+  template_url_service->SetUserSelectedDefaultSearchProvider(custom_dse);
+
+  auto infos = controller->GetAvailablePromptEndpointInfosForTesting();
+  ASSERT_EQ(infos.size(), 1u);
+  EXPECT_EQ(infos[0]->id, ::selection::mojom::PromptEndpointId::kGemini);
+
+  controller->Show(/*options=*/nullptr,
+                   ::selection::EntryPoint::kKeyboardShortcut);
+  EXPECT_EQ(controller->GetActivePromptEndpointIdForTesting(),
+            ::selection::mojom::PromptEndpointId::kGemini);
+
+  static_cast<selection::SelectionOverlayPageHandler*>(controller)
+      ->SetActivePromptEndpoint(
+          ::selection::mojom::PromptEndpointId::kGoogleSearch);
+  EXPECT_EQ(controller->GetActivePromptEndpointIdForTesting(),
+            ::selection::mojom::PromptEndpointId::kGemini);
+  controller->Close();
+}
+
+IN_PROC_BROWSER_TEST_F(SelectionOverlayGoogleSearchBrowserTest,
+                       PanelOwnedSessionPinsEndpointToGemini) {
+  base::HistogramTester histogram_tester;
+  tabs::TabInterface* tab = CreateAndActivateTab(GetSimpleTestUrl());
+  content::WebContents* web_contents = tab->GetContents();
+  auto* controller =
+      SelectionOverlayController::FromTabWebContents(web_contents);
+  ASSERT_TRUE(controller);
+
+  // Persist Google Search as the last-used endpoint.
+  tab->GetProfile()->GetPrefs()->SetInteger(
+      prefs::kGlicSelectionOverlayLastEndpoint,
+      static_cast<int>(::selection::mojom::PromptEndpointId::kGoogleSearch));
+
+  // Case 1: A direct session starts on Google Search, then gets adopted by the
+  // Gemini side panel (`AdoptSession`) which pins endpoints to Gemini.
+  {
+    controller->Show(/*options=*/nullptr,
+                     ::selection::EntryPoint::kKeyboardShortcut);
+    ASSERT_TRUE(base::test::RunUntil(
+        [&]() { return controller->HasPageContextForTesting(); }));
+    EXPECT_EQ(controller->GetActivePromptEndpointIdForTesting(),
+              ::selection::mojom::PromptEndpointId::kGoogleSearch);
+    EXPECT_EQ(controller->GetAvailablePromptEndpointInfosForTesting().size(),
+              2u);
+
+    ASSERT_TRUE(OpenGlicForActiveTab().has_value());
+    mojo::PendingRemote<mojom::CaptureRegionObserver> observer;
+    auto receiver = observer.InitWithNewPipeAndPassReceiver();
+    SelectionOverlayController::CaptureRegion(
+        tab,
+        GlicKeyedService::Get(tab->GetProfile())
+            ->active_instance_sharing_manager(),
+        std::move(observer), /*options=*/nullptr,
+        /*capture_region_handoff=*/true);
+
+    EXPECT_EQ(controller->GetActivePromptEndpointIdForTesting(),
+              ::selection::mojom::PromptEndpointId::kGemini);
+    auto infos = controller->GetAvailablePromptEndpointInfosForTesting();
+    ASSERT_EQ(infos.size(), 1u);
+    EXPECT_EQ(infos[0]->id, ::selection::mojom::PromptEndpointId::kGemini);
+
+    // Attempting to switch to Google Search is ignored while panel-owned.
+    auto* handler =
+        static_cast<selection::SelectionOverlayPageHandler*>(controller);
+    handler->SetActivePromptEndpoint(
+        ::selection::mojom::PromptEndpointId::kGoogleSearch);
+    EXPECT_EQ(controller->GetActivePromptEndpointIdForTesting(),
+              ::selection::mojom::PromptEndpointId::kGemini);
+
+    // Submitting a prompt in a panel-owned session must not overwrite the
+    // user's saved Google Search preference with Gemini.
+    handler->SubmitPrompt("hello from panel");
+    histogram_tester.ExpectUniqueSample(
+        "SmartSelection.Submission.PromptEndpoint",
+        ::selection::mojom::PromptEndpointId::kGemini, 1);
+    EXPECT_EQ(
+        tab->GetProfile()->GetPrefs()->GetInteger(
+            prefs::kGlicSelectionOverlayLastEndpoint),
+        static_cast<int>(::selection::mojom::PromptEndpointId::kGoogleSearch));
+
+    controller->Close();
+  }
+
+  // Case 2: A session initiated directly from the open Gemini side panel via
+  // `CaptureRegion()` starts pinned to Gemini despite the Google Search pref.
+  {
+    mojo::PendingRemote<mojom::CaptureRegionObserver> observer;
+    auto receiver = observer.InitWithNewPipeAndPassReceiver();
+    SelectionOverlayController::CaptureRegion(
+        tab,
+        GlicKeyedService::Get(tab->GetProfile())
+            ->active_instance_sharing_manager(),
+        std::move(observer), /*options=*/nullptr);
+    ASSERT_TRUE(base::test::RunUntil(
+        [&]() { return controller->HasPageContextForTesting(); }));
+
+    EXPECT_EQ(controller->GetActivePromptEndpointIdForTesting(),
+              ::selection::mojom::PromptEndpointId::kGemini);
+    auto infos = controller->GetAvailablePromptEndpointInfosForTesting();
+    ASSERT_EQ(infos.size(), 1u);
+    EXPECT_EQ(infos[0]->id, ::selection::mojom::PromptEndpointId::kGemini);
+
+    auto* handler =
+        static_cast<selection::SelectionOverlayPageHandler*>(controller);
+    handler->SetActivePromptEndpoint(
+        ::selection::mojom::PromptEndpointId::kGoogleSearch);
+    EXPECT_EQ(controller->GetActivePromptEndpointIdForTesting(),
+              ::selection::mojom::PromptEndpointId::kGemini);
+
+    // Submitting a prompt in a panel-owned session must not overwrite the
+    // user's saved Google Search preference with Gemini.
+    handler->SubmitPrompt("hello from panel");
+    EXPECT_EQ(
+        tab->GetProfile()->GetPrefs()->GetInteger(
+            prefs::kGlicSelectionOverlayLastEndpoint),
+        static_cast<int>(::selection::mojom::PromptEndpointId::kGoogleSearch));
+
+    controller->Close();
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(SelectionOverlayGoogleSearchBrowserTest,
+                       SwitchingEndpointRequeriesSuggestedActions) {
+  class RecordingSuggestionService : public ::selection::SuggestionService {
+   public:
+    explicit RecordingSuggestionService(tabs::TabInterface* tab)
+        : ::selection::SuggestionService(tab,
+                                         /*remote_model_executor=*/nullptr,
+                                         /*google_groups_manager=*/nullptr) {}
+    void RequestSuggestions(
+        ::selection::PageContextWithSelection context,
+        std::optional<::selection::mojom::PromptEndpointId> active_endpoint_id,
+        ::selection::SuggestionsCallback callback) override {
+      requested_endpoint_ids_.push_back(active_endpoint_id);
+      ::selection::SuggestionService::RequestSuggestions(
+          std::move(context), active_endpoint_id, std::move(callback));
+    }
+    const std::vector<std::optional<::selection::mojom::PromptEndpointId>>&
+    requested_endpoint_ids() const {
+      return requested_endpoint_ids_;
+    }
+
+   private:
+    std::vector<std::optional<::selection::mojom::PromptEndpointId>>
+        requested_endpoint_ids_;
+  };
+  ui::UserDataFactory::ScopedOverride override_subscription =
+      tabs::TabFeatures::GetUserDataFactoryForTesting().AddOverrideForTesting(
+          base::BindLambdaForTesting(
+              [](tabs::TabInterface& tab)
+                  -> std::unique_ptr<::selection::SuggestionService> {
+                return std::make_unique<RecordingSuggestionService>(&tab);
+              }));
+
+  tabs::TabInterface* tab = CreateAndActivateTab(GetSimpleTestUrl());
+  auto* recording_service = static_cast<RecordingSuggestionService*>(
+      ::selection::SuggestionService::From(tab));
+  ASSERT_TRUE(recording_service);
+  content::WebContents* web_contents = tab->GetContents();
+  auto* controller =
+      SelectionOverlayController::FromTabWebContents(web_contents);
+  ASSERT_TRUE(controller);
+
+  gfx::Rect view_bounds = web_contents->GetViewBounds();
+  gfx::Rect selection_bounds(view_bounds.x() + 10, view_bounds.y() + 10, 100,
+                             50);
+  controller->ShowWithSelection(web_contents->GetPrimaryMainFrame(),
+                                selection_bounds,
+                                selection::InteractionOptions::New(),
+                                ::selection::EntryPoint::kContextMenuImage);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return controller->HasPageContextForTesting(); }));
+
+  class TestActionsListener : public selection::SuggestedActionsListener {
+   public:
+    mojo::PendingRemote<selection::SuggestedActionsListener> Bind() {
+      receiver_.reset();
+      return receiver_.BindNewPipeAndPassRemote();
+    }
+    void OnSuggestedActionsAvailable(
+        std::vector<selection::SuggestedActionPtr> actions) override {
+      ++call_count;
+    }
+    int call_count = 0;
+
+   private:
+    mojo::Receiver<selection::SuggestedActionsListener> receiver_{this};
+  };
+
+  auto* handler =
+      static_cast<selection::SelectionOverlayPageHandler*>(controller);
+  TestActionsListener listener;
+  handler->GetSuggestedActions(listener.Bind());
+  ASSERT_TRUE(base::test::RunUntil([&]() { return listener.call_count == 1; }));
+  EXPECT_EQ(controller->GetActivePromptEndpointIdForTesting(),
+            ::selection::mojom::PromptEndpointId::kGemini);
+
+  // Re-requesting with the same endpoint hits the region cache without
+  // re-querying `SuggestionService`.
+  handler->SetActivePromptEndpoint(
+      ::selection::mojom::PromptEndpointId::kGemini);
+  handler->GetSuggestedActions(listener.Bind());
+  ASSERT_TRUE(base::test::RunUntil([&]() { return listener.call_count == 2; }));
+  EXPECT_EQ(recording_service->requested_endpoint_ids().size(), 1u);
+
+  // Switching to Google Search invalidates the cache and issues a fresh query.
+  handler->SetActivePromptEndpoint(
+      ::selection::mojom::PromptEndpointId::kGoogleSearch);
+  EXPECT_EQ(controller->GetActivePromptEndpointIdForTesting(),
+            ::selection::mojom::PromptEndpointId::kGoogleSearch);
+  handler->GetSuggestedActions(listener.Bind());
+  ASSERT_TRUE(base::test::RunUntil([&]() { return listener.call_count == 3; }));
+
+  EXPECT_THAT(recording_service->requested_endpoint_ids(),
+              testing::ElementsAre(
+                  ::selection::mojom::PromptEndpointId::kGemini,
+                  ::selection::mojom::PromptEndpointId::kGoogleSearch));
+
+  controller->Close();
+}
+
+namespace {
+
+class FakeHandoffSuggestion : public ::selection::Suggestion {
+ public:
+  explicit FakeHandoffSuggestion(base::OnceClosure on_executed)
+      : on_executed_(std::move(on_executed)) {}
+  const std::u16string& GetLabel() const override { return label_; }
+  ToolId GetToolId() const override {
+    return optimization_guide::proto::SMART_SELECTION_TOOL_GEMINI_IN_CHROME;
+  }
+  void OnSuggestionPresented() override {}
+  void OnSuggestionExecuted() override {
+    if (on_executed_) {
+      std::move(on_executed_).Run();
+    }
+  }
+  ::selection::mojom::ActionPtr GetAction() const override {
+    return ::selection::mojom::Action::NewHandoff(
+        ::selection::mojom::Handoff::New());
+  }
+
+ private:
+  std::u16string label_ = u"Fake Suggestion";
+  base::OnceClosure on_executed_;
+};
+
+class CapturingActionsListener : public selection::SuggestedActionsListener {
+ public:
+  mojo::PendingRemote<selection::SuggestedActionsListener> Bind() {
+    receiver_.reset();
+    return receiver_.BindNewPipeAndPassRemote();
+  }
+  void OnSuggestedActionsAvailable(
+      std::vector<selection::SuggestedActionPtr> actions) override {
+    received.push_back(std::move(actions));
+  }
+  std::vector<std::vector<selection::SuggestedActionPtr>> received;
+
+ private:
+  mojo::Receiver<selection::SuggestedActionsListener> receiver_{this};
+};
+
+}  // namespace
+
+IN_PROC_BROWSER_TEST_F(SelectionOverlayGoogleSearchBrowserTest,
+                       AdoptSessionPreservesExistingSuggestedActions) {
+  class FakeSuggestionService : public ::selection::SuggestionService {
+   public:
+    explicit FakeSuggestionService(tabs::TabInterface* tab)
+        : ::selection::SuggestionService(tab,
+                                         /*remote_model_executor=*/nullptr,
+                                         /*google_groups_manager=*/nullptr) {}
+    void RequestSuggestions(
+        ::selection::PageContextWithSelection context,
+        std::optional<::selection::mojom::PromptEndpointId> active_endpoint_id,
+        ::selection::SuggestionsCallback callback) override {
+      std::vector<std::unique_ptr<::selection::Suggestion>> suggestions;
+      suggestions.push_back(
+          std::make_unique<FakeHandoffSuggestion>(base::BindOnce(
+              &FakeSuggestionService::OnExecuted, weak_factory_.GetWeakPtr())));
+      std::move(callback).Run(std::move(suggestions),
+                              ::selection::FeedbackZipBuilder());
+    }
+    int executed_count() const { return executed_count_; }
+
+   private:
+    void OnExecuted() { ++executed_count_; }
+    int executed_count_ = 0;
+    base::WeakPtrFactory<FakeSuggestionService> weak_factory_{this};
+  };
+  ui::UserDataFactory::ScopedOverride override_subscription =
+      tabs::TabFeatures::GetUserDataFactoryForTesting().AddOverrideForTesting(
+          base::BindLambdaForTesting(
+              [](tabs::TabInterface& tab)
+                  -> std::unique_ptr<::selection::SuggestionService> {
+                return std::make_unique<FakeSuggestionService>(&tab);
+              }));
+
+  tabs::TabInterface* tab = CreateAndActivateTab(GetSimpleTestUrl());
+  auto* fake_service = static_cast<FakeSuggestionService*>(
+      ::selection::SuggestionService::From(tab));
+  ASSERT_TRUE(fake_service);
+  content::WebContents* web_contents = tab->GetContents();
+  auto* controller =
+      SelectionOverlayController::FromTabWebContents(web_contents);
+  ASSERT_TRUE(controller);
+
+  // Start a direct session with Google Search active.
+  tab->GetProfile()->GetPrefs()->SetInteger(
+      prefs::kGlicSelectionOverlayLastEndpoint,
+      static_cast<int>(::selection::mojom::PromptEndpointId::kGoogleSearch));
+
+  gfx::Rect view_bounds = web_contents->GetViewBounds();
+  gfx::Rect selection_bounds(view_bounds.x() + 10, view_bounds.y() + 10, 100,
+                             50);
+  controller->ShowWithSelection(web_contents->GetPrimaryMainFrame(),
+                                selection_bounds,
+                                selection::InteractionOptions::New(),
+                                ::selection::EntryPoint::kContextMenuImage);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return controller->HasPageContextForTesting(); }));
+  EXPECT_EQ(controller->GetActivePromptEndpointIdForTesting(),
+            ::selection::mojom::PromptEndpointId::kGoogleSearch);
+
+  auto* handler =
+      static_cast<selection::SelectionOverlayPageHandler*>(controller);
+  CapturingActionsListener listener;
+  handler->GetSuggestedActions(listener.Bind());
+  ASSERT_TRUE(
+      base::test::RunUntil([&]() { return !listener.received.empty(); }));
+  ASSERT_EQ(listener.received[0].size(), 1u);
+  const base::UnguessableToken action_id = listener.received[0][0]->id;
+
+  // Adopt the session from the Gemini side panel; the active endpoint switches
+  // to Gemini, but existing suggested action IDs remain valid.
+  ASSERT_TRUE(OpenGlicForActiveTab().has_value());
+  mojo::PendingRemote<mojom::CaptureRegionObserver> observer;
+  auto receiver = observer.InitWithNewPipeAndPassReceiver();
+  SelectionOverlayController::CaptureRegion(
+      tab,
+      GlicKeyedService::Get(tab->GetProfile())
+          ->active_instance_sharing_manager(),
+      std::move(observer), /*options=*/nullptr,
+      /*capture_region_handoff=*/true);
+  EXPECT_EQ(controller->GetActivePromptEndpointIdForTesting(),
+            ::selection::mojom::PromptEndpointId::kGemini);
+
+  // Clicking an already-displayed suggestion chip succeeds without hitting
+  // ReportBadMessage and leaves the saved Google Search pref unchanged.
+  handler->ExecuteSuggestedAction(action_id,
+                                  mojo::GenericPendingAssociatedReceiver());
+  EXPECT_EQ(fake_service->executed_count(), 1);
+  EXPECT_EQ(
+      tab->GetProfile()->GetPrefs()->GetInteger(
+          prefs::kGlicSelectionOverlayLastEndpoint),
+      static_cast<int>(::selection::mojom::PromptEndpointId::kGoogleSearch));
+
+  controller->Close();
+}
+
+IN_PROC_BROWSER_TEST_F(SelectionOverlayGoogleSearchBrowserTest,
+                       AdoptSessionPreservesInFlightSuggestedActions) {
+  class DeferringSuggestionService : public ::selection::SuggestionService {
+   public:
+    explicit DeferringSuggestionService(tabs::TabInterface* tab)
+        : ::selection::SuggestionService(tab,
+                                         /*remote_model_executor=*/nullptr,
+                                         /*google_groups_manager=*/nullptr) {}
+    void RequestSuggestions(
+        ::selection::PageContextWithSelection context,
+        std::optional<::selection::mojom::PromptEndpointId> active_endpoint_id,
+        ::selection::SuggestionsCallback callback) override {
+      pending_callback_ = std::move(callback);
+    }
+    bool has_pending_callback() const { return !pending_callback_.is_null(); }
+    void ResolveWithSuggestion() {
+      std::vector<std::unique_ptr<::selection::Suggestion>> suggestions;
+      suggestions.push_back(std::make_unique<FakeHandoffSuggestion>(
+          base::BindOnce(&DeferringSuggestionService::OnExecuted,
+                         weak_factory_.GetWeakPtr())));
+      std::move(pending_callback_)
+          .Run(std::move(suggestions), ::selection::FeedbackZipBuilder());
+    }
+    int executed_count() const { return executed_count_; }
+
+   private:
+    void OnExecuted() { ++executed_count_; }
+    ::selection::SuggestionsCallback pending_callback_;
+    int executed_count_ = 0;
+    base::WeakPtrFactory<DeferringSuggestionService> weak_factory_{this};
+  };
+  ui::UserDataFactory::ScopedOverride override_subscription =
+      tabs::TabFeatures::GetUserDataFactoryForTesting().AddOverrideForTesting(
+          base::BindLambdaForTesting(
+              [](tabs::TabInterface& tab)
+                  -> std::unique_ptr<::selection::SuggestionService> {
+                return std::make_unique<DeferringSuggestionService>(&tab);
+              }));
+
+  tabs::TabInterface* tab = CreateAndActivateTab(GetSimpleTestUrl());
+  auto* deferring_service = static_cast<DeferringSuggestionService*>(
+      ::selection::SuggestionService::From(tab));
+  ASSERT_TRUE(deferring_service);
+  content::WebContents* web_contents = tab->GetContents();
+  auto* controller =
+      SelectionOverlayController::FromTabWebContents(web_contents);
+  ASSERT_TRUE(controller);
+
+  tab->GetProfile()->GetPrefs()->SetInteger(
+      prefs::kGlicSelectionOverlayLastEndpoint,
+      static_cast<int>(::selection::mojom::PromptEndpointId::kGoogleSearch));
+
+  gfx::Rect view_bounds = web_contents->GetViewBounds();
+  gfx::Rect selection_bounds(view_bounds.x() + 10, view_bounds.y() + 10, 100,
+                             50);
+  controller->ShowWithSelection(web_contents->GetPrimaryMainFrame(),
+                                selection_bounds,
+                                selection::InteractionOptions::New(),
+                                ::selection::EntryPoint::kContextMenuImage);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return controller->HasPageContextForTesting(); }));
+  EXPECT_EQ(controller->GetActivePromptEndpointIdForTesting(),
+            ::selection::mojom::PromptEndpointId::kGoogleSearch);
+
+  auto* handler =
+      static_cast<selection::SelectionOverlayPageHandler*>(controller);
+  CapturingActionsListener listener;
+  handler->GetSuggestedActions(listener.Bind());
+  ASSERT_TRUE(deferring_service->has_pending_callback());
+
+  // Adopt the session while the suggestion request is still in flight.
+  ASSERT_TRUE(OpenGlicForActiveTab().has_value());
+  mojo::PendingRemote<mojom::CaptureRegionObserver> observer;
+  auto receiver = observer.InitWithNewPipeAndPassReceiver();
+  SelectionOverlayController::CaptureRegion(
+      tab,
+      GlicKeyedService::Get(tab->GetProfile())
+          ->active_instance_sharing_manager(),
+      std::move(observer), /*options=*/nullptr,
+      /*capture_region_handoff=*/true);
+  EXPECT_EQ(controller->GetActivePromptEndpointIdForTesting(),
+            ::selection::mojom::PromptEndpointId::kGemini);
+
+  // Deliver the in-flight response; it must not be dropped on adoption.
+  deferring_service->ResolveWithSuggestion();
+  ASSERT_TRUE(
+      base::test::RunUntil([&]() { return !listener.received.empty(); }));
+  ASSERT_EQ(listener.received[0].size(), 1u);
+
+  handler->ExecuteSuggestedAction(listener.received[0][0]->id,
+                                  mojo::GenericPendingAssociatedReceiver());
+  EXPECT_EQ(deferring_service->executed_count(), 1);
+  EXPECT_EQ(
+      tab->GetProfile()->GetPrefs()->GetInteger(
+          prefs::kGlicSelectionOverlayLastEndpoint),
+      static_cast<int>(::selection::mojom::PromptEndpointId::kGoogleSearch));
+
+  controller->Close();
 }
 
 // The overlay doesn't allow a prompt before the page context is in. One that
@@ -1422,6 +2396,31 @@ IN_PROC_BROWSER_TEST_F(SelectionOverlayTextSelectionNoSmallChipBrowserTest,
   controller->Close();
 }
 
+IN_PROC_BROWSER_TEST_F(SelectionOverlayPromptBrowserTest,
+                       CaptureRegionPreselectsTextSelectionWithPromptBox) {
+  ASSERT_FALSE(base::FeatureList::IsEnabled(features::kGlicSelectionSmallChip));
+  tabs::TabInterface* tab = CreateAndActivateTab(GetSimpleTestUrl());
+  content::WebContents* web_contents = tab->GetContents();
+  auto* controller =
+      SelectionOverlayController::FromTabWebContents(web_contents);
+  ASSERT_TRUE(controller);
+  auto* selection_observer = GlicSelectionObserver::From(tab);
+  ASSERT_TRUE(selection_observer);
+
+  ASSERT_TRUE(SelectAllAndWaitForBounds(web_contents));
+  ASSERT_TRUE(base::test::RunUntil([selection_observer]() {
+    return selection_observer->GetCurrentSelectionBounds().has_value();
+  }));
+  ASSERT_TRUE(OpenGlicForActiveTab().has_value());
+
+  StartCaptureRegion(tab);
+
+  EXPECT_EQ(controller->GetSelectedRegionCount(), 1u);
+
+  controller->Close();
+  EXPECT_EQ(controller->GetSelectedRegionCount(), 0u);
+}
+
 IN_PROC_BROWSER_TEST_F(SelectionOverlayTextSelectionBrowserTest,
                        CaptureRegionIgnoresClearedSelection) {
   tabs::TabInterface* tab = CreateAndActivateTab(GetSimpleTestUrl());
@@ -1550,17 +2549,17 @@ class CountingSelectionSuggestionTool : public ::selection::SuggestionTool {
   }
 
   std::unique_ptr<::selection::Suggestion> CreateSuggestion(
-      const ::selection::AreaOfInterest& processed_area,
+      const ::selection::PageContextWithSelection& context,
       const optimization_guide::proto::SmartSelectionSuggestion&
           server_suggestion) override {
     request_count_++;
-    last_aoi_screenshot_ = processed_area.screenshot;
-    last_aoi_apc_ = processed_area.apc;
-    last_selected_text_ = processed_area.selected_text;
+    last_aoi_screenshot_ = context.page_context.screenshot;
+    last_aoi_apc_ = context.page_context.apc;
+    last_selected_text_ = context.area_of_interest.selected_text;
     last_text_surrounding_selection_ =
-        processed_area.text_surrounding_selection;
-    if (std::holds_alternative<gfx::Rect>(processed_area.bounds)) {
-      last_rect_ = std::get<gfx::Rect>(processed_area.bounds);
+        context.area_of_interest.text_surrounding_selection;
+    if (std::holds_alternative<gfx::Rect>(context.area_of_interest.bounds)) {
+      last_rect_ = std::get<gfx::Rect>(context.area_of_interest.bounds);
     }
     QueueNextResponse();
     std::u16string label = u"Action " + base::NumberToString16(request_count_);
@@ -1823,8 +2822,10 @@ class FakeSuggestionService : public ::selection::SuggestionService {
                                        /*google_groups_manager=*/nullptr) {}
   ~FakeSuggestionService() override = default;
 
-  void RequestSuggestions(::selection::AreaOfInterest processed_area,
-                          ::selection::SuggestionsCallback callback) override {
+  void RequestSuggestions(
+      ::selection::PageContextWithSelection context,
+      std::optional<::selection::mojom::PromptEndpointId> active_endpoint_id,
+      ::selection::SuggestionsCallback callback) override {
     pending_callbacks_.push_back(std::move(callback));
   }
 
@@ -1919,7 +2920,7 @@ class FakePromptSuggestionTool : public ::selection::SuggestionTool {
   }
 
   std::unique_ptr<::selection::Suggestion> CreateSuggestion(
-      const ::selection::AreaOfInterest& processed_area,
+      const ::selection::PageContextWithSelection& context,
       const optimization_guide::proto::SmartSelectionSuggestion&
           server_suggestion) override {
     return std::make_unique<SelectionSuggestion>(
@@ -1982,7 +2983,7 @@ class FakeInlineSuggestionTool : public ::selection::SuggestionTool {
   }
 
   std::unique_ptr<::selection::Suggestion> CreateSuggestion(
-      const ::selection::AreaOfInterest& processed_area,
+      const ::selection::PageContextWithSelection& context,
       const optimization_guide::proto::SmartSelectionSuggestion&
           server_suggestion) override {
     auto suggestion = std::make_unique<InlineSuggestion>();

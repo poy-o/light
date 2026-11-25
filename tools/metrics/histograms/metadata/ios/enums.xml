@@ -471,6 +471,7 @@ chromium-metrics-reviews@google.com.
   <int value="5" label="Lens"/>
   <int value="6" label="TabGroups"/>
   <int value="7" label="PriceTracking"/>
+  <int value="8" label="Safety"/>
 </enum>
 
 <!-- LINT.ThenChange(//components/desktop_to_mobile_promos/promos_types.h:PromoType) -->
@@ -636,7 +637,7 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="Other error"/>
 </enum>
 
-<!-- LINT.ThenChange(/ios/chrome/browser/default_browser/default_status/model/default_status_helper_types.h:DefaultStatusAPIOutcomeType) -->
+<!-- LINT.ThenChange(/ios/chrome/browser/default_browser/default_status/model/default_status_types.h:DefaultStatusAPIOutcomeType) -->
 
 <!-- LINT.IfChange(IOSDefaultStatusHeuristicAssessment) -->
 
@@ -647,7 +648,7 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="False positive"/>
 </enum>
 
-<!-- LINT.ThenChange(/ios/chrome/browser/default_browser/default_status/model/default_status_helper_types.h:DefaultStatusHeuristicAssessment) -->
+<!-- LINT.ThenChange(/ios/chrome/browser/default_browser/default_status/model/default_status_types.h:DefaultStatusHeuristicAssessment) -->
 
 <!-- LINT.IfChange(IOSDefaultStatusRetention) -->
 
@@ -658,7 +659,7 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="Remained non-default"/>
 </enum>
 
-<!-- LINT.ThenChange(/ios/chrome/browser/default_browser/default_status/model/default_status_helper_types.h:DefaultStatusRetention) -->
+<!-- LINT.ThenChange(/ios/chrome/browser/default_browser/default_status/model/default_status_types.h:DefaultStatusRetention) -->
 
 <enum name="IOSDeleteAllSavedCredentialsActions">
   <int value="0" label="User confirmed delete all saved credentials"/>
@@ -2613,16 +2614,6 @@ chromium-metrics-reviews@google.com.
 
 <!-- LINT.ThenChange(/ios/chrome/browser/push_notification/model/constants.h:NotificationType) -->
 
-<enum name="NtpBackgroundCacheCleanupEvent">
-  <int value="0" label="Cleanup Skipped (New User)"/>
-  <int value="1" label="Cleanup Triggered"/>
-  <int value="2" label="Cleanup Completed Success"/>
-  <int value="3" label="Cleanup Completed Failure"/>
-  <int value="4" label="Refetch Triggered"/>
-  <int value="5" label="Refetch Completed Success"/>
-  <int value="6" label="Refetch Completed Failure"/>
-</enum>
-
 <!-- LINT.IfChange(OmniboxPositionType) -->
 
 <enum name="OmniboxPositionType">
@@ -2650,6 +2641,21 @@ chromium-metrics-reviews@google.com.
   <int value="5" label="Partial translate failed, user cancelled"/>
   <int value="6" label="Partial translate failed, user pressed full translate"/>
 </enum>
+
+<!-- LINT.IfChange(PasskeyCreationBottomSheetExitReason) -->
+
+<enum name="PasskeyCreationBottomSheetExitReason">
+  <int value="0" label="Create passkey confirmed"/>
+  <int value="1" label="Save another way tapped"/>
+  <int value="2" label="Bottom sheet dismissed by user"/>
+  <int value="3" label="Reauthentication failed or cancelled"/>
+  <int value="4" label="Reauthentication not possible (deferred to OS)"/>
+  <int value="5" label="Bottom sheet could not be presented"/>
+  <int value="6" label="Dismissed externally (tab switch, abort, or teardown)"/>
+  <int value="7" label="Invalid or expired passkey request"/>
+</enum>
+
+<!-- LINT.ThenChange(//ios/chrome/browser/passwords/bottom_sheet/coordinator/passkey_creation_bottom_sheet_exit_reason.h:PasskeyCreationBottomSheetExitReason) -->
 
 <enum name="PasswordSuggestionBottomSheetExitReason">
   <int value="0" label="Bottom Sheet dismissed"/>
@@ -2962,7 +2968,7 @@ chromium-metrics-reviews@google.com.
   <int value="6" label="Not eligible (optimization guide unknown)"/>
 </enum>
 
-<!-- LINT.ThenChange(/ios/chrome/browser/reader_mode/model/constants.h:ReaderModeHeuristicResult) -->
+<!-- LINT.ThenChange(/components/web_distiller/core/eligibility/reader_mode_eligibility.h:ReaderModeEligibility) -->
 
 <!-- LINT.IfChange(ReaderModeState) -->
 

@@ -233,6 +233,41 @@ struct CounterAbuseVerdict {
   SafeBrowsingVerdict sb_verdict_result;
 };
 
+// @generate glic_api
+// Reason why a page-declared WebMCP script tool set was withheld.
+[Stable, Extensible]
+enum ScriptToolRejectionReason {
+  // Default / unspecified reason (also used for unrecognized future values).
+  [Default] kUnspecified = 0,
+  // Withheld due to a security or safety check.
+  kSecurity = 1,
+  // Withheld because the site is rate-limited / throttled.
+  kThrottling = 2,
+  // Withheld due to a quality check.
+  kQuality = 3,
+  // Withheld while an asynchronous evaluation or scan is still in flight.
+  kScanPending = 4,
+};
+
+// @generate glic_api
+// Identifies a page document whose declared WebMCP tools were withheld.
+struct ScriptToolRejectionDocument {
+  // Optional ID of the tab hosting the document, when known by the web client.
+  int32? tab_id;
+  // DocumentIdentifier.serialized_token from AnnotatedPageContent.
+  mojo_base.mojom.UnguessableToken document_id;
+  // Page-declared WebMCP tool names withheld for this document.
+  array<string> tool_names;
+};
+
+// @generate glic_api
+// Groups page documents whose declared WebMCP tools were withheld for a shared
+// reason.
+struct ScriptToolRejection {
+  ScriptToolRejectionReason reason;
+  array<ScriptToolRejectionDocument> documents;
+};
+
 // The result of `WebClientCreated()`. Contains information that needs to be
 // available before the web client is initialized.
 struct WebClientInitialState {
@@ -317,6 +352,8 @@ struct WebClientInitialState {
   bool enable_client_storage;
   // Initial key-value pairs for the prefs-backed client data storage.
   map<string, string> client_storage;
+  // Whether features::kGlicActionFirstSuggestions is enabled.
+  bool enable_action_first_suggestions;
 };
 
 // @generate glic_api
@@ -1609,6 +1646,13 @@ interface WebClientHandler {
   // `DrivePickerErrorReason::kAlreadyActive` without affecting the active
   // picker.
   ShowDrivePicker(DrivePickerOptions options) => (DrivePickerResult result);
+
+  // Requests Action First FRE suggestion updates for the tab the panel
+  // targets. Chrome sends the current value to `handler`, then each change.
+  // The subscription ends when `handler` is closed. Only valid when
+  // `WebClientInitialState.enable_action_first_suggestions` is true.
+  SubscribeToActionFirstSuggestions(
+      pending_remote<ActionFirstSuggestionsHandler> handler);
 };
 
 // Accesses zero state suggestions from the web client.
@@ -1627,6 +1671,15 @@ interface ZeroStateSuggestionsClient {
   // The zero state suggestions have changed.
   NotifyZeroStateSuggestionsChanged(ZeroStateSuggestionsV2 suggestions,
                                     ZeroStateSuggestionsOptions options);
+};
+
+// Receives Action First FRE suggestion updates. Implemented by the web
+// client in the renderer and called by the browser for the lifetime of the
+// subscription.
+interface ActionFirstSuggestionsHandler {
+  // Suggestions changed. Null means there are no suggestions for the current
+  // tab, because it is not evaluated yet or not eligible.
+  OnActionFirstSuggestionsChanged(ActionFirstSuggestions? suggestions);
 };
 
 // Receives updates for a specific tab.
@@ -2387,6 +2440,16 @@ struct NoFocusedTabData {
   TabData? active_tab_data;
   // A human-readable debug message explaining why there is no focused tab.
   string no_focus_reason;
+};
+
+// @generate glic_api
+// Pre-consent Action First FRE suggestions for a tab.
+struct ActionFirstSuggestions {
+  // ID of the tab these suggestions apply to.
+  int32 tab_id;
+  // Ordered chip IDs from the pre-reviewed chip catalog (e.g. "FACT_CHECK").
+  // Empty means the client should show generic chips.
+  array<string> chip_ids;
 };
 
 // @generate glic_api

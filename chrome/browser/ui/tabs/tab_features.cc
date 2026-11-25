@@ -10,6 +10,7 @@
 #include <optional>
 
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/no_destructor.h"
@@ -57,6 +58,7 @@
 #include "chrome/browser/image_fetcher/image_fetcher_service_factory.h"
 #include "chrome/browser/indigo/indigo_cue_target.h"
 #include "chrome/browser/indigo/indigo_page_action_controller.h"
+#include "chrome/browser/lens/google_search_prompt_endpoint.h"
 #include "chrome/browser/lens/lens_suggestion_tool.h"
 #include "chrome/browser/loader/from_gws_navigation_and_keep_alive_request_observer.h"
 #include "chrome/browser/login_detection/login_detection_tab_helper.h"
@@ -246,6 +248,7 @@
 #include "chrome/browser/glic/public/glic_provider_spec.h"
 #include "chrome/browser/glic/public/widget/glic_side_panel_coordinator_impl.h"
 #include "chrome/browser/glic/selection/quick_answers_tool.h"
+#include "chrome/browser/glic/selection/selection_context_sender.h"
 #include "chrome/browser/glic/selection/selection_overlay_controller.h"
 #include "chrome/browser/glic/selection/selection_suggestion_tool.h"
 #include "chrome/browser/glic/service/glic_instance_helper.h"
@@ -691,6 +694,13 @@ void TabFeatures::Init(TabInterface& tab, Profile* profile) {
               .CreateInstance<commerce::InStockNotificationManager>(tab, &tab);
     }
 
+    // Before the various glic util classes below, which might look it up.
+    if (glic::GlicKeyedService::Get(profile)) {
+      glic_side_panel_coordinator_ =
+          GetUserDataFactory()
+              .CreateInstance<glic::GlicSidePanelCoordinatorImpl>(
+                  tab, &tab, side_panel_registry_.get());
+    }
     if (glic::GlicEnabling::IsProfileEligible(profile)) {
       glic_instance_helper_ =
           GetUserDataFactory().CreateInstance<glic::GlicInstanceHelper>(tab,
@@ -718,12 +728,21 @@ void TabFeatures::Init(TabInterface& tab, Profile* profile) {
       glic_selection_overlay_controller_ =
           GetUserDataFactory().CreateInstance<glic::SelectionOverlayController>(
               tab, &tab, profile->GetPrefs());
+      if (glic_selection_overlay_controller_ &&
+          base::FeatureList::IsEnabled(lens::kSmartSelectionGoogleSearch)) {
+        glic_selection_overlay_controller_->RegisterPromptEndpoint(
+            std::make_unique<lens::GoogleSearchPromptEndpoint>());
+      }
       if (base::FeatureList::IsEnabled(features::kGlicWarmOnGeminiWeb)) {
         glic_gemini_web_warming_observer_ =
             std::make_unique<glic::GlicGeminiWebWarmingObserver>(&tab);
       }
 
       if (glic::GlicEnabling::IsEnabledForProfile(profile)) {
+        // The observer looks up the sender in its constructor, so the sender
+        // goes first (and is destroyed after it).
+        glic_selection_context_sender_ =
+            std::make_unique<glic::SelectionContextSender>(tab);
         glic_selection_observer_ =
             std::make_unique<glic::GlicSelectionObserver>(tab.GetContents());
       }
@@ -733,12 +752,6 @@ void TabFeatures::Init(TabInterface& tab, Profile* profile) {
             GetUserDataFactory().CreateInstance<glic::GlicPageFeaturesManager>(
                 tab, &tab);
       }
-    }
-    if (glic::GlicKeyedService::Get(profile)) {
-      glic_side_panel_coordinator_ =
-          GetUserDataFactory()
-              .CreateInstance<glic::GlicSidePanelCoordinatorImpl>(
-                  tab, &tab, side_panel_registry_.get());
     }
     // TODO(crbug.com/433973411): Move this logic to a helper function.
     if (base::FeatureList::IsEnabled(features::kGlicActor) &&
@@ -1464,7 +1477,9 @@ void TabFeatures::Init(TabInterface& tab, Profile* profile) {
   HttpsOnlyModeTabHelper::CreateForWebContents(tab.GetContents());
 
   login_detection::LoginDetectionTabHelper::MaybeCreateForWebContents(
-      tab.GetContents());
+      tab.GetContents(),
+      base::BindRepeating(
+          &ChromePasswordManagerClient::NotifyNonFedCmFederatedLogin));
 
   if (!profile->IsOffTheRecord()) {
     HistoryClustersTabHelper::CreateForWebContents(
@@ -2145,7 +2160,9 @@ void TabFeatures::WillDiscardContents(tabs::TabInterface* tab,
   HttpsOnlyModeTabHelper::CreateForWebContents(new_contents);
 
   login_detection::LoginDetectionTabHelper::MaybeCreateForWebContents(
-      new_contents);
+      new_contents,
+      base::BindRepeating(
+          &ChromePasswordManagerClient::NotifyNonFedCmFederatedLogin));
 
   if (!profile->IsOffTheRecord()) {
     HistoryClustersTabHelper::CreateForWebContents(

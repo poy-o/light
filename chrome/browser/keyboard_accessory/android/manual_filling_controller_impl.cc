@@ -22,7 +22,6 @@
 #include "chrome/browser/keyboard_accessory/android/accessory_sheet_data.h"
 #include "chrome/browser/keyboard_accessory/android/accessory_sheet_enums.h"
 #include "chrome/browser/keyboard_accessory/android/address_accessory_controller.h"
-#include "chrome/browser/keyboard_accessory/android/at_memory_accessory_controller.h"
 #include "chrome/browser/keyboard_accessory/android/password_accessory_controller.h"
 #include "chrome/browser/keyboard_accessory/android/payment_method_accessory_controller.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
@@ -46,35 +45,12 @@ namespace {
 
 constexpr auto kAllowedFillingSources = base::MakeFixedFlatSet<FillingSource>(
     {FillingSource::PASSWORD_FALLBACKS, FillingSource::CREDIT_CARD_FALLBACKS,
-     FillingSource::ADDRESS_FALLBACKS, FillingSource::AT_MEMORY});
+     FillingSource::ADDRESS_FALLBACKS});
 
 constexpr char
     kUmaAccessoryActionSelectedForNonCredentialFieldWithoutSuggestions[] =
         "KeyboardAccessory."
         "AccessoryActionSelectedForNonCredentialFieldWithoutSuggestions";
-
-// Returns true if `type` represents an unstructured field (contenteditable
-// or textarea) that only supports AtMemory. Textareas only count as such when
-// `kAutofillAtMemorySupportTextAreaOnAndroid` is enabled; otherwise the
-// accessory is never shown on them.
-bool IsUnstructuredFieldType(FocusedFieldType type) {
-  switch (type) {
-    case FocusedFieldType::kFillableTextArea:
-      return base::FeatureList::IsEnabled(
-          autofill::features::kAutofillAtMemorySupportTextAreaOnAndroid);
-    case FocusedFieldType::kContenteditableField:
-      return true;
-    case FocusedFieldType::kUnknown:
-    case FocusedFieldType::kUnfillableElement:
-    case FocusedFieldType::kFillableSearchField:
-    case FocusedFieldType::kFillableNonSearchField:
-    case FocusedFieldType::kFillableWebauthnTaggedField:
-    case FocusedFieldType::kFillableUsernameField:
-    case FocusedFieldType::kFillablePasswordField:
-      return false;
-  }
-  NOTREACHED();
-}
 
 }  // namespace
 
@@ -105,13 +81,11 @@ void ManualFillingControllerImpl::CreateForWebContentsForTesting(
     base::WeakPtr<PasswordAccessoryController> pwd_controller,
     base::WeakPtr<AddressAccessoryController> address_controller,
     base::WeakPtr<PaymentMethodAccessoryController> payment_method_controller,
-    base::WeakPtr<AtMemoryAccessoryController> at_memory_controller,
     std::unique_ptr<ManualFillingViewInterface> view) {
   DCHECK(web_contents) << "Need valid WebContents to attach controller to!";
   DCHECK(!FromWebContents(web_contents)) << "Controller already attached!";
   CHECK(address_controller, base::NotFatalUntil::M161);
   CHECK(payment_method_controller, base::NotFatalUntil::M161);
-  CHECK(at_memory_controller, base::NotFatalUntil::M161);
   CHECK(view, base::NotFatalUntil::M161);
 
   web_contents->SetUserData(
@@ -120,7 +94,7 @@ void ManualFillingControllerImpl::CreateForWebContentsForTesting(
       base::WrapUnique(new ManualFillingControllerImpl(
           web_contents, std::move(pwd_controller),
           std::move(address_controller), std::move(payment_method_controller),
-          std::move(at_memory_controller), std::move(view))));
+          std::move(view))));
 
   FromWebContents(web_contents)->Initialize();
 }
@@ -328,10 +302,6 @@ ManualFillingControllerImpl::ManualFillingControllerImpl(
   payment_method_controller_ =
       PaymentMethodAccessoryController::GetOrCreate(web_contents)->AsWeakPtr();
   CHECK(payment_method_controller_, base::NotFatalUntil::M161);
-
-  at_memory_controller_ =
-      AtMemoryAccessoryController::GetOrCreate(web_contents)->AsWeakPtr();
-  CHECK(at_memory_controller_, base::NotFatalUntil::M161);
 }
 
 ManualFillingControllerImpl::ManualFillingControllerImpl(
@@ -339,13 +309,11 @@ ManualFillingControllerImpl::ManualFillingControllerImpl(
     base::WeakPtr<PasswordAccessoryController> pwd_controller,
     base::WeakPtr<AddressAccessoryController> address_controller,
     base::WeakPtr<PaymentMethodAccessoryController> payment_method_controller,
-    base::WeakPtr<AtMemoryAccessoryController> at_memory_controller,
     std::unique_ptr<ManualFillingViewInterface> view)
     : content::WebContentsUserData<ManualFillingControllerImpl>(*web_contents),
       pwd_controller_(std::move(pwd_controller)),
       address_controller_(std::move(address_controller)),
       payment_method_controller_(std::move(payment_method_controller)),
-      at_memory_controller_(std::move(at_memory_controller)),
       view_(std::move(view)) {}
 
 ManualFillingControllerImpl::~ManualFillingControllerImpl() = default;
@@ -375,30 +343,11 @@ bool ManualFillingControllerImpl::ShouldShowAccessoryForLastFocusedFieldType()
     case FocusedFieldType::kUnknown:
       return available_sources_.contains(FillingSource::AUTOFILL);
 
-    // With `kAutofillAtMemorySupportTextAreaOnAndroid`, textareas show the
-    // accessory with only the AtMemory entry point: `BrowserAutofillManager`
-    // does not generate Autofill suggestions for them. Without the flag,
-    // textareas keep the legacy behavior of never showing the accessory.
-    case FocusedFieldType::kFillableTextArea:
-      if (!base::FeatureList::IsEnabled(
-              autofill::features::kAutofillAtMemorySupportTextAreaOnAndroid)) {
-        // Even if there are suggestions, don't show on textareas.
-        return false;
-      }
-      [[fallthrough]];
-
-    // AtMemory suggestions are supported for contenteditable and textarea
-    // fields on Android.
-    // Unlike database-backed fallback sheets (passwords, addresses, payments)
-    // which signal availability asynchronously via `available_sources_`,
-    // AtMemory availability on contenteditables and textareas is purely
-    // focus-driven and only requires that the `AtMemoryAccessoryController` is
-    // available.
-    // Note: `PasswordAutofillAgent` verifies the feature enablement for
+    // Even if there are suggestions, don't show on textareas or
     // contenteditables.
+    case FocusedFieldType::kFillableTextArea:
     case FocusedFieldType::kContenteditableField:
-      return at_memory_controller_ &&
-             at_memory_controller_->IsAtMemoryAvailable();
+      return false;
   }
 }
 
@@ -411,12 +360,6 @@ void ManualFillingControllerImpl::UpdateVisibility() {
     for (const FillingSource& source : available_sources_) {
       if (source == FillingSource::AUTOFILL) {
         continue;  // Autofill suggestions have no sheet.
-      }
-      // On contenteditable and textarea elements, only AtMemory is supported.
-      // Suppress pushing fallback sheet data (passwords, addresses, payments).
-      if (IsUnstructuredFieldType(last_focused_field_type_) &&
-          source != FillingSource::AT_MEMORY) {
-        continue;
       }
       AccessoryController* controller = GetControllerForFillingSource(source);
       if (!controller) {
@@ -433,10 +376,7 @@ void ManualFillingControllerImpl::UpdateVisibility() {
             last_focused_field_type_ != FocusedFieldType::kUnfillableElement &&
             last_focused_field_type_ != FocusedFieldType::kUnknown),
         ManualFillingViewInterface::ShouldShowOnLargeFormFactor(
-            IsUnstructuredFieldType(last_focused_field_type_) ||
-            available_sources_.contains(FillingSource::AUTOFILL)),
-        ManualFillingViewInterface::IsUnstructuredField(
-            IsUnstructuredFieldType(last_focused_field_type_)));
+            available_sources_.contains(FillingSource::AUTOFILL)));
   } else {
     view_->Hide();
   }
@@ -467,12 +407,7 @@ void ManualFillingControllerImpl::OnSourceAvailabilityChanged(
   // instead of waiting to get it pushed.
   if (sheet.has_value() &&
       GetWebContents().GetVisibility() == content::Visibility::VISIBLE) {
-    // Suppress forwarding fallback sheet data for contenteditable and textarea
-    // elements so only the AtMemory sheet is made available to the view.
-    if (!IsUnstructuredFieldType(last_focused_field_type_) ||
-        source == FillingSource::AT_MEMORY) {
-      view_->OnItemsAvailable(std::move(sheet.value()));
-    }
+    view_->OnItemsAvailable(std::move(sheet.value()));
   }
   UpdateSourceAvailability(source, show_filling_source);
 }
@@ -511,8 +446,6 @@ AccessoryController* ManualFillingControllerImpl::GetControllerForAction(
     case AccessoryAction::MANAGE_CREDIT_CARDS:
     case AccessoryAction::MANAGE_LOYALTY_CARDS:
       return payment_method_controller_.get();
-    case AccessoryAction::SHOW_AT_MEMORY_BOTTOMSHEET:
-      return at_memory_controller_.get();
     case AccessoryAction::AUTOFILL_SUGGESTION:
     case AccessoryAction::DISMISS:
     case AccessoryAction::AUTOFILL_SUGGESTION_FROM_ACCESSORY_SHEET:
@@ -531,8 +464,6 @@ AccessoryController* ManualFillingControllerImpl::GetControllerForFillingSource(
       return payment_method_controller_.get();
     case FillingSource::ADDRESS_FALLBACKS:
       return address_controller_.get();
-    case FillingSource::AT_MEMORY:
-      return at_memory_controller_.get();
     case FillingSource::AUTOFILL:
       NOTREACHED() << "Controller not defined for filling source: "
                    << std::to_underlying(filling_source);

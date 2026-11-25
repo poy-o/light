@@ -24,6 +24,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/tribool.h"
 #include "content/public/browser/web_contents.h"
@@ -69,6 +70,11 @@ void ProfileCustomizationHandler::RegisterMessages() {
       "setAvatarIcon",
       base::BindRepeating(&ProfileCustomizationHandler::HandleSetAvatarIcon,
                           base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "setGaiaPictureAsAvatar",
+      base::BindRepeating(
+          &ProfileCustomizationHandler::HandleSetGaiaPictureAsAvatar,
+          base::Unretained(this)));
 }
 
 void ProfileCustomizationHandler::OnJavascriptAllowed() {
@@ -91,6 +97,15 @@ void ProfileCustomizationHandler::OnProfileAvatarChanged(
 void ProfileCustomizationHandler::OnProfileHighResAvatarLoaded(
     const base::FilePath& profile_path) {
   UpdateProfileInfo(profile_path);
+  // The GAIA picture is loaded asynchronously and is only listed in the avatar
+  // selector once loaded, so the list must be refreshed when it is ready. The
+  // GAIA picture can only be selected in the edit profile dialog.
+  if (profile_path == profile_->GetPath() &&
+      switches::IsManageProfileDialogEnabled()) {
+    FireWebUIListener("on-available-icons-changed",
+                      profiles::GetIconsAndLabelsForProfileAvatarSelector(
+                          profile_->GetPath()));
+  }
 }
 
 void ProfileCustomizationHandler::OnProfileThemeColorsChanged(
@@ -138,16 +153,24 @@ void ProfileCustomizationHandler::HandleDone(const base::ListValue& args) {
   CHECK(!profile_name.empty(), base::NotFatalUntil::M162);
 
   const GURL& url = web_ui()->GetWebContents()->GetVisibleURL();
-  if (GetProfileCustomizationStyle(url) ==
-      ProfileCustomizationStyle::kLocalProfileCreation) {
-    // The local profile is created at first as ephemeral and its creation is
-    // finalized when customization is successfully completed.
-    FinalizeNewProfileSetup(profile_, profile_name, /*is_default_name=*/false);
-  } else {
-    // TODO(crbug.com/40264199): Look into whether this branch should be also
-    // covered by calling FinalizeNewProfileSetup().
-    GetProfileEntry()->SetLocalProfileName(profile_name,
-                                           /*is_default_name=*/false);
+  switch (GetProfileCustomizationStyle(url)) {
+    case ProfileCustomizationStyle::kSignedOutProfileCreation:
+      // The signed-out profile is created at first as ephemeral and its
+      // creation is finalized when customization is successfully completed.
+      FinalizeNewProfileSetup(profile_, profile_name,
+                              /*is_default_name=*/false);
+      break;
+    case ProfileCustomizationStyle::kSignedInProfileCreation:
+      // TODO(crbug.com/40264199): Look into whether this branch should be also
+      // covered by calling FinalizeNewProfileSetup().
+      GetProfileEntry()->SetLocalProfileName(profile_name,
+                                             /*is_default_name=*/false);
+      break;
+    case ProfileCustomizationStyle::kEditProfile:
+      // The profile already exists, only its name is updated.
+      GetProfileEntry()->SetLocalProfileName(profile_name,
+                                             /*is_default_name=*/false);
+      break;
   }
 
   if (completion_callback_) {
@@ -180,6 +203,12 @@ void ProfileCustomizationHandler::HandleSetAvatarIcon(
   CHECK_EQ(1u, args.size());
   profiles::SetDefaultProfileAvatarIndex(
       profile_, profiles::GetSanitizedAvatarIndex(args[0].GetInt()));
+}
+
+void ProfileCustomizationHandler::HandleSetGaiaPictureAsAvatar(
+    const base::ListValue& args) {
+  CHECK_EQ(0u, args.size());
+  profiles::SetGaiaPictureAsAvatar(profile_->GetPrefs());
 }
 
 void ProfileCustomizationHandler::UpdateProfileInfo(

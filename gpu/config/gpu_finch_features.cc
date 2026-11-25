@@ -124,6 +124,11 @@ void InitSkiaGraphiteFeatureParams(const base::Feature* feature) {
           feature, "triple_buffered_dcomp_root_surface",
           g_skia_graphite_feature_params.triple_buffered_dcomp_root_surface)
           .Get();
+  g_skia_graphite_feature_params.use_draw_for_buggy_depth_clear =
+      base::FeatureParam<bool>(
+          feature, "use_draw_for_buggy_depth_clear",
+          g_skia_graphite_feature_params.use_draw_for_buggy_depth_clear)
+          .Get();
 #endif
 
   GetGraphiteParamsInitFlag().Set();
@@ -409,6 +414,12 @@ BASE_FEATURE(kSkiaGraphite,
 BASE_FEATURE(kSkiaGraphiteWinIntel,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+#if BUILDFLAG(IS_WIN) && defined(ARCH_CPU_ARM64)
+// Allow Graphite on Windows ARM64 through a field trial before launch. The GPU
+// blocklist still restricts the supported Qualcomm devices and driver versions.
+BASE_FEATURE(kSkiaGraphiteQualcommWindows, base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
+
 // When enabled, this feature allows ClientSharedImage to store and use a
 // scoped_refptr to SharedImageInterface, instead of the raw_ptr as used in
 // SharedImageInterfaceHolder.
@@ -580,8 +591,7 @@ bool IsSkiaGraphiteSupportedByDevice() {
   // if device would already be using Ganesh/Vulkan.
   return IsUsingVulkan();
 #elif BUILDFLAG(IS_WIN) && defined(ARCH_CPU_ARM64)
-  // Graphite on Windows ARM requires further research.
-  return false;
+  return base::FeatureList::IsEnabled(kSkiaGraphiteQualcommWindows);
 #elif BUILDFLAG(IS_WIN)
   return true;
 #else

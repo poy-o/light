@@ -5,12 +5,14 @@
 #import "ios/chrome/browser/settings/autofill/autofill_ai/coordinator/autofill_ai_entity_edit_mediator.h"
 
 #import <algorithm>
+#import <optional>
 #import <utility>
 #import <variant>
 
 #import "base/apple/foundation_util.h"
+#import "base/i18n/language_tag.h"
 #import "base/strings/sys_string_conversions.h"
-#import "components/application_locale_storage/application_locale_storage.h"
+#import "components/autofill/core/browser/country_type.h"
 #import "components/autofill/core/browser/data_manager/autofill_ai/entity_data_manager.h"
 #import "components/autofill/core/browser/data_model/autofill_ai/entity_instance.h"
 #import "components/autofill/core/browser/data_model/autofill_ai/entity_type.h"
@@ -18,6 +20,7 @@
 #import "components/autofill/core/browser/integrators/autofill_ai/autofill_ai_wallet_util.h"
 #import "components/autofill/core/browser/integrators/autofill_ai/metrics/autofill_ai_metrics.h"
 #import "components/autofill/core/browser/network/autofill_ai/wallet_pass_access_manager.h"
+#import "components/autofill/core/browser/permissions/autofill_ai/autofill_ai_permission_util.h"
 #import "components/autofill/core/browser/proto/server.pb.h"
 #import "components/consent_auditor/consent_auditor.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
@@ -34,7 +37,6 @@
 #import "ios/chrome/browser/settings/autofill/autofill_ai/ui/autofill_ai_entity_edit_item_factory.h"
 #import "ios/chrome/browser/settings/autofill/autofill_ai/utils/autofill_ai_date_util.h"
 #import "ios/chrome/browser/settings/autofill/autofill_ai/utils/autofill_ai_entity_instance_builder.h"
-#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/reauthentication/reauthentication_protocol.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -89,7 +91,10 @@ void LogEntitySaveOrUpdate(AutofillAIEntityEditMode mode,
   raw_ptr<signin::IdentityManager> _identityManager;
 
   // The locale used to get info from the entity instance.
-  std::string _locale;
+  std::optional<base::i18n::LanguageTag> _appLocale;
+
+  // The GeoIP country code used to determine the default country.
+  autofill::GeoIpCountryCode _geoIpCountryCode;
 
   // The date formatter used to display the date.
   NSDateFormatter* _dateFormatter;
@@ -144,7 +149,9 @@ void LogEntitySaveOrUpdate(AutofillAIEntityEditMode mode,
             consentAuditor:(consent_auditor::ConsentAuditor*)consentAuditor
            identityManager:(signin::IdentityManager*)identityManager
               reauthModule:(id<ReauthenticationProtocol>)reauthModule
-                 userEmail:(NSString*)userEmail {
+                 userEmail:(NSString*)userEmail
+                 appLocale:(const base::i18n::LanguageTag&)appLocale
+          geoIpCountryCode:(autofill::GeoIpCountryCode)geoIpCountryCode {
   self = [super init];
   if (self) {
     CHECK(reauthModule);
@@ -155,13 +162,12 @@ void LogEntitySaveOrUpdate(AutofillAIEntityEditMode mode,
     _walletPassManager = walletPassManager;
     _consentAuditor = consentAuditor;
     _identityManager = identityManager;
-    _locale = GetApplicationContext()
-                  ->GetApplicationLocaleStorage()
-                  ->GetTag()
-                  .tag_string();
-    _dateFormatter = CreateDateFormatterForLocale(_locale);
+    _appLocale = appLocale;
+    _geoIpCountryCode = std::move(geoIpCountryCode);
+    _dateFormatter =
+        CreateDateFormatterForLocale(std::string(_appLocale->tag_string()));
     _itemFactory =
-        [[AutofillAIEntityEditItemFactory alloc] initWithLocale:_locale
+        [[AutofillAIEntityEditItemFactory alloc] initWithLocale:*_appLocale
                                                   dateFormatter:_dateFormatter
                                            userHasAuthenticated:NO];
     _reauthModule = reauthModule;
@@ -185,6 +191,12 @@ void LogEntitySaveOrUpdate(AutofillAIEntityEditMode mode,
   _consumer = consumer;
 
   [consumer setMode:_mode];
+
+  const bool show_explicit_decline_button =
+      _mode == AutofillAIEntityEditMode::kCreate &&
+      autofill::MustShowEquallyWeightedButtons(_identityManager,
+                                               _entityInstance->type());
+  [_consumer setShowsExplicitDeclineButton:show_explicit_decline_button];
 
   [self updateTitle];
 
@@ -239,7 +251,7 @@ void LogEntitySaveOrUpdate(AutofillAIEntityEditMode mode,
       autofill::AttributeInstance attrInstance(attrType);
       attrInstance.SetInfo(attrType.field_type(),
                            base::SysNSStringToUTF16(editItem.textFieldValue),
-                           _locale, std::nullopt,
+                           *_appLocale, std::nullopt,
                            autofill::VerificationStatus::kNoStatus);
       attrInstance.FinalizeInfo();
       updatedAttributes.insert(std::move(attrInstance));
@@ -250,7 +262,7 @@ void LogEntitySaveOrUpdate(AutofillAIEntityEditMode mode,
       autofill::AttributeInstance attrInstance(attrType);
       attrInstance.SetInfo(attrType.field_type(),
                            base::SysNSStringToUTF16(countryItem.detailText),
-                           _locale, std::nullopt,
+                           *_appLocale, std::nullopt,
                            autofill::VerificationStatus::kNoStatus);
       attrInstance.FinalizeInfo();
       updatedAttributes.insert(std::move(attrInstance));
@@ -265,7 +277,7 @@ void LogEntitySaveOrUpdate(AutofillAIEntityEditMode mode,
         value_to_save = AttributeValueFromNSDate(dateItem.dateValue);
       }
 
-      attrInstance.SetInfo(attrType.field_type(), value_to_save, _locale,
+      attrInstance.SetInfo(attrType.field_type(), value_to_save, *_appLocale,
                            GetAttributeFormatString(),
                            autofill::VerificationStatus::kNoStatus);
       attrInstance.FinalizeInfo();
@@ -538,7 +550,9 @@ void LogEntitySaveOrUpdate(AutofillAIEntityEditMode mode,
 
 - (NSArray<CountryItem*>*)allCountries {
   if (!_allCountries) {
-    _allCountries = [AutofillProfileEditMediator loadCountries];
+    _allCountries = [AutofillProfileEditMediator
+        loadCountriesWithGeoIpCountryCode:_geoIpCountryCode
+                                appLocale:*_appLocale];
   }
   return _allCountries;
 }

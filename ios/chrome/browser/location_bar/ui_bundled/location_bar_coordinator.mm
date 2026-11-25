@@ -47,6 +47,7 @@
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/fullscreen/model/fullscreen_browser_agent.h"
 #import "ios/chrome/browser/fullscreen/model/fullscreen_browser_agent_observer_bridge.h"
+#import "ios/chrome/browser/fullscreen/public/fullscreen_metrics.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_controller.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_ui_updater.h"
 #import "ios/chrome/browser/infobars/model/infobar_metrics_recorder.h"
@@ -103,6 +104,7 @@
 #import "ios/chrome/browser/shared/public/commands/page_info_commands.h"
 #import "ios/chrome/browser/shared/public/commands/search_image_with_lens_command.h"
 #import "ios/chrome/browser/shared/public/commands/send_tab_to_self_commands.h"
+#import "ios/chrome/browser/shared/public/commands/voice_search_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/shared/ui/util/pasteboard_util.h"
@@ -289,9 +291,9 @@ struct AIHubBadgeActiveWindowsData : public base::SupportsUserData::Data {
   self.viewController.delegate = self;
   // TODO(crbug.com/40670043): Use HandlerForProtocol after commands
   // protocol clean up.
-  self.viewController.dispatcher = static_cast<
-      id<ActivityServiceCommands, SceneCommands, BrowserCoordinatorCommands,
-         LensCommands, LensOverlayCommands, OmniboxCommands>>(
+  self.viewController.dispatcher = static_cast<id<
+      ActivityServiceCommands, SceneCommands, BrowserCoordinatorCommands,
+      LensCommands, LensOverlayCommands, OmniboxCommands, VoiceSearchCommands>>(
       self.browser->GetCommandDispatcher());
   self.viewController.pageActionMenuHandler = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), PageActionMenuCommands);
@@ -428,8 +430,7 @@ struct AIHubBadgeActiveWindowsData : public base::SupportsUserData::Data {
   [_composeboxMenuCoordinator stop];
   _composeboxMenuCoordinator = nil;
 
-  if (IsPageActionMenuEnabled() || IsProactiveSuggestionsFrameworkEnabled() ||
-      IsLocationBarBadgeMigrationEnabled()) {
+  if (IsPageActionMenuEnabled() || IsLocationBarBadgeMigrationEnabled()) {
     [self.locationBarBadgeCoordinator stop];
     self.locationBarBadgeCoordinator = nil;
   }
@@ -984,8 +985,7 @@ struct AIHubBadgeActiveWindowsData : public base::SupportsUserData::Data {
 - (void)setUpBadges {
   BOOL isIncognito = self.isOffTheRecord;
 
-  if (IsPageActionMenuEnabled() || IsProactiveSuggestionsFrameworkEnabled() ||
-      IsLocationBarBadgeMigrationEnabled()) {
+  if (IsPageActionMenuEnabled() || IsLocationBarBadgeMigrationEnabled()) {
     self.locationBarBadgeCoordinator = [[LocationBarBadgeCoordinator alloc]
         initWithBaseViewController:self.viewController
                            browser:self.browser];

@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">分享密码</translation>
 <translation id="1554043146674176775">关闭 AI 模式</translation>
 <translation id="1554477036522844996">打开新的窗口</translation>
+<translation id="1555014818414775661">添加图片</translation>
 <translation id="1557806604681757705">您的电脑</translation>
 <translation id="1558391695376153246">关闭无痕式标签页</translation>
 <translation id="1560153516220021659">已收起辅助工具栏按钮</translation>
@@ -913,10 +914,9 @@
 <translation id="3857113360369572832">打开 <ph name="BEGIN_BOLD" />Safari 设置<ph name="END_BOLD" /></translation>
 <translation id="3858860766373142691">名称</translation>
 <translation id="386224966259596343">下次您填写相关表单时，可选择将此信息保存到 Google 钱包。</translation>
-<translation id="3868495844258915202">显示完整网址</translation>
 <translation id="3870931306085184145">尚未保存任何用于登录 <ph name="DOMAIN" /> 的密码</translation>
 <translation id="3875783148670536197">操作步骤</translation>
-<translation id="3878657761594430423">面板拖拽条</translation>
+<translation id="3878657761594430423">底栏拖拽条</translation>
 <translation id="3884810423191119660">安全保存密码，轻松登录网站和应用</translation>
 <translation id="3885587018298784481">加入家人群组</translation>
 <translation id="3888230626190453136">试试无痕浏览</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">若要接收价格跟踪通知，请在 iOS 设置中开启通知功能。</translation>
 <translation id="528857768909044842">标签页分组会保存在此处</translation>
 <translation id="5294624619177114121">移动设备通知</translation>
-<translation id="5295239312320826323">移除账号 <ph name="USER_EMAIL" />？</translation>
 <translation id="5300589172476337783">显示</translation>
 <translation id="5311061401280561833">已授予摄像头和麦克风使用权</translation>
 <translation id="5313967007315987356">添加网站</translation>
@@ -1788,6 +1787,7 @@
 <translation id="6504541289630702018">轻松访问桌面设备保存的标签页分组</translation>
 <translation id="6505334220040167806">收起标签页分组。</translation>
 <translation id="6506996418997555004">分享标签页分组“<ph name="GROUP_NAME" />”</translation>
+<translation id="650770261448122895">使用智能镜头搜索眼前所见</translation>
 <translation id="6507973708545996744">登录后即可将您的阅读清单同步到您的所有设备上。</translation>
 <translation id="6518133107902771759">验证</translation>
 <translation id="6523575793810663688">显示具体操作</translation>
@@ -2147,7 +2147,6 @@
 <translation id="7603852183842204213">拦截了弹出式窗口（<ph name="NUMBER_OF_BLOCKED_POPUPS" /> 个）</translation>
 <translation id="7605594153474022051">同步功能无法正常运行</translation>
 <translation id="760667371114328991">关闭安全检查通知</translation>
-<translation id="7612619742409846846">已使用以下账号登录 Google：</translation>
 <translation id="7612849887607288481">打开 AI 原型设计菜单</translation>
 <translation id="7618220760967055820">选择要显示在工具栏中的按钮</translation>
 <translation id="7620522820075868385">取消</translation>
@@ -2430,6 +2429,7 @@
 <translation id="8439758443371991593">隐藏“添加到阅读清单”</translation>
 <translation id="8443986842926457191">网址长度超出了 2048 个字符（上限）</translation>
 <translation id="8449869326050867919">已分享密码</translation>
+<translation id="8473367210869452063">如要与此网站互动，请停止当前任务或等待 Gemini 完成工作</translation>
 <translation id="8473815223723723001">使用 Gemini 编辑图片</translation>
 <translation id="8473863474539038330">地址和其他信息</translation>
 <translation id="8474378002946546633">允许通知</translation>

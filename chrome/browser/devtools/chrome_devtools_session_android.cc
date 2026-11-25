@@ -6,6 +6,7 @@
 
 #include <type_traits>
 
+#include "chrome/browser/devtools/protocol/ads_handler.h"
 #include "chrome/browser/devtools/protocol/autofill_handler.h"
 #include "chrome/browser/devtools/protocol/browser_handler_android.h"
 #include "chrome/browser/devtools/protocol/page_handler.h"
@@ -13,6 +14,10 @@
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/devtools_agent_host_client.h"
 #include "content/public/browser/devtools_agent_host_client_channel.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+#include "chrome/browser/devtools/protocol/extensions_handler.h"
+#endif
 
 namespace {
 
@@ -39,6 +44,12 @@ ChromeDevToolsSessionAndroid::ChromeDevToolsSessionAndroid(
   }
   if (agent_host->GetWebContents() &&
       agent_host->GetType() == content::DevToolsAgentHost::kTypePage) {
+    if (IsDomainAvailableToUntrustedClient<AdsHandler>() ||
+        channel->GetClient()->IsTrusted()) {
+      ads_handler_ = std::make_unique<AdsHandler>(
+          agent_host->GetWebContents(), dispatcher(),
+          channel->GetClient()->IsTrusted());
+    }
     if (IsDomainAvailableToUntrustedClient<PageHandler>() ||
         channel->GetClient()->IsTrusted()) {
       page_handler_ = std::make_unique<PageHandler>(
@@ -51,11 +62,21 @@ ChromeDevToolsSessionAndroid::ChromeDevToolsSessionAndroid(
     browser_handler_ = std::make_unique<BrowserHandlerAndroid>(
         dispatcher(), agent_host->GetId());
   }
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+  // Keep in sync with `ChromeDevToolsSession::ChromeDevToolsSession()`.
+  if (IsDomainAvailableToUntrustedClient<ExtensionsHandler>() ||
+      channel->GetClient()->IsTrusted()) {
+    extensions_handler_ = std::make_unique<ExtensionsHandler>(
+        dispatcher(), agent_host->GetId(),
+        agent_host->GetType() == content::DevToolsAgentHost::kTypeBrowser);
+  }
+#endif
   if (IsDomainAvailableToUntrustedClient<TargetHandlerAndroid>() ||
       channel->GetClient()->IsTrusted()) {
     target_handler_ = std::make_unique<TargetHandlerAndroid>(
         dispatcher(), channel->GetClient()->IsTrusted(),
-        channel->GetClient()->MayReadLocalFiles(), browser_handler_.get());
+        channel->GetClient()->MayReadLocalFiles(), browser_handler_.get(),
+        channel);
   }
 }
 

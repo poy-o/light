@@ -32,7 +32,9 @@ import android.content.pm.ApplicationInfo;
 import android.graphics.Color;
 import android.graphics.Paint.FontMetrics;
 import android.graphics.Rect;
+import android.graphics.Typeface;
 import android.os.Build;
+import android.os.LocaleList;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.SpannableStringBuilder;
@@ -175,6 +177,7 @@ public class UrlBarUnitTest {
     private static class TestUrlBar extends UrlBarApi26 {
         TextPaint mCustomPaint;
         boolean mSuperOnKeyDownResult;
+        boolean mRequestLayoutOnSetSelection;
 
         TestUrlBar(Context context, AttributeSet attrs) {
             super(context, attrs);
@@ -188,6 +191,12 @@ public class UrlBarUnitTest {
         @Override
         public boolean super_onKeyDown(int keyCode, KeyEvent event) {
             return mSuperOnKeyDownResult;
+        }
+
+        @Override
+        public void setSelection(int index) {
+            super.setSelection(index);
+            if (mRequestLayoutOnSetSelection) requestLayout();
         }
     }
 
@@ -596,6 +605,30 @@ public class UrlBarUnitTest {
         assertEquals(0, spans.length);
 
         mUrlBar.setLayoutParams(previousLayoutParams);
+    }
+
+    @Test
+    public void testTruncation_RtlUrl() {
+        measureAndLayoutUrlBar();
+        String rtlUrl = SHORT_DOMAIN + SUPER_LONG_RTL_PATH;
+        mUrlBar.setTextWithTruncation(rtlUrl, ScrollType.SCROLL_TO_TLD, SHORT_DOMAIN.length());
+        Editable text = mUrlBar.getText();
+        assertEquals(rtlUrl, text.toString());
+        assertEquals(0, text.getSpans(0, text.length(), BoundsEllipsisSpan.class).length);
+    }
+
+    @Test
+    public void testTruncation_NullLayoutParams() {
+        TestUrlBar detachedUrlBar = new TestUrlBar(mActivity, null);
+        assertNull(detachedUrlBar.getLayoutParams());
+
+        String url = SHORT_DOMAIN + LONG_PATH;
+        detachedUrlBar.setTextWithTruncation(url, ScrollType.SCROLL_TO_TLD, SHORT_DOMAIN.length());
+
+        Editable text = detachedUrlBar.getText();
+        assertEquals(url, text.toString());
+        BoundsEllipsisSpan[] spans = text.getSpans(0, text.length(), BoundsEllipsisSpan.class);
+        assertEquals(0, spans.length);
     }
 
     @Test
@@ -1089,6 +1122,72 @@ public class UrlBarUnitTest {
     }
 
     @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    public void scrollToTLD_rtlOriginWiderThanViewport_keepsOriginEndVisible() {
+        // An origin whose final run is right-to-left and wider than the 100px viewport. Its
+        // logical end (the registrable domain) is drawn at the run's visual left edge.
+        String origin =
+                "\u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629.\u0645\u0635\u0631\u0641"
+                    + "\u0627\u0644\u0631\u0627\u062c\u062d\u064a.\u0627\u0644\u0633\u0639\u0648\u062f\u064a\u0629."
+                        + TextUtils.join("", Collections.nCopies(10, "\u0627"))
+                        + ".\u0634\u0628\u0643\u0629";
+        showUnfocusedUrlScrolledToTld(origin + "/path", origin.length());
+        int visibleWidth = VIEWPORT_WIDTH;
+        float runWidth = mUrlBar.getLayout().getPaint().measureText(origin, 0, origin.length());
+        assertTrue(
+                "Precondition: the RTL origin must overflow the viewport", runWidth > visibleWidth);
+
+        // In the LTR paragraph the RTL run is drawn right-to-left: the TLD label occupies the
+        // run's visual left end, from the caret before its first character (its right edge) down
+        // to the caret before the origin's last character. Both must be inside the viewport.
+        float tldRightEdgeX = viewportXOf(origin.lastIndexOf(".") + 1);
+        float lastCharX = viewportXOf(origin.length() - 1);
+        assertTrue("TLD right edge out of view: " + tldRightEdgeX, tldRightEdgeX >= 0);
+        assertTrue("TLD right edge out of view: " + tldRightEdgeX, tldRightEdgeX <= visibleWidth);
+        assertTrue("Origin end out of view: " + lastCharX, lastCharX >= 0);
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    public void scrollToTLD_rtlOriginWithDigitsWiderThanViewport_keepsOriginEndVisible() {
+        // Digits inside an RTL host (e.g. موقع24.مصر) resolve to an even bidi level (>= 2) and
+        // must not terminate the RTL run scan early, otherwise only ".مصر" is measured.
+        String origin =
+                "\u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629."
+                        + TextUtils.join("", Collections.nCopies(10, "\u0645"))
+                        + ".\u0645\u0648\u0642\u063924.\u0645\u0635\u0631";
+        showUnfocusedUrlScrolledToTld(origin + "/path", origin.length());
+        int visibleWidth = VIEWPORT_WIDTH;
+        float runWidth = mUrlBar.getLayout().getPaint().measureText(origin, 0, origin.length());
+        assertTrue(
+                "Precondition: the RTL origin must overflow the viewport", runWidth > visibleWidth);
+
+        float tldRightEdgeX = viewportXOf(origin.lastIndexOf(".") + 1);
+        float lastCharX = viewportXOf(origin.length() - 1);
+        assertTrue("TLD right edge out of view: " + tldRightEdgeX, tldRightEdgeX >= 0);
+        assertTrue("TLD right edge out of view: " + tldRightEdgeX, tldRightEdgeX <= visibleWidth);
+        assertTrue("Origin end out of view: " + lastCharX, lastCharX >= 0);
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    public void scrollToTLD_rtlOriginWithRtlPath_keepsOriginEndVisible() {
+        String origin =
+                "\u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629.\u0645\u0635\u0631\u0641"
+                    + "\u0627\u0644\u0631\u0627\u062c\u062d\u064a.\u0627\u0644\u0633\u0639\u0648\u062f\u064a\u0629."
+                        + TextUtils.join("", Collections.nCopies(10, "\u0627"))
+                        + ".\u0634\u0628\u0643\u0629";
+        String rtlPath = "/" + TextUtils.join("", Collections.nCopies(20, "\u0645"));
+        showUnfocusedUrlScrolledToTld(origin + rtlPath, origin.length());
+        int visibleWidth = VIEWPORT_WIDTH;
+        float tldRightEdgeX = viewportXOf(origin.lastIndexOf(".") + 1);
+        float lastCharX = viewportXOf(origin.length() - 1);
+        assertTrue("TLD right edge out of view: " + tldRightEdgeX, tldRightEdgeX >= 0);
+        assertTrue("TLD right edge out of view: " + tldRightEdgeX, tldRightEdgeX <= visibleWidth);
+        assertTrue("Origin end out of view: " + lastCharX, lastCharX >= 0);
+    }
+
+    @Test
     public void scrollToBeginning_rtlText_accountsForPadding() {
         String rtlText = "ابحث في Google أو اكتب عنوان URL";
         mUrlBar.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
@@ -1169,6 +1268,25 @@ public class UrlBarUnitTest {
         // Case 3: Selection exists.
         mUrlBar.setSelection(1, 3);
         mUrlBar.scrollDisplayText(ScrollType.SCROLL_TO_BEGINNING, /* originChanged= */ false);
+        assertEquals(0, mUrlBar.getSelectionStart());
+        assertEquals(0, mUrlBar.getSelectionEnd());
+    }
+
+    @Test
+    public void scrollDisplayText_duringLayout_allowsRequestLayoutFromSetSelection() {
+        mUrlBar.setText(SHORT_DOMAIN);
+        mUrlBar.setSelection(5);
+        mUrlBar.requestLayout();
+        mUrlBar.scrollDisplayText(ScrollType.SCROLL_TO_BEGINNING, /* originChanged= */ false);
+        assertTrue(mUrlBar.hasPendingDisplayTextScrollForTesting());
+
+        mUrlBar.mRequestLayoutOnSetSelection = true;
+        mUrlBar.setLayoutParams(new LayoutParams(URL_BAR_WIDTH, URL_BAR_HEIGHT));
+        mUrlBar.measure(
+                MeasureSpec.makeMeasureSpec(URL_BAR_WIDTH, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(URL_BAR_HEIGHT, MeasureSpec.EXACTLY));
+        mUrlBar.layout(0, 0, URL_BAR_WIDTH, URL_BAR_HEIGHT);
+
         assertEquals(0, mUrlBar.getSelectionStart());
         assertEquals(0, mUrlBar.getSelectionEnd());
     }
@@ -2849,5 +2967,84 @@ public class UrlBarUnitTest {
                 EditorInfo.TYPE_TEXT_VARIATION_URI,
                 urlInfo.inputType & EditorInfo.TYPE_TEXT_VARIATION_URI);
         assertEquals(0, urlInfo.inputType & EditorInfo.TYPE_TEXT_FLAG_AUTO_CORRECT);
+    }
+
+    private static class MeasuringPaint extends TextPaint {
+        float mWidth;
+        int mMeasureCount;
+
+        @Override
+        public float measureText(String text) {
+            assertEquals(EllipsisSpan.ELLIPSIS, text);
+            mMeasureCount++;
+            return mWidth;
+        }
+    }
+
+    @Test
+    public void testEllipsisSpan_cachesMeasuredWidthByTextSize() {
+        EllipsisSpan span = new EllipsisSpan();
+        MeasuringPaint paint = new MeasuringPaint();
+        paint.setTextSize(16f);
+        paint.mWidth = 12.3f;
+
+        assertEquals(13, span.getSize(paint, "text", 0, 1, null));
+        assertEquals(13, span.getSize(paint, "text", 0, 1, null));
+        assertEquals(1, paint.mMeasureCount);
+
+        paint.setTextSize(24f);
+        paint.mWidth = 18.1f;
+        assertEquals(19, span.getSize(paint, "text", 0, 1, null));
+        assertEquals(19, span.getSize(paint, "text", 0, 1, null));
+        assertEquals(2, paint.mMeasureCount);
+
+        paint.setTextSize(16f);
+        assertEquals(13, span.getSize(paint, "text", 0, 1, null));
+        assertEquals(2, paint.mMeasureCount);
+    }
+
+    @Test
+    public void testEllipsisSpan_invalidatesCacheOnTypefaceChange() {
+        EllipsisSpan span = new EllipsisSpan();
+        MeasuringPaint paint = new MeasuringPaint();
+        paint.setTextSize(16f);
+        paint.mWidth = 12.3f;
+        assertEquals(13, span.getSize(paint, "text", 0, 1, null));
+
+        paint.setTextSize(24f);
+        paint.mWidth = 18.1f;
+        assertEquals(19, span.getSize(paint, "text", 0, 1, null));
+        assertEquals(2, paint.mMeasureCount);
+
+        paint.setTypeface(Typeface.MONOSPACE);
+        paint.mWidth = 15.0f;
+        assertEquals(15, span.getSize(paint, "text", 0, 1, null));
+        assertEquals(3, paint.mMeasureCount);
+
+        paint.setTextSize(16f);
+        paint.mWidth = 14.0f;
+        assertEquals(14, span.getSize(paint, "text", 0, 1, null));
+        assertEquals(4, paint.mMeasureCount);
+
+        paint.setTypeface(null);
+        paint.mWidth = 12.3f;
+        assertEquals(13, span.getSize(paint, "text", 0, 1, null));
+        assertEquals(5, paint.mMeasureCount);
+    }
+
+    @Test
+    public void testEllipsisSpan_invalidatesCacheOnTextLocaleChange() {
+        EllipsisSpan span = new EllipsisSpan();
+        MeasuringPaint paint = new MeasuringPaint();
+        paint.setTextSize(16f);
+        paint.mWidth = 12.3f;
+        assertEquals(13, span.getSize(paint, "text", 0, 1, null));
+        assertEquals(1, paint.mMeasureCount);
+
+        paint.setTextLocales(LocaleList.forLanguageTags("ar"));
+        paint.mWidth = 14.5f;
+        assertEquals(15, span.getSize(paint, "text", 0, 1, null));
+        assertEquals(15, span.getSize(paint, "text", 0, 1, null));
+        assertEquals(2, paint.mMeasureCount);
     }
 }

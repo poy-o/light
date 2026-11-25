@@ -38,6 +38,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/document_lifecycle.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
+#include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/exported/web_page_popup_impl.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
@@ -289,6 +290,19 @@ class AIPageContentAgentTest : public testing::Test {
     const auto& attributes = *node.content_attributes;
     EXPECT_EQ(attributes.attribute_type,
               mojom::blink::AIPageContentAttributeType::kDialogModeless);
+  }
+
+  void CheckLabelNode(const mojom::blink::AIPageContentNode& node) {
+    const auto& attributes = *node.content_attributes;
+    EXPECT_EQ(attributes.attribute_type,
+              mojom::blink::AIPageContentAttributeType::kLabel);
+  }
+
+  void CheckLabelWithText(const mojom::blink::AIPageContentNode& node,
+                          const String& expected_text) {
+    CheckLabelNode(node);
+    ASSERT_EQ(node.children_nodes.size(), 1u);
+    CheckTextNode(*node.children_nodes[0], expected_text);
   }
 
   void CheckMathNode(const mojom::blink::AIPageContentNode& node,
@@ -1866,8 +1880,8 @@ TEST_F(AIPageContentAgentTest, Table) {
   CheckTableNode(table, "Table caption");
   ASSERT_EQ(table.children_nodes.size(), 5u);
 
-  const auto& caption_text = *table.children_nodes[0];
-  CheckTextNode(caption_text, "Table caption");
+  const auto& caption = *table.children_nodes[0];
+  CheckLabelWithText(caption, "Table caption");
 
   const auto& header1 = *table.children_nodes[1];
   CheckTableRowNode(header1, mojom::blink::AIPageContentTableRowType::kHeader);
@@ -2076,7 +2090,7 @@ TEST_F(AIPageContentAgentTest, FigureCaptionDisplayAsTableCaption) {
   const auto& fig_caption = *figure.children_nodes.at(0);
   ASSERT_TRUE(fig_caption.content_attributes->node_interaction_info);
   EXPECT_EQ(fig_caption.content_attributes->attribute_type,
-            mojom::blink::AIPageContentAttributeType::kContainer);
+            mojom::blink::AIPageContentAttributeType::kLabel);
 
   ASSERT_EQ(fig_caption.children_nodes.size(), 1u);
   const auto& anchor = *fig_caption.children_nodes.at(0);
@@ -2920,8 +2934,8 @@ TEST_F(AIPageContentAgentTest, MathML_InsideHtmlTable) {
   CheckTableNode(table, "Matrix Operations");
   ASSERT_EQ(table.children_nodes.size(), 2u);
 
-  const auto& caption_text = *table.children_nodes[0];
-  CheckTextNode(caption_text, "Matrix Operations");
+  const auto& caption = *table.children_nodes[0];
+  CheckLabelWithText(caption, "Matrix Operations");
 
   const auto& row = *table.children_nodes[1];
   CheckTableRowNode(row, mojom::blink::AIPageContentTableRowType::kBody);
@@ -4317,7 +4331,7 @@ TEST_F(AIPageContentAgentTest, FormWithTextInput) {
             url_test_helpers::ToKURL("https://example.com/submit"));
   EXPECT_EQ(form.children_nodes.size(), 4u);
 
-  CheckTextNode(*form.children_nodes[0], "Lorem Ipsum");
+  CheckLabelWithText(*form.children_nodes[0], "Lorem Ipsum");
 
   const auto& text_input1 = *form.children_nodes[1];
   CheckFormControlNode(text_input1, mojom::blink::FormControlType::kInputText);
@@ -4333,7 +4347,7 @@ TEST_F(AIPageContentAgentTest, FormWithTextInput) {
   EXPECT_EQ(text_input1.children_nodes[0]->children_nodes.size(), 1u);
   CheckTextNode(*text_input1.children_nodes[0]->children_nodes[0], "Lorem");
 
-  CheckTextNode(*form.children_nodes[2], "Ipsum Dolor");
+  CheckLabelWithText(*form.children_nodes[2], "Ipsum Dolor");
 
   const auto& text_input2 = *form.children_nodes[3];
   CheckFormControlNode(text_input2, mojom::blink::FormControlType::kInputText);
@@ -4640,7 +4654,7 @@ TEST_F(AIPageContentAgentTest, FormWithCheckbox) {
   EXPECT_FALSE(checkbox1.content_attributes->form_control_data->is_checked);
   EXPECT_EQ(checkbox1.children_nodes.size(), 0u);
 
-  CheckTextNode(*form.children_nodes[1], "I have a bike");
+  CheckLabelWithText(*form.children_nodes[1], "I have a bike");
 
   const auto& checkbox2 = *form.children_nodes[2];
   CheckFormControlNode(checkbox2,
@@ -4652,7 +4666,7 @@ TEST_F(AIPageContentAgentTest, FormWithCheckbox) {
   EXPECT_TRUE(checkbox2.content_attributes->form_control_data->is_checked);
   EXPECT_EQ(checkbox2.children_nodes.size(), 0u);
 
-  CheckTextNode(*form.children_nodes[3], "I have a car");
+  CheckLabelWithText(*form.children_nodes[3], "I have a car");
 }
 
 TEST_F(AIPageContentAgentTest, FormWithRadio) {
@@ -4693,7 +4707,7 @@ TEST_F(AIPageContentAgentTest, FormWithRadio) {
   EXPECT_FALSE(radio1.content_attributes->form_control_data->is_checked);
   EXPECT_EQ(radio1.children_nodes.size(), 0u);
 
-  CheckTextNode(*form.children_nodes[1], "I have a bike");
+  CheckLabelWithText(*form.children_nodes[1], "I have a bike");
 
   const auto& radio2 = *form.children_nodes[2];
   CheckFormControlNode(radio2, mojom::blink::FormControlType::kInputRadio);
@@ -4703,7 +4717,7 @@ TEST_F(AIPageContentAgentTest, FormWithRadio) {
   EXPECT_TRUE(radio2.content_attributes->form_control_data->is_checked);
   EXPECT_EQ(radio2.children_nodes.size(), 0u);
 
-  CheckTextNode(*form.children_nodes[3], "I have a car");
+  CheckLabelWithText(*form.children_nodes[3], "I have a car");
 }
 
 TEST_F(AIPageContentAgentTest, FormWithPassword) {
@@ -5469,6 +5483,230 @@ TEST_F(AIPageContentAgentTest, SelectionFromEditContext) {
   EXPECT_EQ(selection.end_dom_node_id, editor_id);
   EXPECT_EQ(selection.start_offset, 6);
   EXPECT_EQ(selection.end_offset, 11);
+}
+
+TEST_F(AIPageContentAgentTest, SelectionFromInvalidatedEditContext) {
+  frame_test_helpers::LoadHTMLString(
+      helper_.LocalMainFrame(),
+      R"HTML(
+        <body data-requests="0">
+          <div id="editor"></div>
+          <script>
+            const editor = document.getElementById('editor');
+            const ec = new EditContext({
+              text: '_',
+              selectionStart: 1,
+              selectionEnd: 1,
+            });
+            editor.editContext = ec;
+            ec.addEventListener('contextrequest', () => {
+              document.body.dataset.requests =
+                  String(Number(document.body.dataset.requests) + 1);
+              ec.updateText(0, ec.text.length, 'Hello world');
+              ec.updateSelection(6, 11);
+            });
+            editor.focus();
+            ec.invalidate();
+          </script>
+        </body>
+      )HTML",
+      url_test_helpers::ToKURL("http://foobar.com"));
+
+  Document* doc = helper_.LocalMainFrame()->GetFrame()->GetDocument();
+  {
+    ScopedEditContextOnDemandForTest disabled(false);
+    GetAIPageContent();
+    EXPECT_FALSE(Content()->frame_data->frame_interaction_info->selection);
+    EXPECT_EQ("0", doc->body()->getAttribute(AtomicString("data-requests")));
+  }
+
+  GetAIPageContent();
+  EXPECT_EQ("1", doc->body()->getAttribute(AtomicString("data-requests")));
+
+  const auto& frame_interaction_info =
+      Content()->frame_data->frame_interaction_info;
+  ASSERT_TRUE(frame_interaction_info->selection);
+  const auto& selection = *frame_interaction_info->selection;
+  EXPECT_EQ(selection.selected_text, "world");
+  const DOMNodeId editor_id =
+      DOMNodeIds::IdForNode(doc->getElementById(AtomicString("editor")));
+  EXPECT_EQ(selection.start_dom_node_id, editor_id);
+  EXPECT_EQ(selection.end_dom_node_id, editor_id);
+  EXPECT_EQ(selection.start_offset, 6);
+  EXPECT_EQ(selection.end_offset, 11);
+}
+
+TEST_F(AIPageContentAgentTest,
+       ContextRequestDetachingChildIframePreservesSiblingAndNestedExtraction) {
+  frame_test_helpers::LoadHTMLString(
+      helper_.LocalMainFrame(),
+      R"HTML(
+        <body>
+          <iframe id="f1" srcdoc="<div id='ed1'></div>"></iframe>
+          <iframe id="f2" srcdoc="<p>Sibling frame text</p><iframe id='nested' srcdoc='<div id=&quot;ed2&quot;></div>'></iframe>"></iframe>
+        </body>
+      )HTML",
+      url_test_helpers::ToKURL("http://foobar.com"));
+  test::RunPendingTasks();
+  test::RunPendingTasks();
+
+  helper_.LocalMainFrame()->ExecuteScript(WebScriptSource(R"JS(
+    const f2 = document.getElementById('f2');
+    const nested = f2.contentDocument.getElementById('nested');
+    const ed2 = nested.contentDocument.getElementById('ed2');
+    const ec2 = new nested.contentWindow.EditContext({
+      text: '_',
+      selectionStart: 1,
+      selectionEnd: 1,
+    });
+    ed2.editContext = ec2;
+    ec2.addEventListener('contextrequest', () => {
+      ec2.updateText(0, ec2.text.length, 'Nested text');
+      ec2.updateSelection(0, 6);
+    });
+    ec2.invalidate();
+
+    const f1 = document.getElementById('f1');
+    const ed1 = f1.contentDocument.getElementById('ed1');
+    const ec1 = new f1.contentWindow.EditContext({text: '_'});
+    ed1.editContext = ec1;
+    ec1.addEventListener('contextrequest', () => {
+      f1.remove();
+      nested.focus();
+      ed2.focus();
+    });
+    f1.focus();
+    ed1.focus();
+    ec1.invalidate();
+  )JS"));
+
+  GetAIPageContent();
+  EXPECT_TRUE(
+      TreeContainsTextSubstring(ContentRootNode(), "Sibling frame text"));
+  ASSERT_EQ(ContentRootNode().children_nodes.size(), 1u);
+  const auto& f2_node = *ContentRootNode().children_nodes[0];
+  CheckIframeNode(f2_node);
+  ASSERT_EQ(f2_node.children_nodes.size(), 1u);
+  ASSERT_EQ(f2_node.children_nodes[0]->children_nodes.size(), 2u);
+  const auto& nested_node = *f2_node.children_nodes[0]->children_nodes[1];
+  CheckIframeNode(nested_node);
+  ASSERT_TRUE(nested_node.content_attributes->iframe_data->content);
+  const auto& nested_frame_data = *nested_node.content_attributes->iframe_data
+                                       ->content->get_local_frame_data();
+  ASSERT_TRUE(nested_frame_data.frame_interaction_info->selection);
+  EXPECT_EQ(nested_frame_data.frame_interaction_info->selection->selected_text,
+            "Nested");
+}
+
+TEST_F(AIPageContentAgentTest,
+       ContextRequestInCrossSiteIframeRespectsSameSiteFilter) {
+  frame_test_helpers::LoadHTMLString(
+      helper_.LocalMainFrame(),
+      R"HTML(
+        <body>
+          <iframe id="cross" sandbox="allow-scripts" srcdoc="<body data-requests='0'><div id='ed'></div><script>
+            const ed = document.getElementById('ed');
+            const ec = new EditContext({
+              text: '_',
+              selectionStart: 1,
+              selectionEnd: 1,
+            });
+            ed.editContext = ec;
+            ec.addEventListener('contextrequest', () => {
+              document.body.dataset.requests =
+                  String(Number(document.body.dataset.requests) + 1);
+              ec.updateText(0, ec.text.length, 'Cross-site text');
+              ec.updateSelection(0, 10);
+            });
+            ec.invalidate();
+          </script></body>"></iframe>
+        </body>
+      )HTML",
+      url_test_helpers::ToKURL("http://foobar.com"));
+  test::RunPendingTasks();
+
+  auto* iframe = To<HTMLIFrameElement>(
+      helper_.LocalMainFrame()->GetFrame()->GetDocument()->getElementById(
+          AtomicString("cross")));
+  ASSERT_TRUE(iframe);
+  auto* cross_frame = To<LocalFrame>(iframe->ContentFrame());
+  ASSERT_TRUE(cross_frame);
+  Document* cross_doc = cross_frame->GetDocument();
+  ASSERT_TRUE(cross_doc);
+  Element* cross_ed = cross_doc->getElementById(AtomicString("ed"));
+  ASSERT_TRUE(cross_ed);
+  cross_ed->Focus(FocusParams(FocusTrigger::kUserGesture));
+  ASSERT_EQ(cross_doc->FocusedElement(), cross_ed);
+
+  // When `include_same_site_only` is true, the sandboxed opaque-origin iframe
+  // is redacted as cross-site, so `contextrequest` must not be fired.
+  auto same_site_options = GetAIPageContentOptionsForTest();
+  same_site_options->include_same_site_only = true;
+  GetAIPageContent(std::move(same_site_options));
+  EXPECT_EQ("0",
+            cross_doc->body()->getAttribute(AtomicString("data-requests")));
+  ASSERT_EQ(ContentRootNode().children_nodes.size(), 1u);
+  const auto& redacted_node = *ContentRootNode().children_nodes[0];
+  CheckIframeNode(redacted_node);
+  ASSERT_TRUE(redacted_node.content_attributes->iframe_data->content
+                  ->is_redacted_frame_metadata());
+
+  // When `include_same_site_only` is false, the iframe is extracted and its
+  // active EditContext receives `contextrequest`.
+  auto all_frames_options = GetAIPageContentOptionsForTest();
+  all_frames_options->include_same_site_only = false;
+  GetAIPageContent(std::move(all_frames_options));
+  EXPECT_EQ("1",
+            cross_doc->body()->getAttribute(AtomicString("data-requests")));
+  ASSERT_EQ(ContentRootNode().children_nodes.size(), 1u);
+  const auto& extracted_node = *ContentRootNode().children_nodes[0];
+  CheckIframeNode(extracted_node);
+  const auto& cross_frame_data = *extracted_node.content_attributes->iframe_data
+                                      ->content->get_local_frame_data();
+  ASSERT_TRUE(cross_frame_data.frame_interaction_info->selection);
+  EXPECT_EQ(cross_frame_data.frame_interaction_info->selection->selected_text,
+            "Cross-site");
+}
+
+TEST_F(AIPageContentAgentTest, ContextRequestDetachingRootFrameReturnsNullptr) {
+  frame_test_helpers::LoadHTMLString(
+      helper_.LocalMainFrame(),
+      R"HTML(
+        <body>
+          <iframe id="f1" srcdoc="<div id='ed'></div>"></iframe>
+        </body>
+      )HTML",
+      url_test_helpers::ToKURL("http://foobar.com"));
+  test::RunPendingTasks();
+
+  helper_.LocalMainFrame()->ExecuteScript(WebScriptSource(R"JS(
+    const f1 = document.getElementById('f1');
+    const ed = f1.contentDocument.getElementById('ed');
+    const ec = new f1.contentWindow.EditContext({text: '_'});
+    ed.editContext = ec;
+    ec.addEventListener('contextrequest', () => {
+      f1.remove();
+    });
+    f1.focus();
+    ed.focus();
+    ec.invalidate();
+  )JS"));
+
+  auto* iframe = To<HTMLIFrameElement>(
+      helper_.LocalMainFrame()->GetFrame()->GetDocument()->getElementById(
+          AtomicString("f1")));
+  ASSERT_TRUE(iframe);
+  Document* child_document = iframe->contentDocument();
+  ASSERT_TRUE(child_document);
+  auto* agent = AIPageContentAgent::GetOrCreateForTesting(*child_document);
+  ASSERT_TRUE(agent);
+
+  // Removing `f1` synchronously detaches `child_document` during
+  // `CleanContextIfNeeded()`, so `ContentBuilder::Build()` bails out with
+  // `nullptr` instead of extracting a detached `Document`.
+  mojom::blink::AIPageContentPtr content =
+      agent->GetAIPageContentInternal(*GetAIPageContentOptionsForTest());
+  EXPECT_FALSE(content);
 }
 
 TEST_F(AIPageContentAgentTest, EditContextSelectionPreferredOverDOMSelection) {
@@ -6955,7 +7193,7 @@ TEST_F(AIPageContentAgentTest, LabelWithForSibling) {
             mojom::AIPageContentRedactionDecision::kNoRedactionNecessary);
 
   const auto& label = *root.children_nodes[1];
-  CheckContainerNode(label);
+  CheckLabelNode(label);
   ASSERT_TRUE(label.content_attributes->node_interaction_info);
   EXPECT_TRUE(label.content_attributes->node_interaction_info
                   ->clickability_reasons.empty());
@@ -6982,7 +7220,7 @@ TEST_F(AIPageContentAgentTest, LabelGeometry) {
   EXPECT_EQ(root.children_nodes.size(), 2u);
 
   const auto& label = *root.children_nodes[0];
-  CheckContainerNode(label);
+  CheckLabelNode(label);
   ASSERT_TRUE(label.content_attributes->node_interaction_info);
   EXPECT_TRUE(label.content_attributes->node_interaction_info
                   ->clickability_reasons.empty());
@@ -7025,7 +7263,7 @@ TEST_F(AIPageContentAgentTest, LabelWithForDescendant) {
 
   const auto& label = *root.children_nodes[0];
   EXPECT_EQ(label.children_nodes.size(), 2u);
-  CheckContainerNode(label);
+  CheckLabelNode(label);
   ASSERT_TRUE(label.content_attributes->node_interaction_info);
   CheckHitTestableButNotInteractive(label);
 
@@ -8299,6 +8537,233 @@ TEST_F(AIPageContentAgentTest, Fieldset) {
 
   const auto& fieldset = *form.children_nodes.at(0);
   CheckHitTestableButNotInteractive(fieldset);
+}
+
+TEST_F(AIPageContentAgentTest, FieldsetLegend) {
+  frame_test_helpers::LoadHTMLString(
+      helper_.LocalMainFrame(),
+      R"HTML(
+      <body>
+        <fieldset>
+          <legend><span>Shipping</span> address</legend>
+          <legend>Second legend</legend>
+          <input type="text">
+        </fieldset>
+        <fieldset>
+          <legend><h3>Heading inside legend</h3></legend>
+        </fieldset>
+        <fieldset>
+          <legend style="display: none">Display none</legend>
+          <legend style="visibility: hidden">Visibility hidden</legend>
+        </fieldset>
+        <legend>Orphan legend</legend>
+      </body>
+      )HTML",
+      url_test_helpers::ToKURL("http://foobar.com"));
+
+  GetAIPageContentWithActionableElements();
+  const auto& root = ContentRootNode();
+  ASSERT_EQ(root.children_nodes.size(), 4u);
+
+  const auto& fieldset1 = *root.children_nodes.at(0);
+  CheckFormControlNode(fieldset1, mojom::blink::FormControlType::kFieldset);
+  ASSERT_EQ(fieldset1.children_nodes.size(), 3u);
+  const auto& legend1 = *fieldset1.children_nodes.at(0);
+  CheckLabelNode(legend1);
+  ASSERT_EQ(legend1.children_nodes.size(), 2u);
+  CheckContainerNode(*legend1.children_nodes.at(0));
+  ASSERT_EQ(legend1.children_nodes.at(0)->children_nodes.size(), 1u);
+  CheckTextNode(*legend1.children_nodes.at(0)->children_nodes.at(0),
+                "Shipping");
+  CheckTextNode(*legend1.children_nodes.at(1), " address");
+
+  const auto& second_legend = *fieldset1.children_nodes.at(1);
+  CheckLabelWithText(second_legend, "Second legend");
+
+  CheckFormControlNode(*fieldset1.children_nodes.at(2),
+                       mojom::blink::FormControlType::kInputText);
+
+  const auto& fieldset2 = *root.children_nodes.at(1);
+  ASSERT_EQ(fieldset2.children_nodes.size(), 1u);
+  const auto& legend2 = *fieldset2.children_nodes.at(0);
+  CheckLabelNode(legend2);
+  EXPECT_FALSE(legend2.content_attributes->aria_role.has_value());
+  ASSERT_EQ(legend2.children_nodes.size(), 1u);
+  CheckHeadingNode(*legend2.children_nodes.at(0));
+  ASSERT_EQ(legend2.children_nodes.at(0)->children_nodes.size(), 1u);
+  CheckTextNode(*legend2.children_nodes.at(0)->children_nodes.at(0),
+                "Heading inside legend");
+
+  // Invisible <legend> elements are omitted.
+  const auto& fieldset3 = *root.children_nodes.at(2);
+  EXPECT_TRUE(fieldset3.children_nodes.empty());
+
+  const auto& orphan_legend = *root.children_nodes.at(3);
+  CheckLabelWithText(orphan_legend, "Orphan legend");
+  EXPECT_FALSE(orphan_legend.content_attributes->aria_role.has_value());
+}
+
+TEST_F(AIPageContentAgentTest, LabelAndCaptionUseLabelAttributeType) {
+  frame_test_helpers::LoadHTMLString(
+      helper_.LocalMainFrame(),
+      R"HTML(
+      <body>
+        <label for="name">Name</label>
+        <input id="name" type="text">
+        <table>
+          <caption>Users</caption>
+          <tr><td>Ada</td></tr>
+        </table>
+        <figure>
+          <figcaption>Figure caption</figcaption>
+        </figure>
+      </body>
+      )HTML",
+      url_test_helpers::ToKURL("http://foobar.com"));
+
+  GetAIPageContentWithActionableElements();
+  const auto& root = ContentRootNode();
+  ASSERT_EQ(root.children_nodes.size(), 4u);
+
+  const auto& label = *root.children_nodes.at(0);
+  CheckLabelWithText(label, "Name");
+  EXPECT_FALSE(label.content_attributes->aria_role.has_value());
+
+  const auto& table = *root.children_nodes.at(2);
+  ASSERT_EQ(table.children_nodes.size(), 2u);
+  const auto& caption = *table.children_nodes.at(0);
+  CheckLabelWithText(caption, "Users");
+  EXPECT_FALSE(caption.content_attributes->aria_role.has_value());
+
+  const auto& figure = *root.children_nodes.at(3);
+  ASSERT_EQ(figure.children_nodes.size(), 1u);
+  const auto& figcaption = *figure.children_nodes.at(0);
+  CheckLabelWithText(figcaption, "Figure caption");
+  EXPECT_FALSE(figcaption.content_attributes->aria_role.has_value());
+}
+
+TEST_F(AIPageContentAgentTest, LabelTagsWithExplicitAriaRoles) {
+  frame_test_helpers::LoadHTMLString(
+      helper_.LocalMainFrame(),
+      R"HTML(
+      <body>
+        <label role="checkbox">Agree</label>
+        <legend role="heading">Section</legend>
+        <figcaption role="region">Summary</figcaption>
+      </body>
+      )HTML",
+      url_test_helpers::ToKURL("http://foobar.com"));
+
+  GetAIPageContentWithActionableElements();
+  const auto& root = ContentRootNode();
+  ASSERT_EQ(root.children_nodes.size(), 3u);
+
+  // ARIA control roles take precedence as kFormControl.
+  const auto& aria_checkbox = *root.children_nodes.at(0);
+  CheckFormControlNode(aria_checkbox,
+                       mojom::blink::FormControlType::kInputCheckbox);
+  EXPECT_EQ(aria_checkbox.content_attributes->aria_role,
+            ax::mojom::blink::Role::kCheckBox);
+
+  // Non-control ARIA roles keep kLabel alongside explicit aria_role.
+  const auto& aria_heading = *root.children_nodes.at(1);
+  CheckLabelWithText(aria_heading, "Section");
+  EXPECT_EQ(aria_heading.content_attributes->aria_role,
+            ax::mojom::blink::Role::kHeading);
+
+  const auto& aria_region = *root.children_nodes.at(2);
+  CheckLabelWithText(aria_region, "Summary");
+  EXPECT_EQ(aria_region.content_attributes->aria_role,
+            ax::mojom::blink::Role::kRegion);
+}
+
+TEST_F(AIPageContentAgentTest, FieldsetLegendOffscreenAndDisabled) {
+  frame_test_helpers::LoadHTMLString(
+      helper_.LocalMainFrame(),
+      R"HTML(
+      <body>
+        <fieldset disabled style="position: absolute; top: 2000px">
+          <legend>Enabled section <input type="text"></legend>
+          <input type="text">
+        </fieldset>
+      </body>
+      )HTML",
+      url_test_helpers::ToKURL("http://foobar.com"));
+
+  GetAIPageContentWithActionableElements();
+  const auto& root = ContentRootNode();
+  ASSERT_EQ(root.children_nodes.size(), 1u);
+
+  const auto& fieldset = *root.children_nodes.at(0);
+  CheckFormControlNode(fieldset, mojom::blink::FormControlType::kFieldset);
+  ASSERT_EQ(fieldset.children_nodes.size(), 2u);
+
+  const auto& legend = *fieldset.children_nodes.at(0);
+  CheckLabelNode(legend);
+  ASSERT_TRUE(legend.content_attributes->geometry);
+  EXPECT_TRUE(
+      legend.content_attributes->geometry->visible_bounding_box.IsEmpty());
+  ASSERT_EQ(legend.children_nodes.size(), 2u);
+  CheckTextNode(*legend.children_nodes.at(0), "Enabled section ");
+
+  // Per HTML spec, controls inside a disabled <fieldset>'s first <legend> are
+  // not disabled, while controls outside it are disabled.
+  const auto& legend_input = *legend.children_nodes.at(1);
+  CheckFormControlNode(legend_input, mojom::blink::FormControlType::kInputText);
+  ASSERT_TRUE(legend_input.content_attributes->node_interaction_info);
+  EXPECT_FALSE(
+      legend_input.content_attributes->node_interaction_info->is_disabled);
+
+  const auto& disabled_input = *fieldset.children_nodes.at(1);
+  CheckFormControlNode(disabled_input,
+                       mojom::blink::FormControlType::kInputText);
+  ASSERT_TRUE(disabled_input.content_attributes->node_interaction_info);
+  EXPECT_TRUE(
+      disabled_input.content_attributes->node_interaction_info->is_disabled);
+}
+
+TEST_F(AIPageContentAgentTest, FieldsetLegendDefaultModeAndKillswitch) {
+  frame_test_helpers::LoadHTMLString(
+      helper_.LocalMainFrame(),
+      R"HTML(
+      <body>
+        <fieldset>
+          <legend>Contact info</legend>
+        </fieldset>
+      </body>
+      )HTML",
+      url_test_helpers::ToKURL("http://foobar.com"));
+
+  GetAIPageContent();
+  {
+    const auto& root = ContentRootNode();
+    ASSERT_EQ(root.children_nodes.size(), 1u);
+    const auto& fieldset = *root.children_nodes.at(0);
+    ASSERT_EQ(fieldset.children_nodes.size(), 1u);
+    CheckLabelWithText(*fieldset.children_nodes.at(0), "Contact info");
+  }
+
+  ScopedAIPageContentIncludeLabelForTest disable_label(false);
+  GetAIPageContent();
+  {
+    const auto& root = ContentRootNode();
+    ASSERT_EQ(root.children_nodes.size(), 1u);
+    const auto& fieldset = *root.children_nodes.at(0);
+    ASSERT_EQ(fieldset.children_nodes.size(), 1u);
+    CheckTextNode(*fieldset.children_nodes.at(0), "Contact info");
+  }
+
+  GetAIPageContentWithActionableElements();
+  {
+    const auto& root = ContentRootNode();
+    ASSERT_EQ(root.children_nodes.size(), 1u);
+    const auto& fieldset = *root.children_nodes.at(0);
+    ASSERT_EQ(fieldset.children_nodes.size(), 1u);
+    const auto& legend = *fieldset.children_nodes.at(0);
+    CheckContainerNode(legend);
+    ASSERT_EQ(legend.children_nodes.size(), 1u);
+    CheckTextNode(*legend.children_nodes.at(0), "Contact info");
+  }
 }
 
 TEST_F(AIPageContentAgentTest, ShadowDOMInInput) {
@@ -11346,7 +11811,7 @@ TEST_F(AIPageContentAgentTestZOrder, LabelWithText) {
             mojom::blink::AIPageContentAttributeType::kContainer);
   const auto& label = *body.children_nodes.at(0);
   ASSERT_EQ(label.content_attributes->attribute_type,
-            mojom::blink::AIPageContentAttributeType::kContainer);
+            mojom::blink::AIPageContentAttributeType::kLabel);
   const auto& text = *label.children_nodes.at(0);
   ASSERT_EQ(text.content_attributes->attribute_type,
             mojom::blink::AIPageContentAttributeType::kText);

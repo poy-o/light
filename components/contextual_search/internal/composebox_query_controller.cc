@@ -107,6 +107,7 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotationTag =
           data: "Only file data that is explicitly uploaded by the user will "
             "be sent."
           destination: GOOGLE_OWNED_SERVICE
+          api_service_name: "lensfrontend-pa.googleapis.com"
           internal {
             contacts {
               email: "hujasonx@google.com"
@@ -2712,6 +2713,12 @@ void ComposeboxQueryController::OnUploadRequestBodyReady(
         file_token, contextual_search::ContextUploadStatus::kValidationFailed,
         error_type);
     return;
+  }
+
+  if (file_info->input_data && file_info->input_data->process_image_async &&
+      request.has_objects_request() &&
+      request.objects_request().has_image_data()) {
+    request.mutable_objects_request()->set_process_image_async(true);
   }
 
   // Create the upload requests if they haven't been created yet.

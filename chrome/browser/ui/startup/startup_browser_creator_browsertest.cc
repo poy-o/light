@@ -103,7 +103,9 @@
 #include "chrome/test/base/chrome_test_path_utils.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/bidi_mapper/buildflags.h"
 #include "components/infobars/content/content_infobar_manager.h"
+#include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
 #include "components/infobars/core/infobar_delegate.h"
 #include "components/keep_alive_registry/keep_alive_registry.h"
@@ -138,6 +140,10 @@
 #include "ui/views/controls/webview/webview.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
+
+#if BUILDFLAG(ENABLE_BIDI_MAPPER)
+#include "components/bidi_mapper/host/features.h"
+#endif
 
 #if !BUILDFLAG(IS_CHROMEOS)
 #include "base/check.h"
@@ -867,59 +873,9 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
   CloseBrowserSynchronously(new_browser);
 }
 
-namespace {
-
-enum class ChromeAppDeprecationFeatureValue {
-  kDefault,
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
-  kEnabledWithNoLaunch,
-  kDisabled,
-#endif
-};
-
-std::string ChromeAppDeprecationFeatureValueToString(
-    const ::testing::TestParamInfo<ChromeAppDeprecationFeatureValue>&
-        param_info) {
-  std::string result;
-  switch (param_info.param) {
-    case ChromeAppDeprecationFeatureValue::kDefault:
-      result = "ChromeAppDeprecationFeatureDefault";
-      break;
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
-    case ChromeAppDeprecationFeatureValue::kEnabledWithNoLaunch:
-      result = "ChromeAppDeprecationFeatureEnabledWithNoLaunch";
-      break;
-    case ChromeAppDeprecationFeatureValue::kDisabled:
-      result = "ChromeAppDeprecationFeatureDisabled";
-      break;
-#endif
-  }
-  return result;
-}
-
-}  // namespace
-
 class StartupBrowserCreatorChromeAppShortcutTest
-    : public StartupBrowserCreatorTest,
-      public ::testing::WithParamInterface<ChromeAppDeprecationFeatureValue> {
+    : public StartupBrowserCreatorTest {
  protected:
-  StartupBrowserCreatorChromeAppShortcutTest() {
-    switch (GetParam()) {
-      case ChromeAppDeprecationFeatureValue::kDefault:
-        break;
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
-      case ChromeAppDeprecationFeatureValue::kEnabledWithNoLaunch:
-        scoped_feature_list_.InitAndEnableFeature(
-            features::kChromeAppsDeprecation);
-        break;
-      case ChromeAppDeprecationFeatureValue::kDisabled:
-        scoped_feature_list_.InitAndDisableFeature(
-            features::kChromeAppsDeprecation);
-        break;
-#endif
-    }
-  }
-
   void SetUpOnMainThread() override {
     StartupBrowserCreatorTest::SetUpOnMainThread();
   }
@@ -1038,12 +994,9 @@ class StartupBrowserCreatorChromeAppShortcutTest
     return true;
 #endif
   }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_P(StartupBrowserCreatorChromeAppShortcutTest,
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorChromeAppShortcutTest,
                        OpenAppShortcutNoPref) {
   // Load an app with launch.container = 'tab'.
   const Extension* extension_app = nullptr;
@@ -1088,7 +1041,7 @@ IN_PROC_BROWSER_TEST_P(StartupBrowserCreatorChromeAppShortcutTest,
   }
 }
 
-IN_PROC_BROWSER_TEST_P(StartupBrowserCreatorChromeAppShortcutTest,
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorChromeAppShortcutTest,
                        OpenAppShortcutWindowPref) {
   const Extension* extension_app = nullptr;
   ASSERT_NO_FATAL_FAILURE(LoadApp("app_with_tab_container", &extension_app));
@@ -1125,7 +1078,7 @@ IN_PROC_BROWSER_TEST_P(StartupBrowserCreatorChromeAppShortcutTest,
   }
 }
 
-IN_PROC_BROWSER_TEST_P(StartupBrowserCreatorChromeAppShortcutTest,
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorChromeAppShortcutTest,
                        OpenAppShortcutTabPref) {
   // When we start, the browser should already have an open tab.
   TabStripModel* tab_strip = browser()->GetTabStripModel();
@@ -1174,7 +1127,7 @@ IN_PROC_BROWSER_TEST_P(StartupBrowserCreatorChromeAppShortcutTest,
   }
 }
 
-IN_PROC_BROWSER_TEST_P(StartupBrowserCreatorChromeAppShortcutTest,
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorChromeAppShortcutTest,
                        OpenPolicyForcedAppShortcut) {
   // Load an app with launch.container = 'tab'.
   const Extension* extension_app = nullptr;
@@ -1230,24 +1183,14 @@ IN_PROC_BROWSER_TEST_P(StartupBrowserCreatorChromeAppShortcutTest,
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    StartupBrowserCreatorChromeAppShortcutTest,
-    ::testing::Values(ChromeAppDeprecationFeatureValue::kDefault
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
-                      ,
-                      ChromeAppDeprecationFeatureValue::kEnabledWithNoLaunch,
-                      ChromeAppDeprecationFeatureValue::kDisabled
-#endif
-                      ),
-    ChromeAppDeprecationFeatureValueToString);
-
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
+// These tests are specifically for testing what happens when the "Launch
+// Anyways" button is pressed.
 using StartupBrowserCreatorChromeAppShortcutTestWithLaunch =
     StartupBrowserCreatorChromeAppShortcutTest;
 
-IN_PROC_BROWSER_TEST_P(StartupBrowserCreatorChromeAppShortcutTestWithLaunch,
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorChromeAppShortcutTestWithLaunch,
                        OpenAppShortcutNoPref) {
   // Load an app with launch.container = 'tab'.
   const Extension* extension_app = nullptr;
@@ -1273,7 +1216,7 @@ IN_PROC_BROWSER_TEST_P(StartupBrowserCreatorChromeAppShortcutTestWithLaunch,
                     ->GetSize());
 }
 
-IN_PROC_BROWSER_TEST_P(StartupBrowserCreatorChromeAppShortcutTestWithLaunch,
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorChromeAppShortcutTestWithLaunch,
                        OpenAppShortcutWindowPref) {
   const Extension* extension_app = nullptr;
   ASSERT_NO_FATAL_FAILURE(LoadApp("app_with_tab_container", &extension_app));
@@ -1296,7 +1239,7 @@ IN_PROC_BROWSER_TEST_P(StartupBrowserCreatorChromeAppShortcutTestWithLaunch,
                     ->GetSize());
 }
 
-IN_PROC_BROWSER_TEST_P(StartupBrowserCreatorChromeAppShortcutTestWithLaunch,
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorChromeAppShortcutTestWithLaunch,
                        OpenAppShortcutTabPref) {
   // When we start, the browser should already have an open tab.
   TabStripModel* tab_strip = browser()->GetTabStripModel();
@@ -1323,7 +1266,7 @@ IN_PROC_BROWSER_TEST_P(StartupBrowserCreatorChromeAppShortcutTestWithLaunch,
                     ->GetSize());
 }
 
-IN_PROC_BROWSER_TEST_P(StartupBrowserCreatorChromeAppShortcutTestWithLaunch,
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorChromeAppShortcutTestWithLaunch,
                        OpenPolicyForcedAppShortcut) {
   // Load an app with launch.container = 'tab'.
   const Extension* extension_app = nullptr;
@@ -1355,14 +1298,6 @@ IN_PROC_BROWSER_TEST_P(StartupBrowserCreatorChromeAppShortcutTestWithLaunch,
   ASSERT_EQ(2u, ProfileBrowserCollection::GetForProfile(browser()->GetProfile())
                     ->GetSize());
 }
-
-// These tests are specifically for testing what happens when the "Launch
-// Anyways" button is pressed.
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    StartupBrowserCreatorChromeAppShortcutTestWithLaunch,
-    ::testing::Values(ChromeAppDeprecationFeatureValue::kEnabledWithNoLaunch),
-    ChromeAppDeprecationFeatureValueToString);
 
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
@@ -1524,7 +1459,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, StartupPrefSetAsLastAndURLs) {
   SessionStartupPref::SetStartupPref(&profile, startup_pref);
 
   // Open |t3_url| in a tab.
-  BrowserWindowInterface* new_browser = CreateBrowserWindow(
+  BrowserWindowInterface* new_browser = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(BrowserWindowInterface::TYPE_NORMAL, &profile,
                                 /*from_user_gesture=*/true));
   TabStripModel* tab_strip_model = new_browser->GetTabStripModel();
@@ -1686,7 +1621,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, PRE_UpdateWithTwoProfiles) {
       &profile2, ProfileKeepAliveOrigin::kBrowserWindow);
 
   // Open some urls with the browsers, and close them.
-  BrowserWindowInterface* browser1 = CreateBrowserWindow(
+  BrowserWindowInterface* browser1 = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(BrowserWindowInterface::TYPE_NORMAL, &profile1,
                                 /*from_user_gesture=*/true));
   chrome::NewTab(browser1, NewTabTypes::kNoUserAction);
@@ -1694,7 +1629,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, PRE_UpdateWithTwoProfiles) {
       browser1, embedded_test_server()->GetURL("/empty.html")));
   CloseBrowserSynchronously(browser1);
 
-  BrowserWindowInterface* browser2 = CreateBrowserWindow(
+  BrowserWindowInterface* browser2 = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(BrowserWindowInterface::TYPE_NORMAL, &profile2,
                                 /*from_user_gesture=*/true));
   chrome::NewTab(browser2, NewTabTypes::kNoUserAction);
@@ -1822,7 +1757,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
   SessionStartupPref::SetStartupPref(&profile_urls, pref_urls);
 
   // Open a page with profile_last.
-  BrowserWindowInterface* browser_last = CreateBrowserWindow(
+  BrowserWindowInterface* browser_last = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(BrowserWindowInterface::TYPE_NORMAL,
                                 &profile_last, /*from_user_gesture=*/true));
   chrome::NewTab(browser_last, NewTabTypes::kNoUserAction);
@@ -1931,14 +1866,14 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, RestoreWithNoStartupWindow) {
       &profile2, ProfileKeepAliveOrigin::kBrowserWindow);
 
   // Open a page with profile1 and profile2.
-  BrowserWindowInterface* browser1 = CreateBrowserWindow(
+  BrowserWindowInterface* browser1 = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(BrowserWindowInterface::TYPE_NORMAL, &profile1,
                                 /*from_user_gesture=*/true));
   chrome::NewTab(browser1, NewTabTypes::kNoUserAction);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser1, embedded_test_server()->GetURL("/empty.html")));
 
-  BrowserWindowInterface* browser2 = CreateBrowserWindow(
+  BrowserWindowInterface* browser2 = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(BrowserWindowInterface::TYPE_NORMAL, &profile2,
                                 /*from_user_gesture=*/true));
   chrome::NewTab(browser2, NewTabTypes::kNoUserAction);
@@ -2294,7 +2229,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorHeadlessActivationTokenTest,
   SessionStartupPref::SetStartupPref(
       &profile1, SessionStartupPref(SessionStartupPref::LAST));
 
-  BrowserWindowInterface* browser1 = CreateBrowserWindow(
+  BrowserWindowInterface* browser1 = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(BrowserWindowInterface::TYPE_NORMAL, &profile1,
                                 /*from_user_gesture=*/true));
   chrome::NewTab(browser1, NewTabTypes::kNoUserAction);
@@ -2345,7 +2280,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorHeadlessActivationTokenTest,
   SessionStartupPref::SetStartupPref(
       &profile2, SessionStartupPref(SessionStartupPref::DEFAULT));
 
-  BrowserWindowInterface* browser1 = CreateBrowserWindow(
+  BrowserWindowInterface* browser1 = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(BrowserWindowInterface::TYPE_NORMAL, &profile1,
                                 /*from_user_gesture=*/true));
   chrome::NewTab(browser1, NewTabTypes::kNoUserAction);
@@ -2807,14 +2742,14 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserWithWebAppTest,
   DisableWhatsNewPage();
 
   // Open some urls with the browsers, and close them.
-  BrowserWindowInterface* browser1 = CreateBrowserWindow(
+  BrowserWindowInterface* browser1 = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(BrowserWindowInterface::TYPE_NORMAL, &profile1,
                                 /*from_user_gesture=*/true));
   chrome::NewTab(browser1, NewTabTypes::kNoUserAction);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser1, embedded_test_server()->GetURL("/title1.html")));
 
-  BrowserWindowInterface* browser2 = CreateBrowserWindow(
+  BrowserWindowInterface* browser2 = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(BrowserWindowInterface::TYPE_NORMAL, &profile2,
                                 /*from_user_gesture=*/true));
   chrome::NewTab(browser2, NewTabTypes::kNoUserAction);
@@ -3100,7 +3035,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserWithRealWebAppTest,
 
   // Open some urls with the browsers, and close them.
   SessionServiceFactory::GetForProfileForSessionRestore(&profile1);
-  BrowserWindowInterface* browser1 = CreateBrowserWindow(
+  BrowserWindowInterface* browser1 = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(BrowserWindowInterface::TYPE_NORMAL, &profile1,
                                 /*from_user_gesture=*/true));
   chrome::NewTab(browser1, NewTabTypes::kNoUserAction);
@@ -4417,6 +4352,61 @@ INSTANTIATE_TEST_SUITE_P(
           [](unsigned char c) { return !absl::ascii_isalnum(c); }, '_');
       return name;
     });
+
+#if BUILDFLAG(ENABLE_BIDI_MAPPER)
+// Verifies that a security warning is displayed when the
+// ChromeDriverExtensionApi feature is enabled.
+class StartupBrowserCreatorChromeDriverExtensionApiTest
+    : public InProcessBrowserTest {
+ public:
+  StartupBrowserCreatorChromeDriverExtensionApiTest() {
+    feature_list_.InitAndEnableFeature(
+        bidi_mapper::features::kChromeDriverExtensionApi);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+// The trybots set the kNoSandbox flag when running browser tests with the
+// address sanitizer enabled. The warning is displayed for that flag then, as
+// it is displayed for a single flag only.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_CheckInfobar DISABLED_CheckInfobar
+#else
+#define MAYBE_CheckInfobar CheckInfobar
+#endif
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorChromeDriverExtensionApiTest,
+                       MAYBE_CheckInfobar) {
+  // The infobars are not shown in the browser that the test starts with, see
+  // AddInfoBarsIfNecessary(). Launch another one the way the browser does at
+  // startup. The feature is read from the process, not from `command_line`.
+  ui_test_utils::BrowserCreatedObserver browser_created_observer;
+  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
+  StartupBrowserCreatorImpl launch(base::FilePath(), command_line,
+                                   chrome::startup::IsFirstRun::kNo);
+  launch.Launch(browser()->GetProfile(), chrome::startup::IsProcessStartup::kNo,
+                /*restore_tabbed_browser=*/true);
+  BrowserWindowInterface* new_browser = browser_created_observer.Wait();
+  ASSERT_TRUE(new_browser);
+
+  infobars::ContentInfoBarManager* infobar_manager =
+      infobars::ContentInfoBarManager::FromWebContents(
+          new_browser->GetTabStripModel()->GetActiveWebContents());
+  ASSERT_TRUE(infobar_manager);
+  const auto& infobar_list = infobar_manager->infobars();
+  auto infobar = std::ranges::find(
+      infobar_list, infobars::InfoBarDelegate::BAD_FLAGS_INFOBAR_DELEGATE,
+      &infobars::InfoBar::GetIdentifier);
+  ASSERT_NE(infobar, infobar_list.end());
+  ConfirmInfoBarDelegate* delegate =
+      (*infobar)->delegate()->AsConfirmInfoBarDelegate();
+  ASSERT_TRUE(delegate);
+  EXPECT_THAT(base::UTF16ToUTF8(delegate->GetMessageText()),
+              testing::HasSubstr(
+                  bidi_mapper::features::kChromeDriverExtensionApi.name));
+}
+#endif  // BUILDFLAG(ENABLE_BIDI_MAPPER)
 
 #endif  // !BUILDFLAG(IS_CHROMEOS)
 

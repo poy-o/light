@@ -71,12 +71,7 @@
 #include "ui/display/screen.h"
 
 #if BUILDFLAG(IS_ANDROID)
-#include "base/android/apk_info.h"
-#include "components/metrics/android_metrics_helper.h"
 #include "components/metrics/android_unconditional_persistent_histograms_field_trial.h"
-#if defined(__arm__)
-#include <cpu-features.h>
-#endif  // defined(__arm__)
 #else
 #include "base/power_monitor/battery_state_sampler.h"
 #include "chrome/browser/metrics/first_web_contents_profiler.h"
@@ -118,6 +113,8 @@
 #if BUILDFLAG(IS_CHROMEOS)
 #include "base/files/file_util.h"
 #include "base/strings/string_util.h"
+#include "chrome/browser/ash/settings/stats_reporting_controller.h"
+#include "chrome/browser/metrics/metrics_reporting_state.h"
 #include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "components/user_manager/user_manager.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
@@ -139,6 +136,16 @@ BASE_FEATURE(kWindowsIsPinnedToTaskbar3, base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_WIN)
 
 namespace {
+
+#if BUILDFLAG(IS_CHROMEOS)
+// Callback to update the metrics reporting state when the Chrome OS metrics
+// reporting setting changes.
+void OnCrosMetricsReportingSettingChange(
+    metrics::ChangeMetricsReportingStateCalledFrom called_from) {
+  bool enable_metrics = ash::StatsReportingController::Get()->IsEnabled();
+  metrics::ChangeMetricsReportingState(enable_metrics, called_from);
+}
+#endif
 
 // The number of restarts to wait until removing the enable-benchmarking flag.
 constexpr int kEnableBenchmarkingCountdownDefault = 3;
@@ -984,51 +991,6 @@ void RecordStartupMetrics() {
 
 }  // namespace
 
-#if BUILDFLAG(IS_ANDROID)
-bool IsBundleForMixedDeviceAccordingToVersionCode(
-    const std::string& version_code) {
-  // Primary bitness of the bundle is encoded in the last digit of the version
-  // code. And the variant (package name) is encoded in the second to last.
-  //
-  // From build/util/android_chrome_version.py:
-  //       'arm': {
-  //          '32': 0,
-  //          '32_64': 1,
-  //          '64_32': 2,
-  //          '64_32_high': 3,
-  //          '64': 4,
-  //      },
-  //      'intel': {
-  //          '32': 6,
-  //          '32_64': 7,
-  //          '64_32': 8,
-  //          '64': 9,
-  //      },
-  //
-  //      _PACKAGE_NAMES = {
-  //          'CHROME': 0,
-  //          'CHROME_MODERN': 10,
-  //          'MONOCHROME': 20,
-  //          'TRICHROME': 30,
-  //          [...]
-
-  if (version_code.length() < 2) {
-    return false;
-  }
-
-  // '32' and '64' bundles go on 32bit-only and 64bit-only devices, so exclude
-  // them.
-  std::set<char> arch_codes_mixed = {'1', '2', '3', '7', '8'};
-  char arch_code = version_code.back();
-
-  // Only 'TRICHROME' supports 64-bit.
-  constexpr char kTriChromeVariant = '3';
-  char variant = version_code[version_code.length() - 2];
-
-  return arch_codes_mixed.count(arch_code) > 0 && variant == kTriChromeVariant;
-}
-#endif  // BUILDFLAG(IS_ANDROID)
-
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 // The startup TPM benchmark performs synchronous hardware crypto operations
 // that are invariant for a given machine. Subsample heavily on Stable, while
@@ -1059,6 +1021,19 @@ ChromeBrowserMainExtraPartsMetrics::~ChromeBrowserMainExtraPartsMetrics() =
     default;
 
 void ChromeBrowserMainExtraPartsMetrics::PreCreateThreads() {
+#if BUILDFLAG(IS_CHROMEOS)
+  // Listen for changes to metrics reporting state.
+  cros_reporting_setting_subscription_ =
+      ash::StatsReportingController::Get()->AddObserver(
+          base::BindRepeating(&OnCrosMetricsReportingSettingChange,
+                              metrics::ChangeMetricsReportingStateCalledFrom::
+                                  kCrosMetricsSettingsChange));
+  // Invoke the callback once initially to set the metrics reporting state.
+  OnCrosMetricsReportingSettingChange(
+      metrics::ChangeMetricsReportingStateCalledFrom::
+          kCrosMetricsSettingsCreated);
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
   // Initialize the TabStatsTracker singleton instance. Must be initialized
   // before `responsiveness::Watcher`, which happens in
   // BrowserMainLoop::PreMainMessageLoopRun(), thus the decision to use
@@ -1291,6 +1266,12 @@ void ChromeBrowserMainExtraPartsMetrics::PreMainMessageLoopRun() {
         }));
   }
 }
+
+#if BUILDFLAG(IS_CHROMEOS)
+void ChromeBrowserMainExtraPartsMetrics::PostMainMessageLoopRun() {
+  cros_reporting_setting_subscription_ = {};
+}
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 void ChromeBrowserMainExtraPartsMetrics::PostDestroyThreads() {
   if (metrics::TabStatsTracker::HasInstance()) {

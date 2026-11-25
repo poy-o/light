@@ -42,7 +42,6 @@ import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsAccessibility;
 import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.WindowAndroid;
-import org.chromium.ui.display.DisplayAndroid;
 
 import java.lang.ref.WeakReference;
 
@@ -113,15 +112,17 @@ public class AutofillProvider {
     }
 
     /**
-     * This method ensures that a new context will reinitialize the autofill framework to use the
-     * changed context. WebViews should always be created with an activity context which remains
-     * constant. Therefore, this method should be called exactly once and with a valid context. On
-     * Chrome, the context may change with the attachment of the tab to the window and temporarily,
-     * there may be no context.
+     * Reinitializes the autofill framework to use the new context and resets any active session.
+     * The context may change both on Chrome (as a tab attaches to or detaches from a window) and on
+     * WebView (when WebView content is reparented to another WebView or Activity, or when a {@link
+     * android.content.MutableContextWrapper}'s base context changes), and may temporarily be null.
      *
-     * @param context a {@link WeakReference} to an activity {@link Context} or null.
+     * @param context a {@link WeakReference} to a {@link Context} or null.
      */
     public void switchToContext(WeakReference<Context> context) {
+        if (mNativeAutofillProvider != 0) {
+            AutofillProviderJni.get().onSessionEndedByContextSwitch(mNativeAutofillProvider);
+        }
         reset();
         mContextRef = assumeNonNull(context);
         if (mAutofillUMA != null) mAutofillUMA.recordSession();
@@ -942,6 +943,15 @@ public class AutofillProvider {
         return clampedBounds.intersect(visibleBounds) ? clampedBounds : null;
     }
 
+    private float getDipScale() {
+        WindowAndroid windowAndroid =
+                mWebContents != null ? mWebContents.getTopLevelNativeWindow() : null;
+        if (windowAndroid != null) {
+            return windowAndroid.getDisplay().getDipScale();
+        }
+        return mContainerView.getResources().getDisplayMetrics().density;
+    }
+
     /**
      * Transforms the given bounds from web viewport coordinates (in DP) to absolute screen
      * coordinates (in physical pixels).
@@ -956,9 +966,7 @@ public class AutofillProvider {
     Rect transformToWindowBounds(RectF rect) {
         // Convert bounds to device pixel.
         // Refer to crbug.com/1085294 for the reason for the Y offset.
-        WindowAndroid windowAndroid = mWebContents.getTopLevelNativeWindow();
-        DisplayAndroid displayAndroid = windowAndroid.getDisplay();
-        float dipScale = displayAndroid.getDipScale();
+        float dipScale = getDipScale();
         RectF bounds = new RectF(rect);
         Matrix matrix = new Matrix();
         matrix.setScale(dipScale, dipScale);
@@ -977,9 +985,7 @@ public class AutofillProvider {
      */
     @VisibleForTesting
     public void transformFormFieldToContainViewCoordinates(FormData formData) {
-        WindowAndroid windowAndroid = mWebContents.getTopLevelNativeWindow();
-        DisplayAndroid displayAndroid = windowAndroid.getDisplay();
-        float dipScale = displayAndroid.getDipScale();
+        float dipScale = getDipScale();
         Matrix matrix = new Matrix();
         matrix.setScale(dipScale, dipScale);
         matrix.postTranslate(mContainerView.getScrollX(), mContainerView.getScrollY());
@@ -1074,5 +1080,7 @@ public class AutofillProvider {
         void onDidShowSuggestions(long nativeAndroidAutofillProviderBridgeImpl);
 
         void onTriggerPasskeyRequest(long nativeAndroidAutofillProviderBridgeImpl);
+
+        void onSessionEndedByContextSwitch(long nativeAndroidAutofillProviderBridgeImpl);
     }
 }

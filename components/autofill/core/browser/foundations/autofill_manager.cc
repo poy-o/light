@@ -54,6 +54,7 @@
 #include "components/autofill/core/browser/foundations/autofill_driver.h"
 #include "components/autofill/core/browser/heuristic_source.h"
 #include "components/autofill/core/browser/integrators/custom_form_controls/custom_form_control_script_index.h"
+#include "components/autofill/core/browser/integrators/custom_form_controls/metrics/custom_form_control_metrics.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/metrics/quality_metrics.h"
@@ -82,6 +83,7 @@
 #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
 #include "third_party/abseil-cpp/absl/functional/overload.h"
 #include "ui/gfx/geometry/rect.h"
+#include "url/gurl.h"
 
 namespace autofill {
 
@@ -204,6 +206,7 @@ void AutofillManager::OnAutofillDriverLifecycleStateChanged(
 void AutofillManager::Reset() {
   parsing_weak_ptr_factory_.InvalidateWeakPtrs();
   form_structures_.clear();
+  document_used_web_otp_ = false;
   // TODO(crbug.com/581337039): Reset doesn't run on same document navigations.
   // For scripts that apply a url_filter, loading might not be retried properly.
   attempted_loading_custom_form_control_script_ = false;
@@ -540,6 +543,14 @@ void AutofillManager::OnSuggestionsHidden(SuggestionHidingReason reason) {
     driver().RendererShouldClearPreviewedForm();
   }
   NotifyObservers(&Observer::OnSuggestionsHidden, reason);
+}
+
+void AutofillManager::OnDocumentUsedWebOtp() {
+  document_used_web_otp_ = true;
+}
+
+bool AutofillManager::DocumentUsedWebOtp() const {
+  return document_used_web_otp_;
 }
 
 void AutofillManager::OnSelectFieldOptionsDidChange(
@@ -1197,9 +1208,14 @@ void AutofillManager::MaybeLoadCustomFormControlScript() {
   // Thus, `attempted_loading_custom_form_control_script_` is already set to
   // true at this point to avoid needless retries during future calls.
   attempted_loading_custom_form_control_script_ = true;
-  if (std::optional<std::string> script =
-          index->FindScript(client().GetLastCommittedPrimaryMainFrameURL())) {
-    driver().LoadCustomFormControlScript(*script);
+  const GURL& url = client().GetLastCommittedPrimaryMainFrameURL();
+  if (std::optional<std::string> script = index->FindScript(url)) {
+    LOG_AF(log_manager()) << LoggingScope::kCustomFormControls
+                          << LogMessage::kCustomFormControlScriptAvailable
+                          << url.host();
+    driver().LoadCustomFormControlScript(
+        *script,
+        autofill_metrics::CreateCustomFormControlScriptLoadLoggingCallback());
   }
 }
 

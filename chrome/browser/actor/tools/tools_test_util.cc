@@ -22,6 +22,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/tab_list/tab_list_interface.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/common/actor_webui.mojom.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/chrome_test_utils.h"
 #include "chrome/test/base/platform_browser_test.h"
@@ -37,11 +38,13 @@
 #include "net/dns/mock_host_resolver.h"
 #include "ui/display/display_switches.h"
 #include "ui/gfx/geometry/rect_f.h"
+#include "url/origin.h"
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/actor/ui/actor_task_unload_handler.h"
 #else
 #include "chrome/browser/actor/android/ui/actor_ui_tab_controller_android.h"
+#include "chrome/test/base/android/android_ui_test_utils.h"
 #include "content/public/common/content_switches.h"
 #endif
 
@@ -249,6 +252,8 @@ void ActorToolsTest::SetUpOnMainThread() {
   ui::ActorUiTabControllerAndroid::SetSuppressNavigationDialogsForTesting(true);
 #endif
 
+  // Mock NavigationConfirmationRequest handler with a fail-open, which
+  // simulates users which do not have a GLIC API request handler.
   task_id_ =
       ActorKeyedService::Get(GetProfile())
           ->CreateTask(TestTaskSourceInfo(), NoEnterprisePolicyChecker());
@@ -333,16 +338,16 @@ TabListInterface* ActorToolsTest::tab_list() {
 }
 
 void ActorToolsTest::OpenForegroundTab(const GURL& url) {
-  // Open in the background and activate explicitly rather than opening in the
-  // foreground. On Android, a foreground open runs the new tab animation,
-  // which re-selects the new tab again when the animation finishes. That
-  // deferred selection can land after a tool under test has switched tabs
-  // and undo the switch.
   tabs::TabInterface* tab =
-      tab_list()->OpenTab(url, /*index=*/-1, /*foreground=*/false);
+      tab_list()->OpenTab(url, /*index=*/-1, /*foreground=*/true);
   ASSERT_TRUE(tab);
+#if BUILDFLAG(IS_ANDROID)
+  // On phones the new tab animation selects the new tab again when it ends.
+  // Wait for it, so that it can't undo a tab switch by a tool under test.
+  android_ui_test_utils::WaitForBrowsingLayout(
+      tab->GetBrowserWindowInterface());
+#endif
   ASSERT_TRUE(content::WaitForLoadStop(tab->GetContents()));
-  tab_list()->ActivateTab(tab->GetHandle());
 
   // On Android, TabInterface::IsActivated() can lag the tab list's active
   // index briefly. Tools treat an already activated target as a successful
@@ -421,6 +426,21 @@ gfx::RectF GetBoundingClientRect(content::RenderFrameHost& rfh,
           .ExtractDouble();
 
   return gfx::RectF(x, y, width, height);
+}
+
+void ActorToolsTest::StubNavigationConfirmationRequest(
+    bool permission_granted) {
+  actor_task().SetDelegateForTesting(mock_task_delegate_.GetWeakPtr());
+  ON_CALL(mock_task_delegate_, RequestToConfirmNavigation)
+      .WillByDefault([permission_granted](
+                         TaskId, const url::Origin&,
+                         ActorTaskDelegate::NavigationConfirmationCallback
+                             callback) {
+        std::move(callback).Run(
+            webui::mojom::NavigationConfirmationResponse::New(
+                webui::mojom::ConfirmationRequestResult::NewPermissionGranted(
+                    permission_granted)));
+      });
 }
 
 }  // namespace actor

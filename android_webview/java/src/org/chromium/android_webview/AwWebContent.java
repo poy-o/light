@@ -31,6 +31,7 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
+import org.chromium.components.embedder_support.application.ClassLoaderContextWrapperFactory;
 import org.chromium.content_public.browser.NavigationHistory;
 
 import java.util.Map;
@@ -79,9 +80,15 @@ public class AwWebContent {
     private @Nullable ViewHost mCurrentHost;
     private @Nullable SurfaceBindingListener mSurfaceBindingListener;
     private boolean mIsDestroyed;
+    private boolean mClearBfCacheOnHardwareAcceleration = true;
 
     public AwWebContent(StartupController startupController) {
         mStartupController = startupController;
+    }
+
+    /** See {@link AwSettings#setClearBfCacheOnHardwareAcceleration}. */
+    public void setClearBfCacheOnHardwareAcceleration(boolean clear) {
+        mClearBfCacheOnHardwareAcceleration = clear;
     }
 
     /**
@@ -98,19 +105,27 @@ public class AwWebContent {
      * <p>Must only be called on the UI thread after Chromium startup has completed.
      *
      * <p>TODO(bewise): Replace this destroyed AwWebContent approach with better state management so
-     * that long term we can clean up the default profile when it isn't in use.
+     * that long term we can clean up profiles when they aren't in use.
      */
     public static AwWebContent createDestroyedAwWebContent(
-            StartupController startupController, AwContents.AwContentsClientFactory clientFactory) {
+            StartupController startupController,
+            AwBrowserContext browserContext,
+            AwContents.AwContentsClientFactory clientFactory) {
         ThreadUtils.assertOnUiThread();
         Context appContext = ContextUtils.getApplicationContext();
+        // Note we use a configuration context instead of an application context
+        // to avoid triggering
+        // StrictMode.VmPolicy.Builder#detectIncorrectContextUse() in the AwContents constructor,
+        // and wrap it so WebView resources remain accessible during AwContents construction.
+        Context configContext =
+                ClassLoaderContextWrapperFactory.get(
+                        appContext.createConfigurationContext(new Configuration()));
         AwWebContent destroyedAwWebContent = new AwWebContent(startupController);
         destroyedAwWebContent.mAwContents =
                 new AwContents(
-                        AwBrowserContextStore.getNamedContext(
-                                AwBrowserContext.getDefaultContextName(), true),
-                        new FrameLayout(appContext),
-                        appContext,
+                        browserContext,
+                        new FrameLayout(configContext),
+                        configContext,
                         new NullInternalAccessDelegate(),
                         (canvas, functor) -> {},
                         clientFactory);
@@ -238,6 +253,9 @@ public class AwWebContent {
                             clientFactory,
                             host::initSettings,
                             dependencyFactory);
+            mAwContents
+                    .getSettings()
+                    .setClearBfCacheOnHardwareAcceleration(mClearBfCacheOnHardwareAcceleration);
         } else {
             host.initSettings(mAwContents.getSettings());
             mAwContents.adopt(containerView, internalAccessAdapter);

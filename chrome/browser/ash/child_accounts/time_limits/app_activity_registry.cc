@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "ash/constants/ash_pref_names.h"
+#include "base/containers/flat_set.h"
 #include "base/containers/map_util.h"
 #include "base/logging.h"
 #include "base/time/default_tick_clock.h"
@@ -693,19 +694,21 @@ void AppActivityRegistry::SaveAppActivity() {
 
     const base::Time now = base::Time::Now();
 
+    // Apps which have an entry in |list|.
+    base::flat_set<AppId> stored_apps;
+
     for (base::Value& entry : list) {
       std::optional<AppId> app_id =
           policy::AppIdFromAppInfoDict(entry.GetIfDict());
-      // TODO(crbug.com/576424768): CHECK-exclusion: Convert to a CHECK once we
-      // are confident it won't be triggered.
-      DCHECK(app_id.has_value());
+      if (!app_id.has_value()) {
+        continue;
+      }
+      stored_apps.insert(app_id.value());
 
+      // Entries which were not restored, e.g. because the app is uninstalled
+      // or the entry is invalid, are kept as they are.
       auto it = activity_registry_.find(app_id.value());
       if (it == activity_registry_.end()) {
-        std::optional<AppState> state =
-            PersistedAppInfo::GetAppStateFromDict(entry.GetIfDict());
-        CHECK(state.has_value() && state.value() == AppState::kUninstalled,
-              base::NotFatalUntil::M160);
         continue;
       }
 
@@ -713,15 +716,19 @@ void AppActivityRegistry::SaveAppActivity() {
       info.UpdateAppActivityPreference(entry.GetDict(), /* replace */ false);
     }
 
-    for (const AppId& app_id : newly_installed_apps_) {
-      auto it = activity_registry_.find(app_id);
-      CHECK(it != activity_registry_.end());
-      const PersistedAppInfo info = GetPersistedAppInfoForApp(*it, now);
+    // Add an entry for each app which doesn't have one yet. An uninstalled app
+    // without running active time keeps its entry but is not restored, so it
+    // must not get a second entry when it is installed again.
+    for (auto& entry : activity_registry_) {
+      if (stored_apps.contains(entry.first)) {
+        continue;
+      }
+
+      const PersistedAppInfo info = GetPersistedAppInfoForApp(entry, now);
       base::DictValue value;
       info.UpdateAppActivityPreference(value, /* replace */ false);
       list.Append(std::move(value));
     }
-    newly_installed_apps_.clear();
   }
 
   // Ensure that the app activity is persisted.
@@ -772,7 +779,11 @@ void AppActivityRegistry::CleanRegistry(base::Time timestamp) {
     base::Value& entry = list[index];
     std::optional<PersistedAppInfo> info =
         PersistedAppInfo::PersistedAppInfoFromDict(entry.GetIfDict(), true);
-    CHECK(info.has_value(), base::NotFatalUntil::M160);
+    if (!info.has_value()) {
+      // The entry can't be used, so remove it.
+      list.erase(list.begin() + index);
+      continue;
+    }
     info->RemoveActiveTimeEarlierThan(timestamp);
     info->UpdateAppActivityPreference(entry.GetDict(), /* replace */ true);
 
@@ -819,7 +830,6 @@ void AppActivityRegistry::Add(AppRegistry::value_type& entry) {
     }
   }
 
-  newly_installed_apps_.push_back(app_id);
   for (auto& observer : app_state_observers_) {
     observer.OnAppInstalled(app_id);
   }
@@ -1170,13 +1180,11 @@ void AppActivityRegistry::InitializeAppActivities() {
       continue;
     }
 
-    const bool inserted =
-        activity_registry_
-            .try_emplace(app_info.app_id(),
-                         AppActivity(app_info.app_state(),
-                                     app_info.active_running_time()))
-            .second;
-    CHECK(inserted, base::NotFatalUntil::M160);
+    // The pref may have more than one entry for an app, written before
+    // crbug.com/568495649 was fixed. Restore the first one.
+    activity_registry_.try_emplace(
+        app_info.app_id(),
+        AppActivity(app_info.app_state(), app_info.active_running_time()));
   }
 }
 

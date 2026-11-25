@@ -145,9 +145,6 @@
   "chrome/browser/resources/app_icon/app_icon_resources.grd": {
     "structures": [2360],
   },
-  "chrome/browser/resources/chromeos/app_icon/app_icon_resources.grd": {
-    "structures": [2380],
-  },
   "chrome/browser/resources/chromeos/mako/resources.grd": {
     "META": {"sizes": {"includes": [150]}},
     "includes": [2400],
@@ -628,6 +625,14 @@
     "META": {"sizes": {"includes": [15]}},
     "includes": [4390],
   },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/new_tab_page/code_cache_resources.grd": {
+    "META": {"sizes": {"includes": [10]}},
+    "includes": [4393],
+  },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/new_tab_page/eager_code_cache_resources.grd": {
+    "META": {"sizes": {"includes": [10]}},
+    "includes": [4396],
+  },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/new_tab_page/resources.grd": {
     "META": {"sizes": {"includes": [200]}},
     "includes": [4400],
@@ -946,10 +951,6 @@
     # Big alignment at start of section.
     "META": {"align": 100},
     "includes": [5500],
-  },
-  "<(SHARED_INTERMEDIATE_DIR)/chrome/common/chromeos/extensions/chromeos_system_extensions_resources.grd": {
-    "META": {"sizes": {"includes": [10],}},
-    "includes": [5520],
   },
   "chrome/credential_provider/gaiacp/gaia_resources.grd": {
     "includes": [5540],
@@ -1590,6 +1591,10 @@
   "chromeos/ash/experiences/extensions/chromeos_extensions_resources.grd": {
     "includes": [9015],
   },
+  "<(SHARED_INTERMEDIATE_DIR)/chromeos/ash/experiences/extensions/common/telemetry/chromeos_system_extensions_resources.grd": {
+    "META": {"sizes": {"includes": [10],}},
+    "includes": [9016],
+  },
   "chromeos/ash/experiences/settings_ui/resources/ash_settings_strings.grd": {
     "messages": [9018],
   },
@@ -1628,6 +1633,9 @@
   },
   "ash/quick_insert/resources/quick_insert_resources.grd": {
     "structures":[9190],
+  },
+  "ash/resources/ash_scaled_resources.grd": {
+    "structures": [9198],
   },
   "ash/system/mahi/resources/mahi_resources.grd": {
     "structures":[9200],

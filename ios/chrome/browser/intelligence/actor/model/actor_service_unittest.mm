@@ -160,7 +160,7 @@ constexpr char kTestButtonText[] = "Continue";
 
 // Receives the terminal result of an interrupt.
 using InterruptFuture =
-    base::test::TestFuture<ActorTaskResult<InterruptTaskResult>>;
+    base::test::TestFuture<InterventionResult<InterruptTaskResult>>;
 
 // Returns the provenance attributed to tasks created by these tests.
 TaskSourceInfo TestSource() {
@@ -1384,7 +1384,7 @@ TEST_F(ActorServiceTest, StopQueuedAfterInterruptStopsTask) {
   service->StopTask(task_id, ActorTaskStoppedReason::kStoppedByUser);
 
   ASSERT_FALSE(future.Get().has_value());
-  EXPECT_EQ(ActorTaskError::kTaskWentAway, future.Get().error());
+  EXPECT_EQ(InterventionError::kTaskWentAway, future.Get().error());
   ASSERT_TRUE(
       base::test::RunUntil([&]() { return observer.stoppedCount == 1; }));
   EXPECT_FALSE(HasTask(service, task_id));
@@ -1713,7 +1713,8 @@ TEST_F(ActorServiceTest, SetTaskInterventionDelegateAndInterruptTask) {
   // Confirm the prompt.
   [delegate runUserInterventionCompletion];
   ASSERT_TRUE(future.Get().has_value());
-  EXPECT_EQ(InterruptResponse::kConfirmed, future.Get().value().response);
+  EXPECT_EQ(InterruptResponse::kConfirmed,
+            future.Get().value().reply.response());
   EXPECT_EQ(nullptr, future.Get().value().observation);
   EXPECT_EQ(task->GetState(), ActorTaskState::kReflecting);
 }
@@ -1743,12 +1744,45 @@ TEST_F(ActorServiceTest, InterruptTaskRepliesObservationOfTab) {
   [delegate runUserInterventionCompletion];
 
   ASSERT_TRUE(future.Get().has_value());
-  EXPECT_EQ(InterruptResponse::kConfirmed, future.Get().value().response);
+  EXPECT_EQ(InterruptResponse::kConfirmed,
+            future.Get().value().reply.response());
   ASSERT_NE(nullptr, future.Get().value().observation);
   EXPECT_EQ(fake_web_state_ptr->GetUniqueIdentifier(),
             future.Get().value().observation->tab_id);
 
   browser_list->RemoveBrowser(test_browser.get());
+}
+
+// Tests that an answered clarification replies the answer with an observation
+// of the task's tab.
+TEST_F(ActorServiceTest,
+       InterruptTaskRepliesClarificationAnswerWithObservation) {
+  ActorService* service = ActorServiceFactory::GetForProfile(profile_.get());
+  ASSERT_NE(nullptr, service);
+
+  ActorTaskId task_id = CreateTask(service);
+  web::FakeWebState web_state;
+  service->AddControlledWebState(task_id, &web_state);
+  FakeActorTaskInterventionDelegate* delegate =
+      [[FakeActorTaskInterventionDelegate alloc] init];
+  service->SetTaskInterventionDelegate(task_id, delegate);
+
+  InterruptFuture future;
+  service->InterruptTask(task_id, ClarificationInterrupt{.message = "Size?"},
+                         future.GetCallback());
+  ASSERT_TRUE(
+      base::test::RunUntil([&]() { return delegate.hasPendingClarification; }));
+  EXPECT_NSEQ(@"Size?", delegate.clarificationMessage);
+  EXPECT_EQ(ActorTaskState::kWaitingOnUser, service->GetActiveTaskState());
+
+  [delegate runClarificationCompletionWithAnswer:@"Medium"];
+  ASSERT_TRUE(future.Get().has_value());
+  EXPECT_EQ(InterruptResponse::kAnswered,
+            future.Get().value().reply.response());
+  EXPECT_EQ("Medium", future.Get().value().reply.answer());
+  ASSERT_NE(nullptr, future.Get().value().observation);
+  EXPECT_EQ(web_state.GetUniqueIdentifier(),
+            future.Get().value().observation->tab_id);
 }
 
 // Tests that `PauseTask` queued after `PerformActions` pauses the acting task,
@@ -1809,7 +1843,7 @@ TEST_F(ActorServiceMockTimeTest, InterruptTaskStoppedDuringObservation) {
   task_environment_.FastForwardBy(GetActorTabObservationPageContextTimeout());
   ASSERT_TRUE(future.IsReady());
   ASSERT_FALSE(future.Get().has_value());
-  EXPECT_EQ(ActorTaskError::kTaskWentAway, future.Get().error());
+  EXPECT_EQ(InterventionError::kTaskWentAway, future.Get().error());
 }
 
 // Tests that a task stopped after the user answered, but before the answer is
@@ -1832,7 +1866,7 @@ TEST_F(ActorServiceTest, InterruptTaskStoppedBeforeAnswerDelivered) {
   service->StopTask(task_id, ActorTaskStoppedReason::kStoppedByUser);
 
   ASSERT_FALSE(future.Get().has_value());
-  EXPECT_EQ(ActorTaskError::kTaskWentAway, future.Get().error());
+  EXPECT_EQ(InterventionError::kTaskWentAway, future.Get().error());
   EXPECT_EQ(std::nullopt, service->GetActiveTaskState());
 }
 
@@ -1935,7 +1969,8 @@ TEST_F(ActorServiceTest,
 
   [delegate runUserInterventionCompletion];
   ASSERT_TRUE(future.Get().has_value());
-  EXPECT_EQ(InterruptResponse::kConfirmed, future.Get().value().response);
+  EXPECT_EQ(InterruptResponse::kConfirmed,
+            future.Get().value().reply.response());
 
   service->RemoveTaskLifecycleObserver(observer);
 }
@@ -1955,12 +1990,12 @@ TEST_F(ActorServiceTest, InterventionAndInterruptSafelyHandleUnknownTaskId) {
   RequestConfirmation(service, unknown_task_id, "Unknown", future);
 
   ASSERT_FALSE(future.Get().has_value());
-  EXPECT_EQ(ActorTaskError::kTaskWentAway, future.Get().error());
+  EXPECT_EQ(InterventionError::kTaskWentAway, future.Get().error());
   FlushCurrentSequence();
   EXPECT_FALSE(delegate.requestConfirmationCalled);
 }
 
-// Tests that `InterruptTask` replies `kRejected` without a registered
+// Tests that `InterruptTask` replies `kTaskRejected` without a registered
 // intervention delegate, leaving the task registered and in its current state.
 TEST_F(ActorServiceTest, InterruptTaskRejectedWithoutDelegate) {
   ActorService* service = ActorServiceFactory::GetForProfile(profile_.get());
@@ -1975,11 +2010,11 @@ TEST_F(ActorServiceTest, InterruptTaskRejectedWithoutDelegate) {
   RequestConfirmation(service, task_id, "Please confirm", future);
 
   ASSERT_FALSE(future.Get().has_value());
-  EXPECT_EQ(ActorTaskError::kRejected, future.Get().error());
+  EXPECT_EQ(InterventionError::kTaskRejected, future.Get().error());
   EXPECT_EQ(initial_state, service->GetActiveTaskState());
 }
 
-// Tests that `InterruptTask` replies `kRejected` to a confirmation missing its
+// Tests that `InterruptTask` replies `kTaskRejected` to a confirmation missing
 // button text, leaving the task in its current state.
 TEST_F(ActorServiceTest, InterruptTaskRejectedWithoutButtonText) {
   ActorService* service = ActorServiceFactory::GetForProfile(profile_.get());
@@ -1997,7 +2032,7 @@ TEST_F(ActorServiceTest, InterruptTaskRejectedWithoutButtonText) {
                          future.GetCallback());
 
   ASSERT_FALSE(future.Get().has_value());
-  EXPECT_EQ(ActorTaskError::kRejected, future.Get().error());
+  EXPECT_EQ(InterventionError::kTaskRejected, future.Get().error());
   ActorTask* task = GetTask(service, task_id);
   ASSERT_NE(nullptr, task);
   EXPECT_EQ(task->GetState(), ActorTaskState::kInit);
@@ -2020,7 +2055,7 @@ TEST_F(ActorServiceTest, InterruptTaskRejectedWhileAnotherIsPending) {
   RequestConfirmation(service, task_id, "Second", second);
 
   ASSERT_FALSE(second.Get().has_value());
-  EXPECT_EQ(ActorTaskError::kRejected, second.Get().error());
+  EXPECT_EQ(InterventionError::kTaskRejected, second.Get().error());
   ASSERT_TRUE(base::test::RunUntil(
       [&]() { return delegate.requestConfirmationCalled; }));
   EXPECT_NSEQ(@"First", delegate.confirmationTitle);
@@ -2028,7 +2063,8 @@ TEST_F(ActorServiceTest, InterruptTaskRejectedWhileAnotherIsPending) {
 
   [delegate runUserInterventionCompletion];
   ASSERT_TRUE(first.Get().has_value());
-  EXPECT_EQ(InterruptResponse::kConfirmed, first.Get().value().response);
+  EXPECT_EQ(InterruptResponse::kConfirmed,
+            first.Get().value().reply.response());
 }
 
 // Tests that a stop issued from the intervention delegate callback stops the
@@ -2052,7 +2088,7 @@ TEST_F(ActorServiceTest, InterruptTaskHandlesReentrantStopTask) {
   EXPECT_FALSE(delegate.requestConfirmationCalled);
 
   ASSERT_FALSE(future.Get().has_value());
-  EXPECT_EQ(ActorTaskError::kTaskWentAway, future.Get().error());
+  EXPECT_EQ(InterventionError::kTaskWentAway, future.Get().error());
   ASSERT_TRUE(
       base::test::RunUntil([&]() { return !HasTask(service, task_id); }));
   EXPECT_TRUE(delegate.requestConfirmationCalled);
@@ -2083,7 +2119,7 @@ TEST_F(ActorServiceTest, StopTaskWhileInterruptedRepliesTaskWentAway) {
   service->StopTask(task_id, ActorTaskStoppedReason::kStoppedByUser);
 
   ASSERT_FALSE(future.Get().has_value());
-  EXPECT_EQ(ActorTaskError::kTaskWentAway, future.Get().error());
+  EXPECT_EQ(InterventionError::kTaskWentAway, future.Get().error());
   ASSERT_TRUE(
       base::test::RunUntil([&]() { return observer.stoppedCount == 1; }));
 
@@ -2092,6 +2128,60 @@ TEST_F(ActorServiceTest, StopTaskWhileInterruptedRepliesTaskWentAway) {
   EXPECT_FALSE(HasTask(service, task_id));
 
   service->RemoveTaskLifecycleObserver(observer);
+}
+
+// Tests that a delegate error is forwarded without observing tabs and resumes
+// the task.
+TEST_F(ActorServiceTest, InterruptTaskForwardsDelegateError) {
+  ActorService* service = ActorServiceFactory::GetForProfile(profile_.get());
+  ASSERT_NE(nullptr, service);
+
+  ActorTaskId task_id = CreateTask(service);
+  std::unique_ptr<web::FakeWebState> fake_web_state =
+      CreateWebStateWithHangingExtraction();
+  service->AddControlledWebState(task_id, fake_web_state.get());
+  FakeActorTaskInterventionDelegate* delegate =
+      [[FakeActorTaskInterventionDelegate alloc] init];
+  service->SetTaskInterventionDelegate(task_id, delegate);
+
+  InterruptFuture future;
+  RequestConfirmation(service, task_id, "Please confirm", future);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return delegate.requestConfirmationCalled; }));
+
+  [delegate
+      failUserInterventionWithError:InterventionDelegateError::kUnsupported];
+  ASSERT_FALSE(future.Get().has_value());
+  EXPECT_EQ(InterventionError::kDelegateUnsupported, future.Get().error());
+  EXPECT_FALSE(HasPendingObservation(service));
+  EXPECT_EQ(ActorTaskState::kReflecting, service->GetActiveTaskState());
+}
+
+// Tests that stopping a task before a posted delegate error is delivered
+// replies `kTaskWentAway`.
+TEST_F(ActorServiceTest, StopTaskOverridesPostedDelegateError) {
+  ActorService* service = ActorServiceFactory::GetForProfile(profile_.get());
+  ASSERT_NE(nullptr, service);
+
+  ActorTaskId task_id = CreateTask(service);
+  FakeActorTaskInterventionDelegate* delegate =
+      [[FakeActorTaskInterventionDelegate alloc] init];
+  service->SetTaskInterventionDelegate(task_id, delegate);
+
+  InterruptFuture future;
+  RequestConfirmation(service, task_id, "Please confirm", future);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return delegate.requestConfirmationCalled; }));
+
+  [delegate
+      failUserInterventionWithError:InterventionDelegateError::kUnsupported];
+  // Runs `OnInterruptConfirmationResolved` (which posts `kDelegateUnsupported`
+  // to `ActorService::OnInterruptCompleted`), then `StopTask` runs before that
+  // posted reply is delivered.
+  service->StopTask(task_id, ActorTaskStoppedReason::kStoppedByUser);
+
+  ASSERT_FALSE(future.Get().has_value());
+  EXPECT_EQ(InterventionError::kTaskWentAway, future.Get().error());
 }
 
 // Tests that the reply of an interrupt still awaiting its answer is dropped
@@ -2123,7 +2213,7 @@ TEST_F(ActorServiceTest, ShutdownDropsPostedInterruptReply) {
   ASSERT_NE(nullptr, service);
 
   ActorTaskId task_id = CreateTask(service);
-  // Without an intervention delegate, the task posts a `kRejected` reply.
+  // Without an intervention delegate, the task posts a `kTaskRejected` reply.
   InterruptFuture future;
   RequestConfirmation(service, task_id, "Please confirm", future);
   // Run the enqueued interrupt only, so that its reply is posted but not run.
@@ -2158,7 +2248,7 @@ TEST_F(ActorServiceTest, InterruptTaskStoppedFromObserverRepliesTaskWentAway) {
   InterruptFuture future;
   RequestConfirmation(service, task_id, "Please confirm", future);
   ASSERT_FALSE(future.Get().has_value());
-  EXPECT_EQ(ActorTaskError::kTaskWentAway, future.Get().error());
+  EXPECT_EQ(InterventionError::kTaskWentAway, future.Get().error());
   ASSERT_TRUE(base::test::RunUntil([&]() {
     return !observer.states.empty() &&
            observer.states.back() == ActorTaskState::kCancelled &&

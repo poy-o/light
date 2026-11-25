@@ -22,6 +22,7 @@
 #include "base/no_destructor.h"
 #include "base/run_loop.h"
 #include "base/scoped_multi_source_observation.h"
+#include "base/scoped_observation.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/to_string.h"
@@ -59,6 +60,7 @@
 #include "chrome/browser/profiles/nuke_profile_directory_utils.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
+#include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_manager_observer.h"
 #include "chrome/browser/profiles/profile_observer.h"
@@ -122,6 +124,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "chrome/test/user_education/interactive_feature_promo_test.h"
 #include "components/browser_sync/browser_sync_switches.h"
+#include "components/constrained_window/constrained_window_views.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/device_signals/core/browser/pref_names.h"
 #include "components/feature_engagement/public/feature_constants.h"
@@ -154,12 +157,16 @@
 #include "components/sync/service/sync_service.h"
 #include "components/sync/service/sync_user_settings.h"
 #include "components/sync/test/test_sync_service.h"
+#include "components/web_modal/modal_dialog_host.h"
 #include "components/web_modal/web_contents_modal_dialog_host.h"
+#include "components/web_modal/web_contents_modal_dialog_manager.h"
+#include "components/web_modal/web_contents_modal_dialog_manager_delegate.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/network_connection_change_simulator.h"
 #include "content/public/test/test_launcher.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "extensions/browser/extension_registrar.h"
@@ -167,16 +174,27 @@
 #include "google_apis/gaia/gaia_id.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "google_apis/gaia/google_service_auth_error.h"
+#include "net/base/network_change_notifier.h"
 #include "services/network/test/test_url_loader_factory.h"
+#include "testing/gmock/include/gmock/gmock.h"
+#include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/models/dialog_model.h"
 #include "ui/base/ozone_buildflags.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/events/event_constants.h"
+#include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/vector2d.h"
+#include "ui/gfx/native_ui_types.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/border.h"
 #include "ui/views/test/views_test_utils.h"
+#include "ui/views/test/widget_test.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "url/gurl.h"
 
@@ -601,6 +619,131 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerViewBrowserTest,
   EXPECT_EQ(bounds.size(), modal_host->GetMaximumDialogSize());
 }
 
+IN_PROC_BROWSER_TEST_F(ProfilePickerViewBrowserTest, ModalDialogHostObservers) {
+  class TestModalDialogHostObserver
+      : public web_modal::ModalDialogHostObserver {
+   public:
+    explicit TestModalDialogHostObserver(web_modal::ModalDialogHost* host) {
+      observation_.Observe(host);
+    }
+    ~TestModalDialogHostObserver() override = default;
+
+    void Reset() { observation_.Reset(); }
+    int position_update_count() const { return position_update_count_; }
+    int host_destroying_count() const { return host_destroying_count_; }
+
+    // web_modal::ModalDialogHostObserver:
+    void OnPositionRequiresUpdate() override { ++position_update_count_; }
+    void OnHostDestroying() override {
+      ++host_destroying_count_;
+      observation_.Reset();
+    }
+
+   private:
+    int position_update_count_ = 0;
+    int host_destroying_count_ = 0;
+    base::ScopedObservation<web_modal::ModalDialogHost,
+                            web_modal::ModalDialogHostObserver>
+        observation_{this};
+  };
+
+  // Before the picker `Widget` is created (`State::kInitializing`), host
+  // queries return empty/null values and `ProfilePicker::Hide()` notifies
+  // `OnHostDestroying()`.
+  ProfilePicker::Show(ProfilePicker::Params::FromEntryPoint(
+      ProfilePicker::EntryPoint::kProfileMenuManageProfiles));
+  ASSERT_EQ(view()->state_for_testing(), ProfilePickerView::kInitializing);
+  ASSERT_EQ(widget(), nullptr);
+  web_modal::WebContentsModalDialogHost* init_modal_host = view();
+  ChromeWebModalDialogManagerDelegate* init_modal_delegate = view();
+  ASSERT_EQ(view()->GetWebContentsModalDialogHost(), nullptr);
+  ASSERT_EQ(init_modal_delegate->GetWebContentsModalDialogHost(nullptr),
+            nullptr);
+  ASSERT_EQ(init_modal_host->GetHostView(), gfx::NativeView());
+  ASSERT_EQ(init_modal_host->GetDialogPosition(gfx::Size(200, 100)),
+            gfx::Point(0, 0));
+  ASSERT_EQ(init_modal_host->GetMaximumDialogSize(), gfx::Size());
+  TestModalDialogHostObserver init_observer(init_modal_host);
+  ProfilePicker::Hide();
+  ASSERT_FALSE(ProfilePicker::IsOpen());
+  ASSERT_EQ(init_observer.host_destroying_count(), 1);
+
+  // Re-open the picker and wait for the widget and WebUI to initialize.
+  ProfilePicker::Show(ProfilePicker::Params::FromEntryPoint(
+      ProfilePicker::EntryPoint::kProfileMenuManageProfiles));
+  profiles::testing::WaitForPickerUrl(GURL(chrome::kChromeUIProfilePickerUrl));
+  ASSERT_NE(widget(), nullptr);
+
+  web_modal::WebContentsModalDialogHost* modal_host = view();
+  ChromeWebModalDialogManagerDelegate* modal_delegate = view();
+  content::WebContents* picker_contents = view()->GetPickerContents();
+  ASSERT_NE(picker_contents, nullptr);
+  ASSERT_EQ(view()->GetWebContentsModalDialogHost(), modal_host);
+  ASSERT_EQ(modal_delegate->GetWebContentsModalDialogHost(picker_contents),
+            modal_host);
+  ASSERT_EQ(modal_host->GetHostView(), widget()->GetNativeView());
+
+  auto* dialog_manager =
+      web_modal::WebContentsModalDialogManager::FromWebContents(
+          picker_contents);
+  ASSERT_NE(dialog_manager, nullptr);
+  ASSERT_EQ(dialog_manager->delegate(), view());
+
+  TestModalDialogHostObserver active_observer(modal_host);
+  TestModalDialogHostObserver removed_observer(modal_host);
+  removed_observer.Reset();
+
+  // Open two web-modal dialogs (one active, one queued) on the picker's own
+  // `WebContents`.
+  views::Widget* dialog_1 = constrained_window::ShowWebModal(
+      ui::DialogModel::Builder().Build(), picker_contents);
+  views::Widget* dialog_2 = constrained_window::ShowWebModal(
+      ui::DialogModel::Builder().Build(), picker_contents);
+  ASSERT_NE(dialog_1, nullptr);
+  ASSERT_NE(dialog_2, nullptr);
+  ASSERT_TRUE(dialog_1->IsVisible());
+  ASSERT_FALSE(dialog_2->IsVisible());
+  views::test::WidgetDestroyedWaiter dialog_1_destroyed_waiter(dialog_1);
+  views::test::WidgetDestroyedWaiter dialog_2_destroyed_waiter(dialog_2);
+
+  const gfx::Size dialog_1_size = dialog_1->GetWindowBoundsInScreen().size();
+  const gfx::Point initial_dialog_origin =
+      dialog_1->GetWindowBoundsInScreen().origin();
+  const gfx::Point initial_host_pos =
+      modal_host->GetDialogPosition(dialog_1_size);
+
+  widget()->client_view()->SetBorder(
+      views::CreateEmptyBorder(gfx::Insets::TLBR(30, 60, 8, 8)));
+  views::test::RunScheduledLayout(widget());
+  ASSERT_GT(active_observer.position_update_count(), 0);
+  ASSERT_EQ(removed_observer.position_update_count(), 0);
+  const gfx::Point updated_host_pos =
+      modal_host->GetDialogPosition(dialog_1_size);
+  ASSERT_NE(updated_host_pos, initial_host_pos);
+  ASSERT_EQ(
+      dialog_1->GetWindowBoundsInScreen().origin() - initial_dialog_origin,
+      updated_host_pos - initial_host_pos);
+
+  const int count_before_move = active_observer.position_update_count();
+  widget()->OnNativeWidgetMove();
+  ASSERT_EQ(active_observer.position_update_count(), count_before_move + 1);
+  ASSERT_EQ(removed_observer.position_update_count(), 0);
+
+  std::optional<web_modal::WebContentsModalDialogManagerDelegate*>
+      delegate_at_window_closing;
+  view()->RegisterWindowClosingCallback(base::BindLambdaForTesting(
+      [&] { delegate_at_window_closing = dialog_manager->delegate(); }));
+
+  ProfilePicker::Hide();
+  WaitForPickerClosed();
+  dialog_1_destroyed_waiter.Wait();
+  dialog_2_destroyed_waiter.Wait();
+
+  EXPECT_THAT(delegate_at_window_closing, testing::Optional(testing::IsNull()));
+  EXPECT_EQ(active_observer.host_destroying_count(), 1);
+  EXPECT_EQ(removed_observer.host_destroying_count(), 0);
+}
+
 // Regression test for crbug.com/40910391.
 IN_PROC_BROWSER_TEST_F(ProfilePickerViewBrowserTest,
                        ShowScreen_FinishesForErrorOnStandardNavigation) {
@@ -916,7 +1059,7 @@ class ProfilePickerCreationFlowBrowserTest
  protected:
   const GURL kLocalProfileCreationUrl = AppendProfileCustomizationQueryParams(
       GURL("chrome://profile-customization"),
-      ProfileCustomizationStyle::kLocalProfileCreation);
+      ProfileCustomizationStyle::kSignedOutProfileCreation);
   const std::string kLocalProfileName = "LocalProfile";
 
  private:
@@ -2382,6 +2525,68 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerCreationFlowBrowserTest,
                    .has_value());
 }
 
+// Regression test for crbug.com/583015754: when a web-modal dialog opened in
+// `ProfilePickerView` stays alive across a same-site external navigation that
+// hands the sign-in `WebContents` to a `Browser` tab, closing
+// `ProfilePickerView` must notify `ModalDialogHostObserver::OnHostDestroying()`
+// so the dialog widget closes synchronously rather than retaining a dangling
+// pointer to the destroyed `ProfilePickerView`.
+IN_PROC_BROWSER_TEST_F(ProfilePickerCreationFlowBrowserTest,
+                       WebModalDialogClosedWhenPickerClosesAfterSamlHandoff) {
+  const GURL kSameSiteExternalUrl("https://evil.google.com/");
+  const GURL kCrossSiteUrl("https://www.other.com/");
+
+  ASSERT_EQ(1u, GlobalBrowserCollection::GetInstance()->GetSize());
+  StartDiceSignIn();
+
+  content::WebContents* wc = web_contents();
+  auto* dialog_manager =
+      web_modal::WebContentsModalDialogManager::FromWebContents(wc);
+  ASSERT_NE(dialog_manager, nullptr);
+
+  views::Widget* dialog_widget =
+      constrained_window::ShowWebModal(ui::DialogModel::Builder().Build(), wc);
+  ASSERT_NE(dialog_widget, nullptr);
+  ASSERT_TRUE(dialog_manager->IsDialogActive());
+  views::test::WidgetDestroyedWaiter dialog_destroyed_waiter(dialog_widget);
+  ViewDeletedWaiter picker_deleted_waiter(view());
+
+  // Navigate to a non-Gaia URL under the same registry-controlled domain
+  // (`google.com`) so `WebContentsModalDialogManager::DidFinishNavigation()`
+  // does not close the dialog, while `ProfilePickerSignInProvider` treats the
+  // URL as external, moves `wc` to a browser tab, and closes the picker.
+  BrowserAddedWaiter browser_waiter(2u, BrowserAddedWaiter::ReturnMode::kNew);
+  wc->GetController().LoadURL(kSameSiteExternalUrl, content::Referrer(),
+                              ui::PAGE_TRANSITION_AUTO_TOPLEVEL, std::string());
+  BrowserWindowInterface* const new_browser = browser_waiter.Wait();
+  WaitForBrowserUrl(kSameSiteExternalUrl, wc);
+  WaitForPickerClosed();
+  picker_deleted_waiter.Wait();
+  dialog_destroyed_waiter.Wait();
+
+  ASSERT_FALSE(dialog_manager->IsDialogActive());
+  ASSERT_NE(dialog_manager->delegate(), nullptr);
+  ASSERT_EQ(wc, new_browser->GetTabStripModel()->GetActiveWebContents());
+  ASSERT_FALSE(wc->ShouldIgnoreInputEventsForTesting());
+  ASSERT_FALSE(new_browser->GetTabStripModel()->IsTabBlocked(0));
+
+  // Verify `wc` can host new web-modal dialogs in `new_browser`, and that
+  // navigating cross-site afterwards closes the new dialog without
+  // dereferencing the freed `ProfilePickerView`.
+  views::Widget* browser_dialog_widget =
+      constrained_window::ShowWebModal(ui::DialogModel::Builder().Build(), wc);
+  ASSERT_NE(browser_dialog_widget, nullptr);
+  ASSERT_TRUE(dialog_manager->IsDialogActive());
+  views::test::WidgetDestroyedWaiter browser_dialog_destroyed_waiter(
+      browser_dialog_widget);
+
+  wc->GetController().LoadURL(kCrossSiteUrl, content::Referrer(),
+                              ui::PAGE_TRANSITION_AUTO_TOPLEVEL, std::string());
+  WaitForBrowserUrl(kCrossSiteUrl, wc);
+  browser_dialog_destroyed_waiter.Wait();
+  EXPECT_FALSE(dialog_manager->IsDialogActive());
+}
+
 // Regression test for crash https://crbug.com/40759222.
 // Crash requires specific conditions to be reproduced. Browser should have 2
 // profiles with the same GAIA account name and the first profile should use
@@ -2403,7 +2608,7 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerCreationFlowBrowserTest,
   base::RunLoop run_loop;
   Profile* second_profile = nullptr;
   ProfileManager::CreateMultiProfileAsync(
-      u"Joe", /*icon_index=*/0, /*is_hidden=*/false,
+      u"Joe", profiles::GetPlaceholderAvatarIndex(), /*is_hidden=*/false,
       base::BindLambdaForTesting([&](Profile* profile) {
         ASSERT_TRUE(profile);
         second_profile = profile;
@@ -3084,6 +3289,13 @@ class ProfilePickerEnterpriseCreationFlowBrowserTest
         context, base::BindRepeating(
                      &policy::FakeUserPolicySigninService::BuildForEnterprise));
   }
+
+ protected:
+  void ConfirmProfileSwitch(const base::FilePath& profile_path) {
+    base::ListValue args;
+    args.Append(base::FilePathToValue(profile_path));
+    profile_picker_handler()->HandleConfirmProfileSwitch(args);
+  }
 };
 
 IN_PROC_BROWSER_TEST_F(ProfilePickerEnterpriseCreationFlowBrowserTest,
@@ -3291,6 +3503,185 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerEnterpriseCreationFlowBrowserTest,
   EXPECT_EQ(initial_profile_count, g_browser_process->profile_manager()
                                        ->GetProfileAttributesStorage()
                                        .GetNumberOfProfiles());
+}
+
+IN_PROC_BROWSER_TEST_F(
+    ProfilePickerEnterpriseCreationFlowBrowserTest,
+    CreateSignedInProfileSigninAlreadyExistsConfirmSwitchLockedReauth) {
+  // Ensure `ForceSigninVerifier` sees an online connection even in network-
+  // isolated test environments so it immediately evaluates the invalid token.
+  content::NetworkConnectionChangeSimulator().SetConnectionType(
+      net::NetworkChangeNotifier::CONNECTION_ETHERNET);
+  ASSERT_EQ(GlobalBrowserCollection::GetInstance()->GetSize(), 1u);
+  constexpr char kEmail[] = "joe.consumer@gmail.com";
+
+  // Create a pre-existing profile signed in with the same account and an
+  // invalid refresh token so ForceSignin requires reauth.
+  base::FilePath other_path = CreateNewProfileWithoutBrowser();
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  Profile* other_profile = profile_manager->GetProfileByPath(other_path);
+  ASSERT_NE(other_profile, nullptr);
+  signin::IdentityManager* other_identity_manager =
+      IdentityManagerFactory::GetForProfile(other_profile);
+  signin::MakePrimaryAccountAvailable(other_identity_manager, kEmail,
+                                      signin::ConsentLevel::kSignin);
+  signin::SetInvalidRefreshTokenForPrimaryAccount(other_identity_manager);
+
+  ProfileAttributesStorage& storage =
+      profile_manager->GetProfileAttributesStorage();
+  ProfileAttributesEntry* other_entry =
+      storage.GetProfileAttributesWithPath(other_path);
+  ASSERT_NE(other_entry, nullptr);
+  size_t initial_profile_count = storage.GetNumberOfProfiles();
+
+  GURL expected_switch_url("chrome://profile-picker/profile-switch");
+  expected_switch_url = net::AppendQueryParameter(
+      expected_switch_url, "profileSwitchPath", base::ToString(other_path));
+
+  Profile* contents_profile = SignInForNewProfile(
+      expected_switch_url, kEmail, "Joe", kNoHostedDomainFound,
+      /*start_on_management_page=*/false,
+      /*is_supervised_profile=*/false,
+      /*should_have_primary_account=*/false);
+  base::FilePath contents_profile_path = contents_profile->GetPath();
+
+  // Lock the target profile under ForceSignin before confirming the switch.
+  signin_util::ScopedForceSigninSetterForTesting force_signin_setter{true};
+  other_entry->LockForceSigninProfile(true);
+  ASSERT_TRUE(other_entry->IsSigninRequired());
+
+  ProfileDeletionObserver deletion_observer;
+  ConfirmProfileSwitch(other_path);
+
+  // Confirming the switch resets back to the main picker step, deletes the
+  // temporary sign-in profile, and transitions to the reauth flow without
+  // opening a browser window for the locked profile.
+  WaitForLoadStop(GetChromeReauthURL(kEmail));
+  EXPECT_TRUE(ProfilePicker::IsOpen());
+  EXPECT_TRUE(AreNativeToolbarSigninButtonsVisible());
+  deletion_observer.Wait();
+  EXPECT_EQ(storage.GetProfileAttributesWithPath(contents_profile_path),
+            nullptr);
+  EXPECT_EQ(storage.GetNumberOfProfiles(), initial_profile_count);
+  EXPECT_EQ(GlobalBrowserCollection::GetInstance()->GetSize(), 1u);
+  EXPECT_TRUE(other_entry->IsSigninRequired());
+
+  // Navigating back from reauth returns to the main Profile Picker view with
+  // pruned history rather than the `/profile-switch` screen.
+  SimulateNavigateBack();
+  WaitForLoadStop(GURL(chrome::kChromeUIProfilePickerUrl));
+  EXPECT_TRUE(ProfilePicker::IsOpen());
+  EXPECT_FALSE(AreNativeToolbarSigninButtonsVisible());
+  EXPECT_FALSE(web_contents()->GetController().CanGoBack());
+  EXPECT_EQ(GlobalBrowserCollection::GetInstance()->GetSize(), 1u);
+}
+
+IN_PROC_BROWSER_TEST_F(
+    ProfilePickerEnterpriseCreationFlowBrowserTest,
+    CreateSignedInProfileSigninAlreadyExistsConfirmSwitchLockedErrorDialog) {
+  ASSERT_EQ(GlobalBrowserCollection::GetInstance()->GetSize(), 1u);
+  constexpr char kEmail[] = "joe.consumer@gmail.com";
+
+  // Create a pre-existing signed-in profile, activate it so its ActiveTime is
+  // non-null, and unload it from memory while retaining its attributes entry.
+  base::FilePath other_path = CreateNewProfileWithoutBrowser();
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  Profile* other_profile = profile_manager->GetProfileByPath(other_path);
+  ASSERT_NE(other_profile, nullptr);
+  signin::MakePrimaryAccountAvailable(
+      IdentityManagerFactory::GetForProfile(other_profile), kEmail,
+      signin::ConsentLevel::kSignin);
+
+  ProfileDestructionWaiter profile_destruction_waiter(other_profile);
+  BrowserWindowInterface* extra_browser = CreateBrowser(other_profile);
+  CloseBrowserSynchronously(extra_browser);
+  profile_destruction_waiter.Wait();
+  other_profile = nullptr;
+  ASSERT_EQ(profile_manager->GetProfileByPath(other_path), nullptr);
+
+  ProfileAttributesStorage& storage =
+      profile_manager->GetProfileAttributesStorage();
+  ProfileAttributesEntry* other_entry =
+      storage.GetProfileAttributesWithPath(other_path);
+  ASSERT_NE(other_entry, nullptr);
+  ASSERT_FALSE(other_entry->GetActiveTime().is_null());
+  ASSERT_FALSE(other_entry->GetGAIAId().empty());
+  size_t initial_profile_count = storage.GetNumberOfProfiles();
+
+  GURL expected_switch_url("chrome://profile-picker/profile-switch");
+  expected_switch_url = net::AppendQueryParameter(
+      expected_switch_url, "profileSwitchPath", base::ToString(other_path));
+
+  Profile* contents_profile = SignInForNewProfile(
+      expected_switch_url, kEmail, "Joe", kNoHostedDomainFound,
+      /*start_on_management_page=*/false,
+      /*is_supervised_profile=*/false,
+      /*should_have_primary_account=*/false);
+  base::FilePath contents_profile_path = contents_profile->GetPath();
+
+  // Lock the unloaded profile under ForceSignin and restrict allowed usernames
+  // so loading `other_path` clears its primary account and surfaces the
+  // `ReauthNotAllowed` error dialog on `#mainView`.
+  signin_util::ScopedForceSigninSetterForTesting force_signin_setter{true};
+  other_entry->LockForceSigninProfile(true);
+  g_browser_process->local_state()->SetString(
+      prefs::kGoogleServicesUsernamePattern, "*@corp.com");
+
+  ProfileDeletionObserver deletion_observer;
+  ConfirmProfileSwitch(other_path);
+
+  WaitForLoadStop(GURL(chrome::kChromeUIProfilePickerUrl));
+  deletion_observer.Wait();
+  EXPECT_EQ(storage.GetProfileAttributesWithPath(contents_profile_path),
+            nullptr);
+  EXPECT_EQ(storage.GetNumberOfProfiles(), initial_profile_count);
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return IsSigninErrorDialogShown(web_contents()); }));
+  ForceSigninUIError::UiTexts expected_errors =
+      ForceSigninUIError::ReauthNotAllowed().GetErrorTexts();
+  EXPECT_EQ(GetSigninErrorDialogTitleText(web_contents()),
+            expected_errors.first);
+  EXPECT_EQ(GetSigninErrorDialogBodyText(web_contents()),
+            expected_errors.second);
+  EXPECT_FALSE(web_contents()->GetController().CanGoBack());
+  EXPECT_TRUE(other_entry->IsSigninRequired());
+  EXPECT_EQ(GlobalBrowserCollection::GetInstance()->GetSize(), 1u);
+
+  // A duplicate `confirmProfileSwitch` message while on `Step::kProfilePicker`
+  // (outside `Step::kAccountSelection`) is ignored safely.
+  ConfirmProfileSwitch(other_path);
+  EXPECT_TRUE(ProfilePicker::IsOpen());
+  EXPECT_TRUE(other_entry->IsSigninRequired());
+  EXPECT_EQ(GlobalBrowserCollection::GetInstance()->GetSize(), 1u);
+}
+
+IN_PROC_BROWSER_TEST_F(ProfilePickerEnterpriseCreationFlowBrowserTest,
+                       ConfirmProfileSwitchLockedIgnoredInNonClassicFlow) {
+  ASSERT_EQ(GlobalBrowserCollection::GetInstance()->GetSize(), 1u);
+
+  base::FilePath locked_path = CreateNewProfileWithoutBrowser();
+  ProfileAttributesEntry* entry =
+      g_browser_process->profile_manager()
+          ->GetProfileAttributesStorage()
+          .GetProfileAttributesWithPath(locked_path);
+  ASSERT_NE(entry, nullptr);
+  entry->SetIsGlicEligible(true);
+
+  signin_util::ScopedForceSigninSetterForTesting force_signin_setter{true};
+  entry->LockForceSigninProfile(true);
+  ASSERT_TRUE(entry->IsSigninRequired());
+
+  // Open the picker in a non-classic flow (`ProfilePickerGlicFlowController`).
+  // Sending `confirmProfileSwitch` for a locked profile must be a safe no-op
+  // without downcasting `flow_controller_` to `ProfilePickerFlowController`.
+  ProfilePicker::Show(ProfilePicker::Params::ForGlicManager(base::DoNothing()));
+  WaitForLoadStop(GURL("chrome://profile-picker/"));
+  ASSERT_TRUE(ProfilePicker::IsOpen());
+
+  ConfirmProfileSwitch(locked_path);
+  EXPECT_TRUE(ProfilePicker::IsOpen());
+  EXPECT_TRUE(entry->IsSigninRequired());
+  EXPECT_EQ(GlobalBrowserCollection::GetInstance()->GetSize(), 1u);
 }
 
 IN_PROC_BROWSER_TEST_F(ProfilePickerEnterpriseCreationFlowBrowserTest,

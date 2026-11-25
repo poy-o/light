@@ -67,6 +67,45 @@ TEST(GlicProviderSpecImplTest, GeminiEnterpriseSupportsSsrFollowsGeicSsr) {
   }
 }
 
+// kGeicAnchorEntryPointForOnboardedUsers only applies to Gemini Enterprise.
+TEST(GlicProviderSpecImplTest, GeminiSupportsAnchoredEntryPoint) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {},
+      {features::kGeicAnchorEntryPointForOnboardedUsers, features::kGeicFre});
+  EXPECT_TRUE(CreateGlicProviderSpec(GlicProvider::kGemini, {})
+                  ->SupportsAnchoredEntryPoint());
+}
+
+TEST(GlicProviderSpecImplTest,
+     GeminiEnterpriseSupportsAnchoredEntryPointFollowsGeicFlags) {
+  {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitWithFeatures(
+        {features::kGeicAnchorEntryPointForOnboardedUsers, features::kGeicFre},
+        {});
+    EXPECT_TRUE(CreateGlicProviderSpec(GlicProvider::kGeminiEnterprise, {})
+                    ->SupportsAnchoredEntryPoint());
+  }
+  {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitWithFeatures(
+        {features::kGeicFre},
+        {features::kGeicAnchorEntryPointForOnboardedUsers});
+    EXPECT_FALSE(CreateGlicProviderSpec(GlicProvider::kGeminiEnterprise, {})
+                     ->SupportsAnchoredEntryPoint());
+  }
+  // Without kGeicFre, every GEiC profile reads as consented.
+  {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitWithFeatures(
+        {features::kGeicAnchorEntryPointForOnboardedUsers},
+        {features::kGeicFre});
+    EXPECT_FALSE(CreateGlicProviderSpec(GlicProvider::kGeminiEnterprise, {})
+                     ->SupportsAnchoredEntryPoint());
+  }
+}
+
 TEST(GlicProviderSpecImplTest, GeminiRequiresNoWebviewWhenGlicCicEnabled) {
   {
     base::test::ScopedFeatureList feature_list;
@@ -145,6 +184,42 @@ TEST(GlicProviderSpecImplTest, OnlyGeminiSupportsOsEntryPoints) {
                   ->SupportsFeature(GlicFeature::kOsEntryPoints));
   EXPECT_FALSE(CreateGlicProviderSpec(GlicProvider::kGeminiEnterprise, {})
                    ->SupportsFeature(GlicFeature::kOsEntryPoints));
+}
+
+TEST(GlicProviderSpecImplTest, GeminiPinOnBindEnabledAlwaysTrue) {
+  {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitAndDisableFeature(features::kGeicPinOnBind);
+    EXPECT_TRUE(
+        CreateGlicProviderSpec(GlicProvider::kGemini, {})->PinOnBindEnabled());
+  }
+  {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitAndEnableFeature(features::kGeicPinOnBind);
+    EXPECT_TRUE(
+        CreateGlicProviderSpec(GlicProvider::kGemini, {})->PinOnBindEnabled());
+  }
+}
+
+TEST(GlicProviderSpecImplTest, GeminiEnterprisePinOnBindDisabledByDefault) {
+  EXPECT_FALSE(CreateGlicProviderSpec(GlicProvider::kGeminiEnterprise, {})
+                   ->PinOnBindEnabled());
+}
+
+TEST(GlicProviderSpecImplTest,
+     GeminiEnterprisePinOnBindEnabledFollowsGeicPinOnBind) {
+  {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitAndDisableFeature(features::kGeicPinOnBind);
+    EXPECT_FALSE(CreateGlicProviderSpec(GlicProvider::kGeminiEnterprise, {})
+                     ->PinOnBindEnabled());
+  }
+  {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitAndEnableFeature(features::kGeicPinOnBind);
+    EXPECT_TRUE(CreateGlicProviderSpec(GlicProvider::kGeminiEnterprise, {})
+                    ->PinOnBindEnabled());
+  }
 }
 
 bool GeminiSupportsFeature(GlicFeature feature) {
@@ -268,6 +343,20 @@ TEST(GlicProviderSpecImplTest, GeminiIndigoFollowsIndigoOpenGlic) {
                                  features::kIndigoOpenGlic);
 }
 
+#if !BUILDFLAG(IS_ANDROID)
+TEST(GlicProviderSpecImplTest,
+     GeminiDynamicChromeToolsFollowsGlicDynamicChromeTools) {
+  ExpectGeminiFeatureFollowsFlag(GlicFeature::kDynamicChromeTools,
+                                 features::kGlicDynamicChromeTools);
+}
+#else
+TEST(GlicProviderSpecImplTest, GeminiDoesNotSupportDynamicChromeTools) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kGlicDynamicChromeTools);
+  EXPECT_FALSE(GeminiSupportsFeature(GlicFeature::kDynamicChromeTools));
+}
+#endif  // !BUILDFLAG(IS_ANDROID)
+
 TEST(GlicProviderSpecImplTest,
      GeminiMarketingAutoOpenFollowsGlicMarketingAutoOpen) {
   ExpectGeminiFeatureFollowsFlag(GlicFeature::kMarketingAutoOpen,
@@ -312,6 +401,7 @@ TEST(GlicProviderSpecImplTest, GeminiEnterpriseSupportsNoFeatures) {
       features::kGlicLiveMode,
       features::kGlicShareImage,
       features::kGlicExperimentalTriggering,
+      features::kGlicDynamicChromeTools,
       features::kAutoOpenGlicForPdf,
       features::kGlicSelectionPrompt,
       features::kGlicCaptureRegion,

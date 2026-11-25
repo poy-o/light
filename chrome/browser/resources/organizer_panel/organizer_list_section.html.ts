@@ -17,11 +17,12 @@ export function getHtml(this: OrganizerListSectionElement) {
     @toggle-action="${this.onToggleAction_}">
 </organizer-list-section-header>
 <cr-collapse id="items" role="list" ?opened="${this.isExpanded_()}"
-    ?no-animation="${this.noAnimation_ || this.prefersReducedMotion_}">
+    ?no-animation="${this.noAnimation_}">
   ${this.getZeroState_()}
   ${this.getFilteredItems_().map((item, index) => html`
     <organizer-list-section-item .item="${item}" role="listitem"
-        data-index="${index}" ?has-context-menu="${this.hasContextMenu_()}"
+        data-index="${index}" style="--row-index: ${index}"
+        ?has-context-menu="${this.hasContextMenu_()}"
         ?tabbable="${this.isSearching_()}" @click="${this.onItemClick_}"
         @action-button-click="${this.onItemActionButtonClick_}"
         @context-menu-click="${this.onItemContextMenuClick_}">

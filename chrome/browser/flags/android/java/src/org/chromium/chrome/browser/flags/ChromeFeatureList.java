@@ -368,7 +368,6 @@ public abstract class ChromeFeatureList {
     public static final String ANDROID_TAB_SKIP_SAVE_TABS_TASK_KILLSWITCH =
             "AndroidTabSkipSaveTabsTaskKillswitch";
     public static final String ANDROID_TAB_UI_REFACTOR = "AndroidTabUiRefactor";
-    public static final String ANDROID_THEME_MODULE = "AndroidThemeModule";
     public static final String ANDROID_THEME_RESOURCE_PROVIDER = "AndroidThemeResourceProvider";
     public static final String ANDROID_TIPS_NOTIFICATIONS = "AndroidTipsNotifications";
     public static final String ANDROID_TIPS_NOTIFICATIONS_V2 = "AndroidTipsNotificationsV2";
@@ -424,7 +423,6 @@ public abstract class ChromeFeatureList {
             "AutofillAndroidKeyboardAccessoryDynamicPositioning";
     public static final String AUTOFILL_ANDROID_KEYBOARD_ACCESSORY_HOVER_PREVIEW =
             "AutofillAndroidKeyboardAccessoryHoverPreview";
-    public static final String AUTOFILL_AT_MEMORY = "AutofillAtMemory";
     public static final String AUTOFILL_CARD_SCANNING_BUGFIXES = "AutofillCardScanningBugfixes";
     public static final String AUTOFILL_ENABLE_AI_BASED_AMOUNT_EXTRACTION =
             "AutofillEnableAiBasedAmountExtraction";
@@ -618,6 +616,8 @@ public abstract class ChromeFeatureList {
             "EdgeToEdgeMonitorConfigurations";
     public static final String EDGE_TO_EDGE_TABLET = "EdgeToEdgeTablet";
     public static final String EDGE_TO_EDGE_TOP_INSET = "EdgeToEdgeTopInset";
+    public static final String EDGE_TO_EDGE_TOP_PAGE_COLOR_SAMPLING =
+            "EdgeToEdgeTopPageColorSampling";
     public static final String EDGE_TO_EDGE_USE_BACKUP_NAVBAR_INSETS =
             "EdgeToEdgeUseBackupNavbarInsets";
     public static final String EMAIL_VERIFICATION_PROTOCOL = "EmailVerificationProtocol";
@@ -763,6 +763,8 @@ public abstract class ChromeFeatureList {
             "PageInfoAboutThisSiteMoreLangs";
     public static final String PAINT_PREVIEW_DEMO = "PaintPreviewDemo";
     public static final String PARTNER_CUSTOMIZATIONS_UMA = "PartnerCustomizationsUma";
+    public static final String PASSWORD_SAVE_IN_CONTEXT_ERROR_RESOLUTION =
+            "PasswordSaveInContextErrorResolution";
     public static final String PDF_LAUNCHER_ACTIVITY = "PdfLauncherActivity";
     public static final String PDF_REUSE_FRAGMENT = "PdfReuseFragment";
     public static final String PERMISSION_DEDICATED_CPSS_SETTING_ANDROID =
@@ -794,6 +796,9 @@ public abstract class ChromeFeatureList {
     public static final String READALOUD_IPH_MENU_BUTTON_HIGHLIGHT_CCT =
             "ReadAloudIPHMenuButtonHighlightCCT";
     public static final String READER_MODE_CPA_REENTRY = "ReaderModeCpaReentry";
+    public static final String READER_MODE_DELAY_BOTTOM_SHEET_PEEK =
+            "ReaderModeDelayBottomSheetPeek";
+    public static final String READER_MODE_TOGGLE_LINKS = "ReaderModeToggleLinks";
     public static final String REENGAGEMENT_NOTIFICATION = "ReengagementNotification";
     public static final String REMOVE_EXTRA_HEADERS_ON_CROSS_ORIGIN_REDIRECT =
             "RemoveExtraHeadersOnCrossOriginRedirect";
@@ -983,7 +988,6 @@ public abstract class ChromeFeatureList {
                     ? null
                     : Map.ofEntries(
                             Map.entry(ACCOUNT_FOR_SUPPRESSED_KEYBOARD_INSETS, true),
-                            Map.entry(ANDROID_THEME_MODULE, true),
                             Map.entry(ANDROID_THEME_RESOURCE_PROVIDER, false),
                             Map.entry(AVOID_TASK_TRAMPOLINES, true),
                             Map.entry(DEVICE_REAUTH_REFACTOR, true),
@@ -1002,7 +1006,10 @@ public abstract class ChromeFeatureList {
     public static final CachedFlag sAllocInstanceIdIncreasedDefaultRange =
             newCachedFlag(ALLOC_INSTANCE_ID_INCREASED_DEFAULT_RANGE, /* defaultValue= */ true);
     public static final CachedFlag sAndroidAdaptiveUiTransitions =
-            newCachedFlag(ANDROID_ADAPTIVE_UI_TRANSITIONS, /* defaultValue= */ false);
+            newCachedFlag(
+                    ANDROID_ADAPTIVE_UI_TRANSITIONS,
+                    /* defaultValue= */ false,
+                    /* defaultValueInTests= */ true);
     public static final CachedFlag sAndroidAnimatedProgressBarInBrowser =
             newCachedFlag(ANDROID_ANIMATED_PROGRESS_BAR_IN_BROWSER, /* defaultValue= */ false);
     public static final CachedFlag sAndroidApb144Patch1 = newCachedFlag(APB144_PATCH1, true);
@@ -1268,6 +1275,8 @@ public abstract class ChromeFeatureList {
                     EDGE_TO_EDGE_TOP_INSET,
                     /* defaultValue= */ false,
                     /* defaultValueInTests= */ true);
+    public static final CachedFlag sEdgeToEdgeTopPageColorSampling =
+            newCachedFlag(EDGE_TO_EDGE_TOP_PAGE_COLOR_SAMPLING, /* defaultValue= */ false);
     public static final CachedFlag sEdgeToEdgeUseBackupNavbarInsets =
             newCachedFlag(EDGE_TO_EDGE_USE_BACKUP_NAVBAR_INSETS, true);
     public static final CachedFlag sEnableAndroidSidePanel =
@@ -1400,7 +1409,10 @@ public abstract class ChromeFeatureList {
     public static final CachedFlag sOnStartupWindowPolicy =
             newCachedFlag(ON_STARTUP_WINDOW_POLICY, /* defaultValue= */ true);
     public static final CachedFlag sOneStepAimAccess =
-            newCachedFlag(ONE_STEP_AIM_ACCESS, /* defaultValue= */ false);
+            newCachedFlag(
+                    ONE_STEP_AIM_ACCESS,
+                    /* defaultValue= */ false,
+                    /* defaultValueInTests= */ true);
     public static final CachedFlag sPaintPreviewDemo = newCachedFlag(PAINT_PREVIEW_DEMO, false);
     public static final CachedFlag sPdfReuseFragment =
             newCachedFlag(
@@ -1664,6 +1676,7 @@ public abstract class ChromeFeatureList {
                     sEdgeToEdgeMonitorConfigurations,
                     sEdgeToEdgeTablet,
                     sEdgeToEdgeTopInset,
+                    sEdgeToEdgeTopPageColorSampling,
                     sEdgeToEdgeUseBackupNavbarInsets,
                     sEnableAndroidSidePanel,
                     sEnableAndroidSidePanelDevFeature,
@@ -1882,6 +1895,10 @@ public abstract class ChromeFeatureList {
                             ON_DEMAND_BACKGROUND_TAB_CONTEXT_CAPTURE_OPTIMIZATION, false);
     public static final MutableFlagWithSafeDefault sPdfLauncherActivity =
             newMutableFlagWithSafeDefault(PDF_LAUNCHER_ACTIVITY, false);
+    public static final MutableFlagWithSafeDefault sReaderModeDelayBottomSheetPeek =
+            newMutableFlagWithSafeDefault(READER_MODE_DELAY_BOTTOM_SHEET_PEEK, false);
+    public static final MutableFlagWithSafeDefault sReaderModeToggleLinks =
+            newMutableFlagWithSafeDefault(READER_MODE_TOGGLE_LINKS, false);
     public static final MutableFlagWithSafeDefault sRemoveExtraHeadersOnCrossOriginRedirect =
             newMutableFlagWithSafeDefault(REMOVE_EXTRA_HEADERS_ON_CROSS_ORIGIN_REDIRECT, true);
     public static final MutableFlagWithSafeDefault sRestoreTabGroupsOnFre =
@@ -1972,8 +1989,6 @@ public abstract class ChromeFeatureList {
                     "jump_to_completion_with_fade";
     public static final String ANDROID_DEVICE_SIGNALS_DISCLAIMER_CLEAR_CONSENT =
             "clear_device_signals_permission_on_startup";
-    public static final String ANDROID_THEME_MODULE_FORCE_DEPENDENCIES =
-            "force_theme_module_dependencies";
     public static final String ANDROID_THEME_RESOURCE_PROVIDER_FORCE_LIGHT = "force_light_theme";
     public static final String FRE_STRING_CHANGES_PERSONALIZED = "personalized";
     public static final String FRE_STRING_CHANGES_SAFETY = "safety";
@@ -2044,9 +2059,6 @@ public abstract class ChromeFeatureList {
                                     Map.of(
                                             ANDROID_DEVICE_SIGNALS_DISCLAIMER_CLEAR_CONSENT,
                                             "false")),
-                            Map.entry(
-                                    ANDROID_THEME_MODULE,
-                                    Map.of(ANDROID_THEME_MODULE_FORCE_DEPENDENCIES, "false")),
                             Map.entry(
                                     ANDROID_THEME_RESOURCE_PROVIDER,
                                     Map.of(ANDROID_THEME_RESOURCE_PROVIDER_FORCE_LIGHT, "false")),

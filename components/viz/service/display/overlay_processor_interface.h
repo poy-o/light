@@ -60,16 +60,12 @@ class VIZ_SERVICE_EXPORT OverlayProcessorInterface {
   using PlatformOverlayCandidate = OverlayCandidate;
   using CandidateList = OverlayCandidateList;
   using FilterOperationsMap =
-      base::flat_map<AggregatedRenderPassId,
-                     raw_ptr<cc::FilterOperations, CtnExperimental>>;
+      base::flat_map<AggregatedRenderPassId, raw_ptr<cc::FilterOperations>>;
 
   virtual bool DisableSplittingQuads() const;
 
   // Used by DCLayerOverlayProcessor and OverlayProcessorUsingStrategy.
-  static void RecordOverlayDamageRectHistograms(
-      bool is_overlay,
-      bool has_occluding_surface_damage,
-      bool zero_damage_rect);
+  static void RecordOverlayDamageRectHistogram(bool zero_damage_rect);
 
   static std::unique_ptr<OverlayProcessorInterface> CreateOverlayProcessor(
       OutputSurface* output_surface,

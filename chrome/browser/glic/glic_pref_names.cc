@@ -117,6 +117,10 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   // Boolean pref for enabling shake trigger.
   registry->RegisterBooleanPref(prefs::kGlicShakeTriggerEnabled, false);
 
+  // Integer pref for the last-used selection overlay prompt endpoint
+  // (`selection::mojom::PromptEndpointId`, default 0 = kGemini).
+  registry->RegisterIntegerPref(prefs::kGlicSelectionOverlayLastEndpoint, 0);
+
   // Boolean pref set once the Quick Answers FRE is accepted.
   registry->RegisterBooleanPref(prefs::kGlicQuickAnswersFreAccepted, false);
 
@@ -173,14 +177,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
 }
 
 void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
-  // On Android, hotkeys are scoped to the active browser window rather than
-  // operating as OS-global background shortcuts. Therefore, the launcher
-  // hotkey is enabled by default without requiring a default browser check.
-#if BUILDFLAG(IS_ANDROID)
-  registry->RegisterBooleanPref(prefs::kGlicLauncherEnabled, true);
-#else
   registry->RegisterBooleanPref(prefs::kGlicLauncherEnabled, false);
-#endif
 
   registry->RegisterStringPref(
       prefs::kGlicLauncherHotkey,

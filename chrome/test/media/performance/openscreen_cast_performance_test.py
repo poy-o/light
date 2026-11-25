@@ -11,6 +11,7 @@ like dropped frames and smoothness.
 """
 
 import argparse
+import contextlib
 import logging
 import os
 import platform
@@ -27,6 +28,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as ec
 
 import common
+import cros_updater
 import test_results
 
 # Must follow common, which puts these modules on sys.path.
@@ -92,12 +94,14 @@ data_sources: {{
 }}
 data_sources: {{
     config {{
+        name: "android.track_event"
+    }}
+}}
+data_sources: {{
+    config {{
         name: "track_event"
-        track_event_config {{
-            disabled_categories: "*"
-            enabled_categories: "openscreen"
-            enabled_categories: "cast.stream"
-            enabled_categories: "media"
+        chrome_config {{
+            trace_config: "{CHROME_RECEIVER_TRACE_CONFIG}"
         }}
     }}
 }}
@@ -118,6 +122,13 @@ duration_ms: 45000
 SENDER_TRACE_CATEGORIES = (
     'openscreen,cast.stream,cast_perf_test,media,webrtc,gpu,blink'
 )
+
+
+# Receiver models whose software VP8 decoder cannot sustain 1080p60 in real
+# time (for example Chromecast HD's Cortex-A35 software VP8 decoder, which
+# drops ~45% of frames on 1080p60 VP8). Production Chrome negotiates hardware
+# H.264 or VP9 on these devices.
+SOFTWARE_VP8_30FPS_ONLY_MODELS = frozenset({'chromecast hd'})
 
 
 def should_run_vp9_tests(args) -> bool:
@@ -142,6 +153,34 @@ def should_run_vp9_tests(args) -> bool:
     return True
 
 
+def should_run_60fps_vp8_tests(
+    receiver_ip: str = RECEIVER_IP, adb_path: str = ADB_PATH
+) -> bool:
+    """Returns False when the ADB receiver cannot decode 1080p60 VP8."""
+    try:
+        res = subprocess.run(
+            [
+                adb_path,
+                '-s',
+                receiver_ip,
+                'shell',
+                'getprop',
+                'ro.product.model',
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+        if res.returncode == 0:
+            model = res.stdout.strip().lower()
+            if model in SOFTWARE_VP8_30FPS_ONLY_MODELS:
+                return False
+    except (subprocess.SubprocessError, OSError) as e:
+        logging.warning("Failed to query receiver model: %s", e)
+    return True
+
+
 class SenderSession(NamedTuple):
     """What setup_test_environment started on the sender."""
 
@@ -150,6 +189,12 @@ class SenderSession(NamedTuple):
     tunnel_proc: object
     chrome_version: str
     trace_file_path: str
+
+
+def _sender_log_dir(sender):
+    """Returns the remote directory where Chrome writes traces and logs."""
+    raw_log_dir = getattr(sender, 'LOG_DIR', None)
+    return raw_log_dir if isinstance(raw_log_dir, str) else sender.TMP_DIR
 
 
 def setup_test_environment(
@@ -177,20 +222,20 @@ def setup_test_environment(
     sender.verify_connectivity()
     if chrome_options_list is None:
         chrome_options_list = CHROME_OPTIONS
+    log_dir = _sender_log_dir(sender)
 
     if args.sender_os == 'cros':
-        if chrome_options_list is None:
-            chrome_options_list = []
-        else:
-            chrome_options_list = list(chrome_options_list)
+        chrome_options_list = list(chrome_options_list)
         video_key = f"{codec_name}_{video_name}" if video_name else codec_name
-        trace_file_path = f'/tmp/{video_key}_sender.perfetto-trace'
+        trace_file_path = f'{log_dir}/{video_key}_sender.perfetto-trace'
+        log_file_path = f'{log_dir}/chrome_debug_{video_key}.log'
         chrome_options_list.extend(
             [
-                '--trace-startup',
+                f'--trace-startup={SENDER_TRACE_CATEGORIES}',
                 f'--trace-startup-file={trace_file_path}',
-                f'--trace-startup-categories={SENDER_TRACE_CATEGORIES}',
-                '--trace-startup-duration=45',
+                '--trace-startup-record-mode=record-continuously',
+                '--trace-startup-duration=55',
+                f'--log-file={log_file_path}',
             ]
         )
         driver, cb_platform, actual_version = common.setup_cros_environment(
@@ -210,19 +255,21 @@ def setup_test_environment(
 
     # Enable native Chrome tracing to file for the entire session.
     video_key = f"{codec_name}_{video_name}" if video_name else codec_name
-    trace_file_path = f'{sender.TMP_DIR}/{video_key}_sender.perfetto-trace'
-    chrome_options.add_argument('--trace-startup')
+    trace_file_path = f'{log_dir}/{video_key}_sender.perfetto-trace'
+    chrome_options.add_argument(f'--trace-startup={SENDER_TRACE_CATEGORIES}')
     chrome_options.add_argument(f'--trace-startup-file={trace_file_path}')
     chrome_options.add_argument(
-        f'--trace-startup-categories={SENDER_TRACE_CATEGORIES}'
+        '--trace-startup-record-mode=record-continuously'
     )
     chrome_options.add_argument('--trace-startup-duration=45')
 
     for option in chrome_options_list:
         chrome_options.add_argument(option)
+    for option in sender.extra_chrome_args():
+        chrome_options.add_argument(option)
 
     # Dynamically set the --log-file path.
-    log_file_path = f'{sender.TMP_DIR}/chrome_debug_{video_key}.log'
+    log_file_path = f'{log_dir}/chrome_debug_{video_key}.log'
     chrome_options.add_argument(f'--log-file={log_file_path}')
 
     binary_path = sender.chrome_binary_path(remote_app_path)
@@ -632,19 +679,19 @@ def run_performance_test(
         # Collect the Sender Chrome Log
         try:
             logging.info("Collecting Sender Chrome Log...")
-            if args.sender_os == 'win':
-                # Use standard Windows path with forward slashes for scp.
-                log_file_path = (
-                    f'{common.WIN_REMOTE_TMP_DIR}/chrome_debug_{video_key}.log'
-                )
-            else:
-                log_file_path = f'/tmp/chrome_debug_{video_key}.log'
+            sender = common.make_sender(args)
+            log_dir = _sender_log_dir(sender)
+            log_file_path = f'{log_dir}/chrome_debug_{video_key}.log'
             sender_log_local_path = os.path.join(
                 common.TRACES_DIR, f"{video_key}_chrome_debug.log"
             )
-            common.make_sender(args).copy_from(
-                log_file_path, sender_log_local_path, timeout=30
-            )
+            try:
+                sender.copy_from(
+                    log_file_path, sender_log_local_path, timeout=30
+                )
+            finally:
+                # pylint: disable-next=protected-access
+                sender.run(sender._remove_file_command(log_file_path))
         except (
             common.RemoteDeviceError,
             subprocess.SubprocessError,
@@ -721,11 +768,16 @@ def collect_sender_trace(args, codec_name, video_name, trace_file_path):
             common.TRACES_DIR,
             f"{video_key}_sender.perfetto-trace",
         )
-        common.make_sender(args).copy_from(
-            trace_file_path,
-            sender_trace_local_path,
-            timeout=60,
-        )
+        sender = common.make_sender(args)
+        try:
+            sender.copy_from(
+                trace_file_path,
+                sender_trace_local_path,
+                timeout=60,
+            )
+        finally:
+            # pylint: disable-next=protected-access
+            sender.run(sender._remove_file_command(trace_file_path))
     except (
         common.RemoteDeviceError,
         subprocess.SubprocessError,
@@ -756,6 +808,10 @@ def main():
         return _run_tests(reporter)
 
 
+def _case_name(codec_name, video):
+    return f"{codec_name}/{video['name']}"
+
+
 def _run_tests(reporter):
     """Runs every codec/video case, reporting each one to `reporter`."""
     parser = argparse.ArgumentParser(
@@ -775,6 +831,11 @@ def _run_tests(reporter):
         choices=['mac', 'win', 'linux', 'cros'],
         help='OS of the sender device.',
     )
+    parser.add_argument(
+        '--skip-cros-update',
+        action='store_true',
+        help='Skip auto-updating a ChromeOS sender DUT to LATEST-main.',
+    )
     args, _ = parser.parse_known_args()
     cv = args.chrome_version
     run_vp9_tests = should_run_vp9_tests(args)
@@ -789,6 +850,11 @@ def _run_tests(reporter):
 
     # Fail fast if the Chromecast receiver cannot be reached over ADB.
     common.verify_receiver_connectivity(RECEIVER_IP, ADB_PATH)
+    run_60fps_vp8_tests = should_run_60fps_vp8_tests()
+    logging.info("Should run 60fps VP8 tests: %s", run_60fps_vp8_tests)
+
+    if args.sender_os == 'cros' and not args.skip_cros_update:
+        cros_updater.ensure_latest_canary(args)
 
     # Configure Perfetto tracing on the ADB receiver.
     try:
@@ -961,32 +1027,66 @@ def _run_tests(reporter):
 
         CONFIGURATIONS[codec] = config
 
-    def case_name(codec_name, video):
-        return f"{codec_name}/{video['name']}"
-
     reporter.plan(
-        case_name(codec_name, video)
+        _case_name(codec_name, video)
         for codec_name, config in CONFIGURATIONS.items()
         for video in config['videos']
     )
     # Reported up front so that they read as deliberate skips even if an
     # earlier case fails and stops the run.
+    sender = common.make_sender(args)
+    skip_reasons = {
+        codec: sender.codec_skip_reason(codec) for codec in CONFIGURATIONS
+    }
     if not run_vp9_tests:
-        for video in CONFIGURATIONS['VP9']['videos']:
-            reporter.skip(
-                case_name('VP9', video),
-                "Sender or receiver does not support VP9.",
-            )
+        skip_reasons['VP9'] = "Sender or receiver does not support VP9."
+    skip_reasons = {c: r for c, r in skip_reasons.items() if r}
+    skipped_cases = {}
+    for codec_name, reason in skip_reasons.items():
+        for video in CONFIGURATIONS[codec_name]['videos']:
+            skipped_cases[_case_name(codec_name, video)] = reason
+    if not run_60fps_vp8_tests and 'VP8' not in skip_reasons:
+        for video in CONFIGURATIONS['VP8']['videos']:
+            if video['fps'] > 30:
+                skipped_cases[_case_name('VP8', video)] = (
+                    "Receiver software VP8 decoder cannot sustain 60fps."
+                )
+    for case_id, reason in skipped_cases.items():
+        reporter.skip(case_id, reason)
 
+    # A local Linux sender is a headless lab host, so it needs a virtual
+    # display for Chrome. Other senders return a no-op context.
+    with contextlib.ExitStack() as stack:
+        try:
+            stack.enter_context(sender.virtual_display())
+        except (OSError, RuntimeError) as e:
+            display_error = RuntimeError('Xvfb did not start on the lab host')
+            display_error.__cause__ = e
+            for codec_name, config in CONFIGURATIONS.items():
+                for video in config['videos']:
+                    case_id = _case_name(codec_name, video)
+                    if case_id not in skipped_cases:
+                        reporter.fail(case_id, display_error)
+            raise display_error
+        _run_configurations(
+            args, cv, reporter, CONFIGURATIONS, skip_reasons, skipped_cases
+        )
+
+
+def _run_configurations(
+    args, cv, reporter, configurations, skip_reasons, skipped_cases
+):
+    """Runs every planned codec/video case and cleans up the sender."""
     actual_version = None
     last_version = None
     first_clip_error = None
     try:
-        for codec_name, config in CONFIGURATIONS.items():
-            if codec_name == 'VP9' and not run_vp9_tests:
+        for codec_name, config in configurations.items():
+            if codec_name in skip_reasons:
                 logging.info(
-                    "Skipping VP9 tests: Sender or receiver does not "
-                    "support VP9 encoding/decoding."
+                    "Skipping %s tests: %s",
+                    codec_name,
+                    skip_reasons[codec_name],
                 )
                 continue
             logging.info(
@@ -1025,20 +1125,29 @@ def _run_tests(reporter):
             )
 
             for video in config['videos']:
+                case_id = _case_name(codec_name, video)
+                if case_id in skipped_cases:
+                    logging.info(
+                        "Skipping %s: %s",
+                        case_id,
+                        skipped_cases[case_id],
+                    )
+                    continue
+
                 # TODO(b/512198717): Enable HEVC tests on ChromeOS.
                 # Currently these tests are rendering a blank white screen,
                 # so we skip them to bring up the other cros tests.
                 if args.sender_os == 'cros' and 'HEVC' in video['name']:
                     logging.info("Skipping HEVC on ChromeOS: %s", video['name'])
                     reporter.skip(
-                        case_name(codec_name, video),
+                        _case_name(codec_name, video),
                         "HEVC is disabled on ChromeOS (b/512198717).",
                     )
                     continue
 
                 setup_done = False
                 try:
-                    with reporter.case(case_name(codec_name, video)) as case:
+                    with reporter.case(_case_name(codec_name, video)) as case:
                         # Reset first: setup may fail before reporting one.
                         actual_version = None
                         try:

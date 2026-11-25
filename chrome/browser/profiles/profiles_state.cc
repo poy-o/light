@@ -123,10 +123,16 @@ base::FilePath GetLastUsedProfileBaseName(const PrefService& local_state) {
   return base_name;
 }
 
+bool IsValidProfileDirectoryName(const base::FilePath& base_name) {
+  return !base_name.empty() && !base_name.IsAbsolute() &&
+         !base_name.EndsWithSeparator() && !base_name.ReferencesParent() &&
+         base_name.BaseName() == base_name &&
+         base_name.value() != base::FilePath::kCurrentDirectory;
+}
+
 base::FilePath GetProfileDirFromCommandLine(
     const base::CommandLine& command_line,
-    const base::FilePath& user_data_dir,
-    const PrefService& local_state) {
+    const base::FilePath& user_data_dir) {
   if (!IsMultipleProfilesEnabled() ||
       !command_line.HasSwitch(switches::kProfileDirectory)) {
     return base::FilePath();
@@ -134,15 +140,11 @@ base::FilePath GetProfileDirFromCommandLine(
 
   base::FilePath profile_dir =
       command_line.GetSwitchValuePath(switches::kProfileDirectory);
-#if BUILDFLAG(IS_ANDROID)
-  // StartupData starts with this profile, so require a ProfileAttributesStorage
-  // entry, as for the last used profile. Otherwise, Chrome starts with the last
-  // used profile. This runs before the value is used as a path.
-  if (IsAndroidMultiprofileStartupDataEnabled() &&
-      !DoesProfileExist(local_state, profile_dir)) {
+  if (!IsValidProfileDirectoryName(profile_dir) ||
+      profile_dir.value() == chrome::kSystemProfileDir ||
+      profile_dir.value() == chrome::kGuestProfileDir) {
     return base::FilePath();
   }
-#endif
 
   if (command_line.HasSwitch(switches::kIgnoreProfileDirectoryIfNotExists) &&
       !base::DirectoryExists(user_data_dir.Append(profile_dir))) {
@@ -367,9 +369,17 @@ bool IsGuestModeEnabled(const Profile& profile) {
 }
 
 bool IsProfileLocked(const base::FilePath& profile_path) {
+  // `g_browser_process` or `profile_manager()` may be null during browser
+  // teardown or in unit tests that instantiate a standalone `TestingProfile`
+  // without a `ProfileManager`.
+  ProfileManager* profile_manager =
+      g_browser_process ? g_browser_process->profile_manager() : nullptr;
+  if (!profile_manager) {
+    return false;
+  }
+
   ProfileAttributesEntry* entry =
-      g_browser_process->profile_manager()
-          ->GetProfileAttributesStorage()
+      profile_manager->GetProfileAttributesStorage()
           .GetProfileAttributesWithPath(profile_path);
   if (!entry) {
     return false;
@@ -444,7 +454,9 @@ std::u16string GetDefaultNameForNewEnterpriseProfile(
 
 std::u16string GetDefaultNameForNewSignedInProfile(
     const AccountInfo& account_info) {
-  CHECK(account_info.IsValid(), base::NotFatalUntil::M162);
+  // TODO(crbug.com/589721712): CHECK-exclusion: Convert to a CHECK once we are
+  // confident it won't be triggered.
+  DCHECK(account_info.IsValid());
   if (account_info.IsManaged() != signin::Tribool::kTrue) {
     std::u16string given_name = base::UTF8ToUTF16(*account_info.GetGivenName());
     CHECK(!given_name.empty());

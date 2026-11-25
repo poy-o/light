@@ -13,8 +13,10 @@
 
 #include "base/command_line.h"
 #include "base/functional/bind.h"
+#include "base/i18n/language_tag.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/escape.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
@@ -60,6 +62,13 @@ struct CardUnmaskOptions {
   CardUnmaskOptions& with_fido() {
     use_fido = true;
     use_cvc = false;
+    return *this;
+  }
+
+  CardUnmaskOptions& with_fido_enrollment() {
+    use_fido_enrollment = true;
+    use_cvc = false;
+    set_context_token = false;
     return *this;
   }
 
@@ -116,6 +125,8 @@ struct CardUnmaskOptions {
   bool use_cvc = true;
   // If true, use FIDO authentication.
   bool use_fido = false;
+  // If true, enroll into FIDO authentication while unmasking.
+  bool use_fido_enrollment = false;
   // If true, use otp authentication.
   bool use_otp = false;
   // If CVC authentication is chosen, default CVC value the user entered, to be
@@ -190,9 +201,9 @@ class PaymentsNetworkInterfaceTest : public PaymentsNetworkInterfaceTestBase,
 
   void OnDidUploadCard(
       PaymentsRpcResult result,
-      const UploadCardResponseDetails& upload_card_respone_details) {
+      const UploadCardResponseDetails& upload_card_response_details) {
     result_ = result;
-    upload_card_response_details_ = upload_card_respone_details;
+    upload_card_response_details_ = upload_card_response_details;
   }
 
   void OnDidSelectChallengeOption(PaymentsRpcResult result,
@@ -276,7 +287,7 @@ class PaymentsNetworkInterfaceTest : public PaymentsNetworkInterfaceTestBase,
     payments_network_interface_->GetUnmaskDetails(
         base::BindOnce(&PaymentsNetworkInterfaceTest::OnDidGetUnmaskDetails,
                        GetWeakPtr()),
-        "language-LOCALE");
+        base::i18n::GetKnownLanguageTag("en-US"));
   }
 
   // Issue an UnmaskCard request. This requires an OAuth token before starting
@@ -293,7 +304,13 @@ class PaymentsNetworkInterfaceTest : public PaymentsNetworkInterfaceTestBase,
 
     request_details.risk_data = "some risk data";
     if (options.use_fido) {
-      request_details.fido_assertion_info = base::DictValue();
+      request_details.fido_assertion_info =
+          base::DictValue().Set("signature", "fake_signature");
+    }
+    if (options.use_fido_enrollment) {
+      request_details.fido_authenticator_response = base::DictValue().Set(
+          "fido_attestation_info",
+          base::DictValue().Set("attestation_object", "fake_attestation"));
     }
     if (options.use_cvc) {
       request_details.user_response.cvc = base::ASCIIToUTF16(options.cvc);
@@ -341,7 +358,8 @@ class PaymentsNetworkInterfaceTest : public PaymentsNetworkInterfaceTestBase,
   void StartGettingUploadDetails() {
     payments_network_interface_->GetCardUploadDetails(
         BuildTestProfiles(), /*detected_values=*/0,
-        /*client_behavior_signals=*/{}, "language-LOCALE",
+        /*client_behavior_signals=*/{},
+        base::i18n::GetKnownLanguageTag("en-US"),
         base::BindOnce(&PaymentsNetworkInterfaceTest::OnDidGetUploadDetails,
                        GetWeakPtr()),
         /*billable_service_number=*/12345,
@@ -358,7 +376,7 @@ class PaymentsNetworkInterfaceTest : public PaymentsNetworkInterfaceTestBase,
     request_details.card = test::GetCreditCard();
     request_details.context_token = u"context token";
     request_details.risk_data = "some risk data";
-    request_details.app_locale = "language-LOCALE";
+    request_details.app_locale = base::i18n::GetKnownLanguageTag("en-US");
     request_details.profiles = BuildTestProfiles();
     payments_network_interface_->UploadCard(
         request_details,
@@ -514,7 +532,80 @@ TEST_F(PaymentsNetworkInterfaceTest, GetUnmaskDetailsSuccess) {
             PaymentsAutofillClient::UnmaskAuthMethod::kCvc);
   EXPECT_THAT(unmask_details()->verified_instrument_ids,
               testing::UnorderedElementsAre(12345, 9223372036854775807));
+  // The response carried neither a mandatory re-auth status nor FIDO creation
+  // options.
+  EXPECT_FALSE(unmask_details()->mandatory_reauth_status.has_value());
+  EXPECT_TRUE(unmask_details()->fido_creation_options.empty());
 }
+
+// Ensures the FIDO creation options, which the server returns for a device
+// that can be enrolled into FIDO authentication while unmasking a card, are
+// parsed.
+TEST_F(PaymentsNetworkInterfaceTest,
+       GetUnmaskDetailsParsesFidoCreationOptions) {
+  StartGettingUnmaskDetails();
+  IssueOAuthToken();
+  ReturnResponse(payments_network_interface_.get(), net::HTTP_OK,
+                 R"({ "offer_fido_opt_in": false,
+                      "authentication_method": "CVC",
+                      "mandatory_reauth_status":
+                          "MANDATORY_REAUTH_STATUS_UNKNOWN",
+                      "fido_creation_options": {
+                        "challenge": "fake_challenge",
+                        "relying_party_id": "google.com"
+                      } })");
+
+  EXPECT_EQ(result_, PaymentsRpcResult::kSuccess);
+  const std::string* challenge =
+      unmask_details()->fido_creation_options.FindString("challenge");
+  ASSERT_TRUE(challenge);
+  EXPECT_EQ(*challenge, "fake_challenge");
+  EXPECT_TRUE(unmask_details()->fido_request_options.empty());
+  EXPECT_EQ(unmask_details()->mandatory_reauth_status,
+            UnmaskDetails::MandatoryReauthStatus::kUnknown);
+}
+
+struct MandatoryReauthStatusTestCase {
+  // The value of `mandatory_reauth_status` in the server response.
+  const char* response_value;
+  // The status expected to be parsed from `response_value`.
+  std::optional<UnmaskDetails::MandatoryReauthStatus> expected_status;
+};
+
+class GetUnmaskDetailsMandatoryReauthStatusTest
+    : public PaymentsNetworkInterfaceTest,
+      public ::testing::WithParamInterface<MandatoryReauthStatusTestCase> {};
+
+// Ensures every mandatory re-auth status the server can report is parsed, and
+// that a status this client does not know is treated like a missing one.
+TEST_P(GetUnmaskDetailsMandatoryReauthStatusTest, ParsesStatus) {
+  StartGettingUnmaskDetails();
+  IssueOAuthToken();
+  ReturnResponse(payments_network_interface_.get(), net::HTTP_OK,
+                 base::StrCat({R"({ "authentication_method": "CVC", )",
+                               R"("mandatory_reauth_status": ")",
+                               GetParam().response_value, R"(" })"}));
+
+  EXPECT_EQ(result_, PaymentsRpcResult::kSuccess);
+  EXPECT_EQ(unmask_details()->mandatory_reauth_status,
+            GetParam().expected_status);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ,
+    GetUnmaskDetailsMandatoryReauthStatusTest,
+    testing::Values(
+        MandatoryReauthStatusTestCase{
+            "MANDATORY_REAUTH_STATUS_UNKNOWN",
+            UnmaskDetails::MandatoryReauthStatus::kUnknown},
+        MandatoryReauthStatusTestCase{
+            "MANDATORY_REAUTH_DISABLED",
+            UnmaskDetails::MandatoryReauthStatus::kDisabled},
+        MandatoryReauthStatusTestCase{
+            "MANDATORY_REAUTH_ENABLED",
+            UnmaskDetails::MandatoryReauthStatus::kEnabled},
+        MandatoryReauthStatusTestCase{"MANDATORY_REAUTH_FUTURE_STATUS",
+                                      std::nullopt}));
 
 TEST_F(PaymentsNetworkInterfaceTest,
        GetUnmaskDetailsIncludesChromeUserContext) {
@@ -567,6 +658,68 @@ TEST_F(PaymentsNetworkInterfaceTest, UnmaskSuccessViaFIDO) {
   EXPECT_EQ(result_, PaymentsRpcResult::kSuccess);
   EXPECT_EQ(unmask_response_details()->real_pan, "1234");
 }
+
+// Ensures the WebAuthn response that enrolls the device into FIDO
+// authentication is sent as `fido_authenticator_response`, without any other
+// authentication payload and without asking for a FIDO opt-in.
+TEST_F(PaymentsNetworkInterfaceTest, UnmaskSuccessViaFidoEnrollment) {
+  StartUnmasking(CardUnmaskOptions().with_fido_enrollment());
+  IssueOAuthToken();
+  ReturnResponse(payments_network_interface_.get(), net::HTTP_OK,
+                 "{ \"pan\": \"1234\" }");
+
+  const std::string request = base::UnescapeBinaryURLComponent(GetUploadData());
+  EXPECT_THAT(request,
+              HasSubstr(R"("fido_authenticator_response":{)"
+                        R"("fido_attestation_info":{)"
+                        R"("attestation_object":"fake_attestation"}})"));
+  EXPECT_THAT(request, HasSubstr(R"("opt_in_fido_auth":false)"));
+  AssertNotIncludedInRequest("fido_assertion_info");
+  AssertNotIncludedInRequest("context_token");
+  AssertCvcNotIncludedInRequest();
+  AssertOtpNotIncludedInRequest();
+  EXPECT_EQ(result_, PaymentsRpcResult::kSuccess);
+  EXPECT_EQ(unmask_response_details()->real_pan, "1234");
+}
+
+struct FidoPayloadRetryTestCase {
+  // The options of the unmask request.
+  CardUnmaskOptions options;
+  // A value of the FIDO payload that every attempt has to send.
+  const char* payload_value;
+};
+
+class UnmaskFidoPayloadRetryTest
+    : public PaymentsNetworkInterfaceTest,
+      public ::testing::WithParamInterface<FidoPayloadRetryTestCase> {};
+
+// Ensures the FIDO payload is still part of the request that is re-sent after
+// the server rejected the access token of the first attempt.
+TEST_P(UnmaskFidoPayloadRetryTest, RetryAfterRejectedRequestKeepsFidoPayload) {
+  base::test::ScopedFeatureList scoped_feature_list(
+      features::kAutofillEnableOAuth2TokenFix);
+  StartUnmasking(GetParam().options);
+  IssueOAuthToken();
+  ASSERT_THAT(GetUploadData(), HasSubstr(GetParam().payload_value));
+
+  ReturnResponse(payments_network_interface_.get(), net::HTTP_UNAUTHORIZED, "");
+  ASSERT_EQ(result_, PaymentsRpcResult::kNone);
+  IssueOAuthToken();
+
+  EXPECT_THAT(GetUploadData(), HasSubstr(GetParam().payload_value));
+  ReturnResponse(payments_network_interface_.get(), net::HTTP_OK,
+                 "{ \"pan\": \"1234\" }");
+  EXPECT_EQ(result_, PaymentsRpcResult::kSuccess);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ,
+    UnmaskFidoPayloadRetryTest,
+    testing::Values(FidoPayloadRetryTestCase{CardUnmaskOptions().with_fido(),
+                                             "fake_signature"},
+                    FidoPayloadRetryTestCase{
+                        CardUnmaskOptions().with_fido_enrollment(),
+                        "fake_attestation"}));
 
 TEST_F(PaymentsNetworkInterfaceTest, UnmaskSuccessViaCVCWithCreationOptions) {
   StartUnmasking(CardUnmaskOptions().with_cvc("111"));
@@ -1774,7 +1927,7 @@ TEST_P(GetVirtualCardEnrollmentDetailsTest,
   request_details.instrument_id = 12345678;
   request_details.billing_customer_number = 555666777888;
   request_details.risk_data = "fake risk data";
-  request_details.app_locale = "en";
+  request_details.app_locale = base::i18n::GetKnownLanguageTag("en");
 
   payments_network_interface_->GetVirtualCardEnrollmentDetails(
       request_details,
@@ -1851,7 +2004,7 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_P(PaymentsNetworkInterfaceTestWithPaymentsRpcResultParam,
        GetDetailsForCreateBnplPaymentInstrument) {
   GetDetailsForCreateBnplPaymentInstrumentRequestDetails request_details;
-  request_details.app_locale = "en-US";
+  request_details.app_locale = base::i18n::GetKnownLanguageTag("en-US");
   request_details.billing_customer_number = 555666777888;
   request_details.issuer_id = "Affirm";
   std::string context_token = "some_token";
@@ -1908,7 +2061,7 @@ TEST_P(PaymentsNetworkInterfaceTestWithPaymentsRpcResultParam,
 TEST_P(PaymentsNetworkInterfaceTestWithPaymentsRpcResultParam,
        GetDetailsForUpdateBnplPaymentInstrument) {
   GetDetailsForUpdateBnplPaymentInstrumentRequestDetails request_details;
-  request_details.app_locale = "en-US";
+  request_details.app_locale = base::i18n::GetKnownLanguageTag("en-US");
   request_details.billing_customer_number = 555666777888;
   request_details.type =
       GetDetailsForUpdateBnplPaymentInstrumentRequestDetails::
@@ -1970,7 +2123,7 @@ TEST_P(PaymentsNetworkInterfaceTestWithPaymentsRpcResultParam,
 TEST_P(PaymentsNetworkInterfaceTestWithPaymentsRpcResultParam,
        CreateBnplPaymentInstrument_TestAllFlows) {
   CreateBnplPaymentInstrumentRequestDetails request_details;
-  request_details.app_locale = "en-US";
+  request_details.app_locale = base::i18n::GetKnownLanguageTag("en-US");
   request_details.billing_customer_number = 555666777888;
   request_details.context_token = "context_token";
   request_details.risk_data = "wjhJLg";
@@ -2022,7 +2175,7 @@ TEST_P(PaymentsNetworkInterfaceTestWithPaymentsRpcResultParam,
 TEST_P(PaymentsNetworkInterfaceTestWithPaymentsRpcResultParam,
        UpdateBnplPaymentInstrument_TestAllFlows) {
   UpdateBnplPaymentInstrumentRequestDetails request_details;
-  request_details.app_locale = "en-US";
+  request_details.app_locale = base::i18n::GetKnownLanguageTag("en-US");
   request_details.billing_customer_number = 555666777888;
   request_details.context_token = "context_token";
   request_details.risk_data = "wjhJLg";
@@ -2226,7 +2379,7 @@ TEST_P(PaymentsNetworkInterfaceTestWithPaymentsRpcResultParam,
 TEST_P(PaymentsNetworkInterfaceTestWithPaymentsRpcResultParam,
        GetWalletReminderNotice) {
   GetWalletReminderNoticeRequestDetails request_details;
-  request_details.app_locale = "en-US";
+  request_details.app_locale = base::i18n::GetKnownLanguageTag("en-US");
   request_details.billing_customer_number = 555666777888;
   request_details.billable_service_number = 1234;
 
@@ -2291,7 +2444,7 @@ TEST_P(PaymentsNetworkInterfaceTestWithPaymentsRpcResultParam,
 TEST_P(PaymentsNetworkInterfaceTestWithPaymentsRpcResultParam,
        RecordLegalReminderAcknowledgment) {
   RecordLegalReminderAcknowledgmentRequestDetails request_details;
-  request_details.app_locale = "en-US";
+  request_details.app_locale = base::i18n::GetKnownLanguageTag("en-US");
   request_details.billing_customer_number = 555666777888;
   request_details.billable_service_number = 1234;
   request_details.legal_message_token = "some_token";

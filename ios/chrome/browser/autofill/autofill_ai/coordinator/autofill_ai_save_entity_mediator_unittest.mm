@@ -4,10 +4,13 @@
 
 #import "ios/chrome/browser/autofill/autofill_ai/coordinator/autofill_ai_save_entity_mediator.h"
 
+#import <memory>
+#import <optional>
 #import <tuple>
 
 #import "base/functional/bind.h"
 #import "base/functional/callback_helpers.h"
+#import "base/i18n/language_tag.h"
 #import "base/memory/raw_ptr.h"
 #import "base/test/bind.h"
 #import "base/test/metrics/histogram_tester.h"
@@ -27,8 +30,10 @@
 #import "ios/chrome/browser/autofill/model/bottom_sheet/autofill_bottom_sheet_java_script_feature.h"
 #import "ios/chrome/browser/autofill/model/bottom_sheet/autofill_bottom_sheet_tab_helper.h"
 #import "ios/chrome/browser/autofill/model/features.h"
+#import "ios/chrome/browser/autofill/model/ios_autofill_entity_data_manager_observer_bridge.h"
 #import "ios/chrome/browser/autofill/model/message/autofill_legal_message_line.h"
 #import "ios/chrome/browser/net/model/crurl.h"
+#import "ios/chrome/browser/shared/public/commands/autofill_commands.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/web/public/test/fakes/fake_web_frames_manager.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
@@ -36,6 +41,8 @@
 #import "testing/gtest/include/gtest/gtest.h"
 #import "testing/gtest_mac.h"
 #import "testing/platform_test.h"
+#import "third_party/ocmock/OCMock/OCMock.h"
+#import "third_party/ocmock/gtest_support.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "url/gurl.h"
 
@@ -53,13 +60,16 @@ autofill::EntityInstance CreateTestEntity() {
 @property(nonatomic, copy) NSArray<CrURL*>* footerURLs;
 @property(nonatomic, assign) BOOL setNewEntityCalled;
 @property(nonatomic, assign) BOOL showsExplicitDeclineButton;
+@property(nonatomic, assign) BOOL showLoadingStateCalled;
+@property(nonatomic, assign) BOOL showConfirmationStateCalled;
 @end
 
 @implementation FakeAutofillAISaveEntityConsumer
 
 - (void)setNewEntity:(autofill::EntityInstance)newEntity
             oldEntity:(std::optional<autofill::EntityInstance>)oldEntity
-    saveIsSynchronous:(BOOL)saveIsSynchronous {
+    saveIsSynchronous:(BOOL)saveIsSynchronous
+            appLocale:(const base::i18n::LanguageTag&)appLocale {
   self.setNewEntityCalled = YES;
 }
 
@@ -69,9 +79,11 @@ autofill::EntityInstance CreateTestEntity() {
 }
 
 - (void)showLoadingState {
+  self.showLoadingStateCalled = YES;
 }
 
 - (void)showConfirmationState {
+  self.showConfirmationStateCalled = YES;
 }
 
 @end
@@ -93,8 +105,10 @@ class AutofillAISaveEntityMediatorTest : public PlatformTest {
                                       show_explicit_decline_button);
 
     AutofillAISaveEntityMediator* mediator =
-        [[AutofillAISaveEntityMediator alloc] initWithParams:std::move(params)
-                                           entityDataManager:nullptr];
+        [[AutofillAISaveEntityMediator alloc]
+               initWithParams:std::move(params)
+            entityDataManager:nullptr
+                    appLocale:base::i18n::GetKnownLanguageTag("en-US")];
 
     FakeAutofillAISaveEntityConsumer* consumer =
         [[FakeAutofillAISaveEntityConsumer alloc] init];
@@ -109,14 +123,14 @@ class AutofillAISaveEntityMediatorTest : public PlatformTest {
   void SetUpTabHelperIntegration() {
     scoped_feature_list_.InitAndEnableFeature(
         kAutofillReshowSavePromptOnTabReturn);
+    web::FakeWebState& web_state = fake_web_state_.emplace();
     auto frames_manager = std::make_unique<web::FakeWebFramesManager>();
     web::ContentWorld content_world =
         AutofillBottomSheetJavaScriptFeature::GetInstance()
             ->GetSupportedContentWorld();
-    fake_web_state_.SetWebFramesManager(content_world,
-                                        std::move(frames_manager));
-    AutofillBottomSheetTabHelper::CreateForWebState(&fake_web_state_);
-    tab_helper_ = AutofillBottomSheetTabHelper::FromWebState(&fake_web_state_);
+    web_state.SetWebFramesManager(content_world, std::move(frames_manager));
+    AutofillBottomSheetTabHelper::CreateForWebState(&web_state);
+    tab_helper_ = AutofillBottomSheetTabHelper::FromWebState(&web_state);
   }
 
   // Creates SaveEntityParams with the provided callback and entity.
@@ -125,13 +139,14 @@ class AutofillAISaveEntityMediatorTest : public PlatformTest {
           autofill::AutofillClient::AutofillAiBubbleResult,
           std::optional<autofill::EntityInstance>,
           const autofill::AutofillClient::EntityImportUIContext&)> callback,
-      autofill::EntityInstance entity = CreateTestEntity()) {
-    return autofill::SaveEntityParams(
-        std::move(entity), /*old_entity=*/std::nullopt,
-        /*user_email=*/u"test@example.com",
-        /*save_is_synchronous=*/true, std::move(callback),
-        /*public_passes_notice=*/{},
-        /*show_explicit_decline_button=*/false);
+      autofill::EntityInstance entity = CreateTestEntity(),
+      bool save_is_synchronous = true) {
+    return autofill::SaveEntityParams(std::move(entity),
+                                      /*old_entity=*/std::nullopt,
+                                      /*user_email=*/u"test@example.com",
+                                      save_is_synchronous, std::move(callback),
+                                      /*public_passes_notice=*/{},
+                                      /*show_explicit_decline_button=*/false);
   }
 
   // Sets up tab helper integration, stages the prompt model, and creates a
@@ -143,13 +158,15 @@ class AutofillAISaveEntityMediatorTest : public PlatformTest {
         std::make_unique<AutofillAiSaveEntityPromptModel>(std::move(params));
     tab_helper_->ShowAutofillAiSaveEntityBottomSheet(std::move(model));
     EXPECT_NE(nullptr, tab_helper_->GetAutofillAiSaveEntityPromptModel());
-    return [[AutofillAISaveEntityMediator alloc] initWithTabHelper:tab_helper_
-                                                 entityDataManager:nullptr];
+    return [[AutofillAISaveEntityMediator alloc]
+        initWithTabHelper:tab_helper_
+        entityDataManager:nullptr
+                appLocale:base::i18n::GetKnownLanguageTag("en-US")];
   }
 
   base::test::ScopedFeatureList scoped_feature_list_;
   base::test::TaskEnvironment task_environment_;
-  web::FakeWebState fake_web_state_;
+  std::optional<web::FakeWebState> fake_web_state_;
   raw_ptr<AutofillBottomSheetTabHelper> tab_helper_ = nullptr;
 };
 
@@ -306,9 +323,10 @@ TEST_F(AutofillAISaveEntityMediatorTest,
       /*public_passes_notice=*/std::move(legal_message_lines),
       /*show_explicit_decline_button=*/false);
 
-  AutofillAISaveEntityMediator* mediator =
-      [[AutofillAISaveEntityMediator alloc] initWithParams:std::move(params)
-                                         entityDataManager:nullptr];
+  AutofillAISaveEntityMediator* mediator = [[AutofillAISaveEntityMediator alloc]
+         initWithParams:std::move(params)
+      entityDataManager:nullptr
+              appLocale:base::i18n::GetKnownLanguageTag("en-US")];
   FakeAutofillAISaveEntityConsumer* consumer =
       [[FakeAutofillAISaveEntityConsumer alloc] init];
   mediator.consumer = consumer;
@@ -367,9 +385,10 @@ TEST_F(AutofillAISaveEntityMediatorTest, AcceptSavingReportsAccepted) {
             callback_result = result;
           }));
 
-  AutofillAISaveEntityMediator* mediator =
-      [[AutofillAISaveEntityMediator alloc] initWithParams:std::move(params)
-                                         entityDataManager:nullptr];
+  AutofillAISaveEntityMediator* mediator = [[AutofillAISaveEntityMediator alloc]
+         initWithParams:std::move(params)
+      entityDataManager:nullptr
+              appLocale:base::i18n::GetKnownLanguageTag("en-US")];
   [mediator acceptSaving];
 
   EXPECT_EQ(callback_result,
@@ -392,9 +411,10 @@ TEST_F(AutofillAISaveEntityMediatorTest, CancelSavingReportsCancelled) {
             callback_result = result;
           }));
 
-  AutofillAISaveEntityMediator* mediator =
-      [[AutofillAISaveEntityMediator alloc] initWithParams:std::move(params)
-                                         entityDataManager:nullptr];
+  AutofillAISaveEntityMediator* mediator = [[AutofillAISaveEntityMediator alloc]
+         initWithParams:std::move(params)
+      entityDataManager:nullptr
+              appLocale:base::i18n::GetKnownLanguageTag("en-US")];
   [mediator cancelSaving];
 
   EXPECT_EQ(callback_result,
@@ -419,9 +439,10 @@ TEST_F(AutofillAISaveEntityMediatorTest,
             callback_result = result;
           }));
 
-  AutofillAISaveEntityMediator* mediator =
-      [[AutofillAISaveEntityMediator alloc] initWithParams:std::move(params)
-                                         entityDataManager:nullptr];
+  AutofillAISaveEntityMediator* mediator = [[AutofillAISaveEntityMediator alloc]
+         initWithParams:std::move(params)
+      entityDataManager:nullptr
+              appLocale:base::i18n::GetKnownLanguageTag("en-US")];
   [mediator dismissSaving];
 
   EXPECT_EQ(callback_result,
@@ -446,9 +467,10 @@ TEST_F(AutofillAISaveEntityMediatorTest,
             callback_result = result;
           }));
 
-  AutofillAISaveEntityMediator* mediator =
-      [[AutofillAISaveEntityMediator alloc] initWithParams:std::move(params)
-                                         entityDataManager:nullptr];
+  AutofillAISaveEntityMediator* mediator = [[AutofillAISaveEntityMediator alloc]
+         initWithParams:std::move(params)
+      entityDataManager:nullptr
+              appLocale:base::i18n::GetKnownLanguageTag("en-US")];
   [mediator disconnect];
 
   EXPECT_EQ(callback_result,
@@ -630,4 +652,96 @@ TEST_F(AutofillAISaveEntityMediatorTest,
   // Explicitly destroy the pending model while callback_result is still in
   // scope to avoid stack-use-after-scope during test teardown.
   std::ignore = tab_helper_->TakeAutofillAiSaveEntityPromptModel();
+}
+
+// Regression test for crbug.com/586568080: destroying the WebState (and its
+// AutofillBottomSheetTabHelper) while an asynchronous save is in flight must
+// not cause a use-after-free or crash if the mediator subsequently receives
+// confirmation, swipe dismissal, cancel, accept, or disconnect calls.
+TEST_F(AutofillAISaveEntityMediatorTest,
+       TabHelperIntegrationAsyncAcceptWebStateDestroyedDoesNotCrash) {
+  int callback_count = 0;
+  std::optional<autofill::AutofillClient::AutofillAiBubbleResult>
+      callback_result;
+  AutofillAISaveEntityMediator* mediator =
+      CreateMediatorWithPromptModel(CreateDefaultSaveEntityParams(
+          base::BindLambdaForTesting(
+              [&](autofill::AutofillClient::AutofillAiBubbleResult result,
+                  std::optional<autofill::EntityInstance> entity,
+                  const autofill::AutofillClient::EntityImportUIContext&
+                      context) {
+                ++callback_count;
+                callback_result = result;
+              }),
+          CreateTestEntity(), /*save_is_synchronous=*/false));
+
+  FakeAutofillAISaveEntityConsumer* consumer =
+      [[FakeAutofillAISaveEntityConsumer alloc] init];
+  mediator.consumer = consumer;
+
+  id mock_autofill_handler = OCMProtocolMock(@protocol(AutofillCommands));
+  mediator.autofillHandler = mock_autofill_handler;
+
+  [mediator acceptSaving];
+  EXPECT_TRUE(consumer.showLoadingStateCalled);
+  EXPECT_EQ(callback_count, 1);
+  EXPECT_EQ(callback_result,
+            autofill::AutofillClient::AutofillAiBubbleResult::kAccepted);
+  EXPECT_EQ(nullptr, tab_helper_->GetAutofillAiSaveEntityPromptModel());
+
+  // Destroy the WebState and its AutofillBottomSheetTabHelper while the async
+  // save UI is still alive.
+  tab_helper_ = nullptr;
+  fake_web_state_.reset();
+  EXPECT_EQ(callback_count, 1);
+
+  // Async save completes after WebState destruction, then user swipes down or
+  // interacts with the lingering mediator.
+  [(id<IOSAutofillEntityDataManagerObserver>)mediator onEntityInstancesChanged];
+  EXPECT_TRUE(consumer.showConfirmationStateCalled);
+
+  OCMExpect([mock_autofill_handler dismissSaveEntityDialog]);
+  [mediator dismissSaving];
+
+  OCMExpect([mock_autofill_handler dismissSaveEntityDialog]);
+  [mediator cancelSaving];
+
+  OCMExpect([mock_autofill_handler dismissSaveEntityDialog]);
+  [mediator acceptSaving];
+
+  EXPECT_EQ(callback_count, 1);
+  EXPECT_OCMOCK_VERIFY(mock_autofill_handler);
+  [mediator disconnect];
+}
+
+// Tests that if the WebState is destroyed before the user taps Save,
+// `acceptSaving` safely dismisses without crashing on a null `WeakPtr`.
+TEST_F(AutofillAISaveEntityMediatorTest,
+       TabHelperIntegrationWebStateDestroyedBeforeAcceptDismissesSafely) {
+  std::optional<autofill::AutofillClient::AutofillAiBubbleResult>
+      callback_result;
+  AutofillAISaveEntityMediator* mediator =
+      CreateMediatorWithPromptModel(CreateDefaultSaveEntityParams(
+          base::BindLambdaForTesting(
+              [&](autofill::AutofillClient::AutofillAiBubbleResult result,
+                  std::optional<autofill::EntityInstance> entity,
+                  const autofill::AutofillClient::EntityImportUIContext&
+                      context) { callback_result = result; }),
+          CreateTestEntity(), /*save_is_synchronous=*/false));
+
+  id mock_autofill_handler = OCMProtocolMock(@protocol(AutofillCommands));
+  mediator.autofillHandler = mock_autofill_handler;
+
+  // Destroying the WebState expires the pending model with `kUnknown` and
+  // invalidates the mediator's weak pointer to the tab helper.
+  tab_helper_ = nullptr;
+  fake_web_state_.reset();
+  EXPECT_EQ(callback_result,
+            autofill::AutofillClient::AutofillAiBubbleResult::kUnknown);
+
+  OCMExpect([mock_autofill_handler dismissSaveEntityDialog]);
+  [mediator acceptSaving];
+
+  EXPECT_OCMOCK_VERIFY(mock_autofill_handler);
+  [mediator disconnect];
 }

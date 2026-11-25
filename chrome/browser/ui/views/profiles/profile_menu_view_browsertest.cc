@@ -28,7 +28,6 @@
 #include "base/time/time.h"
 #include "base/version.h"
 #include "base/version_info/version_info.h"
-#include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
@@ -106,7 +105,7 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
-#include "components/enterprise/isolated_mode/isolated_mode_features.h"
+#include "components/enterprise/isolated_mode/scoped_isolated_mode_override_for_testing.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/google/core/common/google_util.h"
 #include "components/password_manager/core/common/password_manager_features.h"
@@ -170,10 +169,6 @@
 #include "ui/views/test/widget_test.h"
 #include "ui/views/view_utils.h"
 #include "ui/views/widget/any_widget_observer.h"
-
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
-#include "chrome/test/base/scoped_channel_override.h"
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 #include "chrome/browser/ui/webui/signin/signout_confirmation/signout_confirmation_ui.h"
@@ -1711,7 +1706,7 @@ PROFILE_MENU_CLICK_TEST(kActionableItems_MultipleProfiles,
   CreateAdditionalProfile();
   // Open a browser for another profile, and a second browser for the current
   // profile, so the kExitProfileButton is shown.
-  CreateBrowserWindow(
+  CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(other_profile, /*from_user_gesture=*/true));
   SetTargetBrowser(CreateBrowser(browser()->GetProfile()));
   RunTest();
@@ -2241,19 +2236,9 @@ PROFILE_MENU_CLICK_TEST(kActionableItems_IncognitoProfile,
 }
 
 class ProfileMenuClickTestEnterpriseIsolated : public ProfileMenuClickTest {
- public:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    ProfileMenuClickTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch(
-        enterprise_isolated_mode::switches::
-            kForceEnterpriseIsolatedModeReplacesIncognito);
-  }
-
  private:
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
-  chrome::ScopedChannelOverride channel_override_{
-      chrome::ScopedChannelOverride::Channel::kDev};
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
+  enterprise_isolated_mode::ScopedIsolatedModeOverrideForTesting
+      scoped_isolated_mode_;
 };
 
 // List of actionable items in the correct order as they appear in the menu.
@@ -2596,7 +2581,7 @@ IN_PROC_BROWSER_TEST_F(ProfileMenuHatsSurveyTest,
   MockHatsService* other_profile_hats_service = static_cast<MockHatsService*>(
       HatsServiceFactory::GetInstance()->SetTestingFactoryAndUse(
           other_profile, base::BindRepeating(&BuildMockHatsService)));
-  CreateBrowserWindow(
+  CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(other_profile, /*from_user_gesture=*/true));
 
   // The survey should be launched for the other profile after switching.
@@ -2726,7 +2711,7 @@ IN_PROC_BROWSER_TEST_F(ProfileMenuHatsSurveyTest,
 
   // Set up another profile.
   Profile* other_profile = CreateAdditionalProfile();
-  CreateBrowserWindow(
+  CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(other_profile, /*from_user_gesture=*/true));
 
   // Attempt to select every actionable item in the menu.

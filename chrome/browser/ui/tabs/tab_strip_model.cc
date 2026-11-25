@@ -70,6 +70,7 @@
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_model.h"
 #include "chrome/browser/ui/tabs/tab_muted_utils.h"
+#include "chrome/browser/ui/tabs/tab_strip_focus_announcer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
@@ -153,6 +154,36 @@ class ReentrancyCheck {
   const raw_ptr<bool> guard_flag_;
 };
 
+// Defers `TabInterface::RegisterSplitChanged()` notifications for the given
+// tabs until this scope exits so listeners never observe partial split state.
+class ScopedSplitUpdate {
+ public:
+  ScopedSplitUpdate(base::PassKey<TabStripModel> passkey,
+                    base::span<tabs::TabInterface* const> tabs)
+      : passkey_(passkey) {
+    handles_.reserve(tabs.size());
+    for (tabs::TabInterface* tab : tabs) {
+      handles_.push_back(tab->GetHandle());
+      static_cast<tabs::TabModel*>(tab)->BeginSplitUpdate(passkey_);
+    }
+  }
+
+  ScopedSplitUpdate(const ScopedSplitUpdate&) = delete;
+  ScopedSplitUpdate& operator=(const ScopedSplitUpdate&) = delete;
+
+  ~ScopedSplitUpdate() {
+    for (tabs::TabHandle handle : handles_) {
+      if (tabs::TabInterface* tab = handle.Get()) {
+        static_cast<tabs::TabModel*>(tab)->EndSplitUpdate(passkey_);
+      }
+    }
+  }
+
+ private:
+  base::PassKey<TabStripModel> passkey_;
+  std::vector<tabs::TabHandle> handles_;
+};
+
 // Returns true if the specified transition is one of the types that cause the
 // opener relationships for the tab in which the transition occurred to be
 // forgotten. This is generally any navigation that isn't a link click (i.e.
@@ -178,20 +209,26 @@ void RecordToggleFocusGroupMetrics(bool is_unfocus,
     return;
   }
 
-  TabGroupFocusEntryPoint entry_point =
-      TabGroupFocusEntryPoint::kTabContextMenu;
-  if (is_non_group) {
-    entry_point = non_group_tabs_count == 1
-                      ? TabGroupFocusEntryPoint::kTabContextMenuSingleTab
-                      : TabGroupFocusEntryPoint::kTabContextMenuMultiTab;
-  }
-  base::UmaHistogramEnumeration("TabGroups.Focus.EntryPoint", entry_point);
   base::RecordAction(UserMetricsAction(is_non_group
                                            ? "TabContextMenu_FocusNonGroupTabs"
                                            : "TabContextMenu_FocusTabGroup"));
   if (is_non_group) {
     base::UmaHistogramCounts1000("TabGroups.Focus.NonGroupTabsCount",
                                  non_group_tabs_count);
+  }
+}
+
+bool IsGroupFocusEntryPoint(TabGroupFocusEntryPoint entry_point) {
+  switch (entry_point) {
+    case TabGroupFocusEntryPoint::kEditorBubble:
+    case TabGroupFocusEntryPoint::kTabContextMenu:
+    case TabGroupFocusEntryPoint::kBookmarksBarContextMenu:
+    case TabGroupFocusEntryPoint::kAppMenu:
+    case TabGroupFocusEntryPoint::kOrganizerPanel:
+      return true;
+    case TabGroupFocusEntryPoint::kTabContextMenuSingleTab:
+    case TabGroupFocusEntryPoint::kTabContextMenuMultiTab:
+      return false;
   }
 }
 
@@ -2454,6 +2491,7 @@ void TabStripModel::PromoteEphemeralTabGroup(
   }
 
   tab_group->SetIsEphemeral(false);
+  OnFocusCujGroupPromoted(group_id);
 
   // Ephemeral groups skip OnTabGroupAdded() at creation, so observers that
   // save or persist groups have never seen this one. Send it now, otherwise
@@ -2475,12 +2513,16 @@ std::optional<tab_groups::TabGroupId> TabStripModel::GetFocusedGroup() const {
   return selection_model_.focused_group();
 }
 
-void TabStripModel::EnterFocusMode(const tab_groups::TabGroupId& group) {
+void TabStripModel::EnterFocusMode(
+    const tab_groups::TabGroupId& group,
+    std::optional<TabGroupFocusEntryPoint> entry_point) {
   ReentrancyCheck reentrancy_check(&reentrancy_guard_);
-  EnterFocusModeImpl(group);
+  EnterFocusModeImpl(group, entry_point);
 }
 
-void TabStripModel::EnterFocusModeImpl(const tab_groups::TabGroupId& group) {
+void TabStripModel::EnterFocusModeImpl(
+    const tab_groups::TabGroupId& group,
+    std::optional<TabGroupFocusEntryPoint> entry_point) {
   CHECK(base::FeatureList::IsEnabled(features::kTabGroupsFocusing));
 
   CHECK(group_model_);
@@ -2493,15 +2535,19 @@ void TabStripModel::EnterFocusModeImpl(const tab_groups::TabGroupId& group) {
     return;
   }
 
+  TabGroup* const tab_group = group_model_->GetTabGroup(group);
+  CHECK(tab_group->tab_count() > 0);
+  if (entry_point.has_value()) {
+    CHECK_EQ(IsGroupFocusEntryPoint(*entry_point), !tab_group->is_ephemeral());
+    base::UmaHistogramEnumeration("TabGroups.Focus.EntryPoint", *entry_point);
+  }
+
   std::optional<tab_groups::TabGroupId> old_focused_group =
       selection_model_.focused_group();
 
   {
     tabs::TabStripModelSelectionState new_selection_model = selection_model_;
     new_selection_model.set_focused_group(group);
-
-    TabGroup* const tab_group = group_model_->GetTabGroup(group);
-    CHECK(tab_group->tab_count() > 0);
 
     // Copy the previous selection model, but remove tabs not part of the
     // tab_group in the list of selected tabs.
@@ -2542,6 +2588,11 @@ void TabStripModel::EnterFocusModeImpl(const tab_groups::TabGroupId& group) {
                  /*triggered_by_other_operation=*/false);
     NotifyTabGroupFocusChanged(old_focused_group);
 
+    if (auto* const announcer = TabStripFocusAnnouncer::From(
+            delegate_->GetBrowserWindowInterface())) {
+      announcer->AnnounceFocusEntered(*tab_group);
+    }
+
     // Ephemeral tab groups do not trigger a browser theme change upon entering
     // focus mode, so we manually update the visual data here to ensure
     // correctness.
@@ -2551,22 +2602,25 @@ void TabStripModel::EnterFocusModeImpl(const tab_groups::TabGroupId& group) {
     }
 
     MaybeRemoveEphemeralGroup(old_focused_group);
+    StartOrContinueFocusCujSession(entry_point);
   }
 }
 
 tab_groups::TabGroupId TabStripModel::EnterFocusMode(
-    const std::vector<int>& indices) {
+    const std::vector<int>& indices,
+    std::optional<TabGroupFocusEntryPoint> entry_point) {
   CHECK(base::FeatureList::IsEnabled(features::kTabGroupsFocusing));
   ReentrancyCheck reentrancy_check(&reentrancy_guard_);
   const tab_groups::TabGroupId group =
       AddToNewGroupAndNotifyImpl(indices, /*is_ephemeral=*/true);
-  EnterFocusModeImpl(group);
+  EnterFocusModeImpl(group, entry_point);
   return group;
 }
 
 tab_groups::TabGroupId TabStripModel::EnterFocusMode(
-    const std::vector<tabs::TabHandle>& tabs) {
-  return EnterFocusMode(GetSortedIndicesForTabs(tabs));
+    const std::vector<tabs::TabHandle>& tabs,
+    std::optional<TabGroupFocusEntryPoint> entry_point) {
+  return EnterFocusMode(GetSortedIndicesForTabs(tabs), entry_point);
 }
 
 void TabStripModel::ExitFocusMode(
@@ -2600,20 +2654,34 @@ void TabStripModel::ExitFocusModeImpl(
     NotifyTabGroupFocusChanged(old_focused_group);
   }
 
+  BrowserWindowInterface* const browser =
+      delegate_->GetBrowserWindowInterface();
+  const TabGroup* const old_group =
+      group_model_->GetTabGroup(old_focused_group.value());
+  bool toast_shown = false;
   if (reason == TabGroupFocusExitReason::kTabOutsideGroupActivated) {
     if (ToastController* const toast_controller =
-            ToastController::From(delegate_->GetBrowserWindowInterface())) {
+            ToastController::From(browser)) {
       ToastParams params(ToastId::kTabGroupFocusExited);
       if (is_ephemeral) {
         params.body_string_override = l10n_util::GetPluralStringFUTF16(
-            IDS_NON_GROUP_FOCUS_EXITED_TOAST_BODY,
-            group_model_->GetTabGroup(old_focused_group.value())->tab_count());
+            IDS_NON_GROUP_FOCUS_EXITED_TOAST_BODY, old_group->tab_count());
       }
-      toast_controller->MaybeShowToast(std::move(params));
+      toast_shown = toast_controller->MaybeShowToast(std::move(params));
+    }
+  }
+
+  if (auto* const announcer = TabStripFocusAnnouncer::From(browser)) {
+    // Skip when the exit toast already alerts screen readers or on teardown.
+    if (toast_shown || closing_all_) {
+      announcer->CancelPendingAnnouncement();
+    } else {
+      announcer->AnnounceFocusExited(*old_group);
     }
   }
 
   MaybeRemoveEphemeralGroup(old_focused_group);
+  FinishFocusCujSession();
 }
 
 base::ScopedClosureRunner TabStripModel::TakeEphemeralGroupRemovalLock(
@@ -2787,6 +2855,63 @@ void TabStripModel::LogTabGroupFocusMetrics(
     had_pinned_tabs_in_focus_session_ = (pinned_tabs_count > 0);
     base::UmaHistogramCounts100("TabGroups.Focus.PinnedTabCountOnEntry",
                                 pinned_tabs_count);
+  }
+}
+
+void TabStripModel::StartOrContinueFocusCujSession(
+    std::optional<TabGroupFocusEntryPoint> entry_point) {
+  if (!profile_ || !profile_->IsRegularProfile() || closing_all_ || empty()) {
+    AbortFocusCujSession();
+    return;
+  }
+
+  if (focus_cuj_session_.has_value()) {
+    if (!focus_cuj_session_->is_persistent_group_session()) {
+      // Switching directly from an unpromoted ephemeral selection into a
+      // persistent group destroys the ephemeral selection; finalize the
+      // Non-Group session before starting a new session for `entry_point`.
+      FinishFocusCujSession();
+    } else if (entry_point.has_value() &&
+               !IsGroupFocusEntryPoint(*entry_point)) {
+      // Never absorb an ephemeral entry into an active persistent-group
+      // session; finalize the persistent session first.
+      FinishFocusCujSession();
+    } else {
+      return;
+    }
+  }
+
+  if (!entry_point.has_value()) {
+    return;
+  }
+
+  focus_cuj_session_ = FocusCujSession{
+      .is_group_session = IsGroupFocusEntryPoint(*entry_point),
+  };
+}
+
+void TabStripModel::FinishFocusCujSession() {
+  if (!focus_cuj_session_.has_value()) {
+    return;
+  }
+
+  const FocusCujSession session =
+      *std::exchange(focus_cuj_session_, std::nullopt);
+  if (!session.is_group_session) {
+    base::UmaHistogramBoolean("TabGroups.Focus.NonGroupPromotedInSession",
+                              session.promoted);
+  }
+}
+
+void TabStripModel::AbortFocusCujSession() {
+  focus_cuj_session_.reset();
+}
+
+void TabStripModel::OnFocusCujGroupPromoted(
+    const tab_groups::TabGroupId& group_id) {
+  if (focus_cuj_session_.has_value() && !focus_cuj_session_->is_group_session &&
+      GetFocusedGroup() == group_id) {
+    focus_cuj_session_->promoted = true;
   }
 }
 
@@ -3555,7 +3680,10 @@ void TabStripModel::ExecuteContextMenuCommand(tabs::TabHandle context_tab,
         std::vector<tabs::TabHandle> tabs = GetTabsForCommand(context_tab);
         RecordToggleFocusGroupMetrics(/*is_unfocus=*/false,
                                       /*is_non_group=*/true, tabs.size());
-        EnterFocusMode(tabs);
+        EnterFocusMode(tabs,
+                       tabs.size() == 1
+                           ? TabGroupFocusEntryPoint::kTabContextMenuSingleTab
+                           : TabGroupFocusEntryPoint::kTabContextMenuMultiTab);
         break;
       }
       if (GetFocusedGroup() == group_id) {
@@ -3565,7 +3693,8 @@ void TabStripModel::ExecuteContextMenuCommand(tabs::TabHandle context_tab,
       } else {
         RecordToggleFocusGroupMetrics(/*is_unfocus=*/false,
                                       /*is_non_group=*/false);
-        EnterFocusMode(group_id.value());
+        EnterFocusMode(group_id.value(),
+                       TabGroupFocusEntryPoint::kTabContextMenu);
       }
       break;
     }
@@ -5128,6 +5257,7 @@ split_tabs::SplitTabId TabStripModel::AddToSplitImpl(
                                GetTabGroupForTab(pivot_index),
                                IsTabPinned(pivot_index));
 
+  ScopedSplitUpdate split_update(base::PassKey<TabStripModel>(), tabs);
   contents_data_->CreateSplit(split_id, tabs, visual_data);
   selection_model_.InvalidateListSelectionModel(base::PassKey<TabStripModel>());
 
@@ -5172,6 +5302,12 @@ void TabStripModel::RemoveSplitImpl(
     SplitTabChange::SplitTabRemoveReason reason) {
   std::vector<std::pair<tabs::TabInterface*, int>> tabs_with_indices =
       GetTabsAndIndicesInSplit(split_id);
+  std::vector<tabs::TabInterface*> split_tabs;
+  split_tabs.reserve(tabs_with_indices.size());
+  for (const auto& [tab, index] : tabs_with_indices) {
+    split_tabs.push_back(tab);
+  }
+  ScopedSplitUpdate split_update(base::PassKey<TabStripModel>(), split_tabs);
 
   contents_data_->Unsplit(split_id);
   selection_model_.InvalidateListSelectionModel(base::PassKey<TabStripModel>());
@@ -5214,6 +5350,10 @@ void TabStripModel::UpdateTabInSplitImpl(tabs::TabHandle split_tab,
 
   std::vector<tabs::TabInterface*> tabs_to_split =
       GetSplitData(split_id)->ListTabs();
+  std::vector<tabs::TabInterface*> split_update_tabs = tabs_to_split;
+  split_update_tabs.push_back(update_tab_ptr);
+  ScopedSplitUpdate split_update(base::PassKey<TabStripModel>(),
+                                 split_update_tabs);
   split_tabs::SplitTabVisualData split_visual_data =
       *GetSplitData(split_id)->visual_data();
   const bool initial_split_active = split_tab_ptr->IsActivated();

@@ -105,6 +105,8 @@ COMPONENT_EXPORT(AUTOFILL)
 BASE_DECLARE_FEATURE(kAutofillEnableWalletGmailOffers);
 COMPONENT_EXPORT(AUTOFILL)
 BASE_DECLARE_FEATURE(kAutofillEnableWalletReminderNotice);
+COMPONENT_EXPORT(AUTOFILL)
+BASE_DECLARE_FEATURE(kAutofillFixVcnStrikeDatabaseFallback);
 #if BUILDFLAG(IS_IOS)
 // When enabled, skips empty CVCs in AutofillWalletCredentialSyncBridge instead
 // of failing a CHECK.
@@ -131,6 +133,8 @@ COMPONENT_EXPORT(AUTOFILL)
 BASE_DECLARE_FEATURE(kAutofillSkipSaveCardForTabModalPopup);
 #if BUILDFLAG(IS_ANDROID)
 COMPONENT_EXPORT(AUTOFILL) BASE_DECLARE_FEATURE(kAutofillSyncEwalletAccounts);
+COMPONENT_EXPORT(AUTOFILL)
+BASE_DECLARE_FEATURE(kAutofillTouchToFillPaymentsBindTargetFieldIds);
 #endif
 COMPONENT_EXPORT(AUTOFILL) BASE_DECLARE_FEATURE(kAutofillUpstream);
 COMPONENT_EXPORT(AUTOFILL)

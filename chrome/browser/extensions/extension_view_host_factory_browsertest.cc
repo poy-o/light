@@ -17,6 +17,22 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/mojom/view_type.mojom.h"
 
+#if BUILDFLAG(IS_ANDROID)
+#include <android/input.h>
+#include <android/keycodes.h>
+
+#include "base/test/scoped_feature_list.h"
+#include "base/time/time.h"
+#include "chrome/browser/extensions/commands/command_service.h"
+#include "components/input/native_web_keyboard_event.h"
+#include "content/public/browser/keyboard_event_processing_result.h"
+#include "extensions/test/extension_test_message_listener.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/jni_zero/jni_zero.h"
+#include "ui/android/ui_android_features.h"
+#include "ui/events/android/key_event_android.h"
+#endif  // BUILDFLAG(IS_ANDROID)
+
 static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 namespace extensions {
@@ -83,5 +99,112 @@ IN_PROC_BROWSER_TEST_F(ExtensionViewHostFactoryTest,
               host->extension_host_type());
   }
 }
+
+#if BUILDFLAG(IS_ANDROID)
+namespace {
+
+input::NativeWebKeyboardEvent CreateKeyDownEvent(int key_code,
+                                                 int meta_state = 0) {
+  ui::KeyEventAndroid key_event(AKEY_EVENT_ACTION_DOWN, key_code, meta_state);
+  return input::NativeWebKeyboardEvent(
+      jni_zero::AttachCurrentThread(), key_event.GetJavaObject(),
+      blink::WebInputEvent::Type::kRawKeyDown,
+      blink::WebInputEvent::kNoModifiers, base::TimeTicks::Now(), key_code,
+      /*scancode=*/0, /*unicode_character=*/0, /*is_system_key=*/false);
+}
+
+}  // namespace
+
+class ExtensionViewHostFactoryShortcutsAndroidTest
+    : public ExtensionViewHostFactoryTest {
+ private:
+  base::test::ScopedFeatureList feature_list_{
+      ui::kAndroidUnifiedKeyboardShortcuts};
+};
+
+IN_PROC_BROWSER_TEST_F(ExtensionViewHostFactoryShortcutsAndroidTest,
+                       PreHandleKeyboardEventForwardsToActiveTabDelegate) {
+  scoped_refptr<const Extension> extension =
+      LoadExtension(test_data_dir_.AppendASCII("api_test")
+                        .AppendASCII("side_panel")
+                        .AppendASCII("simple_default"));
+  ASSERT_TRUE(extension);
+
+  auto* browser = GetBrowserWindowInterface();
+  auto* active_tab = TabListInterface::From(browser)->GetActiveTab();
+  ASSERT_TRUE(active_tab);
+
+  input::NativeWebKeyboardEvent f6_event = CreateKeyDownEvent(AKEYCODE_F6);
+
+  std::unique_ptr<ExtensionViewHost> popup_host =
+      ExtensionViewHostFactory::CreatePopupHost(*extension, extension->url(),
+                                                browser);
+  EXPECT_EQ(content::KeyboardEventProcessingResult::NOT_HANDLED_IS_SHORTCUT,
+            popup_host->PreHandleKeyboardEvent(popup_host->host_contents(),
+                                               f6_event));
+
+  std::unique_ptr<ExtensionViewHost> browser_side_panel_host =
+      ExtensionViewHostFactory::CreateSidePanelHost(
+          *extension, extension->url(), browser, /*tab_interface=*/nullptr);
+  EXPECT_EQ(content::KeyboardEventProcessingResult::NOT_HANDLED_IS_SHORTCUT,
+            browser_side_panel_host->PreHandleKeyboardEvent(
+                browser_side_panel_host->host_contents(), f6_event));
+
+  std::unique_ptr<ExtensionViewHost> tab_side_panel_host =
+      ExtensionViewHostFactory::CreateSidePanelHost(
+          *extension, extension->url(), /*browser=*/nullptr, active_tab);
+  EXPECT_EQ(content::KeyboardEventProcessingResult::NOT_HANDLED_IS_SHORTCUT,
+            tab_side_panel_host->PreHandleKeyboardEvent(
+                tab_side_panel_host->host_contents(), f6_event));
+}
+
+IN_PROC_BROWSER_TEST_F(
+    ExtensionViewHostFactoryShortcutsAndroidTest,
+    PreHandleKeyboardEventExecutesRegisteredExtensionAccelerators) {
+  scoped_refptr<const Extension> extension =
+      LoadExtension(test_data_dir_.AppendASCII("api_test")
+                        .AppendASCII("keybinding")
+                        .AppendASCII("basics"));
+  ASSERT_TRUE(extension);
+
+  std::unique_ptr<ExtensionViewHost> popup_host =
+      ExtensionViewHostFactory::CreatePopupHost(*extension, extension->url(),
+                                                GetBrowserWindowInterface());
+
+  // Without an extension override, Ctrl+D is a non-reserved browser shortcut
+  // (IDC_BOOKMARK_THIS_TAB) and defers to the renderer first.
+  input::NativeWebKeyboardEvent ctrl_d_event =
+      CreateKeyDownEvent(AKEYCODE_D, AMETA_CTRL_ON);
+  EXPECT_EQ(content::KeyboardEventProcessingResult::NOT_HANDLED_IS_SHORTCUT,
+            popup_host->PreHandleKeyboardEvent(popup_host->host_contents(),
+                                               ctrl_d_event));
+
+  // Remapping the named command to Ctrl+D registers it at high priority, so
+  // PreHandleKeyboardEvent intercepts it pre-renderer and fires the command.
+  CommandService* command_service = CommandService::Get(profile());
+  command_service->UpdateKeybindingPrefs(extension->id(), "toggle-feature",
+                                         "Ctrl+D");
+  ExtensionTestMessageListener command_listener("toggle-feature");
+  EXPECT_EQ(content::KeyboardEventProcessingResult::HANDLED,
+            popup_host->PreHandleKeyboardEvent(popup_host->host_contents(),
+                                               ctrl_d_event));
+  EXPECT_TRUE(command_listener.WaitUntilSatisfied());
+
+  // Clearing the shortcut unregisters the priority handler and restores the
+  // non-reserved browser shortcut behavior.
+  command_service->RemoveKeybindingPrefs(extension->id(), "toggle-feature");
+  EXPECT_EQ(content::KeyboardEventProcessingResult::NOT_HANDLED_IS_SHORTCUT,
+            popup_host->PreHandleKeyboardEvent(popup_host->host_contents(),
+                                               ctrl_d_event));
+
+  ExtensionTestMessageListener action_listener("basics browser action");
+  input::NativeWebKeyboardEvent ctrl_shift_f_event =
+      CreateKeyDownEvent(AKEYCODE_F, AMETA_CTRL_ON | AMETA_SHIFT_ON);
+  EXPECT_EQ(content::KeyboardEventProcessingResult::HANDLED,
+            popup_host->PreHandleKeyboardEvent(popup_host->host_contents(),
+                                               ctrl_shift_f_event));
+  EXPECT_TRUE(action_listener.WaitUntilSatisfied());
+}
+#endif  // BUILDFLAG(IS_ANDROID)
 
 }  // namespace extensions

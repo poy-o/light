@@ -63,7 +63,7 @@ void MergeParams(
 
 // Returns the config for `tool`, or null if there's none.
 const omnibox::ToolConfig* FindToolConfig(const omnibox::InputState& state,
-                                          omnibox::ToolMode tool) {
+                                          omnibox::ToolKey tool) {
   auto it =
       std::ranges::find(state.tool_configs, tool, &omnibox::ToolConfig::tool);
   return it != state.tool_configs.end() ? &*it : nullptr;
@@ -71,7 +71,7 @@ const omnibox::ToolConfig* FindToolConfig(const omnibox::InputState& state,
 
 // Returns the config for `model`, or null if there's none.
 const omnibox::ModelConfig* FindModelConfig(const omnibox::InputState& state,
-                                            omnibox::ModelMode model) {
+                                            omnibox::ModelKey model) {
   auto it = std::ranges::find(state.model_configs, model,
                               &omnibox::ModelConfig::model);
   return it != state.model_configs.end() ? &*it : nullptr;
@@ -211,10 +211,6 @@ FulfillmentDecision ComputeFulfillment(const omnibox::InputState& state,
   // A tool goes by its params, or to AIM if it has no config.
   const bool tool_needs_aim =
       has_tool && (!tool_config || ParamsRouteToAim(params));
-  // A tool with attachments (e.g. editing an image) isn't currently supported
-  // by AIO on SRP, so it goes to AIM.
-  const bool tool_with_attachments =
-      has_tool && attachments != AttachmentCounts();
   const bool attachments_need_aim =
       !AttachmentsCanGoToSrp(attachments, eligible);
 
@@ -222,8 +218,7 @@ FulfillmentDecision ComputeFulfillment(const omnibox::InputState& state,
   decision.will_fulfill_in_aim =
       !has_valid_config ||
       // Whether AI Mode was activated by the current composition.
-      aim_mode_active || tool_needs_aim || tool_with_attachments ||
-      attachments_need_aim;
+      aim_mode_active || tool_needs_aim || attachments_need_aim;
   if (!decision.will_fulfill_in_aim) {
     decision.url_params = std::move(params);
     return decision;

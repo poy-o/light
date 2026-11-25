@@ -20,9 +20,11 @@
 #import "ios/chrome/browser/intelligence/actor/model/actor_service_factory.h"
 #import "ios/chrome/browser/intelligence/actor/tools/model/actor_form_suggestion.h"
 #import "ios/chrome/browser/intelligence/actor/tools/model/actor_form_suggestion_favicon_data_source.h"
+#import "ios/chrome/browser/intelligence/actor/ui/actuation_worklog_constants.h"
 #import "ios/chrome/browser/intelligence/actor/ui/actuation_worklog_view_data.h"
 #import "ios/chrome/browser/intelligence/actor/util/actor_test_utils.h"
 #import "ios/chrome/browser/intelligence/features/features.h"
+#import "ios/chrome/browser/intelligence/ui/intelligence_header_item.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -44,6 +46,7 @@
 // Shortcuts to the intervention and suggestions of `state`.
 @property(nonatomic, readonly) ActuationInterventionData* intervention;
 @property(nonatomic, readonly) NSArray<ActorFormSuggestion*>* suggestions;
+@property(nonatomic, readonly) NSInteger selectedSuggestionIndex;
 @property(nonatomic, readonly) ActuationWorklogItem* suggestionsItem;
 @end
 
@@ -65,6 +68,10 @@
 
 - (NSArray<ActorFormSuggestion*>*)suggestions {
   return _state.suggestions;
+}
+
+- (NSInteger)selectedSuggestionIndex {
+  return _state.selectedSuggestionIndex;
 }
 
 - (ActuationWorklogItem*)suggestionsItem {
@@ -172,6 +179,12 @@ ActorFormSuggestion* CreateAutofillSuggestion(
                                                      dataType:data_type];
 }
 
+// Returns a no-op suggestion selection callback.
+ActorSuggestionSelectionCallback DoNothingSuggestionCallback() {
+  return ^(actor::InterventionDelegateResult<actor::SuggestionSelection>) {
+  };
+}
+
 class GeminiActorTaskStoreTest : public PlatformTest {
  protected:
   void SetUp() override {
@@ -223,13 +236,14 @@ class GeminiActorTaskStoreTest : public PlatformTest {
 
   // Interrupts `task_id` for user confirmation and returns its result, or
   // `std::nullopt` while it awaits the user's answer.
-  std::optional<actor::ActorTaskResult<actor::InterruptTaskResult>>
+  std::optional<actor::InterventionResult<actor::InterruptTaskResult>>
   RequestConfirmation(actor::ActorTaskId task_id) {
     actor::ConfirmationInterrupt confirmation;
     confirmation.title = kConfirmationTitle;
     confirmation.subtitle = kConfirmationMessage;
     confirmation.button_text = kConfirmationButtonText;
-    base::test::TestFuture<actor::ActorTaskResult<actor::InterruptTaskResult>>
+    base::test::TestFuture<
+        actor::InterventionResult<actor::InterruptTaskResult>>
         result;
     actor_service_->InterruptTask(task_id, std::move(confirmation),
                                   result.GetCallback());
@@ -244,6 +258,12 @@ class GeminiActorTaskStoreTest : public PlatformTest {
   // Returns the header content of the latest published state for `mode`.
   ActuationHeaderContent* HeaderContent(ActuationWorklogDisplayMode mode) {
     return [observer_.state.headerContent contentForDisplayMode:mode];
+  }
+
+  // Returns the identifier of the header's primary item in the latest state.
+  NSString* HeaderPrimaryItemIdentifier() {
+    return HeaderContent(ActuationWorklogDisplayModeCompact)
+        .primaryItem.identifier;
   }
 
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -333,14 +353,14 @@ TEST_F(GeminiActorTaskStoreTest, IgnoresEmptyAndDuplicateUpdates) {
 // Tests that state changes are published.
 TEST_F(GeminiActorTaskStoreTest, StateChangeIsPublished) {
   AttachAndRegister();
-  EXPECT_EQ(observer_.state.headerPrimaryAction,
-            ActuationHeaderPrimaryAction::kPause);
+  EXPECT_NSEQ(HeaderPrimaryItemIdentifier(),
+              kActuationHeaderPauseItemIdentifier);
 
   [store_ actorTaskWithID:task_id_ didChangeState:kFinished fromState:kActing];
 
   EXPECT_FALSE(observer_.state.actuationActive);
-  EXPECT_EQ(observer_.state.headerPrimaryAction,
-            ActuationHeaderPrimaryAction::kStop);
+  EXPECT_NSEQ(HeaderPrimaryItemIdentifier(),
+              kActuationHeaderCloseItemIdentifier);
   EXPECT_NSEQ(HeaderContent(ActuationWorklogDisplayModeMinimized).title,
               l10n_util::GetNSString(IDS_IOS_ACTOR_HEADER_TASK_DONE));
 }
@@ -411,9 +431,11 @@ TEST_F(GeminiActorTaskStoreTest, UserInterventionFlow) {
       requestUserInterventionWithTitle:@"Intervention Title"
                               subtitle:@"Intervention Subtitle"
                             buttonText:@"Continue"
-                     completionHandler:^{
-                       completion_called = YES;
-                     }];
+                              callback:^(actor::InterventionDelegateResult<void>
+                                             result) {
+                                EXPECT_TRUE(result.has_value());
+                                completion_called = YES;
+                              }];
 
   ASSERT_NE(observer_.intervention, nil);
   EXPECT_NSEQ(observer_.intervention.title, @"Intervention Title");
@@ -436,9 +458,10 @@ TEST_F(GeminiActorTaskStoreTest, UserInterventionCancellation) {
   __block BOOL suggestions_completion_called = NO;
   [store_ actorTask:task_id_
       selectFromSuggestions:@[ CreateCredentialSuggestion() ]
-          completionHandler:^(ActorFormSuggestion* s, BOOL storePermission) {
-            suggestions_completion_called = YES;
-          }];
+                   callback:^(actor::InterventionDelegateResult<
+                              actor::SuggestionSelection> result) {
+                     suggestions_completion_called = YES;
+                   }];
   ASSERT_NE(observer_.suggestions, nil);
 
   __block BOOL intervention_completion_called = NO;
@@ -446,11 +469,13 @@ TEST_F(GeminiActorTaskStoreTest, UserInterventionCancellation) {
       requestUserInterventionWithTitle:@"Title"
                               subtitle:@"Subtitle"
                             buttonText:@"Continue"
-                     completionHandler:^{
-                       intervention_completion_called = YES;
-                     }];
+                              callback:^(actor::InterventionDelegateResult<void>
+                                             result) {
+                                intervention_completion_called = YES;
+                              }];
   EXPECT_FALSE(suggestions_completion_called);
   EXPECT_EQ(observer_.suggestions, nil);
+  EXPECT_EQ(observer_.selectedSuggestionIndex, NSNotFound);
   EXPECT_EQ(observer_.suggestionsItem, nil);
   EXPECT_NSEQ(observer_.intervention.title, @"Title");
 
@@ -458,21 +483,32 @@ TEST_F(GeminiActorTaskStoreTest, UserInterventionCancellation) {
   EXPECT_FALSE(intervention_completion_called);
 }
 
-// Tests that the intervention and its suggestions are cleared before the
-// completion runs.
+// Tests that the intervention and its suggestions are cleared in the published
+// state before the completion runs, while the completion still receives the
+// selected suggestion.
 TEST_F(GeminiActorTaskStoreTest, ResolvingClearsInterventionBeforeCompletion) {
   AttachAndRegister();
+  ActorFormSuggestion* suggestion = CreateCredentialSuggestion();
   GeminiActorTaskStore* store = store_;
+  __block ActorFormSuggestion* resolved_suggestion = nil;
   __block BOOL cleared_in_completion = NO;
   [store_ actorTask:task_id_
-      selectFromSuggestions:@[ CreateCredentialSuggestion() ]
-          completionHandler:^(ActorFormSuggestion* s, BOOL storePermission) {
-            cleared_in_completion =
-                !store.state.intervention && !store.state.suggestions;
-          }];
+      selectFromSuggestions:@[ suggestion ]
+                   callback:^(actor::InterventionDelegateResult<
+                              actor::SuggestionSelection> result) {
+                     EXPECT_TRUE(result.has_value());
+                     if (result.has_value()) {
+                       resolved_suggestion = result->suggestion;
+                     }
+                     cleared_in_completion =
+                         !store.state.intervention &&
+                         !store.state.suggestions &&
+                         store.state.selectedSuggestionIndex == NSNotFound;
+                   }];
 
   [store_ resolveInterventionWithAction:observer_.intervention.actions[1]];
 
+  EXPECT_EQ(resolved_suggestion, suggestion);
   EXPECT_TRUE(cleared_in_completion);
 }
 
@@ -480,6 +516,7 @@ TEST_F(GeminiActorTaskStoreTest, ResolvingClearsInterventionBeforeCompletion) {
 // the intervention each publish a single state.
 TEST_F(GeminiActorTaskStoreTest, SelectFromCredentialsAllow) {
   AttachAndRegister();
+  EXPECT_EQ(observer_.selectedSuggestionIndex, NSNotFound);
   const NSUInteger initialUpdateCount = observer_.updateCount;
 
   ActorFormSuggestion* suggestion = CreateCredentialSuggestion();
@@ -488,10 +525,14 @@ TEST_F(GeminiActorTaskStoreTest, SelectFromCredentialsAllow) {
   __block BOOL stored = YES;
   [store_ actorTask:task_id_
       selectFromSuggestions:@[ suggestion ]
-          completionHandler:^(ActorFormSuggestion* s, BOOL storePermission) {
-            selected = s;
-            stored = storePermission;
-          }];
+                   callback:^(actor::InterventionDelegateResult<
+                              actor::SuggestionSelection> result) {
+                     EXPECT_TRUE(result.has_value());
+                     if (result.has_value()) {
+                       selected = result->suggestion;
+                       stored = result->should_store_permission;
+                     }
+                   }];
 
   EXPECT_EQ(observer_.updateCount, initialUpdateCount + 1);
   ActuationWorklogItem* item = observer_.items.lastObject;
@@ -509,6 +550,7 @@ TEST_F(GeminiActorTaskStoreTest, SelectFromCredentialsAllow) {
 
   EXPECT_EQ(observer_.suggestions.count, 1u);
   EXPECT_EQ(observer_.suggestions.firstObject, suggestion);
+  EXPECT_EQ(observer_.selectedSuggestionIndex, 0);
   EXPECT_EQ(observer_.suggestionsItem, item);
 
   ASSERT_NE(observer_.intervention, nil);
@@ -528,6 +570,7 @@ TEST_F(GeminiActorTaskStoreTest, SelectFromCredentialsAllow) {
   EXPECT_FALSE(stored);
   EXPECT_EQ(observer_.intervention, nil);
   EXPECT_EQ(observer_.suggestions, nil);
+  EXPECT_EQ(observer_.selectedSuggestionIndex, NSNotFound);
   EXPECT_EQ(observer_.suggestionsItem, nil);
 }
 
@@ -543,11 +586,15 @@ TEST_F(GeminiActorTaskStoreTest, SelectFromCredentialsManualSignIn) {
   __block BOOL completion_called = NO;
   [store_ actorTask:task_id_
       selectFromSuggestions:@[ suggestion ]
-          completionHandler:^(ActorFormSuggestion* s, BOOL storePermission) {
-            completion_called = YES;
-            selected = s;
-            stored = storePermission;
-          }];
+                   callback:^(actor::InterventionDelegateResult<
+                              actor::SuggestionSelection> result) {
+                     completion_called = YES;
+                     EXPECT_TRUE(result.has_value());
+                     if (result.has_value()) {
+                       selected = result->suggestion;
+                       stored = result->should_store_permission;
+                     }
+                   }];
 
   EXPECT_NSEQ(observer_.items.lastObject.title,
               l10n_util::GetNSString(
@@ -572,7 +619,7 @@ TEST_F(GeminiActorTaskStoreTest, SelectFromAddresses) {
 
   [store_ actorTask:task_id_
       selectFromSuggestions:@[ suggestion ]
-          completionHandler:nil];
+                   callback:DoNothingSuggestionCallback()];
 
   ActuationWorklogItem* item = observer_.items.lastObject;
   EXPECT_NSEQ(item.title, l10n_util::GetNSString(
@@ -600,7 +647,7 @@ TEST_F(GeminiActorTaskStoreTest, SelectFromContacts) {
 
   [store_ actorTask:task_id_
       selectFromSuggestions:@[ suggestion ]
-          completionHandler:nil];
+                   callback:DoNothingSuggestionCallback()];
 
   ActuationWorklogItem* item = observer_.items.lastObject;
   EXPECT_NSEQ(item.title, l10n_util::GetNSString(
@@ -622,7 +669,7 @@ TEST_F(GeminiActorTaskStoreTest, SelectFromPayments) {
 
   [store_ actorTask:task_id_
       selectFromSuggestions:@[ suggestion ]
-          completionHandler:nil];
+                   callback:DoNothingSuggestionCallback()];
 
   ActuationWorklogItem* item = observer_.items.lastObject;
   EXPECT_NSEQ(item.title, l10n_util::GetNSString(
@@ -648,17 +695,22 @@ TEST_F(GeminiActorTaskStoreTest, SelectSuggestionReplacesCard) {
   __block ActorFormSuggestion* selected = nil;
   [store_ actorTask:task_id_
       selectFromSuggestions:@[ suggestion1, suggestion2 ]
-          completionHandler:^(ActorFormSuggestion* s, BOOL storePermission) {
-            selected = s;
-          }];
+                   callback:^(actor::InterventionDelegateResult<
+                              actor::SuggestionSelection> result) {
+                     EXPECT_TRUE(result.has_value());
+                     if (result.has_value()) {
+                       selected = result->suggestion;
+                     }
+                   }];
   ActuationWorklogEntry* first_entry = observer_.state.entries.firstObject;
   const NSUInteger item_count = observer_.items.count;
   const NSUInteger update_count = observer_.updateCount;
   NSArray<ActorFormSuggestion*>* suggestions = observer_.suggestions;
   EXPECT_NSEQ(observer_.items.lastObject.accessoryItem.title,
               @"user1@example.com");
+  EXPECT_EQ(observer_.selectedSuggestionIndex, 0);
 
-  [store_ selectSuggestion:suggestion2];
+  [store_ selectSuggestionAtIndex:1];
 
   EXPECT_EQ(observer_.updateCount, update_count + 1);
   ASSERT_EQ(observer_.items.count, item_count);
@@ -669,10 +721,12 @@ TEST_F(GeminiActorTaskStoreTest, SelectSuggestionReplacesCard) {
   EXPECT_EQ(observer_.state.entries.lastObject.chip, nil);
   EXPECT_EQ(observer_.suggestionsItem, observer_.items.lastObject);
   EXPECT_EQ(observer_.suggestions, suggestions);
+  EXPECT_EQ(observer_.selectedSuggestionIndex, 1);
 
   [store_ resolveInterventionWithAction:observer_.intervention.actions[1]];
   EXPECT_EQ(selected, suggestion2);
   EXPECT_EQ(observer_.suggestions, nil);
+  EXPECT_EQ(observer_.selectedSuggestionIndex, NSNotFound);
 }
 
 // Tests that selecting a suggestion while none are selectable is a no-op,
@@ -682,7 +736,7 @@ TEST_F(GeminiActorTaskStoreTest, SelectSuggestionWithoutSuggestionsIsNoOp) {
   NSArray<ActuationWorklogItem*>* items = observer_.items;
   const NSUInteger update_count = observer_.updateCount;
 
-  [store_ selectSuggestion:CreateCredentialSuggestion()];
+  [store_ selectSuggestionAtIndex:0];
 
   EXPECT_NSEQ(observer_.items, items);
   EXPECT_EQ(observer_.updateCount, update_count);
@@ -698,10 +752,10 @@ TEST_F(GeminiActorTaskStoreTest, CancelSuggestionSelection) {
   __block BOOL completion_called = NO;
   [store_ actorTask:task_id_
       selectFromSuggestions:@[ suggestion ]
-          completionHandler:^(ActorFormSuggestion* selectedSuggestion,
-                              BOOL storePermission) {
-            completion_called = YES;
-          }];
+                   callback:^(actor::InterventionDelegateResult<
+                              actor::SuggestionSelection> result) {
+                     completion_called = YES;
+                   }];
   ASSERT_NE(observer_.intervention, nil);
   ASSERT_EQ(observer_.items.count, item_count + 1);
 
@@ -715,7 +769,7 @@ TEST_F(GeminiActorTaskStoreTest, CancelSuggestionSelection) {
 
   [store_ actorTask:task_id_
       selectFromSuggestions:@[ suggestion ]
-          completionHandler:nil];
+                   callback:DoNothingSuggestionCallback()];
   EXPECT_NE(observer_.intervention, nil);
   ASSERT_EQ(observer_.suggestions.count, 1u);
   EXPECT_EQ(observer_.suggestions.firstObject, suggestion);
@@ -732,9 +786,11 @@ TEST_F(GeminiActorTaskStoreTest,
       requestUserInterventionWithTitle:@"Title"
                               subtitle:@"Subtitle"
                             buttonText:@"Continue"
-                     completionHandler:^{
-                       completion_called = YES;
-                     }];
+                              callback:^(actor::InterventionDelegateResult<void>
+                                             result) {
+                                EXPECT_TRUE(result.has_value());
+                                completion_called = YES;
+                              }];
   ActuationInterventionData* intervention = observer_.intervention;
   ASSERT_NE(intervention, nil);
 
@@ -766,7 +822,7 @@ TEST_F(GeminiActorTaskStoreTest,
 
   [store_ actorTask:task_id_
       selectFromSuggestions:@[ suggestion ]
-          completionHandler:nil];
+                   callback:DoNothingSuggestionCallback()];
 
   EXPECT_EQ(observer_.updateCount, initial_update_count + 1);
   ASSERT_EQ(observer_.items.count, initial_item_count + 1);
@@ -790,7 +846,7 @@ TEST_F(GeminiActorTaskStoreTest,
 
   [store_ actorTask:task_id_
       selectFromSuggestions:@[ suggestion ]
-          completionHandler:nil];
+                   callback:DoNothingSuggestionCallback()];
 
   const NSUInteger item_count = observer_.items.count;
   const NSUInteger update_count = observer_.updateCount;
@@ -836,10 +892,9 @@ TEST_F(GeminiActorTaskStoreTest,
 
   [store_ actorTask:task_id_
       selectFromSuggestions:@[ suggestion1, suggestion2 ]
-          completionHandler:^(ActorFormSuggestion*, BOOL){
-          }];
+                   callback:DoNothingSuggestionCallback()];
 
-  [store_ selectSuggestion:suggestion2];
+  [store_ selectSuggestionAtIndex:1];
   const NSUInteger update_count_after_select = observer_.updateCount;
   ActuationWorklogItem* second_item = observer_.items.lastObject;
   EXPECT_NSEQ(second_item.accessoryItem.title, @"user2@example.com");
@@ -878,6 +933,23 @@ TEST_F(GeminiActorTaskStoreTest, ConfirmationInterruptShowsInterventionCard) {
   EXPECT_EQ(actor_service_->GetActiveTaskState(), kReflecting);
 }
 
+// Tests that a clarification interrupt is answered with `kDelegateUnsupported`
+// without showing an intervention, and that the task resumes.
+TEST_F(GeminiActorTaskStoreTest, ClarificationInterruptIsUnsupported) {
+  AttachAndRegister();
+  base::test::TestFuture<actor::InterventionResult<actor::InterruptTaskResult>>
+      result;
+  actor_service_->InterruptTask(
+      task_id_, actor::ClarificationInterrupt{.message = "Which size?"},
+      result.GetCallback());
+
+  ASSERT_FALSE(result.Get().has_value());
+  EXPECT_EQ(result.Get().error(),
+            actor::InterventionError::kDelegateUnsupported);
+  EXPECT_EQ(observer_.intervention, nil);
+  EXPECT_EQ(actor_service_->GetActiveTaskState(), kReflecting);
+}
+
 // Tests that pausing the task shows a card resuming the task, without adding a
 // worklog entry, and that tapping its button resumes the task.
 TEST_F(GeminiActorTaskStoreTest, PauseShowsResumeCard) {
@@ -891,8 +963,8 @@ TEST_F(GeminiActorTaskStoreTest, PauseShowsResumeCard) {
   // Drain remaining notifications before checking that no entry is added.
   actor::FlushCurrentSequence();
   EXPECT_EQ(observer_.items.count, item_count);
-  EXPECT_EQ(observer_.state.headerPrimaryAction,
-            ActuationHeaderPrimaryAction::kStop);
+  EXPECT_NSEQ(HeaderPrimaryItemIdentifier(),
+              kActuationHeaderCloseItemIdentifier);
   EXPECT_EQ(observer_.intervention.type, ActuationInterventionType::kCard);
   EXPECT_NSEQ(observer_.intervention.title, @"Task paused");
   EXPECT_NSEQ(observer_.intervention.subtitle, @(kTaskTitle));
@@ -941,10 +1013,10 @@ TEST_F(GeminiActorTaskStoreTest, StopDiscardsPendingSuggestionCard) {
   __block BOOL completion_called = NO;
   [store_ actorTask:task_id_
       selectFromSuggestions:@[ CreateCredentialSuggestion() ]
-          completionHandler:^(ActorFormSuggestion* selectedSuggestion,
-                              BOOL storePermission) {
-            completion_called = YES;
-          }];
+                   callback:^(actor::InterventionDelegateResult<
+                              actor::SuggestionSelection> result) {
+                     completion_called = YES;
+                   }];
   ASSERT_NE(observer_.intervention, nil);
   ASSERT_EQ(observer_.items.count, item_count + 1);
 
@@ -996,7 +1068,7 @@ TEST_F(GeminiActorTaskStoreTest, DisconnectClearsInterventionDelegate) {
   [store_ disconnect];
   EXPECT_EQ(store_.state, nil);
   EXPECT_EQ(RequestConfirmation(task_id_),
-            base::unexpected(actor::ActorTaskError::kRejected));
+            base::unexpected(actor::InterventionError::kTaskRejected));
 }
 
 // Tests that stopping the task cancels it, and is a no-op once disconnected.
@@ -1022,13 +1094,13 @@ TEST_F(GeminiActorTaskStoreTest, PauseTaskWhileConfirmingShowsResumeCard) {
   AttachAndRegister();
   ASSERT_EQ(RequestConfirmation(task_id_), std::nullopt);
   ASSERT_NSEQ(observer_.intervention.title, @(kConfirmationTitle));
-  ASSERT_EQ(observer_.state.headerPrimaryAction,
-            ActuationHeaderPrimaryAction::kPause);
+  ASSERT_NSEQ(HeaderPrimaryItemIdentifier(),
+              kActuationHeaderPauseItemIdentifier);
 
   [store_ pauseTask];
   ASSERT_TRUE(base::test::RunUntil([&]() {
-    return observer_.state.headerPrimaryAction ==
-           ActuationHeaderPrimaryAction::kStop;
+    return [HeaderPrimaryItemIdentifier()
+        isEqualToString:kActuationHeaderCloseItemIdentifier];
   }));
 
   EXPECT_EQ(actor_service_->GetActiveTaskState(), kPausedByUser);
@@ -1046,6 +1118,129 @@ TEST_F(GeminiActorTaskStoreTest, PauseTaskAfterDisconnectIsNoOp) {
 
   EXPECT_NE(observer.state, kPausedByUser);
   EXPECT_NE(actor_service_->GetActiveTaskState(), kPausedByUser);
+}
+
+// Tests the navigation confirmation flow when the user taps "Continue".
+TEST_F(GeminiActorTaskStoreTest, NavigationConfirmationContinue) {
+  AttachAndRegister();
+  const NSUInteger item_count = observer_.items.count;
+  __block std::optional<actor::InterventionDelegateResult<bool>> result;
+  [store_ actorTask:task_id_
+      requestNavigationConfirmationForDomain:@"healthequity.com"
+                                    callback:^(
+                                        actor::InterventionDelegateResult<bool>
+                                            callback_result) {
+                                      result = callback_result;
+                                    }];
+
+  ASSERT_EQ(observer_.items.count, item_count + 1);
+  ActuationWorklogItem* item = observer_.items.lastObject;
+  ASSERT_NE(item, nil);
+  EXPECT_EQ(item.style, ActuationWorklogItemStyle::kLabeled);
+  EXPECT_NSEQ(item.title,
+              l10n_util::GetNSStringF(
+                  IDS_IOS_ACTOR_WORKLOG_NAVIGATION_CONFIRMATION_TITLE,
+                  u"healthequity.com"));
+  EXPECT_NSEQ(item.subtitle,
+              l10n_util::GetNSString(
+                  IDS_IOS_ACTOR_WORKLOG_NAVIGATION_CONFIRMATION_SUBTITLE));
+
+  ASSERT_NE(observer_.intervention, nil);
+  EXPECT_EQ(observer_.intervention.type, ActuationInterventionType::kRow);
+  ASSERT_EQ(observer_.intervention.actions.count, 2u);
+  EXPECT_EQ(observer_.intervention.actions[0].identifier,
+            InterventionActionIdentifier::kDecline);
+  EXPECT_EQ(observer_.intervention.actions[1].identifier,
+            InterventionActionIdentifier::kContinue);
+
+  // Tap "Continue" (index 1). The answered entry stays in the worklog.
+  [store_ resolveInterventionWithAction:observer_.intervention.actions[1]];
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(*result, base::ok(true));
+  EXPECT_EQ(observer_.intervention, nil);
+  EXPECT_EQ(observer_.items.count, item_count + 1);
+}
+
+// Tests the navigation confirmation flow when the user taps "Don't use this
+// site".
+TEST_F(GeminiActorTaskStoreTest, NavigationConfirmationDecline) {
+  AttachAndRegister();
+  const NSUInteger item_count = observer_.items.count;
+  __block std::optional<actor::InterventionDelegateResult<bool>> result;
+  [store_ actorTask:task_id_
+      requestNavigationConfirmationForDomain:@"healthequity.com"
+                                    callback:^(
+                                        actor::InterventionDelegateResult<bool>
+                                            callback_result) {
+                                      result = callback_result;
+                                    }];
+
+  ASSERT_EQ(observer_.items.count, item_count + 1);
+  ASSERT_NE(observer_.intervention, nil);
+  ASSERT_EQ(observer_.intervention.actions.count, 2u);
+
+  // Tap "Don't use this site" (index 0). The answered entry stays in the
+  // worklog.
+  [store_ resolveInterventionWithAction:observer_.intervention.actions[0]];
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(*result, base::ok(false));
+  EXPECT_EQ(observer_.intervention, nil);
+  EXPECT_EQ(observer_.items.count, item_count + 1);
+}
+
+// Tests that stopping the task drops a pending navigation confirmation and
+// removes its unanswered worklog entry without invoking its callback.
+TEST_F(GeminiActorTaskStoreTest,
+       StopDiscardsPendingNavigationConfirmationEntry) {
+  AttachAndRegister();
+  const NSUInteger item_count = observer_.items.count;
+  __block BOOL callback_called = NO;
+  [store_ actorTask:task_id_
+      requestNavigationConfirmationForDomain:@"healthequity.com"
+                                    callback:^(
+                                        actor::InterventionDelegateResult<
+                                            bool>) {
+                                      callback_called = YES;
+                                    }];
+  ASSERT_NE(observer_.intervention, nil);
+  ASSERT_EQ(observer_.items.count, item_count + 1);
+
+  [store_ stopTask];
+  ASSERT_TRUE(
+      base::test::RunUntil([&]() { return observer_.intervention == nil; }));
+  // The unanswered confirmation entry is removed and replaced by the task ended
+  // item.
+  ASSERT_EQ(observer_.items.count, item_count + 1);
+  EXPECT_NSEQ(observer_.items.lastObject.title,
+              l10n_util::GetNSString(IDS_IOS_ACTOR_WORKLOG_TASK_ENDED));
+  EXPECT_FALSE(callback_called);
+}
+
+// Tests that pausing the task drops a pending navigation confirmation and
+// removes its unanswered worklog entry without invoking its callback.
+TEST_F(GeminiActorTaskStoreTest,
+       PauseDiscardsPendingNavigationConfirmationEntry) {
+  AttachAndRegister();
+  const NSUInteger item_count = observer_.items.count;
+  __block BOOL callback_called = NO;
+  [store_ actorTask:task_id_
+      requestNavigationConfirmationForDomain:@"healthequity.com"
+                                    callback:^(
+                                        actor::InterventionDelegateResult<
+                                            bool>) {
+                                      callback_called = YES;
+                                    }];
+  ASSERT_NE(observer_.intervention, nil);
+  ASSERT_EQ(observer_.items.count, item_count + 1);
+
+  [store_ pauseTask];
+  ASSERT_TRUE(base::test::RunUntil([&]() {
+    return [HeaderPrimaryItemIdentifier()
+        isEqualToString:kActuationHeaderCloseItemIdentifier];
+  }));
+  EXPECT_NSEQ(observer_.intervention.title, @"Task paused");
+  EXPECT_EQ(observer_.items.count, item_count);
+  EXPECT_FALSE(callback_called);
 }
 
 }  // namespace

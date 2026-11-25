@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.tabwindow;
 
 import android.content.Context;
 
-import org.chromium.base.Token;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.tabmodel.TabGroupTitleUtils;
@@ -30,7 +29,7 @@ public class TabWindowManagerUtils {
     public static @Nullable String getTabGroupTitleInAnyWindow(
             Context context,
             TabWindowManager tabWindowManager,
-            Token tabGroupId,
+            TabGroupId tabGroupId,
             boolean isIncognito) {
         @WindowId int windowId = tabWindowManager.findWindowIdForTabGroup(tabGroupId);
         if (windowId == TabWindowManager.INVALID_WINDOW_ID) {
@@ -51,13 +50,11 @@ public class TabWindowManagerUtils {
      * @return The color of the tab group or fallback to grey.
      */
     public static @TabGroupColorId int getTabGroupColorInAnyWindow(
-            TabWindowManager tabWindowManager, Token tabGroupId, boolean isIncognito) {
+            TabWindowManager tabWindowManager, TabGroupId tabGroupId, boolean isIncognito) {
         @WindowId int windowId = tabWindowManager.findWindowIdForTabGroup(tabGroupId);
         if (windowId == TabWindowManager.INVALID_WINDOW_ID) return TabGroupColorId.GREY;
         TabModelSelector tabModelSelector = tabWindowManager.getTabModelSelectorById(windowId);
         if (tabModelSelector == null) return TabGroupColorId.GREY;
-        return tabModelSelector
-                .getModel(isIncognito)
-                .getTabGroupColorWithFallback(TabGroupId.fromRawToken(tabGroupId));
+        return tabModelSelector.getModel(isIncognito).getTabGroupColorWithFallback(tabGroupId);
     }
 }

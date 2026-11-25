@@ -31,6 +31,7 @@
 #import "ios/chrome/browser/tabs/model/tabs_dependency_installer.h"
 #import "ios/public/provider/chrome/browser/bwg/gemini_api.h"
 
+class AuthenticationService;
 class Browser;
 class FullscreenController;
 class GeminiSharedTabsManager;
@@ -329,6 +330,22 @@ class GeminiBrowserAgent : public BrowserUserData<GeminiBrowserAgent>,
   // permission).
   bool HasGivenAllLivePermissions() const;
 
+  // Records Gemini live session started metrics and initializes session timing.
+  void LogLiveSessionStartedMetrics();
+
+  // Logs Gemini live related metrics and resets values if needed.
+  void LogLiveSessionMetrics(bool floaty_dismissed = false);
+
+  // Updates the Gemini availability and notifies observers if it changed.
+  void UpdateGeminiAvailability();
+
+  // Handles the client transitioning to a dormant status.
+  void HandleDormantStatus(ios::provider::GeminiDormantReason dormant_reason);
+
+  // Logs state transition events for Gemini Live metrics.
+  void LogLiveStatusTransition(ios::provider::GeminiClientMode old_status,
+                               ios::provider::GeminiClientMode new_status);
+
   // Manager for the shared tabs attached to Gemini. Shares the lifecycle of
   // `GeminiBrowserAgent` so multi-tab selection persists across Gemini
   // invocations. Declared before `gemini_container_mediator_` so it outlives
@@ -351,6 +368,9 @@ class GeminiBrowserAgent : public BrowserUserData<GeminiBrowserAgent>,
 
   // IdentityManager associated with the Browser's profile.
   raw_ptr<signin::IdentityManager> identity_manager_ = nullptr;
+
+  // `AuthenticationService` associated with the `Browser`'s profile.
+  raw_ptr<AuthenticationService> authentication_service_ = nullptr;
 
   // Observers for keyboard events.
   id keyboard_show_observer_ = nil;
@@ -382,6 +402,7 @@ class GeminiBrowserAgent : public BrowserUserData<GeminiBrowserAgent>,
 
   // Whether the Gemini container is currently invoked.
   bool is_gemini_invoked_ = false;
+
   // Presentation deferred until the active page context is generated, so that
   // an auto-submitted prompt is sent with the full page context. Null when no
   // presentation is pending.
@@ -437,28 +458,12 @@ class GeminiBrowserAgent : public BrowserUserData<GeminiBrowserAgent>,
   // overall interaction.
   base::TimeDelta live_session_accumulated_duration_;
 
-  // Records Gemini live session started metrics and initializes session timing.
-  void LogLiveSessionStartedMetrics();
-
-  // Logs Gemini live related metrics and resets values if needed.
-  void LogLiveSessionMetrics(bool floaty_dismissed = false);
-
   // The current processing status of the Gemini client.
   ios::provider::GeminiClientMode processing_status_ =
       ios::provider::GeminiClientMode::kUnknown;
 
   // The last known availability of Gemini for the active web state.
   bool last_known_gemini_availability_ = false;
-
-  // Updates the Gemini availability and notifies observers if it changed.
-  void UpdateGeminiAvailability();
-
-  // Handles the client transitioning to a dormant status.
-  void HandleDormantStatus(ios::provider::GeminiDormantReason dormant_reason);
-
-  // Logs state transition events for Gemini Live metrics.
-  void LogLiveStatusTransition(ios::provider::GeminiClientMode old_status,
-                               ios::provider::GeminiClientMode new_status);
 
   // Whether we are currently displaying the Live session dormant snackbar.
   bool is_showing_live_session_dormant_snackbar_ = false;

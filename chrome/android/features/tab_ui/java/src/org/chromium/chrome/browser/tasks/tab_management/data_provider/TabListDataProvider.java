@@ -34,9 +34,18 @@ public abstract class TabListDataProvider {
     private final ObserverList<TabListDataObserver> mObservers = new ObserverList<>();
     private final NonNullObservableSupplier<List<TabModel>> mTabModelListSupplier;
     private final Callback<List<TabModel>> mOnTabModelsChanged = this::onTabModelsChanged;
+    private final @Nullable NullableObservableSupplier<TabModel> mHighlightTabModelSupplier;
+    private final Callback<@Nullable TabModel> mOnHighlightTabModelChanged =
+            model -> refreshHighlight();
 
-    /** The models currently observed, in the order they were attached. */
+    /**
+     * The models currently observed, in the order they were attached, with each tab ID held by at
+     * most one of them.
+     */
     private final List<TabModel> mAttachedTabModels = new ArrayList<>();
+
+    /** The attached models still restoring their tabs, so their tabs are added once they finish. */
+    private final List<TabModel> mLoadingTabModels = new ArrayList<>();
 
     private @Nullable TabModelObserver mTabModelObserver;
     private @Nullable TabGroupObserver mTabGroupObserver;
@@ -45,9 +54,16 @@ public abstract class TabListDataProvider {
      * Constructs a {@link TabListDataProvider}.
      *
      * @param tabModelListSupplier Supplier of the {@link TabModel}s to show tabs from.
+     * @param highlightTabModelSupplier Supplier of the {@link TabModel} whose current tab is
+     *     highlighted, holding null for no highlight. Required when {@link
+     *     #supportsMultipleModels()} is true. When null, the only model's current tab is
+     *     highlighted.
      */
-    protected TabListDataProvider(NonNullObservableSupplier<List<TabModel>> tabModelListSupplier) {
+    protected TabListDataProvider(
+            NonNullObservableSupplier<List<TabModel>> tabModelListSupplier,
+            @Nullable NullableObservableSupplier<TabModel> highlightTabModelSupplier) {
         mTabModelListSupplier = tabModelListSupplier;
+        mHighlightTabModelSupplier = highlightTabModelSupplier;
     }
 
     /**
@@ -102,6 +118,9 @@ public abstract class TabListDataProvider {
     public void destroy() {
         mObservers.clear();
         mTabModelListSupplier.removeObserver(mOnTabModelsChanged);
+        if (mHighlightTabModelSupplier != null) {
+            mHighlightTabModelSupplier.removeObserver(mOnHighlightTabModelChanged);
+        }
         detachFromAttachedModels();
         mTabModelObserver = null;
         mTabGroupObserver = null;
@@ -120,14 +139,40 @@ public abstract class TabListDataProvider {
             TabModelObserver tabModelObserver, TabGroupObserver tabGroupObserver) {
         mTabModelObserver = tabModelObserver;
         mTabGroupObserver = tabGroupObserver;
+        // Without a supplier, the highlight would follow whichever model happens to be first.
+        assert !supportsMultipleModels() || mHighlightTabModelSupplier != null
+                : "Showing several TabModels needs a highlight TabModel supplier.";
         assertModelsSupported(mTabModelListSupplier.get());
         mTabModelListSupplier.addSyncObserver(mOnTabModelsChanged);
+        if (mHighlightTabModelSupplier != null) {
+            mHighlightTabModelSupplier.addSyncObserver(mOnHighlightTabModelChanged);
+        }
+    }
+
+    /**
+     * Called when an attached {@link TabModel} finishes restoring its tabs. With one model,
+     * rebuilds the list. With several, adds the tabs of the models that just finished.
+     */
+    protected void onRestoreCompleted() {
+        // The callback doesn't say which model finished, so check the models still loading.
+        List<TabModel> restoredModels = new ArrayList<>();
+        for (TabModel model : mLoadingTabModels) {
+            if (model.isTabStateInitialized()) restoredModels.add(model);
+        }
+        mLoadingTabModels.removeAll(restoredModels);
+
+        if (mAttachedTabModels.size() <= 1) {
+            requestDataReset();
+            return;
+        }
+        for (TabModel model : restoredModels) {
+            addTabItems(model);
+        }
     }
 
     /** Returns the first observed {@link TabModel} if its tab state is initialized, or null. */
     protected @Nullable TabModel getTabModelIfTabStateInitialized() {
-        // TODO(crbug.com/587126481): Limit this to single-model paths once the highlight model is
-        // decided; multi-model paths should use the tab's own model.
+        assert !supportsMultipleModels();
         if (mAttachedTabModels.isEmpty()) return null;
         TabModel tabModel = mAttachedTabModels.get(0);
         return tabModel.isTabStateInitialized() ? tabModel : null;
@@ -139,8 +184,8 @@ public abstract class TabListDataProvider {
     }
 
     /**
-     * Returns the tab with {@code tabId} from the observed models, checking them in order and
-     * skipping models whose tab state isn't initialized yet, or null if none has it.
+     * Returns the tab with {@code tabId} from the observed models, skipping models whose tab state
+     * isn't initialized yet, or null if none has it.
      *
      * @param tabId The ID of the tab to find.
      */
@@ -156,9 +201,7 @@ public abstract class TabListDataProvider {
 
     /** Returns the tab to highlight in the list, or null if there is none. */
     protected @Nullable Tab getSelectedTab() {
-        // TODO(crbug.com/587126481): The highlight comes from the first model for now; let the host
-        // choose which model drives it, or none.
-        TabModel model = getTabModelIfTabStateInitialized();
+        TabModel model = getHighlightTabModel();
         return model == null ? null : TabModelUtils.getCurrentTab(model);
     }
 
@@ -206,10 +249,9 @@ public abstract class TabListDataProvider {
      * TabList#INVALID_TAB_INDEX} if absent. Subclasses can override to map grouped tabs to their
      * containing {@link TabGroupItem}.
      *
-     * @param model The active {@link TabModel}.
      * @param tabId The ID of the tab to resolve.
      */
-    protected int indexOfItemForTab(TabModel model, @TabId int tabId) {
+    protected int indexOfItemForTab(@TabId int tabId) {
         return indexOfTabId(tabId);
     }
 
@@ -316,37 +358,28 @@ public abstract class TabListDataProvider {
     }
 
     /**
-     * Updates the selected item in {@link #mItems} when {@code tab} is selected in {@link
-     * TabModel}.
+     * Updates the selected item in {@link #mItems} when {@code tab} is selected in the highlight
+     * {@link TabModel}, and ignores selections in other models.
      *
      * @param tab The newly selected {@link Tab}.
      * @param prevSelectedTabId The ID of the previously selected tab, or {@link
      *     Tab#INVALID_TAB_ID}.
      */
     protected void selectTab(Tab tab, @TabId int prevSelectedTabId) {
-        TabModel model = getTabModelIfTabStateInitialized();
-        if (model == null) return;
-
         @TabId int newSelectedTabId = tab.getId();
         if (newSelectedTabId == prevSelectedTabId) return;
 
-        int prevSelectedIndex = indexOfItemForTab(model, prevSelectedTabId);
-        int newSelectedIndex = indexOfItemForTab(model, newSelectedTabId);
+        TabModel model = getHighlightTabModel();
+        if (model == null || model.getTabById(newSelectedTabId) == null) return;
+
+        int prevSelectedIndex = indexOfItemForTab(prevSelectedTabId);
+        int newSelectedIndex = indexOfItemForTab(newSelectedTabId);
         if (newSelectedIndex != TabList.INVALID_TAB_INDEX
                 && newSelectedIndex == prevSelectedIndex) {
             return;
         }
 
-        // Deselect all other tabs first so only one tab remains selected.
-        for (int i = 0; i < mItems.size(); i++) {
-            if (i != newSelectedIndex && mItems.get(i).isSelected()) {
-                updateSelection(i, /* isSelected= */ false);
-            }
-        }
-
-        if (newSelectedIndex != TabList.INVALID_TAB_INDEX) {
-            updateSelection(newSelectedIndex, /* isSelected= */ true);
-        }
+        moveHighlightTo(newSelectedIndex);
     }
 
     /**
@@ -423,7 +456,7 @@ public abstract class TabListDataProvider {
      * Inserts a {@link TabListItem} into {@link #mItems} at its {@link TabModel} position and
      * notifies observers via {@link TabListDataObserver#onItemsInserted}.
      *
-     * @param model The active {@link TabModel}.
+     * @param model The loaded {@link TabModel} that holds {@code item}'s tab.
      * @param item The {@link TabListItem} to insert.
      */
     protected void insertItem(TabModel model, TabListItem item) {
@@ -619,6 +652,29 @@ public abstract class TabListDataProvider {
         updateItemAt(index, currentItem.withSelected(isSelected), PayloadType.SELECTION);
     }
 
+    /** Highlights the item at {@code index}, or none for an invalid index. */
+    private void moveHighlightTo(int index) {
+        // Deselect all other tabs first so only one tab remains selected.
+        for (int i = 0; i < mItems.size(); i++) {
+            if (i != index && mItems.get(i).isSelected()) {
+                updateSelection(i, /* isSelected= */ false);
+            }
+        }
+
+        if (index != TabList.INVALID_TAB_INDEX) {
+            updateSelection(index, /* isSelected= */ true);
+        }
+    }
+
+    /** Moves the highlight to the highlight model's current tab, or clears it if there is none. */
+    private void refreshHighlight() {
+        if (mItems.isEmpty()) return;
+        Tab tab = getSelectedTab();
+        int index = tab == null ? TabList.INVALID_TAB_INDEX : indexOfItemForTab(tab.getId());
+        moveHighlightTo(index);
+        updateMultiSelection();
+    }
+
     /**
      * Dispatches {@code callback} to all registered {@link TabListDataObserver}s.
      *
@@ -646,8 +702,8 @@ public abstract class TabListDataProvider {
     }
 
     /**
-     * Detaches the attached models missing from {@code newModels}, then removes the cards whose tab
-     * no remaining model holds.
+     * Detaches the attached models missing from {@code newModels}, then removes the removed models'
+     * cards.
      */
     private void detachRemovedModels(List<TabModel> newModels) {
         List<TabModel> removedModels = new ArrayList<>(mAttachedTabModels);
@@ -699,6 +755,7 @@ public abstract class TabListDataProvider {
             model.addTabGroupObserver(mTabGroupObserver);
         }
         mAttachedTabModels.add(model);
+        if (!model.isTabStateInitialized()) mLoadingTabModels.add(model);
     }
 
     private void detachFromModel(TabModel model) {
@@ -709,6 +766,7 @@ public abstract class TabListDataProvider {
             model.removeTabGroupObserver(mTabGroupObserver);
         }
         mAttachedTabModels.remove(model);
+        mLoadingTabModels.remove(model);
     }
 
     /** Returns the loaded model that holds a tab with {@code tabId}, or null if none does. */
@@ -728,12 +786,26 @@ public abstract class TabListDataProvider {
         return getTabModelForTabId(tab.getId());
     }
 
+    /**
+     * Returns the model whose current tab is highlighted, or null if there is none or it isn't
+     * attached and loaded yet. Without a highlight supplier, this is the only model.
+     */
+    private @Nullable TabModel getHighlightTabModel() {
+        if (mHighlightTabModelSupplier == null) return getTabModelIfTabStateInitialized();
+        TabModel model = mHighlightTabModelSupplier.get();
+        if (model == null || !mAttachedTabModels.contains(model)) return null;
+        return model.isTabStateInitialized() ? model : null;
+    }
+
     /** Returns whether the loaded model that holds {@code tabId} has it multi-selected. */
     private boolean isTabMultiSelected(@TabId int tabId) {
-        // TODO(crbug.com/587126481): A model reports its own current tab as multi-selected, so a
-        // background model's current tab counts too. Settle this with the highlight model.
         TabModel model = getTabModelForTabId(tabId);
-        return model != null && model.isTabMultiSelected(tabId);
+        if (model == null || !model.isTabMultiSelected(tabId)) return false;
+        // A model reports its own active tab as multi-selected even when nothing is multi-selected,
+        // so ignore a background model's active tab unless it has multiple tabs selected.
+        return model == getHighlightTabModel()
+                || model.getMultiSelectedTabsCount() > 1
+                || tabId != TabModelUtils.getCurrentTabId(model);
     }
 
     /** Returns whether {@code models} holds the attached models, in any order. */

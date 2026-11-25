@@ -64,6 +64,15 @@
 #include "base/apple/scoped_nsautorelease_pool.h"
 #endif  // BUILDFLAG(IS_APPLE)
 
+#if BUILDFLAG(IS_MAC)
+#include <cstdlib>
+#include <vector>
+
+#include "remoting/host/audio_capturer_mac.h"
+#include "remoting/host/mac/permission_utils.h"
+#include "remoting/host/mac/sandbox_mac.h"
+#endif  // BUILDFLAG(IS_MAC)
+
 #if BUILDFLAG(IS_WIN)
 #include <windows.h>
 
@@ -322,6 +331,20 @@ int HostMain(int argc, char** argv) {
     process_type = command_line->GetSwitchValueASCII(kProcessTypeSwitchName);
   }
 
+#if BUILDFLAG(IS_MAC)
+  const bool is_sandboxed_worker = process_type == kProcessTypeNetwork ||
+                                   process_type == kProcessTypePeerConnection;
+  if (is_sandboxed_worker) {
+    // Unlike Linux (`fork()` + `LaunchOptions::PreExecDelegate` in
+    // `LinuxWorkerProcessLauncherDelegate`), `base::LaunchProcess()` on macOS
+    // uses `posix_spawn()`, which has no `PreExecDelegate`
+    // (`!BUILDFLAG(IS_APPLE)`) and no public macOS `posix_spawn` API to switch
+    // to an arbitrary UID/GID before `exec`. Drop `root -> nobody` (-2) here at
+    // the start of `HostMain()`.
+    mac::DropRootPrivilegesAndAcquireBootstrapPort();
+  }
+#endif  // BUILDFLAG(IS_MAC)
+
 #if BUILDFLAG(IS_LINUX)
   if (process_type == kProcessTypePeerConnection) {
     // The peer connection process handles untrusted network traffic, and all
@@ -352,6 +375,33 @@ int HostMain(int argc, char** argv) {
 
   // Enable debug logs.
   InitHostLogging();
+
+#if BUILDFLAG(IS_MAC)
+  if (command_line->HasSwitch(kCheckAccessibilityPermissionSwitchName)) {
+    return mac::CanInjectInput() ? EXIT_SUCCESS : EXIT_FAILURE;
+  }
+  if (command_line->HasSwitch(kCheckScreenRecordingPermissionSwitchName)) {
+    bool permission_granted = mac::CanRecordScreen();
+    if (!permission_granted) {
+      // This adds the host bundle to the list of apps under Security & Privacy
+      // -> Screen Recording. This may also show a system prompt (if the bundle
+      // was not previously in the list).
+      mac::RequestScreenCapturePermission();
+    }
+    return permission_granted ? EXIT_SUCCESS : EXIT_FAILURE;
+  }
+  if (command_line->HasSwitch(kListAudioDevicesSwitchName)) {
+    std::vector<AudioCapturerMac::AudioDeviceInfo> audio_devices =
+        AudioCapturerMac::GetAudioDevices();
+    printf("Audio devices:\n");
+    for (const auto& audio_device : audio_devices) {
+      printf("\n");
+      printf("  Device name: %s\n", audio_device.device_name.c_str());
+      printf("  Device UID: %s\n", audio_device.device_uid.c_str());
+    }
+    return kSuccessExitCode;
+  }
+#endif  // BUILDFLAG(IS_MAC)
 
 #if !BUILDFLAG(IS_CHROMEOS)
   if (command_line->HasSwitch(kAgentStatusSwitchName) ||
@@ -450,6 +500,12 @@ int HostMain(int argc, char** argv) {
   base::i18n::InitializeICU();
 
   remoting::LoadResources("");
+
+#if BUILDFLAG(IS_MAC)
+  if (is_sandboxed_worker) {
+    mac::EnterSeatbeltSandbox(process_type);
+  }
+#endif  // BUILDFLAG(IS_MAC)
 
   bool is_broker_process = false;
 #if !BUILDFLAG(IS_MAC)

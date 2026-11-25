@@ -2,17 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://webui-toolbar.top-chrome/lazy_load.js';
+import 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
 
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
+import {isMac} from 'chrome://resources/js/platform.js';
 import {MenuSourceType} from 'chrome://resources/mojo/ui/base/mojom/menu_source_type.mojom-webui.js';
 import {assertArrayEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 import {microtasksFinished} from 'chrome://webui-test/test_util.js';
-import {AnimationTracker} from 'chrome://webui-toolbar.top-chrome/lazy_load.js';
-import type {AppMenuButtonElement} from 'chrome://webui-toolbar.top-chrome/lazy_load.js';
-import {AppMenuIconType, AppMenuSeverity, BrowserProxyImpl, ContextMenuType, FocusRequestTarget} from 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
-import type {BrowserProxy, FocusRequestListener} from 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
+import {AnimationTracker, AppMenuIconType, AppMenuSeverity, BrowserProxyImpl, ContextMenuType, FocusRequestTarget} from 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
+import type {AppMenuButtonElement, BrowserProxy, FocusRequestListener} from 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
 
 import {TestToolbarUiHandler} from './test_toolbar_browser_proxy.js';
 
@@ -82,12 +81,11 @@ suite('AppMenuButtonTest', function() {
   test('Mouse Down Triggers Menu', function() {
     const button = appMenuButton.$.button;
 
-    // Simulate mouse pointerdown (detail: 1 is required to be treated as mouse
-    // click)
+    // Simulate mouse pointerdown. Real pointerdown events have detail 0.
     button.dispatchEvent(new PointerEvent('pointerdown', {
       button: 0,
       pointerType: 'mouse',
-      detail: 1,
+      detail: 0,
     }));
 
     assertEquals(1, toolbarUiHandler.getCallCount('showContextMenu'));
@@ -209,6 +207,20 @@ suite('AppMenuButtonTest', function() {
     }));
 
     assertEquals(0, toolbarUiHandler.getCallCount('showContextMenu'));
+  });
+
+  test('CtrlLeftClickOnDown', function() {
+    const button = appMenuButton.$.button;
+
+    button.dispatchEvent(new PointerEvent('pointerdown', {
+      button: 0,
+      ctrlKey: true,
+      pointerType: 'mouse',
+      detail: 1,
+    }));
+
+    assertEquals(
+        isMac ? 0 : 1, toolbarUiHandler.getCallCount('showContextMenu'));
   });
 
   test('Attribute Bindings', async function() {
@@ -681,7 +693,9 @@ suite('AppMenuButtonTest', function() {
         await microtasksFinished();
         assertEquals(
             prefersReducedMotion ? '0s' : '0.25s',
-            window.getComputedStyle(appMenuButton.$.button.$.button, '::before')
+            window
+                .getComputedStyle(
+                    appMenuButton.$.button.$.background, '::before')
                 .transitionDuration);
         if (prefersReducedMotion) {
           assertFalse(appMenuButton.glowUpActive);

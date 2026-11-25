@@ -23,7 +23,6 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.IntentUtils;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.test.transit.Triggers;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
@@ -45,12 +44,12 @@ import org.chromium.chrome.browser.test.MockCertVerifierRuleAndroid;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.transit.page.BasePageStation;
 import org.chromium.chrome.test.transit.page.WebPageStation;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.components.webapps.AddToHomescreenCoordinator;
 import org.chromium.components.webapps.TwaInstaller;
 import org.chromium.components.webapps.WebappsUtils;
-import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.net.test.EmbeddedTestServerRule;
 
@@ -140,10 +139,7 @@ public class TwaInstallerIntegrationTest {
                 ChromeActivityTestRule.waitFor(ChromeTabbedActivity.class, STARTUP_TIMEOUT);
         ChromeActivityTestRule.waitForActivityCompletelyLoaded(tabbedActivity);
         Tab tab = ThreadUtils.runOnUiThreadBlocking(() -> tabbedActivity.getActivityTab());
-        WebPageStation.waitForWebPageLoad(
-                Triggers.runOnUiThreadTo(() -> tab.loadUrl(new LoadUrlParams(pageUrl))),
-                tab,
-                pageUrl);
+        BasePageStation.loadUrlTo(tab, pageUrl).reach(WebPageStation.at(pageUrl).shownIn(tab));
 
         Intent twaIntent =
                 TrustedWebActivityTestUtil.createTrustedWebActivityIntentAndVerifiedSession(

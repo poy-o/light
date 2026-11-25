@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">પાસવર્ડ શેર કરો</translation>
 <translation id="1554043146674176775">AI મોડ બંધ કરો</translation>
 <translation id="1554477036522844996">નવી વિંડો</translation>
+<translation id="1555014818414775661">છબીઓ ઉમેરો</translation>
 <translation id="1557806604681757705">તમારું કમ્પ્યૂટર</translation>
 <translation id="1558391695376153246">છૂપી ટૅબ બંધ કરો</translation>
 <translation id="1560153516220021659">સેકન્ડરી ટૂલબાર બટનને નાનું કર્યું</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832"><ph name="BEGIN_BOLD" />Safariના સેટિંગ<ph name="END_BOLD" /> ખોલો</translation>
 <translation id="3858860766373142691">નામ</translation>
 <translation id="386224966259596343">આગલી વખતે જ્યારે તમે સંબંધિત ફોર્મ ભરો, ત્યારે તમને આ માહિતી Walletમાં સાચવવાની તક મળશે.</translation>
-<translation id="3868495844258915202">સંપૂર્ણ URL બતાવો</translation>
 <translation id="3870931306085184145"><ph name="DOMAIN" /> માટે કોઈ પાસવર્ડ સાચવેેેેલ નથી</translation>
 <translation id="3875783148670536197">મને બતાવો કે કેવી રીતે</translation>
 <translation id="3878657761594430423">શીટ ગ્રેબર</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">કિંમતને ટ્રૅક કરતા નોટિફિકેશન મેળવવા માટે, તમારા iOS સેટિંગમાં નોટિફિકેશન ચાલુ કરો.</translation>
 <translation id="528857768909044842">અહીં ટૅબના ગ્રૂપ સાચવવામાં આવે છે</translation>
 <translation id="5294624619177114121">મોબાઇલ નોટિફિકેશન</translation>
-<translation id="5295239312320826323">એકાઉન્ટ <ph name="USER_EMAIL" /> કાઢી નાખીએ?</translation>
 <translation id="5300589172476337783">બતાવો</translation>
 <translation id="5311061401280561833">કૅમેરા અને માઇક્રોફોનના ઍક્સેસની મંજૂરી આપવામાં આવી છે</translation>
 <translation id="5313967007315987356">સાઈટ ઉમેરો</translation>
@@ -1788,6 +1787,7 @@
 <translation id="6504541289630702018">તમારા ડેસ્કટૉપ ટૅબના ગ્રૂપને સરળતાથી ઍક્સેસ કરો</translation>
 <translation id="6505334220040167806">ટૅબનું ગ્રૂપ નાનું કરો.</translation>
 <translation id="6506996418997555004">"<ph name="GROUP_NAME" />" ટૅબનું ગ્રૂપ શેર કરો</translation>
+<translation id="650770261448122895">Lens વડે તમે જે જુઓ છો તે શોધો</translation>
 <translation id="6507973708545996744">તમારા બધા ડિવાઇસ પર તમારી વાંચન સૂચિ મેળવવા માટે સાઇન ઇન કરો.</translation>
 <translation id="6518133107902771759">પ્રમાણિત કરો</translation>
 <translation id="6523575793810663688">મને તેની રીત બતાવો</translation>
@@ -2147,7 +2147,6 @@
 <translation id="7603852183842204213">(<ph name="NUMBER_OF_BLOCKED_POPUPS" />) અવરોધિત પૉપ-અપ્સ</translation>
 <translation id="7605594153474022051">સમન્વયન કામ કરતું નથી</translation>
 <translation id="760667371114328991">સલામતી માટે તપાસ સંબંધિત નોટિફિકેશન બંધ કરો</translation>
-<translation id="7612619742409846846">Google પર આ તરીકે સાઇન ઇન કરો</translation>
 <translation id="7612849887607288481">AI પ્રોટોટાઇપિંગ મેનૂ ખોલો</translation>
 <translation id="7618220760967055820">ટૂલબારમાં કયું બટન બતાવવામાં આવે તે પસંદ કરો</translation>
 <translation id="7620522820075868385">રદ કરો</translation>
@@ -2430,6 +2429,7 @@
 <translation id="8439758443371991593">'વાંચન સૂચિમાં ઉમેરો' છુપાવો</translation>
 <translation id="8443986842926457191">URLમાં 2048થી વધુ અક્ષર છે</translation>
 <translation id="8449869326050867919">પાસવર્ડ શેર કરવામાં આવ્યો</translation>
+<translation id="8473367210869452063">આ સાઇટ સાથે ક્રિયાપ્રતિક્રિયા કરવા માટે, વર્તમાન કાર્યને રોકો અથવા Geminiનું કાર્ય પૂર્ણ થવાની રાહ જુઓ</translation>
 <translation id="8473815223723723001">Gemini વડે છબીમાં ફેરફાર કરો</translation>
 <translation id="8473863474539038330">સરનામા અને વધુ</translation>
 <translation id="8474378002946546633">સૂચનાઓને અનુમતિ આપો</translation>

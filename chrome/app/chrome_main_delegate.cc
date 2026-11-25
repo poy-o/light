@@ -32,6 +32,7 @@
 #include "base/process/process_handle.h"
 #include "base/profiler/thread_group_profiler.h"
 #include "base/rand_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -70,8 +71,6 @@
 #include "components/metrics/persistent_histograms.h"
 #include "components/sampling_profiler/thread_profiler.h"
 #include "components/startup_metric_utils/common/startup_metric_utils.h"
-#include "components/variations/service/variations_network_clock.h"
-#include "components/variations/variations_ids_provider.h"
 #include "components/version_info/channel.h"
 #include "content/public/app/initialize_mojo_core.h"
 #include "content/public/common/content_client.h"
@@ -113,9 +112,11 @@
 #include "base/win/elevation_util.h"
 #include "base/win/resource_exhaustion.h"
 #include "base/win/win_util.h"
+#include "chrome/app/startup_timestamps_win.h"
 #include "chrome/child/v8_crashpad_support_win.h"
 #include "sandbox/win/src/sandbox.h"
 #include "sandbox/win/src/sandbox_factory.h"
+#include "third_party/abseil-cpp/absl/functional/overload.h"
 #include "ui/base/resource/resource_bundle_win.h"
 #endif  // BUILDFLAG(IS_WIN)
 
@@ -650,6 +651,13 @@ struct MainFunction {
 };
 
 #if !defined(BUILDING_CHROME_RENDERER)
+void RemoveDisableWebSecuritySwitch() {
+  LOG(ERROR) << "Web security may only be disabled if '--user-data-dir' is "
+                "also specified with a non-default value.";
+  base::CommandLine::ForCurrentProcess()->RemoveSwitch(
+      switches::kDisableWebSecurity);
+}
+
 // Initializes the user data dir. Must be called before InitializeLocalState().
 void InitializeUserDataDir(base::CommandLine* command_line) {
 #if BUILDFLAG(IS_WIN)
@@ -791,9 +799,26 @@ void RecordMainStartupMetrics(const StartupTimestamps& timestamps) {
   // On all other platforms, `timestamps.exe_entry_point_ticks` contains the exe
   // entry point time (on some platforms this is ChromeMain, on some it is
   // before).
+#if BUILDFLAG(IS_WIN)
+  const base::TimeTicks application_start_ticks =
+      std::visit(absl::Overload{
+                     [](base::TimeTicks ticks) {
+                       CHECK(!ticks.is_null());
+                       return ticks;
+                     },
+                     [now](base::TimeDelta qpc_delta) {
+                       CHECK(!qpc_delta.is_zero());
+                       return ResolveEntryPointQpcDelta(qpc_delta, now);
+                     },
+                 },
+                 timestamps.exe_entry_point_ticks);
+#else
   CHECK(!timestamps.exe_entry_point_ticks.is_null());
+  const base::TimeTicks application_start_ticks =
+      timestamps.exe_entry_point_ticks;
+#endif
   startup_metric_utils::GetCommon().RecordApplicationStartTime(
-      timestamps.exe_entry_point_ticks);
+      application_start_ticks);
 #endif
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || \
@@ -860,19 +885,20 @@ ChromeMainDelegate::ChromeMainDelegate()
 ChromeMainDelegate::ChromeMainDelegate() = default;
 #endif
 
-ChromeMainDelegate::ChromeMainDelegate(const StartupTimestamps& timestamps) {
+ChromeMainDelegate::ChromeMainDelegate(const StartupTimestamps& timestamps)
+#if BUILDFLAG(IS_WIN) && !defined(BUILDING_CHROME_RENDERER)
+    : exe_entry_point_qpc_delta_(
+          std::holds_alternative<base::TimeDelta>(
+              timestamps.exe_entry_point_ticks)
+              ? std::get<base::TimeDelta>(timestamps.exe_entry_point_ticks)
+              : base::TimeDelta())
+#endif
+{
   // Record startup metrics in the browser process. For component builds, there
   // is no way to know the type of process (process command line is not yet
   // initialized), so the function below will also be called in renderers.
   // This doesn't matter as it simply sets global variables.
   RecordMainStartupMetrics(timestamps);
-#if BUILDFLAG(IS_WIN)
-  if (IsCanaryDev()) {
-    // Enroll this client into an arm of the
-    // PinUser32AndGdi32InAvailabilityCheck study; see crbug.com/577860802.
-    base::win::InitPinUser32AndGdi32Trial();
-  }
-#endif
 }
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -1085,12 +1111,9 @@ ChromeMainDelegate::CreateVariationsIdsProvider() {
   // `ChromeContentBrowserClient`. Once the global browser instance is
   // created, it will take over ownership of the NetworkTimeTracker.
 
-  return ::variations::VariationsIdsProvider::CreateInstance(
-      ::variations::VariationsIdsProvider::Mode::kUseSignedInState,
-      std::make_unique<::variations::VariationsNetworkClock>(
-          chrome_content_browser_client_->startup_data()
-              ->chrome_feature_list_creator()
-              ->network_time_tracker()));
+  return chrome_content_browser_client_->startup_data()
+      ->chrome_feature_list_creator()
+      ->CreateVariationsIdsProvider();
 #endif  // defined(BUILDING_CHROME_RENDERER)
 }
 
@@ -1230,10 +1253,7 @@ std::optional<int> ChromeMainDelegate::BasicStartupComplete() {
   // specified a distinct profile directory. This still enables tests to disable
   // web security by setting the kWebKitWebSecurityEnabled pref directly.
   //
-  // Note that this is done in ChromeMainDelegate::BasicStartupComplete()
-  // because this is the earliest callback. Many places in Chromium gate
-  // security features around kDisableWebSecurity, and it is unreasonable to
-  // expect them all to properly also check for kUserDataDir.
+  // PreSandboxStartup() checks the effective directory once it exists.
 #if !defined(BUILDING_CHROME_RENDERER)
   if (command_line.HasSwitch(switches::kDisableWebSecurity)) {
     base::FilePath default_user_data_dir;
@@ -1243,10 +1263,7 @@ std::optional<int> ChromeMainDelegate::BasicStartupComplete() {
             .StripTrailingSeparators();
     if (specified_user_data_dir.empty() ||
         specified_user_data_dir == default_user_data_dir) {
-      LOG(ERROR) << "Web security may only be disabled if '--user-data-dir' is "
-                    "also specified with a non-default value.";
-      base::CommandLine::ForCurrentProcess()->RemoveSwitch(
-          switches::kDisableWebSecurity);
+      RemoveDisableWebSecuritySwitch();
     }
   }
 #endif  // !defined(BUILDING_CHROME_RENDERER)
@@ -1343,8 +1360,17 @@ std::optional<int> ChromeMainDelegate::BasicStartupComplete() {
   // process becomes the stub, and will terminate after the main browser has
   // terminated, with the exit code from the main browser.
   if (is_browser && chrome::IsIsolationEnabled(&command_line)) {
+    base::CommandLine isolated_command_line = command_line;
+    // Pass the stub's entry-point QPC delta so the isolated browser uses the
+    // stub's initial launch time across all clients (capturing stub DLL load,
+    // COM, and elevation service overhead).
+    if (exe_entry_point_qpc_delta_.is_positive()) {
+      isolated_command_line.AppendSwitchASCII(
+          switches::kIsolatedStubStartQpcUs,
+          base::NumberToString(exe_entry_point_qpc_delta_.InMicroseconds()));
+    }
     const auto isolated_process =
-        chrome::IsolatedBrowserProcess::Launch(command_line);
+        chrome::IsolatedBrowserProcess::Launch(isolated_command_line);
     // Record the launch result HRESULT so that it can be reported to UMA once
     // metrics reporting has been initialized. If the launch fails, this process
     // falls through to run unisolated and reports the failure HRESULT. If the
@@ -1601,6 +1627,18 @@ void ChromeMainDelegate::PreSandboxStartup() {
   // Initialize the user data dir for any process type that needs it.
   if (chrome::ProcessNeedsProfileDir(process_type)) {
     InitializeUserDataDir(base::CommandLine::ForCurrentProcess());
+    if (command_line.HasSwitch(switches::kDisableWebSecurity)) {
+      // Initialization can fall back to the default instead of using the
+      // requested directory. Compare the effective directories on disk.
+      base::FilePath user_data_dir;
+      base::FilePath default_user_data_dir;
+      if (!base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir) ||
+          !chrome::GetDefaultUserDataDirectory(&default_user_data_dir) ||
+          !chrome::IsConfirmedNonDefaultUserDataDirectory(
+              user_data_dir, default_user_data_dir)) {
+        RemoveDisableWebSecuritySwitch();
+      }
+    }
   }
 
   // Register component_updater PathProvider after DIR_USER_DATA overridden by

@@ -45,7 +45,6 @@ ActuationInterventionData* CreateIntervention() {
 @interface FakeActuationWorklogConsumer
     : NSObject <ActuationSuggestionsConsumer, ActuationWorklogConsumer>
 @property(nonatomic, assign) BOOL actuationActive;
-@property(nonatomic, assign) ActuationHeaderPrimaryAction headerPrimaryAction;
 @property(nonatomic, strong)
     ActuationHeaderContentVariants* headerContentVariants;
 @property(nonatomic, strong) NSMutableArray<ActuationWorklogItem*>* items;
@@ -55,6 +54,7 @@ ActuationInterventionData* CreateIntervention() {
 @property(nonatomic, strong) ActuationInterventionData* intervention;
 @property(nonatomic, assign) NSUInteger resetCount;
 @property(nonatomic, strong) NSArray<ActorFormSuggestion*>* suggestions;
+@property(nonatomic, assign) NSInteger selectedSuggestionIndex;
 @property(nonatomic, strong) ActuationWorklogItem* suggestionsItem;
 @end
 
@@ -64,7 +64,7 @@ ActuationInterventionData* CreateIntervention() {
   if ((self = [super init])) {
     _items = [NSMutableArray array];
     _animated = [NSMutableArray array];
-    _headerPrimaryAction = ActuationHeaderPrimaryAction::kStop;
+    _selectedSuggestionIndex = NSNotFound;
   }
   return self;
 }
@@ -89,13 +89,14 @@ ActuationInterventionData* CreateIntervention() {
   [_animated removeAllObjects];
   _chip = nil;
   _headerContentVariants = nil;
-  _headerPrimaryAction = ActuationHeaderPrimaryAction::kStop;
   _intervention = nil;
 }
 
 - (void)setSuggestions:(NSArray<ActorFormSuggestion*>*)suggestions
-    forActiveWorklogItem:(ActuationWorklogItem*)worklogItem {
+    selectedSuggestionIndex:(NSInteger)selectedSuggestionIndex
+       forActiveWorklogItem:(ActuationWorklogItem*)worklogItem {
   _suggestions = suggestions;
+  _selectedSuggestionIndex = selectedSuggestionIndex;
   _suggestionsItem = worklogItem;
 }
 
@@ -109,12 +110,19 @@ ActuationInterventionData* CreateIntervention() {
 @property(nonatomic, weak, readonly) id<ActorTaskDataSourceObserver> observer;
 @property(nonatomic, strong, readonly)
     ActuationInterventionAction* resolvedAction;
-@property(nonatomic, strong, readonly) ActorFormSuggestion* selectedSuggestion;
+@property(nonatomic, assign, readonly) NSInteger selectedSuggestionIndex;
 @property(nonatomic, assign, readonly) BOOL taskStopped;
 @property(nonatomic, assign, readonly) BOOL taskPaused;
 @end
 
 @implementation FakeActorTaskDataSource
+
+- (instancetype)init {
+  if ((self = [super init])) {
+    _selectedSuggestionIndex = NSNotFound;
+  }
+  return self;
+}
 
 - (void)setState:(ActuationWorklogState*)state {
   _state = state;
@@ -136,8 +144,8 @@ ActuationInterventionData* CreateIntervention() {
   _resolvedAction = action;
 }
 
-- (void)selectSuggestion:(ActorFormSuggestion*)suggestion {
-  _selectedSuggestion = suggestion;
+- (void)selectSuggestionAtIndex:(NSInteger)index {
+  _selectedSuggestionIndex = index;
 }
 
 - (void)stopTask {
@@ -156,7 +164,9 @@ class ActuationWorklogMediatorTest : public PlatformTest {
  protected:
   ActuationWorklogMediatorTest() {
     ActuationHeaderContent* content =
-        [[ActuationHeaderContent alloc] initWithTitle:kTaskTitle subtitle:nil];
+        [[ActuationHeaderContent alloc] initWithTitle:kTaskTitle
+                                             subtitle:nil
+                                          primaryItem:nil];
     header_content_ = [[ActuationHeaderContentVariants alloc]
         initWithMinimizedContent:content
                   compactContent:content
@@ -168,19 +178,22 @@ class ActuationWorklogMediatorTest : public PlatformTest {
   ~ActuationWorklogMediatorTest() override { [mediator_ disconnect]; }
 
   // Publishes the state of an active task displaying `entries`, with
-  // `intervention`, `suggestions` for the last entry, and `primary_action`.
+  // `intervention`, `suggestions` for the last entry, and `header_content`
+  // (defaulting to `header_content_`).
   void Publish(NSArray<ActuationWorklogEntry*>* entries,
                ActuationInterventionData* intervention = nil,
                NSArray<ActorFormSuggestion*>* suggestions = nil,
-               ActuationHeaderPrimaryAction primary_action =
-                   ActuationHeaderPrimaryAction::kPause) {
+               ActuationHeaderContentVariants* header_content = nil,
+               NSInteger selected_suggestion_index = 0) {
+    NSInteger index = suggestions ? selected_suggestion_index : NSNotFound;
+    ActuationHeaderContentVariants* content = header_content ?: header_content_;
     data_source_.state = [[ActuationWorklogState alloc]
         initWithActuationActive:YES
-            headerPrimaryAction:primary_action
-                  headerContent:header_content_
+                  headerContent:content
                         entries:entries
                    intervention:intervention
                     suggestions:suggestions
+        selectedSuggestionIndex:index
                suggestionsEntry:(suggestions ? entries.lastObject : nil)];
   }
 
@@ -319,36 +332,46 @@ TEST_F(ActuationWorklogMediatorTest,
        TestInterventionAndSuggestionsAreForwarded) {
   NSArray<ActuationWorklogEntry*>* entries = @[ Entry(@"A"), Entry(@"Card") ];
   ActuationInterventionData* intervention = CreateIntervention();
-  NSArray<ActorFormSuggestion*>* suggestions = @[ [[ActorFormSuggestion alloc]
-      initWithCredential:actor_login::Credential()] ];
+  NSArray<ActorFormSuggestion*>* suggestions = @[
+    [[ActorFormSuggestion alloc] initWithCredential:actor_login::Credential()],
+    [[ActorFormSuggestion alloc] initWithCredential:actor_login::Credential()]
+  ];
   StartObserving();
 
-  Publish(entries, intervention, suggestions);
+  Publish(entries, intervention, suggestions, /*header_content=*/nil,
+          /*selected_suggestion_index=*/1);
   EXPECT_EQ(consumer_.intervention, intervention);
   EXPECT_NSEQ(consumer_.suggestions, suggestions);
+  EXPECT_EQ(consumer_.selectedSuggestionIndex, 1);
   EXPECT_EQ(consumer_.suggestionsItem, entries.lastObject.item);
 
   Publish(entries);
   EXPECT_EQ(consumer_.intervention, nil);
   EXPECT_EQ(consumer_.suggestions, nil);
+  EXPECT_EQ(consumer_.selectedSuggestionIndex, NSNotFound);
   EXPECT_EQ(consumer_.suggestionsItem, nil);
 }
 
-// Tests that the header primary action of each state is forwarded.
-TEST_F(ActuationWorklogMediatorTest, TestHeaderPrimaryActionIsForwarded) {
+// Tests that subsequent state updates forward new header content variants
+// without resetting the consumer.
+TEST_F(ActuationWorklogMediatorTest, TestHeaderContentVariantsAreUpdated) {
   NSArray<ActuationWorklogEntry*>* entries = @[ Entry(@"A") ];
   Publish(entries);
   StartObserving();
-  EXPECT_EQ(consumer_.headerPrimaryAction,
-            ActuationHeaderPrimaryAction::kPause);
+  EXPECT_EQ(consumer_.headerContentVariants, header_content_);
 
-  Publish(entries, /*intervention=*/nil, /*suggestions=*/nil,
-          ActuationHeaderPrimaryAction::kStop);
-  EXPECT_EQ(consumer_.headerPrimaryAction, ActuationHeaderPrimaryAction::kStop);
-
-  Publish(entries);
-  EXPECT_EQ(consumer_.headerPrimaryAction,
-            ActuationHeaderPrimaryAction::kPause);
+  ActuationHeaderContent* updated_content =
+      [[ActuationHeaderContent alloc] initWithTitle:@"Updated"
+                                           subtitle:nil
+                                        primaryItem:nil];
+  ActuationHeaderContentVariants* updated_variants =
+      [[ActuationHeaderContentVariants alloc]
+          initWithMinimizedContent:updated_content
+                    compactContent:updated_content
+                   expandedContent:updated_content];
+  Publish(entries, /*intervention=*/nil, /*suggestions=*/nil, updated_variants);
+  EXPECT_EQ(consumer_.headerContentVariants, updated_variants);
+  EXPECT_EQ(consumer_.resetCount, 0u);
 }
 
 // Tests that stopping observation detaches from the data source and resets the
@@ -361,7 +384,6 @@ TEST_F(ActuationWorklogMediatorTest, TestStopObservingResetsConsumer) {
 
   EXPECT_EQ(data_source_.observer, nil);
   EXPECT_FALSE(consumer_.actuationActive);
-  EXPECT_EQ(consumer_.headerPrimaryAction, ActuationHeaderPrimaryAction::kStop);
   EXPECT_EQ(consumer_.headerContentVariants, nil);
   EXPECT_EQ(consumer_.items.count, 0u);
 }
@@ -400,16 +422,14 @@ TEST_F(ActuationWorklogMediatorTest, TestUserActionsAreForwarded) {
   StartObserving();
   ActuationInterventionAction* action =
       CreateIntervention().actions.firstObject;
-  ActorFormSuggestion* suggestion = [[ActorFormSuggestion alloc]
-      initWithCredential:actor_login::Credential()];
 
   [mediator_ didTriggerInterventionAction:action];
-  [mediator_ suggestionsCoordinator:nil didSelectSuggestion:suggestion];
+  [mediator_ suggestionsCoordinator:nil didSelectSuggestionAtIndex:2];
   [mediator_ pauseActuation];
   [mediator_ stopActuation];
 
   EXPECT_EQ(data_source_.resolvedAction, action);
-  EXPECT_EQ(data_source_.selectedSuggestion, suggestion);
+  EXPECT_EQ(data_source_.selectedSuggestionIndex, 2);
   EXPECT_TRUE(data_source_.taskPaused);
   EXPECT_TRUE(data_source_.taskStopped);
 }

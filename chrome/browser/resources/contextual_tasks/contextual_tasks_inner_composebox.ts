@@ -255,13 +255,6 @@ export class
         changedProperties.has('enableFileHint')) {
       this.updateInputPlaceholder();
     }
-
-    if (!this.hasUpdated) {
-      // The mixin default reads the all-surfaces coherence key; Contextual
-      // Tasks must use the cobrowsing-specific key.
-      this.voiceSearchCoherenceEnabled = loadTimeData.getBoolean(
-          'voiceSearchCoherenceCobrowsingComposeboxEnabled');
-    }
   }
 
   override firstUpdated(changedProperties: PropertyValues<this>) {
@@ -282,6 +275,11 @@ export class
       this.fire(
           'show-suggestion-activity-link',
           this.shouldShowSuggestionActivityLink());
+    }
+    if (changedProperties.has('canSubmitFilesAndInput')) {
+      this.dispatchEvent(new CustomEvent('can-submit-files-and-input-changed', {
+        detail: {canSubmitFilesAndInput: this.canSubmitFilesAndInput},
+      }));
     }
   }
 

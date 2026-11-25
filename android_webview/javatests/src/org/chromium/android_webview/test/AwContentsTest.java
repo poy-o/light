@@ -12,9 +12,11 @@ import static org.chromium.android_webview.test.OnlyRunIn.ProcessMode.MULTI_PROC
 import static org.chromium.android_webview.test.OnlyRunIn.ProcessMode.SINGLE_PROCESS;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.ComponentCallbacks2;
 import android.content.Context;
 import android.content.ContextWrapper;
+import android.content.Intent;
 import android.content.MutableContextWrapper;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -940,7 +942,7 @@ public class AwContentsTest extends AwParameterizedTest {
     /**
      * Verifies that SharedWorker is not exposed in WebView.
      *
-     * Note: It is OK to delete this test if you are consciously enabling SharedWorker in WebView
+     * <p>Note: It is OK to delete this test if you are consciously enabling SharedWorker in WebView
      * and have fixed related issues. For example, see crbug.com/575037727.
      */
     @Test
@@ -2290,6 +2292,30 @@ public class AwContentsTest extends AwParameterizedTest {
     }
 
     @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testAdoptCancelsPendingIntents() throws Throwable {
+        mActivityTestRule.startBrowserProcess();
+        AwTestContainerView oldView =
+                mActivityTestRule.createAwTestContainerViewOnMainSync(mContentsClient);
+        AwContents awContents = oldView.getAwContents();
+        List<Integer> results = new ArrayList<>();
+        // AwTestContainerView doesn't actually start an Activity, so the request stays pending.
+        ThreadUtils.runOnUiThreadBlocking(
+                () ->
+                        Assert.assertTrue(
+                                awContents.startActivityForResult(
+                                        new Intent(),
+                                        (resultCode, data) -> results.add(resultCode))));
+
+        // The result would be delivered to the old container view, so moving the AwContents to
+        // another Activity cancels the request.
+        mActivityTestRule.reparentAwContents(oldView);
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> Assert.assertEquals(List.of(Activity.RESULT_CANCELED), results));
+    }
+
+    @Test
     @MediumTest
     @Feature({"AndroidWebView"})
     public void testAdoptPreservesSizeUntilLaidOut() throws Throwable {
@@ -2348,6 +2374,35 @@ public class AwContentsTest extends AwParameterizedTest {
                     laidOutView.layout(0, 0, 300, 200);
                     newView.getAwContents().adopt(laidOutView, newView.getInternalAccessDelegate());
                     Assert.assertEquals(List.of(Pair.create(300, 200)), sizes);
+                });
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testAdoptAttachedContainer() throws Throwable {
+        mActivityTestRule.startBrowserProcess();
+        AwTestContainerView oldView =
+                mActivityTestRule.createAwTestContainerViewOnMainSync(mContentsClient);
+        FrameLayout attachedView =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> {
+                            FrameLayout view = new FrameLayout(mActivityTestRule.getActivity());
+                            mActivityTestRule.getActivity().addView(view);
+                            return view;
+                        });
+        CriteriaHelper.pollUiThread(attachedView::isAttachedToWindow);
+
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    ((ViewGroup) oldView.getParent()).removeView(oldView);
+                    oldView.getAwContents()
+                            .adopt(attachedView, oldView.getInternalAccessDelegate());
+                    Assert.assertSame(
+                            attachedView,
+                            oldView.getAwContents()
+                                    .getViewAndroidDelegateForTesting()
+                                    .getContainerView());
                 });
     }
 

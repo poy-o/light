@@ -25,8 +25,8 @@ import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
+import org.chromium.chrome.browser.fullscreen.ImmersiveModeMetrics.ImmersiveModeExitReason;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
@@ -93,9 +93,7 @@ public class ExclusiveAccessManager
                     @Override
                     public void willCloseTabs(
                             List<Tab> tabs, boolean isAllTabs, boolean allowUndo) {
-                        if (mExclusiveAccessManagerAndroidNativePointer == null) {
-                            return;
-                        }
+                        assert mExclusiveAccessManagerAndroidNativePointer != null;
                         mLatestFullscreenOptions = null;
                         for (Tab tab : tabs) {
                             ExclusiveAccessManagerJni.get()
@@ -124,9 +122,7 @@ public class ExclusiveAccessManager
                 ExclusiveAccessManagerJni.get()
                         .init(this, windowAndroid, mFullscreenManager, activityTabProvider);
 
-        for (TabModel model : modelSelector.getModels()) {
-            model.addObserver(mTabModelObserver);
-        }
+        modelSelector.addObserverToAllModels(mTabModelObserver);
 
         if (mPendingFullscreen) {
             // Fullscreen options are always available if mPendingFullscreen is on.
@@ -259,13 +255,33 @@ public class ExclusiveAccessManager
         if (mExclusiveAccessManagerAndroidNativePointer == null) {
             return;
         }
-        // Start tracking a Browser immersive mode session when entering Browser immersive mode.
-        if (!mFullscreenManager.getPersistentFullscreenMode()) {
+        // Start tracking a Browser immersive mode session when entering Browser immersive mode;
+        // when exiting, default to OTHER if no specific exit reason (e.g. KEYBOARD_SHORTCUT) was
+        // already set, so the native ExitFullscreen callback does not misattribute it to
+        // PRESS_AND_HOLD_ESCAPE.
+        boolean isExiting = mFullscreenManager.getPersistentFullscreenMode();
+        if (!isExiting) {
             mFullscreenManager.onEnterBrowserImmersiveMode();
+        } else {
+            mFullscreenManager.setPendingBrowserImmersiveExitReasonIfUnset(
+                    ImmersiveModeExitReason.OTHER);
         }
         ExclusiveAccessManagerJni.get()
                 .toggleBrowserFullscreenMode(
                         mExclusiveAccessManagerAndroidNativePointer, userInitiated);
+        if (isExiting) {
+            mFullscreenManager.clearPendingBrowserImmersiveExitReason();
+        }
+    }
+
+    /** Exits exclusive access in response to a back-press / back-swipe gesture. */
+    void exitExclusiveAccessFromBackPress() {
+        if (mExclusiveAccessManagerAndroidNativePointer == null) {
+            return;
+        }
+        mFullscreenManager.setPendingBrowserImmersiveExitReasonIfUnset(
+                ImmersiveModeExitReason.BACK_PRESS);
+        exitExclusiveAccess();
     }
 
     /** Force exit of all exclusive access controllers */
@@ -274,8 +290,11 @@ public class ExclusiveAccessManager
             return;
         }
         mLatestFullscreenOptions = null;
+        mFullscreenManager.setPendingBrowserImmersiveExitReasonIfUnset(
+                ImmersiveModeExitReason.OTHER);
         ExclusiveAccessManagerJni.get()
                 .exitExclusiveAccess(mExclusiveAccessManagerAndroidNativePointer);
+        mFullscreenManager.clearPendingBrowserImmersiveExitReason();
         // Re-check exclusive access state: e.g. when in nested fullscreen (tab fullscreen on top
         // of browser immersive mode), exiting once only exits tab fullscreen while
         // browser immersive mode remains active.
@@ -292,12 +311,25 @@ public class ExclusiveAccessManager
             return;
         }
         mLatestFullscreenOptions = null;
+        // Default to OTHER if a caller (e.g. desktop windowing or activity hidden) has not already
+        // set a specific exit reason (for example, TabHidingType.TAB_SWITCHER_SHOWN), so the
+        // native ExitFullscreen callback does not misattribute the exit to PRESS_AND_HOLD_ESCAPE.
+        mFullscreenManager.setPendingBrowserImmersiveExitReasonIfUnset(
+                ImmersiveModeExitReason.OTHER);
         ExclusiveAccessManagerJni.get()
                 .exitAllExclusiveAccess(mExclusiveAccessManagerAndroidNativePointer);
+        mFullscreenManager.clearPendingBrowserImmersiveExitReason();
         // Unlike single-step exitExclusiveAccess() (where browser immersive mode may remain active
         // after exiting nested tab fullscreen), exitAllExclusiveAccess() tears down all exclusive
         // access layers at once, so no exclusive access remains active.
         mExclusiveAccessState.set(false);
+    }
+
+    /** Hides the fullscreen exit notice when the activity enters picture-in-picture. */
+    public void hideExclusiveAccessBubble() {
+        if (mExclusiveAccessManagerAndroidNativePointer == null) return;
+        ExclusiveAccessManagerJni.get()
+                .hideExclusiveAccessBubble(mExclusiveAccessManagerAndroidNativePointer);
     }
 
     /** Checks if any of the fullscreen, keyboard lock or pointer lock is on */
@@ -472,6 +504,8 @@ public class ExclusiveAccessManager
             // When the window transitions into desktop windowing mode, exit all fullscreen layers
             // (both tab fullscreen and browser immersive mode) so browser immersive mode does not
             // remain active inside a desktop window.
+            mFullscreenManager.setPendingBrowserImmersiveExitReasonIfUnset(
+                    ImmersiveModeExitReason.DESKTOP_WINDOWING_MODE_CHANGED);
             exitAllExclusiveAccess();
         }
     }
@@ -479,15 +513,14 @@ public class ExclusiveAccessManager
     /** Cleanup function which should be called when owning object is destroyed. */
     @Override
     public void destroy() {
+        if (mTabModelSelector != null) {
+            mTabModelSelector.removeObserverFromAllModels(mTabModelObserver);
+            mTabModelSelector = null;
+        }
+        if (mDesktopWindowStateManager != null) mDesktopWindowStateManager.removeObserver(this);
         if (mExclusiveAccessManagerAndroidNativePointer != null) {
             mExclusiveAccessManagerAndroidNativePointer.destroy();
             mExclusiveAccessManagerAndroidNativePointer = null;
-        }
-        if (mDesktopWindowStateManager != null) mDesktopWindowStateManager.removeObserver(this);
-        if (mTabModelSelector != null) {
-            for (TabModel model : mTabModelSelector.getModels()) {
-                model.removeObserver(mTabModelObserver);
-            }
         }
     }
 
@@ -545,6 +578,8 @@ public class ExclusiveAccessManager
         void exitExclusiveAccess(JniPtr<NativeExclusiveAccessManagerAndroid> self);
 
         void exitAllExclusiveAccess(JniPtr<NativeExclusiveAccessManagerAndroid> self);
+
+        void hideExclusiveAccessBubble(JniPtr<NativeExclusiveAccessManagerAndroid> self);
 
         boolean hasExclusiveAccess(JniPtr<NativeExclusiveAccessManagerAndroid> self);
 

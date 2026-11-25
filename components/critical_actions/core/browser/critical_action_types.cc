@@ -4,7 +4,17 @@
 
 #include "components/critical_actions/core/browser/critical_action_types.h"
 
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "base/containers/fixed_flat_map.h"
+#include "base/i18n/icubridge/icu_bridge.h"
+#include "base/i18n/icubridge/list_formatter.h"
 #include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
+#include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/uuid.h"
 #include "base/values.h"
@@ -12,6 +22,154 @@
 #include "ui/base/l10n/l10n_util.h"
 
 namespace critical_actions {
+
+namespace {
+
+constexpr char kFormFillTypesKey[] = "form_fill_types";
+
+// Strings stored in `metadata` for each FormFillType. Never change an existing
+// string.
+constexpr auto kFormFillTypeStrings =
+    base::MakeFixedFlatMap<FormFillType, std::string_view>({
+        {FormFillType::kAddress, "ADDRESS"},
+        {FormFillType::kName, "NAME"},
+        {FormFillType::kEmail, "EMAIL"},
+        {FormFillType::kPhone, "PHONE"},
+        {FormFillType::kCreditCard, "CREDIT_CARD"},
+    });
+
+// Every `FormFillType` in `FormFillTypes` (all but `kUnknown`) needs a string.
+static_assert(kFormFillTypeStrings.size() == FormFillTypes::kValueCount);
+static_assert(!kFormFillTypeStrings.contains(FormFillType::kUnknown));
+
+// Returns the FormFillType for a value read from `metadata`, or std::nullopt
+// if `value` isn't a string or isn't a known FormFillType string.
+std::optional<FormFillType> FormFillTypeFromString(const base::Value& value) {
+  const std::string* type_string = value.GetIfString();
+  if (!type_string) {
+    return std::nullopt;
+  }
+  for (const auto& [type, string] : kFormFillTypeStrings) {
+    if (string == *type_string) {
+      return type;
+    }
+  }
+  return std::nullopt;
+}
+
+// Returns the FormFillTypes from the "form_fill_types" list in `metadata_dict`.
+// Returns an empty set if the list is missing, skips values that aren't known
+// FormFillType strings.
+FormFillTypes ParseFormFillTypes(const base::DictValue& metadata_dict) {
+  const base::ListValue* form_fill_types =
+      metadata_dict.FindList(kFormFillTypesKey);
+  if (!form_fill_types) {
+    return {};
+  }
+  FormFillTypes types;
+  for (const base::Value& value : *form_fill_types) {
+    if (std::optional<FormFillType> type = FormFillTypeFromString(value)) {
+      types.Put(*type);
+    }
+  }
+  return types;
+}
+
+// Returns the localized name of one filled contact info attribute, e.g.
+// "Address".
+std::u16string GetContactInfoTypeName(FormFillType type) {
+  switch (type) {
+    case FormFillType::kAddress:
+      return l10n_util::GetStringUTF16(
+          IDS_HISTORY_CRITICAL_ACTION_FORM_FILL_TYPE_ADDRESS);
+    case FormFillType::kName:
+      return l10n_util::GetStringUTF16(
+          IDS_HISTORY_CRITICAL_ACTION_FORM_FILL_TYPE_NAME);
+    case FormFillType::kEmail:
+      return l10n_util::GetStringUTF16(
+          IDS_HISTORY_CRITICAL_ACTION_FORM_FILL_TYPE_EMAIL);
+    case FormFillType::kPhone:
+      return l10n_util::GetStringUTF16(
+          IDS_HISTORY_CRITICAL_ACTION_FORM_FILL_TYPE_PHONE);
+    case FormFillType::kCreditCard:
+    case FormFillType::kUnknown:
+      // Only contact info attributes are listed, and `FormFillTypes` never
+      // contains `kUnknown`.
+      NOTREACHED();
+  }
+}
+
+// Joins `names` into a localized list, e.g. "Address, Name, Email" in
+// English.
+std::u16string JoinFormFillTypeNames(const std::vector<std::u16string>& names) {
+  return base::i18n::IcuBridge::GetInstance()
+      .list_formatter()
+      ->FormatNarrowList(names);
+}
+
+// Returns the label of a contact info form fill with `types`, e.g. "Contact
+// info filled: Address, Name", or "Contact info filled" if it has no contact
+// info attributes.
+std::string GetContactInfoLabel(FormFillTypes types) {
+  std::vector<std::u16string> names;
+  for (FormFillType type : types) {
+    // Skip attributes of another group, which don't belong under this
+    // action's label, tooltip and linkout.
+    if (GetFormFillGroup(type) == ActionType::kFormFillContactInfo) {
+      names.push_back(GetContactInfoTypeName(type));
+    }
+  }
+  if (names.empty()) {
+    return l10n_util::GetStringUTF8(IDS_HISTORY_CRITICAL_ACTION_FORM_FILLED);
+  }
+  return l10n_util::GetStringFUTF8(
+      IDS_HISTORY_CRITICAL_ACTION_CONTACT_INFO_FILLED_WITH_TYPES,
+      JoinFormFillTypeNames(names));
+}
+
+}  // namespace
+
+bool IsGranularFormFill(ActionType type) {
+  switch (type) {
+    case ActionType::kFormFillContactInfo:
+    case ActionType::kFormFillPayments:
+      return true;
+    case ActionType::kUnknown:
+    case ActionType::kFormFill:
+    case ActionType::kDownload:
+    case ActionType::kSettingChange:
+    case ActionType::kCredentialAccess:
+    case ActionType::kGooglePasswordManager:
+    case ActionType::kFederatedLogin:
+    case ActionType::kCredentialsOtp:
+    case ActionType::kWebMcpTool:
+      return false;
+  }
+}
+
+ActionType GetFormFillGroup(FormFillType type) {
+  switch (type) {
+    case FormFillType::kAddress:
+    case FormFillType::kName:
+    case FormFillType::kEmail:
+    case FormFillType::kPhone:
+      return ActionType::kFormFillContactInfo;
+    case FormFillType::kCreditCard:
+      return ActionType::kFormFillPayments;
+    case FormFillType::kUnknown:
+      // `FormFillType::kUnknown` is never parsed from metadata or produced
+      // when logging.
+      NOTREACHED();
+  }
+}
+
+void SetFormFillTypes(base::DictValue& metadata_dict, FormFillTypes types) {
+  base::ListValue form_fill_types;
+  for (FormFillType type : types) {
+    form_fill_types.Append(kFormFillTypeStrings.at(type));
+  }
+  metadata_dict.Set(kFormFillTypesKey, std::move(form_fill_types));
+}
 
 CriticalActionEntry::CriticalActionEntry() = default;
 
@@ -41,8 +199,9 @@ std::string CriticalActionEntry::GetLabel() const {
       return l10n_util::GetStringUTF8(
           IDS_HISTORY_CRITICAL_ACTION_CREDENTIALS_OTP);
     case ActionType::kFormFill:
-    case ActionType::kFormFillContactInfo:
       return l10n_util::GetStringUTF8(IDS_HISTORY_CRITICAL_ACTION_FORM_FILLED);
+    case ActionType::kFormFillContactInfo:
+      return GetContactInfoLabel(GetFormFillTypes());
     case ActionType::kFormFillPayments:
       return l10n_util::GetStringUTF8(
           IDS_HISTORY_CRITICAL_ACTION_CARD_DETAILS_FILLED);
@@ -105,6 +264,25 @@ std::string CriticalActionEntry::GetTooltip() const {
     case ActionType::kUnknown:
       return "";
   }
+}
+
+FormFillTypes CriticalActionEntry::GetFormFillTypes() const {
+  std::optional<base::DictValue> metadata_dict =
+      base::JSONReader::ReadDict(metadata, base::JSON_PARSE_RFC);
+  return metadata_dict ? ParseFormFillTypes(*metadata_dict) : FormFillTypes();
+}
+
+void CriticalActionEntry::AddFormFillTypes(FormFillTypes types) {
+  if (types.empty()) {
+    return;
+  }
+  base::DictValue metadata_dict =
+      base::JSONReader::ReadDict(metadata, base::JSON_PARSE_RFC)
+          .value_or(base::DictValue());
+  FormFillTypes merged = ParseFormFillTypes(metadata_dict);
+  merged.PutAll(types);
+  SetFormFillTypes(metadata_dict, merged);
+  metadata = base::WriteJson(metadata_dict).value_or(metadata);
 }
 
 CriticalActionQueryOptions::CriticalActionQueryOptions() = default;

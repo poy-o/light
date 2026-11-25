@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">Jelszavak megosztása</translation>
 <translation id="1554043146674176775">AI-mód kikapcsolása</translation>
 <translation id="1554477036522844996">Új ablak</translation>
+<translation id="1555014818414775661">Képek hozzáadása</translation>
 <translation id="1557806604681757705">számítógépe</translation>
 <translation id="1558391695376153246">Inkognitó lapok bezárása</translation>
 <translation id="1560153516220021659">Összecsukott másodlagos eszköztár gombja</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">Nyissa meg a <ph name="BEGIN_BOLD" />Safari beállításait<ph name="END_BOLD" />.</translation>
 <translation id="3858860766373142691">Név</translation>
 <translation id="386224966259596343">A következő alkalommal, amikor egy releváns űrlapot tölt ki, lehetősége lesz az adatok Walletbe való mentésére.</translation>
-<translation id="3868495844258915202">Teljes URL megjelenítése</translation>
 <translation id="3870931306085184145">Nincsenek mentett jelszavak a(z) <ph name="DOMAIN" /> domainhez</translation>
 <translation id="3875783148670536197">Bemutató</translation>
 <translation id="3878657761594430423">Lapösszefogó</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">Ha árfigyelési értesítéseket szeretne kapni, kapcsolja be az értesítéseket az iOS beállításaiban.</translation>
 <translation id="528857768909044842">Ide kerülnek mentésre a lapcsoportok</translation>
 <translation id="5294624619177114121">Mobilos értesítések</translation>
-<translation id="5295239312320826323">Eltávolítja a(z) <ph name="USER_EMAIL" /> fiókot?</translation>
 <translation id="5300589172476337783">Megjelenítés</translation>
 <translation id="5311061401280561833">Kamera- és mikrofon-hozzáférés engedélyezve</translation>
 <translation id="5313967007315987356">Webhely hozzáadása</translation>
@@ -1788,6 +1787,7 @@ Az Átadást engedélyezni kell a Beállítások általános részében is, és 
 <translation id="6504541289630702018">Könnyen hozzáférhet az asztali lapcsoportokhoz</translation>
 <translation id="6505334220040167806">Lapcsoport összecsukása.</translation>
 <translation id="6506996418997555004">A(z) „<ph name="GROUP_NAME" />” lapcsoport megosztása</translation>
+<translation id="650770261448122895">A Lens segítségével bármire rákereshet, amit meglát</translation>
 <translation id="6507973708545996744">Ha bejelentkezik, az összes eszközén hozzáférhet az olvasólistájához.</translation>
 <translation id="6518133107902771759">Ellenőrzés</translation>
 <translation id="6523575793810663688">Bemutató</translation>
@@ -2147,7 +2147,6 @@ Bármikor újraindíthatja.</translation>
 <translation id="7603852183842204213">Pop-up letiltva (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">A szinkronizálás nem működik.</translation>
 <translation id="760667371114328991">A biztonsági ellenőrzés értesítéseinek kikapcsolása</translation>
-<translation id="7612619742409846846">Bejelentkezve a Google rendszerébe mint</translation>
 <translation id="7612849887607288481">AI-prototípuskészítés menüjének megnyitása</translation>
 <translation id="7618220760967055820">Az eszköztáron megjelenő gomb kiválasztása</translation>
 <translation id="7620522820075868385">Mégse</translation>
@@ -2430,6 +2429,7 @@ Bármikor újraindíthatja.</translation>
 <translation id="8439758443371991593">A „Hozzáadás az Olvasólistához” művelet elrejtése</translation>
 <translation id="8443986842926457191">Az URL több mint 2048 karakterből áll</translation>
 <translation id="8449869326050867919">Jelszó megosztva</translation>
+<translation id="8473367210869452063">A webhely használatához állítsa le a jelenlegi feladatot, vagy várja meg, amíg a Gemini befejezi a munkát.</translation>
 <translation id="8473815223723723001">Kép szerkesztése a Geminivel</translation>
 <translation id="8473863474539038330">Címek és egyebek</translation>
 <translation id="8474378002946546633">Értesítések engedélyezése</translation>

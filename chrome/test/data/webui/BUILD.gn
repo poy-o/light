@@ -315,6 +315,7 @@ source_set("browser_tests") {
       deps += [
         "//chrome/browser/ash/boca",
         "//chrome/browser/gcm",
+        "//chrome/browser/signin:identity_test_support",
         "//chromeos/ash/components/boca/proto",
         "//chromeos/ash/components/boca/session_api",
         "//components/gcm_driver",
@@ -478,6 +479,8 @@ source_set("browser_tests") {
   if (!enable_extensions_core && enable_guest_view) {
     sources += [ "guest_view_shared/slim_webview_browsertest.cc" ]
     deps += [
+      "//chrome/browser/glic",
+      "//chrome/browser/glic/public:provider_features",
       "//chrome/browser/permissions",
       "//components/zoom",
       "//net:test_support",

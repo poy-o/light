@@ -482,7 +482,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="GPU.ANGLECanEmulateGLES3" enum="BooleanANGLECanEmulateGLES3"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>blundell@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@google.com</owner>
   <summary>
@@ -966,7 +966,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="GPU.DirectComposition.OverlaysSupported"
-    enum="BooleanOverlaySupported" expires_after="2027-03-21">
+    enum="BooleanOverlaySupported" expires_after="2027-05-23">
   <owner>magchen@chromium.org</owner>
   <owner>zmo@chromium.org</owner>
   <owner>magchen@chromium.org</owner>
@@ -978,7 +978,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="GPU.DirectComposition.Supported" enum="Boolean"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>lehoangquyen@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
   <summary>
@@ -1048,7 +1048,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="GPU.EGLDisplayType" enum="EGLDisplayType"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>zmo@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
   <summary>The display type used to ask for an EGLDisplay.</summary>
@@ -1157,7 +1157,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="GPU.EstablishGpuChannelSyncRetry" enum="BooleanSuccess"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>fangzhoug@chromium.org</owner>
   <owner>kylechar@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
@@ -1179,7 +1179,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="GPU.EstablishGpuChannelSyncTime.FirstRun" units="ms"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>chikamune@chromium.org</owner>
   <owner>kouhei@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
@@ -1263,6 +1263,7 @@ chromium-metrics-reviews@google.com.
   <owner>magchen@chromium.org</owner>
   <owner>zmo@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
+  <improvement direction="LOWER_IS_BETTER"/>
   <summary>
     The time between the GPU process start and the collection of GPU info during
     the process's startup phase. The time range is between 5ms and 90s. Emitted
@@ -1279,7 +1280,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="GPU.GPUProcessExitCode" enum="CrashExitCodes"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>zmo@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
   <summary>
@@ -1288,8 +1289,9 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="GPU.GPUProcessLaunchTime" units="ms"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>vmiura@chromium.org</owner>
+  <improvement direction="LOWER_IS_BETTER"/>
   <summary>
     Startup time of the GPU process as measured by the GPU process host.
   </summary>
@@ -1557,7 +1559,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="GPU.IntelGpuGeneration" enum="IntelGpuGeneration"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>zmo@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
   <summary>
@@ -1659,7 +1661,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Gpu.OutputSurface.ScheduleOverlaysUs" units="microseconds"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>magchen@chromium.org</owner>
   <owner>ccameron@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
@@ -1822,7 +1824,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="GPU.ProcessLifetimeEvents.HardwareAccelerated"
-    enum="GPUProcessLifetimeEvent" expires_after="2027-03-21">
+    enum="GPUProcessLifetimeEvent" expires_after="2027-05-23">
   <owner>vmiura@chromium.org</owner>
   <summary>
     Recorded once for every GPU process launch and crash when GPU process is
@@ -2007,7 +2009,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="GPU.SharedImage.BackingType" enum="SharedImageBackingType"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>kylechar@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@google.com</owner>
   <summary>
@@ -2038,7 +2040,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="GPU.SoftwareRendering" enum="BooleanSoftwareRendering"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>zmo@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
   <summary>
@@ -2127,7 +2129,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="GPU.WatchdogThread.Event{ThreadType}"
-    enum="GpuWatchdogThreadEvent" expires_after="2027-03-21">
+    enum="GpuWatchdogThreadEvent" expires_after="2027-05-23">
   <owner>magchen@chromium.org</owner>
   <owner>zmo@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
@@ -2568,24 +2570,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Viz.BeginFrameSource.Accuracy.AverageDelta2"
-    units="microseconds" expires_after="2027-04-11">
-  <owner>magchen@chromium.org</owner>
-  <owner>ccameron@chromium.org</owner>
-  <owner>chrome-gpu-metric-alerts@chromium.org</owner>
-  <improvement direction="LOWER_IS_BETTER"/>
-  <summary>
-    The average time delta between the expected BeginFrame time and the actual
-    time of BeginFrame on Mac. Each recorded number is an average result of 3600
-    frames. It's recorded every 3600 frames when OnBeginFrame or OnTimerTick is
-    called. The max delta is capped to 33 ms.
-
-    This metric is only for Mac clients with high-resolution clocks.
-
-    Expired on 2025-08-24 and restarted on 2025-09-09.
-  </summary>
-</histogram>
-
 <histogram name="Viz.BeginFrameSource.Accuracy.CallbackTimeError"
     units="microseconds" expires_after="2027-04-11">
   <owner>magchen@chromium.org</owner>
@@ -2714,13 +2698,31 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Viz.DisplayCompositor.RootDamageRect.Underlay"
-    enum="UnderlayDamageRect" expires_after="2025-07-21">
+<histogram name="Viz.DisplayLink.CADisplayLink.CreationTimeUs.{Order}{Result}"
+    units="microseconds" expires_after="2027-05-18">
   <owner>magchen@chromium.org</owner>
-  <owner>zmo@chromium.org</owner>
+  <owner>chrome-gpu-metric-alerts@chromium.org</owner>
+  <improvement direction="LOWER_IS_BETTER"/>
   <summary>
-    The root damage type excluding underlay damage in the current frame.
+    The time elapsed in microseconds (up to 25 seconds) to create and configure
+    a CADisplayLink via SLSGetDisplayLink() in
+    CADisplayLinkMac::GetForDisplay(), recorded on {Order} that resulted in
+    {Result}. Recorded once per display. Only reported on Mac clients, which
+    always have high-resolution clocks.
   </summary>
+  <token key="Order">
+    <variant name="First"
+        summary="the first creation attempt in the process (including initial
+                 SkyLight display-link setup)"/>
+    <variant name="Subsequent"
+        summary="the first creation attempt for each additional display in
+                 the process"/>
+  </token>
+  <token key="Result">
+    <variant name="" summary="either success or failure"/>
+    <variant name=".Failure" summary="failure"/>
+    <variant name=".Success" summary="success"/>
+  </token>
 </histogram>
 
 <histogram name="Viz.DisplayLink.Create.GPU.{Source}" enum="BooleanSuccess"
@@ -2740,6 +2742,25 @@ chromium-metrics-reviews@google.com.
     <variant name="ExternalDisplayLink"
         summary="ExternalDisplayLink using CADisplayLink in the Browser
                  process"/>
+  </token>
+</histogram>
+
+<histogram name="Viz.DisplayLink.CVDisplayLink.CreationTimeUs{Result}"
+    units="microseconds" expires_after="2027-05-18">
+  <owner>magchen@chromium.org</owner>
+  <owner>chrome-gpu-metric-alerts@chromium.org</owner>
+  <improvement direction="LOWER_IS_BETTER"/>
+  <summary>
+    The time elapsed in microseconds (up to 25 seconds) to create and configure
+    a CVDisplayLink via CVDisplayLinkCreateWithCGDisplay() in
+    CVDisplayLinkMac::GetForDisplay(), recorded on the first creation attempt
+    for each display that resulted in {Result}. Only reported on Mac clients,
+    which always have high-resolution clocks.
+  </summary>
+  <token key="Result">
+    <variant name="" summary="either success or failure"/>
+    <variant name=".Failure" summary="failure"/>
+    <variant name=".Success" summary="success"/>
   </token>
 </histogram>
 

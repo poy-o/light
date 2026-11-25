@@ -4,13 +4,10 @@
 
 #include "chrome/browser/ui/views/incognito_clear_browsing_data_dialog.h"
 
-#include "base/command_line.h"
 #include "base/memory/raw_ptr.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/run_until.h"
 #include "base/test/scoped_feature_list.h"
-#include "build/branding_buildflags.h"
-#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
@@ -35,9 +32,7 @@
 #include "chrome/grit/theme_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/enterprise/isolated_mode/isolated_mode_features.h"
-#include "components/enterprise/isolated_mode/prefs.h"
-#include "components/prefs/pref_service.h"
+#include "components/enterprise/isolated_mode/scoped_isolated_mode_override_for_testing.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -48,16 +43,14 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/views/controls/label.h"
 #include "ui/views/controls/webview/webview.h"
+#include "ui/views/test/views_test_utils.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/view_utils.h"
 #include "ui/views/widget/any_widget_observer.h"
 #include "ui/views/widget/widget_observer.h"
 #include "url/url_constants.h"
-
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
-#include "chrome/test/base/scoped_channel_override.h"
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
 
 namespace {
 
@@ -238,25 +231,9 @@ IN_PROC_BROWSER_TEST_F(IncognitoClearBrowsingDataDialogTest,
 
 class IsolatedClearBrowsingDataDialogTest
     : public IncognitoClearBrowsingDataDialogTest {
- public:
-  IsolatedClearBrowsingDataDialogTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        enterprise_isolated_mode::kEnableEnterpriseIsolatedMode);
-  }
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    IncognitoClearBrowsingDataDialogTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch(
-        enterprise_isolated_mode::switches::
-            kForceEnterpriseIsolatedModeReplacesIncognito);
-  }
-
  private:
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
-  chrome::ScopedChannelOverride channel_override_{
-      chrome::ScopedChannelOverride::Channel::kDev};
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
-  base::test::ScopedFeatureList scoped_feature_list_;
+  enterprise_isolated_mode::ScopedIsolatedModeOverrideForTesting
+      scoped_isolated_mode_;
 };
 
 IN_PROC_BROWSER_TEST_F(IsolatedClearBrowsingDataDialogTest,
@@ -336,6 +313,30 @@ IN_PROC_BROWSER_TEST_F(IncognitoClearBrowsingDataDialogTest,
       ui::mojom::DialogButton::kOk));
   ASSERT_TRUE(incognito_cbd_dialog_view->IsDialogButtonEnabled(
       ui::mojom::DialogButton::kCancel));
+}
+
+// Regression test for crbug.com/589703940: the labels must fit in the space
+// the bubble gives them, without eliding or clipping.
+IN_PROC_BROWSER_TEST_F(IncognitoClearBrowsingDataDialogTest,
+                       HistoryDisclaimerBubbleLabelsFit) {
+  OpenDialog(IncognitoClearBrowsingDataDialog::Type::kHistoryDisclaimerBubble);
+  views::test::RunScheduledLayout(GetDialogWidget());
+
+  int label_count = 0;
+  for (views::View* child : GetDialogView()->children()) {
+    auto* label = views::AsViewClass<views::Label>(child);
+    if (!label) {
+      continue;
+    }
+    ++label_count;
+    SCOPED_TRACE(label->GetText());
+    EXPECT_FALSE(label->IsDisplayTextTruncated());
+    const gfx::Size needed =
+        label->GetPreferredSize(views::SizeBounds(label->width(), {}));
+    EXPECT_LE(needed.width(), label->width());
+    EXPECT_LE(needed.height(), label->height());
+  }
+  EXPECT_EQ(2, label_count);
 }
 
 IN_PROC_BROWSER_TEST_F(IncognitoClearBrowsingDataDialogTest,
@@ -466,7 +467,7 @@ class IncognitoClearBrowsingDataDialogWebUIAvatarOverflowTest
 
 IN_PROC_BROWSER_TEST_F(IncognitoClearBrowsingDataDialogWebUIAvatarOverflowTest,
                        ShowBeforeAvatarButtonReady) {
-  BrowserWindowInterface* incognito_browser = CreateBrowserWindow(
+  BrowserWindowInterface* incognito_browser = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(GetProfile()->GetPrimaryOTRProfile(
                                     /*create_if_needed=*/true),
                                 /*from_user_gesture=*/true));

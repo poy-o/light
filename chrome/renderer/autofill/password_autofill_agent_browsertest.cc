@@ -6,10 +6,12 @@
 
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/run_loop.h"
@@ -48,6 +50,7 @@
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/safe_browsing/buildflags.h"
 #include "content/public/renderer/render_frame.h"
+#include "content/public/renderer/render_frame_observer.h"
 #include "content/public/test/browser_test_utils.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
@@ -63,6 +66,7 @@
 #include "third_party/blink/public/web/web_input_element.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
+#include "third_party/blink/public/web/web_view.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -661,7 +665,6 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
     ON_CALL(fake_driver_, FocusedInputChanged)
         .WillByDefault([this](FieldRendererId focused_field_id,
                               mojom::FocusedFieldType focused_field_type) {
-          last_focused_field_id_ = focused_field_id;
           last_focused_field_type_ = focused_field_type;
         });
   }
@@ -1181,7 +1184,6 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
   int called_check_safe_browsing_reputation_cnt_ = 0;
   int called_inform_about_user_input_count_ = 0;
   std::optional<FormData> form_data_maybe_submitted_;
-  FieldRendererId last_focused_field_id_;
   mojom::FocusedFieldType last_focused_field_type_ =
       mojom::FocusedFieldType::kUnknown;
 
@@ -2263,6 +2265,77 @@ TEST_F(PasswordAutofillAgentTest, PreviewField_ClearPreviewedForm) {
     EXPECT_EQ(0u, element.SelectionEnd());
   }
 }
+
+#if !BUILDFLAG(IS_ANDROID)
+// Regression test for reentrant preview mutation during `ClearPreviewedForm()`
+// when `SetSuggestedValue()` rebuilds a temporal input's UA shadow tree and
+// synchronously changes focus (temporal subfields are only focusable on
+// desktop; see `blink::DateTimeChooser::ShouldSubfieldsBeFocusable()`).
+TEST_F(PasswordAutofillAgentTest, ClearPreviewedFormHandlesReentrantPreview) {
+  class FocusChangeObserver : public content::RenderFrameObserver {
+   public:
+    FocusChangeObserver(content::RenderFrame* render_frame,
+                        base::OnceClosure on_focus_change)
+        : content::RenderFrameObserver(render_frame),
+          on_focus_change_(std::move(on_focus_change)) {}
+
+    void FocusedElementChanged(const WebElement& element) override {
+      if (on_focus_change_) {
+        std::move(on_focus_change_).Run();
+      }
+    }
+    void OnDestruct() override {}
+
+   private:
+    base::OnceClosure on_focus_change_;
+  };
+
+  WebInputElement random_element = GetInputElementByID("random_field");
+
+  // Switch `username` to `type="date"` with a dirty value (`u.value = ...`) and
+  // focus its UA-shadow subfield before previewing so focus does not change
+  // between previewing and `ClearPreviewedForm()`.
+  GetMainFrame()->View()->SetIsActive(true);
+  ExecuteJavaScriptForTests(
+      "const u = document.getElementById('username');"
+      "u.type = 'date';"
+      "u.value = '2001-02-04';"
+      "u.focus();");
+
+  // Populate `previewed_elements_` with 2 entries (`size == capacity == 2`).
+  constexpr char16_t kPreviewedDate[] = u"2005-06-07";
+  password_autofill_agent_->PreviewField(
+      form_util::GetFieldRendererId(username_element_), kPreviewedDate);
+  password_autofill_agent_->PreviewField(
+      form_util::GetFieldRendererId(password_element_), kAlicePassword16);
+  ASSERT_EQ(u"2005-06-07", username_element_.SuggestedValue().Utf16());
+  ASSERT_EQ(kAlicePassword, password_element_.SuggestedValue().Utf8());
+
+  // Make `StepRange` layout parameters stale via `defaultValue` (which skips
+  // `UpdateView()` when `u` has a dirty value), so `SetSuggestedValue()` in
+  // `ClearPreviewedForm()` rebuilds the date subfields and synchronously
+  // notifies `FocusedElementChanged()`.
+  ExecuteJavaScriptForTests(
+      "document.getElementById('username').defaultValue = '2003-04-05';");
+
+  FocusChangeObserver observer(
+      GetMainRenderFrame(),
+      base::BindOnce(&PasswordAutofillAgent::PreviewField,
+                     base::Unretained(password_autofill_agent_),
+                     form_util::GetFieldRendererId(random_element),
+                     std::u16string(kBobUsername16)));
+
+  password_autofill_agent_->ClearPreviewedForm();
+
+  EXPECT_TRUE(username_element_.SuggestedValue().IsEmpty());
+  EXPECT_TRUE(password_element_.SuggestedValue().IsEmpty());
+  ASSERT_EQ(kBobUsername, random_element.SuggestedValue().Utf8());
+
+  // The nested preview must remain tracked and clearable on the next call.
+  password_autofill_agent_->ClearPreviewedForm();
+  EXPECT_TRUE(random_element.SuggestedValue().IsEmpty());
+}
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 // Tests that `ClearPreview` properly clears previewed username and password
 // with username and password being previously autofilled.
@@ -3959,125 +4032,6 @@ TEST_F(PasswordAutofillAgentTest, DriverIsInformedAboutFillableTextArea) {
   fake_driver_.Flush();
   EXPECT_EQ(FocusedFieldType::kFillableTextArea, last_focused_field_type_);
 }
-
-#if BUILDFLAG(IS_ANDROID)
-// Tests that when kAutofillAtMemorySupportContenteditableOnAndroid is disabled,
-// focusing a contenteditable element is not treated as kContenteditableField.
-TEST_F(PasswordAutofillAgentTest, ContentEditableIgnoredWhenFeatureDisabled) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(
-      features::kAutofillAtMemorySupportContenteditableOnAndroid);
-
-  const char kContentEditableHTML[] =
-      "<div id='editable_div' contenteditable='true'>Hello world</div>";
-  LoadHTML(kContentEditableHTML);
-
-  FocusElement("editable_div");
-  fake_driver_.Flush();
-  EXPECT_EQ(FocusedFieldType::kUnknown, last_focused_field_type_);
-}
-
-// Tests that focusing a contenteditable element informs the password manager
-// driver about the focused input with FocusedFieldType::kContenteditableField
-// and its correct FieldRendererId.
-TEST_F(PasswordAutofillAgentTest, DriverIsInformedAboutContentEditable) {
-  base::test::ScopedFeatureList scoped_feature_list(
-      features::kAutofillAtMemorySupportContenteditableOnAndroid);
-
-  const char kContentEditableHTML[] =
-      "<div id='editable_div' contenteditable='true'>Hello world</div>";
-  LoadHTML(kContentEditableHTML);
-
-  FocusElement("editable_div");
-  fake_driver_.Flush();
-  EXPECT_EQ(FocusedFieldType::kContenteditableField, last_focused_field_type_);
-  WebElement editable_element = GetMainFrame()->GetDocument().GetElementById(
-      WebString::FromAscii("editable_div"));
-  ASSERT_TRUE(editable_element);
-  EXPECT_EQ(form_util::GetFieldRendererId(editable_element),
-            last_focused_field_id_);
-  EXPECT_FALSE(last_focused_field_id_.is_null());
-
-  BlurElement("editable_div");
-  fake_driver_.Flush();
-  EXPECT_EQ(FocusedFieldType::kUnknown, last_focused_field_type_);
-  EXPECT_TRUE(last_focused_field_id_.is_null());
-}
-
-// Tests that multiple contenteditable elements receive distinct FieldRendererId
-// values, that focus switches update the driver accordingly, and that focusing
-// an unfillable field or blurring resets/updates the state appropriately.
-TEST_F(PasswordAutofillAgentTest, ContentEditableFieldRendererIds) {
-  base::test::ScopedFeatureList scoped_feature_list(
-      features::kAutofillAtMemorySupportContenteditableOnAndroid);
-
-  const char kMultipleContentEditablesHTML[] =
-      "<div id='editable1' contenteditable='true'>First</div>"
-      "<p id='editable2' contenteditable='true'>Second</p>"
-      "<input id='readonly_input' readonly value='test'/>";
-  LoadHTML(kMultipleContentEditablesHTML);
-
-  WebElement elem1 = GetMainFrame()->GetDocument().GetElementById(
-      WebString::FromAscii("editable1"));
-  WebElement elem2 = GetMainFrame()->GetDocument().GetElementById(
-      WebString::FromAscii("editable2"));
-  WebElement readonly_input = GetMainFrame()->GetDocument().GetElementById(
-      WebString::FromAscii("readonly_input"));
-  ASSERT_TRUE(elem1);
-  ASSERT_TRUE(elem2);
-  ASSERT_TRUE(readonly_input);
-
-  FieldRendererId id1 = form_util::GetFieldRendererId(elem1);
-  FieldRendererId id2 = form_util::GetFieldRendererId(elem2);
-  FieldRendererId id_ro = form_util::GetFieldRendererId(readonly_input);
-  EXPECT_FALSE(id1.is_null());
-  EXPECT_FALSE(id2.is_null());
-  EXPECT_FALSE(id_ro.is_null());
-  EXPECT_NE(id1, id2);
-  EXPECT_NE(id1, id_ro);
-  EXPECT_NE(id2, id_ro);
-
-  FocusElement("editable1");
-  fake_driver_.Flush();
-  EXPECT_EQ(FocusedFieldType::kContenteditableField, last_focused_field_type_);
-  EXPECT_EQ(id1, last_focused_field_id_);
-
-  FocusElement("editable2");
-  fake_driver_.Flush();
-  EXPECT_EQ(FocusedFieldType::kContenteditableField, last_focused_field_type_);
-  EXPECT_EQ(id2, last_focused_field_id_);
-
-  BlurElement("editable2");
-  fake_driver_.Flush();
-  EXPECT_EQ(FocusedFieldType::kUnknown, last_focused_field_type_);
-  EXPECT_TRUE(last_focused_field_id_.is_null());
-
-  FocusElement("readonly_input");
-  fake_driver_.Flush();
-  EXPECT_EQ(FocusedFieldType::kUnfillableElement, last_focused_field_type_);
-  EXPECT_EQ(id_ro, last_focused_field_id_);
-
-  BlurElement("readonly_input");
-  fake_driver_.Flush();
-  EXPECT_EQ(FocusedFieldType::kUnknown, last_focused_field_type_);
-  EXPECT_TRUE(last_focused_field_id_.is_null());
-}
-#else
-// Tests that focusing a contenteditable element on desktop is ignored by
-// PasswordAutofillAgent and does not report kContenteditableField.
-TEST_F(PasswordAutofillAgentTest, ContentEditableIgnoredOnDesktop) {
-  base::test::ScopedFeatureList scoped_feature_list(
-      features::kAutofillAtMemorySupportContenteditableOnAndroid);
-
-  const char kContentEditableHTML[] =
-      "<div id='editable_div' contenteditable='true'>Hello world</div>";
-  LoadHTML(kContentEditableHTML);
-
-  FocusElement("editable_div");
-  fake_driver_.Flush();
-  EXPECT_EQ(FocusedFieldType::kUnknown, last_focused_field_type_);
-}
-#endif
 
 // Tests that credential suggestions are autofilled on a password (and change
 // password) forms having either ambiguous or empty name.

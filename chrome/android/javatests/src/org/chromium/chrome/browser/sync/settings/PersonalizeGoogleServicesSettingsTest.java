@@ -43,6 +43,8 @@ import org.chromium.chrome.browser.settings.SettingsTestRule;
 import org.chromium.chrome.browser.sync.SyncTestRule;
 import org.chromium.chrome.browser.ui.signin.GoogleActivityController;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.transit.ChromeTransitTestRules;
+import org.chromium.chrome.test.transit.FreshCtaTransitTestRule;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.components.regional_capabilities.RegionalCapabilitiesService;
 import org.chromium.ui.test.util.RenderTestRule;
@@ -56,6 +58,9 @@ public class PersonalizeGoogleServicesSettingsTest {
 
     private final SyncTestRule mSyncTestRule = new SyncTestRule();
 
+    private final FreshCtaTransitTestRule mCtaTestRule =
+            ChromeTransitTestRules.freshChromeTabbedActivityRule();
+
     private final SettingsTestRule<PersonalizeGoogleServicesSettings> mSettingsTestRule =
             new SettingsTestRule<>(PersonalizeGoogleServicesSettings.class);
 
@@ -67,6 +72,7 @@ public class PersonalizeGoogleServicesSettingsTest {
     @Rule
     public final RuleChain mRuleChain =
             RuleChain.outerRule(mSyncTestRule)
+                    .around(mCtaTestRule)
                     .around(mSettingsTestRule)
                     .around(mSettingsSearchTestRule);
 
@@ -84,6 +90,7 @@ public class PersonalizeGoogleServicesSettingsTest {
 
     @Before
     public void setUp() {
+        mCtaTestRule.startOnBlankPage();
         ServiceLoaderUtil.setInstanceForTesting(
                 GoogleActivityController.class, mGoogleActivityController);
         RegionalCapabilitiesServiceFactory.setInstanceForTesting(mRegionalCapabilities);

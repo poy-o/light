@@ -74,6 +74,7 @@ import org.chromium.chrome.browser.browser_controls.BrowserStateBrowserControlsV
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.night_mode.ChromeNightModeTestUtils;
+import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.omnibox.LocationBarBackgroundDrawable;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
 import org.chromium.chrome.browser.omnibox.SearchEngineService;
@@ -105,7 +106,6 @@ import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.search_engines.AiModeButtonUiConfig;
 import org.chromium.components.search_engines.TemplateUrlService;
-import org.chromium.components.signin.SigninFeatures;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.test.util.NightModeTestUtils.NightModeParams;
 
@@ -561,7 +561,6 @@ public class ToolbarPhoneTest {
 
     @Test
     @MediumTest
-    @EnableFeatures(SigninFeatures.SIGNIN_LEVEL_UP_BUTTON)
     public void testSigninButton_DrawnWhenVisible() {
         // Inflate the real view using the real coordinator.
         mActivityTestRule.loadUrl(getOriginalNativeNtpUrl());
@@ -587,7 +586,6 @@ public class ToolbarPhoneTest {
 
     @Test
     @MediumTest
-    @EnableFeatures(SigninFeatures.SIGNIN_LEVEL_UP_BUTTON)
     public void testSigninButton_NotDrawnWhenNotVisible() {
         // Inflate the real view using the real coordinator.
         mActivityTestRule.loadUrl(getOriginalNativeNtpUrl());
@@ -611,7 +609,6 @@ public class ToolbarPhoneTest {
 
     @Test
     @MediumTest
-    @EnableFeatures(SigninFeatures.SIGNIN_LEVEL_UP_BUTTON)
     @DisableFeatures(ChromeFeatureList.ANDROID_BOTTOM_BAR)
     public void testSigninButton_followsToolbarNtpState() {
         mActivityTestRule.loadUrl(getOriginalNativeNtpUrl());
@@ -775,6 +772,56 @@ public class ToolbarPhoneTest {
                     assertNotEquals(
                             0,
                             mToolbar.getLocationBarOffsetForFocusAnimation(/* hasFocus= */ true));
+                });
+
+        // Test pending navigation away from NTP where focus animations are disabled before commit.
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    NewTabPage ntp = (NewTabPage) tab.getNativePage();
+                    ntp.setUrlFocusAnimationsDisabled(/* disable= */ true);
+                    assertEquals(
+                            0,
+                            mToolbar.getLocationBarOffsetForFocusAnimation(/* hasFocus= */ true));
+                    ntp.setUrlFocusAnimationsDisabled(/* disable= */ false);
+                });
+    }
+
+    @Test
+    @MediumTest
+    public void testLocationBarNotShiftedAfterNtpUnfocus() {
+        mActivityTestRule.loadUrl(getOriginalNativeNtpUrl());
+        Tab tab = mActivityTestRule.getActivityTab();
+        NewTabPageTestUtils.waitForNtpLoaded(tab);
+        assertTrue(mToolbar.isLocationBarShownInNtp());
+
+        float baselineTranslationX =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> mToolbar.findViewById(R.id.location_bar).getTranslationX());
+
+        mOmnibox.requestFocus();
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    assertTrue(
+                            mToolbar.getLocationBarOffsetForFocusAnimation(/* hasFocus= */ true)
+                                    < 0);
+                });
+
+        mOmnibox.clearFocus();
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    View locationBar = mToolbar.findViewById(R.id.location_bar);
+                    assertTrue(mToolbar.hasFocus());
+                    assertFalse(mToolbar.urlHasFocus());
+
+                    mToolbar.measure(
+                            View.MeasureSpec.makeMeasureSpec(
+                                    mToolbar.getWidth(), View.MeasureSpec.EXACTLY),
+                            View.MeasureSpec.makeMeasureSpec(
+                                    mToolbar.getHeight(), View.MeasureSpec.EXACTLY));
+                    assertEquals(
+                            baselineTranslationX,
+                            locationBar.getTranslationX(),
+                            /* delta= */ 0.01f);
                 });
     }
 

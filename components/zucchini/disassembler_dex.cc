@@ -9,14 +9,12 @@
 
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <iterator>
 #include <optional>
 #include <set>
 #include <utility>
 
 #include "base/compiler_specific.h"
-#include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/logging.h"
@@ -174,7 +172,11 @@ class CodeItemParser {
 
     // TODO(huangs): Fail if |code_item->insns_size == 0| (Constraint A1).
     // Skip instruction bytes.
-    if (!source_.Skip(code_item->insns_size * sizeof(uint16_t))) {
+    size_t insns_bytes = 0;
+    if (!base::CheckMul<size_t>(code_item->insns_size,
+                                static_cast<size_t>(kInstrUnitSize))
+             .AssignIfValid(&insns_bytes) ||
+        !source_.Skip(insns_bytes)) {
       return kInvalidOffset;
     }
     // Skip padding if present.
@@ -202,11 +204,13 @@ class CodeItemParser {
         int32_t encoded_catch_handler_size = 0;
         if (!source_.GetSleb128(&encoded_catch_handler_size))
           return kInvalidOffset;
-        const size_type abs_size = std::abs(encoded_catch_handler_size);
-        if (source_.Remaining() < abs_size)  // Sanity check.
+        const uint32_t abs_size =
+            base::SafeUnsignedAbs(encoded_catch_handler_size);
+        if (source_.Remaining() < static_cast<size_type>(abs_size)) {
           return kInvalidOffset;
+        }
         // Skip (encoded_type_addr_pair) handlers[].
-        for (size_type j = 0; j < abs_size; ++j) {
+        for (uint32_t j = 0; j < abs_size; ++j) {
           if (!source_.SkipLeb128() || !source_.SkipLeb128())
             return kInvalidOffset;
         }
@@ -229,7 +233,11 @@ class CodeItemParser {
     BufferSource source(image, code_item_offset);
     const auto* code_item = source.GetPointer<const dex::CodeItem>();
     DCHECK(code_item);
-    BufferRegion insns{0, code_item->insns_size * kInstrUnitSize};
+    const size_t insns_bytes =
+        base::CheckMul<size_t>(code_item->insns_size,
+                               static_cast<size_t>(kInstrUnitSize))
+            .ValueOrDie();
+    BufferRegion insns{0, insns_bytes};
     DCHECK(source.covers(insns));
     return source[insns];
   }
@@ -255,21 +263,19 @@ class InstructionParser {
   };
 
   // Returns pointer to DEX Instruction data for |opcode|, or null if |opcode|
-  // is unknown. An internal initialize-on-first-use table is used for fast
+  // is unknown. A compile-time lookup table is used for fast, thread-safe
   // lookup.
-  const dex::Instruction* FindDalvikInstruction(uint8_t opcode) {
-    static bool is_init = false;
-    static std::array<const dex::Instruction*, 256> instruction_table;
-    if (!is_init) {
-      is_init = true;
-      std::ranges::fill(instruction_table, nullptr);
+  static const dex::Instruction* FindDalvikInstruction(uint8_t opcode) {
+    static constexpr auto kInstructionTable = []() {
+      std::array<const dex::Instruction*, 256> table{};
       for (const dex::Instruction& instr : dex::kByteCode) {
-        std::ranges::fill(
-            base::span(instruction_table).subspan(instr.opcode, instr.variant),
-            &instr);
+        for (size_t i = 0; i < instr.variant; ++i) {
+          table[static_cast<size_t>(instr.opcode) + i] = &instr;
+        }
       }
-    }
-    return instruction_table[opcode];
+      return table;
+    }();
+    return kInstructionTable[opcode];
   }
 
   InstructionParser() = default;
@@ -996,19 +1002,19 @@ std::vector<ReferenceGroup> DisassemblerDex::MakeReferenceGroups() const {
            MakeReadAnnotationsDirectoryToParameterAnnotationSetRef,
        &DisassemblerDex::MakeWriteAbs32},
       {{4, TypeTag(kAnnotationSetRefListToAnnotationSet),
-        PoolTag(kAnnotionSet)},
+        PoolTag(kAnnotationSet)},
        &DisassemblerDex::MakeReadAnnotationSetRefListToAnnotationSet,
        &DisassemblerDex::MakeWriteAbs32},
       {{4, TypeTag(kAnnotationsDirectoryToClassAnnotationSet),
-        PoolTag(kAnnotionSet)},
+        PoolTag(kAnnotationSet)},
        &DisassemblerDex::MakeReadAnnotationsDirectoryToClassAnnotationSet,
        &DisassemblerDex::MakeWriteAbs32},
       {{4, TypeTag(kAnnotationsDirectoryToFieldAnnotationSet),
-        PoolTag(kAnnotionSet)},
+        PoolTag(kAnnotationSet)},
        &DisassemblerDex::MakeReadAnnotationsDirectoryToFieldAnnotationSet,
        &DisassemblerDex::MakeWriteAbs32},
       {{4, TypeTag(kAnnotationsDirectoryToMethodAnnotationSet),
-        PoolTag(kAnnotionSet)},
+        PoolTag(kAnnotationSet)},
        &DisassemblerDex::MakeReadAnnotationsDirectoryToMethodAnnotationSet,
        &DisassemblerDex::MakeWriteAbs32},
       {{4, TypeTag(kClassDefToClassData), PoolTag(kClassData)},
@@ -1160,7 +1166,7 @@ DisassemblerDex::MakeReadMethodIdToNameStringId32(offset_t lo, offset_t hi) {
 std::unique_ptr<ReferenceReader>
 DisassemblerDex::MakeReadClassDefToClassTypeId32(offset_t lo, offset_t hi) {
   auto mapper = base::BindRepeating(
-      ReadTargetIndex<decltype(dex::ClassDefItem::superclass_idx)>, image_,
+      ReadTargetIndex<decltype(dex::ClassDefItem::class_idx)>, image_,
       type_map_item_, sizeof(dex::TypeIdItem));
   return std::make_unique<ItemReferenceReader>(
       lo, hi, class_def_map_item_, sizeof(dex::ClassDefItem),

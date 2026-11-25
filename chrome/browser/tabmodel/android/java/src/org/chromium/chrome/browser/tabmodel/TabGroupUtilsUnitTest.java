@@ -137,25 +137,30 @@ public class TabGroupUtilsUnitTest {
                 .thenReturn(List.of());
 
         assertNull(TabGroupUtils.getSelectedOrFirstTabInGroup(mTabModel, /* tabGroupId= */ null));
-        assertNull(TabGroupUtils.getSelectedOrFirstTabInGroup(mTabModel, TAB_GROUP_ID2));
+        assertNull(
+                TabGroupUtils.getSelectedOrFirstTabInGroup(
+                        mTabModel, TabGroupId.fromOptionalToken(TAB_GROUP_ID2)));
 
         // When current tab supplier is unset, fallback to first tab.
         assertThat(
-                TabGroupUtils.getSelectedOrFirstTabInGroup(mTabModel, TAB_GROUP_ID1),
+                TabGroupUtils.getSelectedOrFirstTabInGroup(
+                        mTabModel, TabGroupId.fromOptionalToken(TAB_GROUP_ID1)),
                 equalTo(mTab1));
 
         // When current tab is in the group, return it.
         when(mTabModel.getCurrentTabSupplier())
                 .thenReturn(ObservableSuppliers.createNullable(mTab2));
         assertThat(
-                TabGroupUtils.getSelectedOrFirstTabInGroup(mTabModel, TAB_GROUP_ID1),
+                TabGroupUtils.getSelectedOrFirstTabInGroup(
+                        mTabModel, TabGroupId.fromOptionalToken(TAB_GROUP_ID1)),
                 equalTo(mTab2));
 
         // When current tab is not in the group, fallback to first tab.
         when(mTabModel.getCurrentTabSupplier())
                 .thenReturn(ObservableSuppliers.createNullable(mTab3));
         assertThat(
-                TabGroupUtils.getSelectedOrFirstTabInGroup(mTabModel, TAB_GROUP_ID1),
+                TabGroupUtils.getSelectedOrFirstTabInGroup(
+                        mTabModel, TabGroupId.fromOptionalToken(TAB_GROUP_ID1)),
                 equalTo(mTab1));
     }
 
@@ -165,9 +170,13 @@ public class TabGroupUtilsUnitTest {
         when(mTabModel.getTabsInGroup(TabGroupId.fromOptionalToken(TAB_GROUP_ID2)))
                 .thenReturn(List.of());
 
-        assertThat(TabGroupUtils.getFirstTabIdInGroup(mTabModel, TAB_GROUP_ID1), equalTo(TAB1_ID));
         assertThat(
-                TabGroupUtils.getFirstTabIdInGroup(mTabModel, TAB_GROUP_ID2),
+                TabGroupUtils.getFirstTabIdInGroup(
+                        mTabModel, TabGroupId.fromOptionalToken(TAB_GROUP_ID1)),
+                equalTo(TAB1_ID));
+        assertThat(
+                TabGroupUtils.getFirstTabIdInGroup(
+                        mTabModel, TabGroupId.fromOptionalToken(TAB_GROUP_ID2)),
                 equalTo(Tab.INVALID_TAB_ID));
         assertThat(
                 TabGroupUtils.getFirstTabIdInGroup(mTabModel, /* tabGroupId= */ null),
@@ -204,10 +213,12 @@ public class TabGroupUtilsUnitTest {
         // Empty group should do nothing.
         when(mTabModel.getTabsInGroup(TabGroupId.fromOptionalToken(TAB_GROUP_ID2)))
                 .thenReturn(List.of());
-        TabGroupUtils.openUrlInGroup(mTabModel, url, TAB_GROUP_ID2, launchType);
+        TabGroupUtils.openUrlInGroup(
+                mTabModel, url, TabGroupId.fromOptionalToken(TAB_GROUP_ID2), launchType);
         verify(mTabCreator, never()).createNewTab(any(), anyInt(), any());
 
-        TabGroupUtils.openUrlInGroup(mTabModel, url, TAB_GROUP_ID1, launchType);
+        TabGroupUtils.openUrlInGroup(
+                mTabModel, url, TabGroupId.fromOptionalToken(TAB_GROUP_ID1), launchType);
         ArgumentMatcher<LoadUrlParams> matcher = params -> TextUtils.equals(params.getUrl(), url);
         verify(mTabCreator).createNewTab(argThat(matcher), eq(launchType), eq(mTab1));
     }
@@ -228,10 +239,12 @@ public class TabGroupUtilsUnitTest {
         // Empty group should do nothing.
         when(mTabModel.getTabsInGroup(TabGroupId.fromOptionalToken(TAB_GROUP_ID2)))
                 .thenReturn(List.of());
-        TabGroupUtils.openUrlInGroup(mTabModel, loadUrlParams, TAB_GROUP_ID2, launchType);
+        TabGroupUtils.openUrlInGroup(
+                mTabModel, loadUrlParams, TabGroupId.fromOptionalToken(TAB_GROUP_ID2), launchType);
         verify(mTabCreator, never()).createNewTab(any(), anyInt(), any());
 
-        TabGroupUtils.openUrlInGroup(mTabModel, loadUrlParams, TAB_GROUP_ID1, launchType);
+        TabGroupUtils.openUrlInGroup(
+                mTabModel, loadUrlParams, TabGroupId.fromOptionalToken(TAB_GROUP_ID1), launchType);
         verify(mTabCreator).createNewTab(loadUrlParams, launchType, mTab2);
     }
 
@@ -240,7 +253,8 @@ public class TabGroupUtilsUnitTest {
         mSavedTabGroup1.collaborationId = "collaborationId";
         when(mTab1.getTabGroupId()).thenReturn(TAB_GROUP_ID1);
         when(mTabModel.getProfile()).thenReturn(mProfile);
-        when(mTabGroupSyncService.getGroup(new LocalTabGroupId(TAB_GROUP_ID1)))
+        when(mTabGroupSyncService.getGroup(
+                        new LocalTabGroupId(TabGroupId.fromRawToken(TAB_GROUP_ID1))))
                 .thenReturn(mSavedTabGroup1);
 
         assertTrue(areAnyTabsPartOfSharedGroup(mTabModel, List.of(mTab1, mTab2), null));
@@ -253,9 +267,11 @@ public class TabGroupUtilsUnitTest {
         when(mTab1.getTabGroupId()).thenReturn(TAB_GROUP_ID1);
         when(mTab2.getTabGroupId()).thenReturn(TAB_GROUP_ID2);
         when(mTabModel.getProfile()).thenReturn(mProfile);
-        when(mTabGroupSyncService.getGroup(new LocalTabGroupId(TAB_GROUP_ID1)))
+        when(mTabGroupSyncService.getGroup(
+                        new LocalTabGroupId(TabGroupId.fromRawToken(TAB_GROUP_ID1))))
                 .thenReturn(mSavedTabGroup1);
-        when(mTabGroupSyncService.getGroup(new LocalTabGroupId(TAB_GROUP_ID2)))
+        when(mTabGroupSyncService.getGroup(
+                        new LocalTabGroupId(TabGroupId.fromRawToken(TAB_GROUP_ID2))))
                 .thenReturn(mSavedTabGroup2);
 
         assertTrue(areAnyTabsPartOfSharedGroup(mTabModel, List.of(mTab1, mTab2), null));
@@ -266,10 +282,15 @@ public class TabGroupUtilsUnitTest {
         mSavedTabGroup1.collaborationId = "collaborationId";
         when(mTab1.getTabGroupId()).thenReturn(TAB_GROUP_ID1);
         when(mTabModel.getProfile()).thenReturn(mProfile);
-        when(mTabGroupSyncService.getGroup(new LocalTabGroupId(TAB_GROUP_ID1)))
+        when(mTabGroupSyncService.getGroup(
+                        new LocalTabGroupId(TabGroupId.fromRawToken(TAB_GROUP_ID1))))
                 .thenReturn(mSavedTabGroup1);
 
-        assertFalse(areAnyTabsPartOfSharedGroup(mTabModel, List.of(mTab1, mTab2), TAB_GROUP_ID1));
+        assertFalse(
+                areAnyTabsPartOfSharedGroup(
+                        mTabModel,
+                        List.of(mTab1, mTab2),
+                        TabGroupId.fromOptionalToken(TAB_GROUP_ID1)));
     }
 
     @Test
@@ -396,7 +417,8 @@ public class TabGroupUtilsUnitTest {
         when(mTab1.getTabGroupId()).thenReturn(TAB_GROUP_ID1);
         when(mTab2.getTabGroupId()).thenReturn(null);
         when(mTabModel.getProfile()).thenReturn(mProfile);
-        when(mTabGroupSyncService.getGroup(new LocalTabGroupId(TAB_GROUP_ID1)))
+        when(mTabGroupSyncService.getGroup(
+                        new LocalTabGroupId(TabGroupId.fromRawToken(TAB_GROUP_ID1))))
                 .thenReturn(mSavedTabGroup1);
 
         TabMovedCallback movedCallback = mock(TabMovedCallback.class);

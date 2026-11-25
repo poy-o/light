@@ -13,6 +13,7 @@ import android.util.Pair;
 import androidx.annotation.VisibleForTesting;
 
 import org.jni_zero.CalledByNative;
+import org.jni_zero.JNINamespace;
 import org.jni_zero.JniType;
 import org.jni_zero.NativeMethods;
 
@@ -25,7 +26,6 @@ import org.chromium.build.annotations.Nullable;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.google_apis.gaia.GaiaId;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -36,17 +36,20 @@ import java.util.TreeSet;
 import java.util.function.Consumer;
 
 /** Client used to communicate with GmsCore about sync encryption keys. */
+@JNINamespace("trusted_vault")
 @NullMarked
 public class TrustedVaultClient {
     /** Interface to downstream functionality. */
     public interface Backend {
         /**
-         * Reads and returns available encryption keys without involving any user action.
+         * Reads and returns available encryption keys and their versions without involving any user
+         * action.
          *
          * @param accountInfo Account representing the user.
-         * @return a promise with known keys, if any, where the last one is the most recent.
+         * @return a promise with known keys and versions, if any, where the last one is the most
+         *     recent.
          */
-        Promise<List<byte[]>> fetchKeys(CoreAccountInfo accountInfo);
+        Promise<List<TrustedVaultKeyAndVersion>> fetchKeysAndVersions(CoreAccountInfo accountInfo);
 
         /**
          * Stores encryption keys for the given account. Test-only on Android (where keys are
@@ -72,8 +75,8 @@ public class TrustedVaultClient {
         Promise<PendingIntent> createKeyRetrievalIntent(CoreAccountInfo accountInfo);
 
         /**
-         * Invoked when the result of fetchKeys() represents keys that cannot decrypt Nigori, which
-         * should only be possible if the provided keys are not up-to-date.
+         * Invoked when the result of fetchKeysAndVersions() represents keys that cannot decrypt
+         * Nigori, which should only be possible if the provided keys are not up-to-date.
          *
          * @param accountInfo Account representing the user.
          * @return a promise which indicates completion and also represents whether the operation
@@ -159,7 +162,8 @@ public class TrustedVaultClient {
     /** Trivial backend implementation that is always empty. */
     public static class EmptyBackend implements Backend {
         @Override
-        public Promise<List<byte[]>> fetchKeys(CoreAccountInfo accountInfo) {
+        public Promise<List<TrustedVaultKeyAndVersion>> fetchKeysAndVersions(
+                CoreAccountInfo accountInfo) {
             return Promise.fulfilled(Collections.emptyList());
         }
 
@@ -433,19 +437,20 @@ public class TrustedVaultClient {
     }
 
     /**
-     * Forwards calls to Backend.fetchKeys() and upon completion invokes native method
+     * Forwards calls to Backend.fetchKeysAndVersions() and upon completion invokes native method
      * fetchKeysCompleted().
      */
+    @VisibleForTesting
     @CalledByNative
-    private static void fetchKeys(
+    static void fetchKeys(
             long nativeTrustedVaultClientAndroid,
             @SecurityDomainId int securityDomainId,
             int requestId,
             @JniType("CoreAccountInfo") CoreAccountInfo accountInfo) {
         assert isNativeRegistered(nativeTrustedVaultClientAndroid, securityDomainId);
 
-        Consumer<List<byte[]>> responseCb =
-                keys -> {
+        Consumer<List<TrustedVaultKeyAndVersion>> responseCb =
+                keysAndVersions -> {
                     if (!isNativeRegistered(nativeTrustedVaultClientAndroid, securityDomainId)) {
                         // Native already unregistered, no response needed.
                         return;
@@ -455,12 +460,12 @@ public class TrustedVaultClient {
                                     nativeTrustedVaultClientAndroid,
                                     requestId,
                                     accountInfo.getGaiaId().toString(),
-                                    keys.toArray(new byte[0][]));
+                                    keysAndVersions);
                 };
         get(securityDomainId)
                 .mBackend
-                .fetchKeys(accountInfo)
-                .then(responseCb::accept, exception -> responseCb.accept(new ArrayList<byte[]>()));
+                .fetchKeysAndVersions(accountInfo)
+                .then(responseCb::accept, exception -> responseCb.accept(Collections.emptyList()));
     }
 
     /** Forwards calls to Backend.storeKeys(). */
@@ -646,7 +651,8 @@ public class TrustedVaultClient {
                 long nativeTrustedVaultClientAndroid,
                 int requestId,
                 @JniType("std::string") String gaiaId,
-                byte[][] keys);
+                @JniType("std::vector<trusted_vault::TrustedVaultKeyAndVersion>")
+                        List<TrustedVaultKeyAndVersion> keys);
 
         void markLocalKeysAsStaleCompleted(
                 long nativeTrustedVaultClientAndroid, int requestId, boolean succeeded);

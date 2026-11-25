@@ -259,6 +259,7 @@
 #include "chrome/browser/profiles/profile_test_util.h"  // nogncheck
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"  // nogncheck
 #include "chrome/browser/ui/signin/signin_view_controller.h"  // nogncheck
+#include "chrome/browser/ui/webui/signin/signin_url_utils.h"  // nogncheck
 #endif
 
 #if BUILDFLAG(IS_OZONE)
@@ -4419,8 +4420,17 @@ IN_PROC_BROWSER_TEST_P(FullWebUIOmniboxInteractiveTest, TabSwitchKeepsPopup) {
 // Verifies that switching to a tab in another window from a closing NTP with
 // an unload listener activates and keeps active the target window rather than
 // re-activating the source window when the deferred NTP close completes.
+// TODO(crbug.com/588153350): Re-enable on Linux and ChromeOS once
+// GetWebElementIntersection flakiness on kSwitchToTabChip is resolved.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#define MAYBE_SwitchToTabFromClosingNtpActivatesOtherWindow \
+  DISABLED_SwitchToTabFromClosingNtpActivatesOtherWindow
+#else
+#define MAYBE_SwitchToTabFromClosingNtpActivatesOtherWindow \
+  SwitchToTabFromClosingNtpActivatesOtherWindow
+#endif
 IN_PROC_BROWSER_TEST_P(FullWebUIOmniboxInteractiveTest,
-                       SwitchToTabFromClosingNtpActivatesOtherWindow) {
+                       MAYBE_SwitchToTabFromClosingNtpActivatesOtherWindow) {
   ASSERT_TRUE(embedded_test_server()->Start());
   const GURL target_url = embedded_test_server()->GetURL("/title1.html");
   const GURL fg_url = embedded_test_server()->GetURL("/simple.html");
@@ -9667,14 +9677,14 @@ class FullWebUIOmniboxWelcomeDialogInteractiveTest
         g_browser_process->profile_manager();
     Profile& profile = profiles::testing::CreateProfileSync(
         profile_manager, profile_manager->GenerateNextProfileDirectoryPath());
-    BrowserWindowInterface* const new_browser = CreateBrowserWindow(
+    BrowserWindowInterface* const new_browser = CreateBrowserWindowForTesting(
         BrowserWindowCreateParams(profile, /*from_user_gesture=*/true));
     chrome::AddTabAt(new_browser, GURL(chrome::kChromeUINewTabURL),
                      /*index=*/-1, /*foreground=*/true);
     new_browser->GetWindow()->Show();
     SigninViewController::From(new_browser)
         ->ShowModalProfileCustomizationDialog(
-            /*is_local_profile_creation=*/true);
+            ProfileCustomizationStyle::kSignedOutProfileCreation);
     SetBrowser(new_browser);
   }
 

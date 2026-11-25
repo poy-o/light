@@ -14,6 +14,7 @@
 #include "base/callback_list.h"
 #include "base/containers/flat_map.h"
 #include "base/memory/weak_ptr.h"
+#include "base/process/kill.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/unguessable_token.h"
@@ -23,9 +24,12 @@
 #include "chrome/browser/glic/selection/selection_context.h"
 #include "chrome/browser/glic/selection/selection_overlay.mojom.h"
 #include "chrome/browser/glic/selection/selection_overlay_prewarmer.h"
+#include "chrome/browser/selection/area_of_interest.h"
 #include "chrome/browser/selection/feedback_zip_builder.h"
 #include "chrome/browser/selection/metrics_logger.h"
 #include "chrome/browser/selection/mojom/action.mojom-forward.h"
+#include "chrome/browser/selection/page_context.h"
+#include "chrome/browser/selection/prompt_endpoint.h"
 #include "chrome/browser/selection/suggestion_service.h"
 #include "chrome/browser/ui/lens/overlay_base_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
@@ -40,6 +44,7 @@
 #include "ui/gfx/geometry/rect.h"
 
 namespace content {
+class NavigationHandle;
 class RenderFrameHost;
 class WebContents;
 }  // namespace content
@@ -129,10 +134,12 @@ class SelectionOverlayController
                          ::selection::EntryPoint entry_point);
   void Close(CloseReason reason = CloseReason::kOther);
 
-  // Invokes Glic from a suggestion with `prompt` and any eligible selected
-  // regions, closing direct sessions. When `prompt` is empty, invokes Glic
+  // Invokes the prompt endpoint identified by `endpoint_id` from a suggestion
+  // with `prompt` and any eligible selected regions, closing the overlay if
+  // required by the endpoint. When `prompt` is empty, invokes the endpoint
   // without auto-submitting a prompt.
-  void InvokeFromSuggestion(const std::string& prompt);
+  void InvokeFromSuggestion(std::string prompt,
+                            ::selection::mojom::PromptEndpointId endpoint_id);
 
   // Starts loading the overlay WebUI while idle, so a following
   // `ShowWithSelection()` with the same options can show it without waiting
@@ -159,6 +166,18 @@ class SelectionOverlayController
   void GetSuggestedActionsForTesting(SuggestedActionsCallback callback);
   bool HasPageContextForTesting() const {
     return session_->tab_context && !session_->redacted_screenshot.empty();
+  }
+  void RegisterPromptEndpoint(
+      std::unique_ptr<::selection::PromptEndpoint> endpoint);
+  void SetPromptEndpointsForTesting(
+      std::vector<std::unique_ptr<::selection::PromptEndpoint>> endpoints);
+  std::vector<selection::PromptEndpointInfoPtr>
+  GetAvailablePromptEndpointInfosForTesting() const {
+    return GetAvailablePromptEndpointInfos();
+  }
+  std::optional<::selection::mojom::PromptEndpointId>
+  GetActivePromptEndpointIdForTesting() const {
+    return session_->active_endpoint_id;
   }
 
  private:
@@ -232,6 +251,12 @@ class SelectionOverlayController
   void ShowPreselectionBubble() override;
   void TabForegrounded(tabs::TabInterface* tab) override;
 
+  // `content::WebContentsObserver`:
+  void PrimaryMainFrameRenderProcessGone(
+      base::TerminationStatus status) override;
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
+
   // `selection::SelectionOverlayPageHandler`:
   void DismissOverlay(selection::DismissOverlayReason reason) override;
   void AdjustRegion(selection::SelectedRegionPtr target,
@@ -239,6 +264,8 @@ class SelectionOverlayController
   void ClosePreselectionBubble() override;
   void AddBackgroundBlur() override;
   void SetLiveBlur(bool enabled) override;
+  void SetActivePromptEndpoint(
+      ::selection::mojom::PromptEndpointId endpoint_id) override;
   void SubmitPrompt(const std::string& prompt) override;
   void GetSuggestedActions(
       mojo::PendingRemote<selection::SuggestedActionsListener> listener)
@@ -288,10 +315,24 @@ class SelectionOverlayController
   // Lets the overlay submit prompts once it's initialized and the page context
   // is ready.
   void SendPageContextReceivedIfReady();
-  // Invokes glic with `prompt` and any eligible selected regions, closing
-  // direct sessions. When `prompt` is empty, invokes glic without
-  // auto-submitting a prompt.
-  void InvokeWithPrompt(const std::string& prompt);
+  // Invokes the available prompt endpoint identified by `endpoint_id` with
+  // `prompt` and any eligible selected regions, closing the overlay if
+  // required by the endpoint. When `prompt` is empty, invokes the endpoint
+  // without auto-submitting a prompt.
+  void InvokeWithPrompt(std::string prompt,
+                        ::selection::mojom::PromptEndpointId endpoint_id);
+  // Returns whether submitting to `endpoint_id` should close the overlay.
+  bool ShouldCloseOnSubmit(
+      ::selection::mojom::PromptEndpointId endpoint_id) const;
+  bool IsEndpointAllowedForSession(
+      ::selection::mojom::PromptEndpointId endpoint_id) const;
+  ::selection::PromptEndpoint* FindAvailablePromptEndpoint(
+      ::selection::mojom::PromptEndpointId endpoint_id);
+  std::optional<::selection::mojom::PromptEndpointId>
+  ResolveInitialPromptEndpointId();
+  std::vector<selection::PromptEndpointInfoPtr>
+  GetAvailablePromptEndpointInfos() const;
+  void CancelPendingEndpointRequests();
 
   struct SelectedRegionData {
     explicit SelectedRegionData(selection::SelectedRegionPtr region);
@@ -313,9 +354,21 @@ class SelectionOverlayController
     bool suggestions_requested = false;
     bool suggestions_complete = false;
     // The generation of the region. Incremented each time the region is
-    // adjusted, and used to invalidate old suggestions.
+    // adjusted or re-queried for a new endpoint, and used to invalidate old
+    // suggestions.
     uint64_t generation = 0;
   };
+
+  // Builds a `PageContext` snapshot from the current session's redacted
+  // screenshot, APC, metadata, and (when `include_submission_data` is true)
+  // PDF data and pre-encoded viewport screenshot.
+  ::selection::PageContext BuildPageContext(bool include_submission_data) const;
+  // Builds an `AreaOfInterest` for `region_data` (may be null). When
+  // `include_region_bounds` is true, validates and converts the region's
+  // normalized bounds to pixel coordinates on the redacted screenshot.
+  ::selection::AreaOfInterest BuildAreaOfInterest(
+      const SelectedRegionData* region_data,
+      bool include_region_bounds) const;
 
   // Shows a usable prewarmed overlay while the screenshot is captured, instead
   // of loading a new one once the screenshot is here. Drops it otherwise.
@@ -430,9 +483,16 @@ class SelectionOverlayController
     // The start of the click to overlay rendered latency; null once recorded.
     base::TimeTicks show_requested_time;
     bool prewarm_ready = false;
+    // The currently active prompt endpoint ID for this session, or nullopt if
+    // no endpoint is available.
+    std::optional<::selection::mojom::PromptEndpointId> active_endpoint_id;
   };
   // Never null.
   std::unique_ptr<Session> session_ = std::make_unique<Session>(this);
+
+  // Owned at the controller level so asynchronous endpoint completion callbacks
+  // (e.g. Google Search URL creation) outlive `Session` reset on `Close()`.
+  std::vector<std::unique_ptr<::selection::PromptEndpoint>> prompt_endpoints_;
 
   SelectionOverlayPrewarmer prewarmer_;
   // Whether the shown overlay's page has bound its handler. Unlike `session_`,

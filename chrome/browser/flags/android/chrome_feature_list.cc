@@ -144,7 +144,6 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &autofill::features::kAutofillAndroidDesktopSuppressAccessoryOnEmpty,
     &autofill::features::kAutofillAndroidKeyboardAccessoryDynamicPositioning,
     &autofill::features::kAutofillAndroidKeyboardAccessoryHoverPreview,
-    &autofill::features::kAutofillAtMemory,
     &autofill::features::kAutofillCardScanningBugfixes,
     &autofill::features::kAutofillEnableAiBasedAmountExtraction,
     &autofill::features::kAutofillEnableBuyNowPayLater,
@@ -304,7 +303,6 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &kAndroidTabSkipSaveTabsKillswitch,
     &kAndroidTabUiRefactor,
     &kAndroidTabstripStartupCaptureBugFix,
-    &kAndroidThemeModule,
     &kAndroidThemeResourceProvider,
     &kAndroidToolbarCaptureOnDesktop,
     &kAndroidToolbarScrollAblation,
@@ -419,6 +417,7 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &kEdgeToEdgeMonitorConfigurations,
     &kEdgeToEdgeTablet,
     &kEdgeToEdgeTopInset,
+    &kEdgeToEdgeTopPageColorSampling,
     &kEdgeToEdgeUseBackupNavbarInsets,
     &kEnableAndroidSidePanel,
     &kEnableAndroidSidePanelDevFeature,
@@ -495,6 +494,8 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &kReadAloudAudioOverviews,
     &kReadAloudIPHMenuButtonHighlightCCT,
     &kReaderModeCpaReentry,
+    &kReaderModeDelayBottomSheetPeek,
+    &kReaderModeToggleLinks,
     &kReengagementNotification,
     &kRemoveExtraHeadersOnCrossOriginRedirect,
     &kRestoreTabGroupsOnFre,
@@ -600,6 +601,7 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &password_manager::features::kActorLoginPermissionsUi,
     &password_manager::features::kBiometricTouchToFill,
     &password_manager::features::kDeviceReauthRefactor,
+    &password_manager::features::kPasswordSaveInContextErrorResolution,
     &payments::facilitated::kEnablePixAccountLinkingNative,
     &permissions::features::kAndroidWindowManagementWebApi,
     &permissions::features::kPermissionDedicatedCpssSettingAndroid,
@@ -661,7 +663,6 @@ const base::Feature* const kFeaturesExposedToJava[] = {
 // Alphabetical:
 const base::FeatureParam<bool>* const kBooleanParamsExposedToJava[] = {
 // go/keep-sorted start
-    &kAndroidThemeModuleForceDependencies,
     &kAndroidThemeResourceProviderForceLight,
     &kNtpAuroraChangeButtonColor,
 // go/keep-sorted end
@@ -757,7 +758,6 @@ BASE_FEATURE(kAndroidTabPersistentStoreActiveTabPrefs, base::FEATURE_DISABLED_BY
 BASE_FEATURE(kAndroidTabSkipSaveTabsKillswitch,"AndroidTabSkipSaveTabsTaskKillswitch", base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kAndroidTabUiRefactor, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kAndroidTabstripStartupCaptureBugFix, base::FEATURE_ENABLED_BY_DEFAULT);
-BASE_FEATURE(kAndroidThemeModule, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kAndroidThemeResourceProvider, base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kAndroidToolbarCaptureOnDesktop, base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kAndroidToolbarScrollAblation, base::FEATURE_DISABLED_BY_DEFAULT);
@@ -877,6 +877,7 @@ BASE_FEATURE(kEdgeToEdgeExtraLogs, base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kEdgeToEdgeMonitorConfigurations, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kEdgeToEdgeTablet, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kEdgeToEdgeTopInset, base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kEdgeToEdgeTopPageColorSampling, base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kEdgeToEdgeUseBackupNavbarInsets, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kEnableAndroidSidePanel, base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kEnableAndroidSidePanelDevFeature, base::FEATURE_DISABLED_BY_DEFAULT);
@@ -959,9 +960,12 @@ BASE_FEATURE(kQueuedCompositorWebContentsUpdates, base::FEATURE_ENABLED_BY_DEFAU
 BASE_FEATURE(kReadAloudAudioOverviews, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kReadAloudIPHMenuButtonHighlightCCT, base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kReadAloudServerExperiments, base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kReaderModeBlurTransitionAnimation, base::FEATURE_DISABLED_BY_DEFAULT);
 // Kill switch for letting permanently suppressed users see the Reading Mode CPA
 // again. Remove once it has shipped. See crbug.com/585792505.
 BASE_FEATURE(kReaderModeCpaReentry, base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kReaderModeDelayBottomSheetPeek, base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kReaderModeToggleLinks, base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kReengagementNotification, base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kRemoveExtraHeadersOnCrossOriginRedirect, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kRestoreTabGroupsOnFre, base::FEATURE_DISABLED_BY_DEFAULT);
@@ -1061,11 +1065,6 @@ BASE_RUNTIME_MUTABLE_FEATURE(kAvoidTaskTrampolines, base::FEATURE_ENABLED_BY_DEF
 // FeatureParams exposed to Java through the k*ParamsExposedToJava arrays.
 // Alphabetical:
 // go/keep-sorted start sticky_comments=yes
-BASE_FEATURE_PARAM(bool,
-                   kAndroidThemeModuleForceDependencies,
-                   &kAndroidThemeModule,
-                   "force_theme_module_dependencies",
-                   false);
 BASE_FEATURE_PARAM(bool,
                    kAndroidThemeResourceProviderForceLight,
                    &kAndroidThemeResourceProvider,

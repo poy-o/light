@@ -176,6 +176,7 @@ constexpr CGFloat kFacePileAvatarSize = 16;
 
 - (void)stop {
   [self clearLeaveOrDeleteCompletion];
+  [self hideTabStripGroupCreation];
   if (_tabGroupConfirmationCoordinator) {
     [_tabGroupConfirmationCoordinator stop];
     _tabGroupConfirmationCoordinator = nil;
@@ -213,7 +214,7 @@ constexpr CGFloat kFacePileAvatarSize = 16;
   _createTabGroupCoordinator = [[CreateTabGroupCoordinator alloc]
       initTabGroupEditionWithBaseViewController:self.baseViewController
                                         browser:self.browser
-                                       tabGroup:tabGroup.get()];
+                                       tabGroup:tabGroup];
   _createTabGroupCoordinator.delegate = self;
   [_createTabGroupCoordinator start];
 }

@@ -5,7 +5,7 @@
 import 'chrome://profile-customization/profile_customization_app.js';
 
 import type {ProfileCustomizationAppElement} from 'chrome://profile-customization/profile_customization_app.js';
-import {ProfileCustomizationBrowserProxyImpl} from 'chrome://profile-customization/profile_customization_browser_proxy.js';
+import {ProfileCustomizationBrowserProxyImpl, ProfileCustomizationStyle} from 'chrome://profile-customization/profile_customization_browser_proxy.js';
 import type {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import type {CrIconButtonElement} from 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
@@ -15,18 +15,43 @@ import {isChildVisible, microtasksFinished} from 'chrome://webui-test/test_util.
 
 import {TestProfileCustomizationBrowserProxy} from './test_profile_customization_browser_proxy.js';
 
+// Opens the avatar selection view, clicks the avatar with the given `label`
+// and confirms.
+// For the available labels see
+// `TestProfileCustomizationBrowserProxy.getAvailableIcons()`.
+async function selectAvatar(
+    app: ProfileCustomizationAppElement,
+    browserProxy: TestProfileCustomizationBrowserProxy, label: string) {
+  await browserProxy.whenCalled('getAvailableIcons');
+  await microtasksFinished();
+  app.shadowRoot.querySelector<CrIconButtonElement>(
+                    '#customizeAvatarIcon')!.click();
+  await microtasksFinished();
+
+  const selector = app.shadowRoot.querySelector('cr-profile-avatar-selector')!;
+  selector.shadowRoot
+      .querySelector<CrButtonElement>(
+          `.avatar[aria-label="${label}"]`)!.click();
+  await microtasksFinished();
+
+  app.shadowRoot.querySelector<CrButtonElement>(
+                    '#selectAvatarConfirmButton')!.click();
+  await microtasksFinished();
+}
+
 suite('ProfileCustomizationTest', function() {
   let app: ProfileCustomizationAppElement;
   let browserProxy: TestProfileCustomizationBrowserProxy;
 
-  const AVATAR_URL_1 = 'chrome://theme/IDR_PROFILE_AVATAR_1';
-  const AVATAR_URL_2 = 'chrome://theme/IDR_PROFILE_AVATAR_2';
+  const AVATAR_URL_1 = 'chrome://theme/IDR_PROFILE_AVATAR_27';
+  const AVATAR_URL_2 = 'chrome://theme/IDR_PROFILE_AVATAR_28';
   const STATIC_TITLE_PATTERN = /^Customize your (Chromium|Chrome) profile$/g;
 
   setup(function() {
     loadTimeData.overrideValues({
       profileName: 'TestName',
-      isLocalProfileCreation: false,
+      profileCustomizationStyle:
+          ProfileCustomizationStyle.SIGNED_IN_PROFILE_CREATION,
     });
     browserProxy = new TestProfileCustomizationBrowserProxy();
     browserProxy.setProfileInfo({
@@ -167,36 +192,33 @@ suite('ProfileCustomizationTest', function() {
     assertTrue(!!app.shadowRoot.querySelector('cr-theme-color-picker'));
   });
 
-  // Checks that there is no Delete Profile button in the default Profile
-  // Customization page.
-  test('DeleteProfileButtonNotVisible', async function() {
-    await initializeApp();
-    assertFalse(isChildVisible(app, '#deleteProfileButton'));
-  });
-
-  // Checks that clicking the Skip button triggers the correct browser proxy
-  // method.
+  // Checks that the secondary button reads "Skip" and triggers the correct
+  // browser proxy method.
   test('ClickSkip', async function() {
     await initializeApp();
-    assertTrue(isChildVisible(app, '#skipButton'));
+    assertTrue(isChildVisible(app, '#secondaryButton'));
     const skipButton =
-        app.shadowRoot.querySelector<CrButtonElement>('#skipButton')!;
+        app.shadowRoot.querySelector<CrButtonElement>('#secondaryButton')!;
+    assertEquals(
+        loadTimeData.getString('profileCustomizationSkipLabel'),
+        skipButton.textContent.trim());
     skipButton.click();
     return browserProxy.whenCalled('skip');
   });
 });
 
-suite('LocalProfileCreationTest', function() {
+suite('SignedOutProfileCreationTest', function() {
   let app: ProfileCustomizationAppElement;
   let browserProxy: TestProfileCustomizationBrowserProxy;
 
-  const AVATAR_URL_1 = 'chrome://theme/IDR_PROFILE_AVATAR_1';
+  const AVATAR_URL_1 = 'chrome://theme/IDR_PROFILE_AVATAR_27';
   const WELCOME_TITLE = 'Welcome!';
 
   setup(async function() {
     loadTimeData.overrideValues({
       profileName: 'TestName',
-      isLocalProfileCreation: true,
+      profileCustomizationStyle:
+          ProfileCustomizationStyle.SIGNED_OUT_PROFILE_CREATION,
     });
     browserProxy = new TestProfileCustomizationBrowserProxy();
     browserProxy.setProfileInfo({
@@ -214,12 +236,10 @@ suite('LocalProfileCreationTest', function() {
     return microtasksFinished();
   });
 
-  test('LocalProfileCreationDialog', function() {
+  test('SignedOutProfileCreationDialog', function() {
     assertEquals(WELCOME_TITLE, app.$.title.innerText);
     assertFalse(isChildVisible(app, '#workBadge'));
     assertTrue(isChildVisible(app, '#customizeAvatarIcon'));
-    assertTrue(isChildVisible(app, '#deleteProfileButton'));
-    assertFalse(isChildVisible(app, '#skipButton'));
 
     const activeView = 'active';
     const profileCustomizationDialog =
@@ -245,11 +265,88 @@ suite('LocalProfileCreationTest', function() {
     assertFalse(avatarSelectionDialog.classList.contains(activeView));
   });
 
+  // Checks that the secondary button reads "Delete profile" and triggers the
+  // correct browser proxy method.
   test('ClickDeleteProfileButton', function() {
-    assertTrue(isChildVisible(app, '#deleteProfileButton'));
+    assertTrue(isChildVisible(app, '#secondaryButton'));
     const deleteProfileButton =
-        app.shadowRoot.querySelector<CrButtonElement>('#deleteProfileButton')!;
+        app.shadowRoot.querySelector<CrButtonElement>('#secondaryButton')!;
+    assertEquals(
+        loadTimeData.getString('profileCustomizationDeleteProfileLabel'),
+        deleteProfileButton.textContent.trim());
     deleteProfileButton.click();
     return browserProxy.whenCalled('deleteProfile');
+  });
+
+  test('SelectDefaultAvatar', async function() {
+    await selectAvatar(app, browserProxy, 'fake-icon-1');
+    assertEquals(1, await browserProxy.whenCalled('setAvatarIcon'));
+    assertEquals(0, browserProxy.getCallCount('setGaiaPictureAsAvatar'));
+  });
+
+  // The Google Account picture is not a default avatar index.
+  test('SelectGaiaAvatar', async function() {
+    await selectAvatar(app, browserProxy, 'fake-gaia-icon');
+    await browserProxy.whenCalled('setGaiaPictureAsAvatar');
+    assertEquals(0, browserProxy.getCallCount('setAvatarIcon'));
+  });
+});
+
+suite('EditProfileTest', function() {
+  let app: ProfileCustomizationAppElement;
+  let browserProxy: TestProfileCustomizationBrowserProxy;
+
+  setup(function() {
+    loadTimeData.overrideValues({
+      profileName: 'TestName',
+      profileCustomizationStyle: ProfileCustomizationStyle.EDIT_PROFILE,
+    });
+    browserProxy = new TestProfileCustomizationBrowserProxy();
+    ProfileCustomizationBrowserProxyImpl.setInstance(browserProxy);
+  });
+
+  async function initializeApp() {
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    app = document.createElement('profile-customization-app');
+    document.body.append(app);
+    await browserProxy.whenCalled('initialized');
+  }
+
+  // Checks that the secondary button reads "Cancel" and triggers the correct
+  // browser proxy method.
+  test('ClickCancel', async function() {
+    await initializeApp();
+    assertTrue(isChildVisible(app, '#secondaryButton'));
+    const cancelButton =
+        app.shadowRoot.querySelector<CrButtonElement>('#secondaryButton')!;
+    assertEquals(
+        loadTimeData.getString('profileCustomizationCancelLabel'),
+        cancelButton.textContent.trim());
+    cancelButton.click();
+    return browserProxy.whenCalled('skip');
+  });
+
+  // Checks that the avatar can be changed to the Google Account picture.
+  test('SelectGaiaAvatar', async function() {
+    await initializeApp();
+    await selectAvatar(app, browserProxy, 'fake-gaia-icon');
+    await browserProxy.whenCalled('setGaiaPictureAsAvatar');
+    assertEquals(0, browserProxy.getCallCount('setAvatarIcon'));
+  });
+
+  // Checks that the "edit" button is shown instead of the work badge for
+  // managed profiles.
+  test('NoWorkBadge', async function() {
+    await initializeApp();
+    webUIListenerCallback('on-profile-info-changed', {
+      backgroundColor: 'rgb(0, 255, 0)',
+      pictureUrl: 'chrome://theme/IDR_PROFILE_AVATAR_1',
+      isManaged: true,
+      hasEnterpriseLabel: false,
+      welcomeTitle: '',
+    });
+    await microtasksFinished();
+    assertFalse(isChildVisible(app, '#workBadge'));
+    assertTrue(isChildVisible(app, '#customizeAvatarIcon'));
   });
 });

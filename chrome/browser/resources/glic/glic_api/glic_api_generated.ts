@@ -85,6 +85,18 @@ export enum CloseAuthTabResult {
   NAVIGATED_AWAY = 6,
 }
 
+// Result of attempting to select a Gemini Enterprise rollout stage.
+export enum SelectRolloutStageResult {
+  UNKNOWN = 0,
+  // The stage preference was saved, and a browser restart was initiated if the
+  // target stage differs from the current session's stage.
+  SUCCESS = 1,
+  // The requested stage ID does not match any selectable rollout stage.
+  UNKNOWN_STAGE = 2,
+  // Stage switching is not supported (e.g. overridden by policy or switch).
+  NOT_SUPPORTED = 3,
+}
+
 export enum FileUploadPolicyState {
   ENABLED = 0,
   DISABLED = 1,
@@ -188,6 +200,20 @@ export enum SbThreatType {
   SOCIAL_ENGINEERING = 1,
   MALWARE = 2,
   UNWANTED_SOFTWARE = 3,
+}
+
+// Reason why a page-declared WebMCP script tool set was withheld.
+export enum ScriptToolRejectionReason {
+  // Default / unspecified reason (also used for unrecognized future values).
+  UNSPECIFIED = 0,
+  // Withheld due to a security or safety check.
+  SECURITY = 1,
+  // Withheld because the site is rate-limited / throttled.
+  THROTTLING = 2,
+  // Withheld due to a quality check.
+  QUALITY = 3,
+  // Withheld while an asynchronous evaluation or scan is still in flight.
+  SCAN_PENDING = 4,
 }
 
 // Enum to specify the image format of the screenshot.
@@ -850,6 +876,8 @@ export enum InvocationSource {
   // From the "Open chat" button on a chrome://history critical action row.
   // Targets the turn where the action happened, when known.
   HISTORY_PAGE_CRITICAL_ACTION_CHAT_LINKOUT = 51,
+  // From the Context Hub Record Replay UI.
+  CONTEXT_HUB_RECORD_REPLAY = 52,
 }
 
 // Target for actuation.
@@ -910,6 +938,37 @@ export declare interface CloseAuthTabResponse {
   result: CloseAuthTabResult;
 }
 
+// A selectable Gemini Enterprise rollout stage.
+export declare interface GeicRolloutStage {
+  // Stable identifier for the stage, persisted in preferences when selected.
+  id: string;
+  // Human-readable display label shown in the stage switcher UI.
+  label: string;
+}
+
+// Available Gemini Enterprise rollout stages and the active stage for the
+// current session.
+export declare interface GeicRolloutStagesInfo {
+  // Selectable rollout stages. Empty when stage switching is unavailable or
+  // overridden by enterprise policy or command-line flags.
+  stages: GeicRolloutStage[];
+  // Identifier of the stage active in the current session, if known.
+  currentStageId?: string;
+}
+
+// Options for selecting a Gemini Enterprise rollout stage.
+export declare interface SelectRolloutStageOptions {
+  // Identifier of the rollout stage to switch to on the next browser launch.
+  stageId: string;
+}
+
+// Response for `SelectRolloutStage`. Wrapped in a struct so fields can be
+// added later without breaking backwards compatibility.
+export declare interface SelectRolloutStageResponse {
+  // The result of attempting to select the rollout stage.
+  result: SelectRolloutStageResult;
+}
+
 // TODO(b/570016708): Remove once web client usages are eliminated.
 // Deprecated: Formerly settings for Gemini Enterprise as a Tool.
 export declare interface GeminiEnterpriseSettings {
@@ -952,6 +1011,23 @@ export declare interface SafeBrowsingVerdict {
 // The type of counter abuse verdict that was received.
 export declare interface CounterAbuseVerdict {
   sbVerdictResult: SafeBrowsingVerdict;
+}
+
+// Identifies a page document whose declared WebMCP tools were withheld.
+export declare interface ScriptToolRejectionDocument {
+  // Optional ID of the tab hosting the document, when known by the web client.
+  tabId?: string;
+  // DocumentIdentifier.serialized_token from AnnotatedPageContent.
+  documentId: string;
+  // Page-declared WebMCP tool names withheld for this document.
+  toolNames: string[];
+}
+
+// Groups page documents whose declared WebMCP tools were withheld for a shared
+// reason.
+export declare interface ScriptToolRejection {
+  reason: ScriptToolRejectionReason;
+  documents: ScriptToolRejectionDocument[];
 }
 
 // Options for screenshot collection.
@@ -1556,6 +1632,15 @@ export declare interface TabData {
   isWindowActive?: boolean;
   // Lightweight page features detected on the page.
   lightweightPageFeatures?: LightweightPageFeature[];
+}
+
+// Pre-consent Action First FRE suggestions for a tab.
+export declare interface ActionFirstSuggestions {
+  // ID of the tab these suggestions apply to.
+  tabId: string;
+  // Ordered chip IDs from the pre-reviewed chip catalog (e.g. "FACT_CHECK").
+  // Empty means the client should show generic chips.
+  chipIds: string[];
 }
 
 // Information about the annotated page content.

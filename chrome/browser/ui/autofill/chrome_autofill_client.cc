@@ -117,8 +117,6 @@
 #include "components/autofill/content/browser/integrators/custom_form_controls/custom_form_control_script_runner.h"
 #include "components/autofill/content/browser/integrators/email_verifier/email_verifier_delegate.h"
 #include "components/autofill/core/browser/actor/actor_autofill_manager.h"
-#include "components/autofill/core/browser/at_memory/at_memory_enablement_util.h"
-#include "components/autofill/core/browser/at_memory/at_memory_manager.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/data_manager/autofill_ai/entity_data_manager.h"
 #include "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
@@ -222,6 +220,7 @@
 #include "chrome/browser/signin/android/signin_bridge.h"
 #include "chrome/browser/touch_to_fill/autofill/android/touch_to_fill_autofill_controller.h"
 #include "chrome/browser/touch_to_fill/autofill/android/touch_to_fill_autofill_view_impl.h"
+#include "chrome/browser/ui/android/autofill/autofill_ai_attribution_verification_sheet_bridge.h"
 #include "chrome/browser/ui/android/autofill/autofill_ai_save_update_entity_flow_manager.h"
 #include "chrome/browser/ui/android/autofill/autofill_dialog_controller_impl.h"
 #include "chrome/browser/ui/android/autofill/autofill_message_controller_impl.h"
@@ -399,6 +398,20 @@ void ChromeAutofillClient::AtMemoryCopyPasteObserver::DidGetUserInteraction(
   OnPaste();
 }
 
+ChromeAutofillClient::WebOtpObserver::WebOtpObserver(
+    content::WebContents* web_contents)
+    : content::WebContentsObserver(web_contents) {}
+
+ChromeAutofillClient::WebOtpObserver::~WebOtpObserver() = default;
+
+void ChromeAutofillClient::WebOtpObserver::OnDocumentUsedWebOtp(
+    content::RenderFrameHost* render_frame_host) {
+  if (ContentAutofillDriver* driver =
+          ContentAutofillDriver::GetForRenderFrameHost(render_frame_host)) {
+    driver->GetAutofillManager().OnDocumentUsedWebOtp();
+  }
+}
+
 base::WeakPtr<AutofillClient> ChromeAutofillClient::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
@@ -521,10 +534,6 @@ AutofillComposeDelegate* ChromeAutofillClient::GetComposeDelegate() {
 AtMemoryQueryService* ChromeAutofillClient::GetAtMemoryQueryService() {
   Profile* profile = GetProfile();
   return AtMemoryQueryServiceFactory::GetForProfile(profile);
-}
-
-AtMemoryManager* ChromeAutofillClient::GetAtMemoryManager() {
-  return at_memory_manager_.get();
 }
 
 personal_context::PersonalContextEligibilityState
@@ -805,11 +814,18 @@ void ChromeAutofillClient::ShowAutofillSettings(
             autofill_metrics::AutofillSettingsReferrer::kFillingFlowDropdown);
         chrome::ShowSettingsSubPage(browser, chrome::kShoppingSubPage);
         return;
+      case SuggestionType::kManageOffers:
+        base::UmaHistogramEnumeration(
+            "Autofill.YourSavedInfoSettingsPage.VisitReferrer",
+            autofill_metrics::AutofillSettingsReferrer::kFillingFlowDropdown);
+        chrome::ShowSettingsSubPage(
+            browser, base::FeatureList::IsEnabled(
+                         features::kAutofillEnableOffersAndLoyaltyCardsSettings)
+                         ? chrome::kOffersAndLoyaltyCardsSubPage
+                         : chrome::kPaymentsSubPage);
+        return;
       case SuggestionType::kManageCreditCard:
       case SuggestionType::kManageIban:
-      // TODO(crbug.com/546252995): Open up the shopping leaf for Wallet Direct
-      // Offers when navigating to settings.
-      case SuggestionType::kManageOffers:
         base::UmaHistogramEnumeration(
             "Autofill.YourSavedInfoSettingsPage.VisitReferrer",
             autofill_metrics::AutofillSettingsReferrer::kFillingFlowDropdown);
@@ -1041,18 +1057,19 @@ void ChromeAutofillClient::TriggerAtMemoryPersonalizationAndTrustSurvey(
 void ChromeAutofillClient::
     TriggerOneTimePasswordDismissalPersonalizationAndTrustSurvey(
         const HatsSurveyStringData& product_specific_data) {
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-  HatsService* hats_service =
-      HatsServiceFactory::GetForProfile(profile, /*create_if_necessary=*/true);
+  HatsService* hats_service = HatsServiceFactory::GetForProfile(
+      GetProfile(), /*create_if_necessary=*/true);
   if (!hats_service) {
     return;
   }
 
-  hats_service->LaunchSurvey(
+  // Launch survey asynchronously with 0ms delay to avoid blocking when called
+  // during teardown. Use variant that binds to `web_contents()` because
+  // `LaunchSurvey()` without web contents is not implemented on Android.
+  hats_service->LaunchDelayedSurveyForWebContents(
       kHatsSurveyTriggerAutofillPersonalizationAndTrustOneTimePasswordDismissed,
-      /*success_callback=*/base::DoNothing(),
-      /*failure_callback=*/base::DoNothing(),
+      web_contents(),
+      /*timeout_ms=*/0,
       /*product_specific_bits_data=*/{},
       /*product_specific_string_data=*/product_specific_data);
 }
@@ -1360,11 +1377,6 @@ ChromeAutofillClient::ChromeAutofillClient(content::WebContents* web_contents)
   if (base::FeatureList::IsEnabled(features::kAutofillAiWithDataSchema)) {
     autofill_ai_manager_ = std::make_unique<AutofillAiManager>(
         this, StrikeDatabaseFactory::GetForProfile(GetProfile()));
-  }
-  if (base::FeatureList::IsEnabled(features::kAutofillAtMemory)) {
-    at_memory_manager_ = std::make_unique<AtMemoryManager>(
-        this, HistoryServiceFactory::GetForProfile(
-                  GetProfile(), ServiceAccessType::EXPLICIT_ACCESS));
   }
   // When AutofillCustomFormControlExtraction is enabled,
   // `AutofillManager::OnFormsSeen()` loads the script instead.
@@ -1852,6 +1864,24 @@ void ChromeAutofillClient::ShowAutofillAiSuggestionRemovedNotification(
   params.action_button_callback_data = base::Value(*entity.guid());
   toast_controller->MaybeShowToast(std::move(params));
 #endif
+}
+
+void ChromeAutofillClient::ShowAutofillAiAttributionVerification(
+    const EntityInstance& entity,
+    const GURL& source_url,
+    const gfx::RectF& field_bounds,
+    AutofillAiVerificationDecisionCallback decision_cb) {
+#if BUILDFLAG(IS_ANDROID)
+  if (!autofill_ai_attribution_verification_sheet_bridge_) {
+    autofill_ai_attribution_verification_sheet_bridge_ =
+        std::make_unique<AutofillAiAttributionVerificationSheetBridge>(
+            web_contents());
+  }
+  autofill_ai_attribution_verification_sheet_bridge_->RequestShowContent(
+      std::move(decision_cb));
+#else
+  NOTIMPLEMENTED();
+#endif  // BUILDFLAG(IS_ANDROID)
 }
 
 ToastController* ChromeAutofillClient::GetToastController() {

@@ -235,7 +235,7 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.11.0"
+version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "find-msvc-tools",
@@ -271,6 +271,7 @@ dependencies = [
  "flate2",
  "font-types",
  "harfrust",
+ "harfrust_capi",
  "hex",
  "hmac-sha256",
  "icu_capi",
@@ -685,7 +686,7 @@ dependencies = [
 
 [[package]]
 name = "flate2"
-version = "1.1.10"
+version = "1.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "crc32fast",
@@ -763,6 +764,18 @@ dependencies = [
  "read-fonts",
  "smallvec",
  "yoke",
+]
+
+[[package]]
+name = "harfrust_capi"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "harfrust",
+ "read-fonts",
+ "skera",
+ "smallvec",
+ "write-fonts",
 ]
 
 [[package]]
@@ -1276,7 +1289,7 @@ dependencies = [
 
 [[package]]
 name = "itoa"
-version = "1.0.18"
+version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -2207,7 +2220,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "smallvec"
-version = "1.16.4"
+version = "1.16.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -2621,17 +2634,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "utf16_iter"
-version = "1.0.5"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "utf_types",
+]
 
 [[package]]
 name = "utf8_iter"
-version = "1.0.4"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "utf_types",
+]
+
+[[package]]
+name = "utf_types"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "uuid"
-version = "1.29.0"
+version = "1.29.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "getrandom",

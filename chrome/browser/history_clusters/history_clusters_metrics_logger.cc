@@ -52,11 +52,7 @@ HistoryClustersMetricsLogger::~HistoryClustersMetricsLogger() {
   base::UmaHistogramCounts100(
       "History.Clusters.Actions.FinalState.NumberIndividualVisitsDeleted",
       visits_deleted_count_);
-  base::UmaHistogramBoolean("History.Clusters.Actions.FinalState.WasSuccessful",
-                            IsCurrentlySuccessfulHistoryClustersOutcome());
 
-  base::UmaHistogramBoolean("History.Clusters.Actions.DidMakeQuery",
-                            num_queries_ > 0);
   if (num_queries_ > 0) {
     // Only log if at least 1 query was made so we measure the distribution of
     // the number of queries when made.
@@ -121,20 +117,6 @@ void HistoryClustersMetricsLogger::RecordToggledVisibility(bool visible) {
 
 void HistoryClustersMetricsLogger::WasShown() {
   is_ever_shown_ = true;
-}
-
-bool HistoryClustersMetricsLogger::
-    IsCurrentlySuccessfulHistoryClustersOutcome() {
-  if (related_searches_click_count_ > 0)
-    return true;
-  if (links_opened_count_ > 0)
-    return true;
-  if (visits_deleted_count_ > 0)
-    return true;
-  if (clusters_deleted_count_ > 0)
-    return true;
-
-  return false;
 }
 
 PAGE_USER_DATA_KEY_IMPL(HistoryClustersMetricsLogger);

@@ -33,6 +33,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "chrome/browser/glic/actor/glic_actor_policy_checker.h"
+#include "chrome/browser/glic/common/glic_relaunch.h"
 #include "chrome/browser/glic/experimental_triggering/glic_experimental_triggering_types.h"
 #include "chrome/browser/glic/gemini_enterprise/geic_fre.h"
 #include "chrome/browser/glic/gemini_enterprise/geic_pref_names.h"
@@ -40,9 +41,9 @@
 #include "chrome/browser/glic/glic_pref_names.h"
 #include "chrome/browser/glic/glic_pref_names_internal.h"
 #include "chrome/browser/glic/host/glic.mojom.h"
+#include "chrome/browser/glic/host/glic_assistant_switcher.h"
 #include "chrome/browser/glic/host/glic_features.mojom-features.h"
 #include "chrome/browser/glic/host/glic_features.mojom.h"
-#include "chrome/browser/glic/host/glic_provider_change_relaunch.h"
 #include "chrome/browser/glic/public/features.h"
 #include "chrome/browser/glic/public/glic_feature.h"
 #include "chrome/browser/glic/public/glic_fre_store.h"
@@ -58,6 +59,7 @@
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
+#include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
@@ -101,6 +103,7 @@
 #include "base/android/android_info.h"
 #include "base/android/application_status_listener.h"
 #include "chrome/browser/glic/android/background_actuation_capability.h"
+#include "ui/base/device_form_factor.h"
 #else
 #include "chrome/browser/sync/device_info_sync_service_factory.h"
 #include "chrome/test/base/scoped_metrics_service_for_synthetic_trials.h"  // nogncheck
@@ -235,6 +238,13 @@ TEST_F(GlicEnablingTest, GlicFeatureNotEnabledTest) {
   scoped_feature_list_.Reset();
   scoped_feature_list_.InitWithFeatures({}, {features::kGlic});
   EXPECT_FALSE(CreateGlobalEnabling().IsEnabledByGlobalCriteria());
+}
+
+TEST_F(GlicEnablingTest, IsReadyForProfile_NullProfile) {
+  EXPECT_FALSE(GlicEnabling::IsReadyForProfile(nullptr));
+
+  GlicEnabling::ScopedBypassEnablementChecksForTesting bypass;
+  EXPECT_FALSE(GlicEnabling::IsReadyForProfile(nullptr));
 }
 
 TEST_F(GlicEnablingTest, IneligibleProfileDoesNotLogIsConsentedMetrics) {
@@ -372,32 +382,6 @@ TEST_F(GlicEnablingTest,
   histogram_tester_->ExpectTotalCount("Glic.CountryFilteringResult2.Adult", 5);
 }
 
-TEST_F(GlicEnablingTest,
-       CountryFilteringEnabledWithLists_SessionCountryIgnored) {
-  base::test::ScopedFeatureList features;
-  features.InitWithFeaturesAndParameters(
-      {{features::kGlicCountryFiltering,
-        {{"disabled_countries", "zz"}, {"enabled_countries", "us,uk,zz"}}}},
-      {features::kGlicUseSessionCountryForFiltering});
-
-  EXPECT_FALSE(TestDelegate::GetCountryEnablement("zz", "us"));
-  EXPECT_TRUE(TestDelegate::GetCountryEnablement("us", "zz"));
-  EXPECT_FALSE(TestDelegate::GetCountryEnablement("qq", "us"));
-  EXPECT_TRUE(TestDelegate::GetCountryEnablement("us", "qq"));
-  EXPECT_FALSE(TestDelegate::GetCountryEnablement("qq", "qq"));
-
-  histogram_tester_->ExpectBucketCount(
-      "Glic.CountryFilteringResult2.Adult",
-      GlicFilteringResult::kBlockedInExclusionList, 1);
-  histogram_tester_->ExpectBucketCount(
-      "Glic.CountryFilteringResult2.Adult",
-      GlicFilteringResult::kAllowedInInclusionList, 2);
-  histogram_tester_->ExpectBucketCount(
-      "Glic.CountryFilteringResult2.Adult",
-      GlicFilteringResult::kBlockedNotInInclusionList, 2);
-  histogram_tester_->ExpectTotalCount("Glic.CountryFilteringResult2.Adult", 5);
-}
-
 TEST_F(GlicEnablingTest, CountryFilteringEnabledWithStar) {
   base::test::ScopedFeatureList features;
   features.InitAndEnableFeatureWithParameters(
@@ -530,42 +514,23 @@ TEST_F(GlicEnablingTest, WebActuationDisclosureCountryVariant) {
 }
 
 TEST_F(GlicEnablingTest, WebActuationDisclosureCountryVariant_SessionCountry) {
-  {
-    base::test::ScopedFeatureList features;
-    features.InitWithFeatures(
-        {features::kGlicWebActuationDisclosureCountryVariant,
-         features::kGlicUseSessionCountryForFiltering},
-        {});
-    // Session country takes precedence over the permanent country.
-    delegate_.SetPermanentCountryCode("us");
-    delegate_.SetSessionCountryCode("gb");
-    EXPECT_TRUE(
-        CreateGlobalEnabling().ShouldUseWebActuationDisclosureCountryVariant());
-    delegate_.SetPermanentCountryCode("gb");
-    delegate_.SetSessionCountryCode("us");
-    EXPECT_FALSE(
-        CreateGlobalEnabling().ShouldUseWebActuationDisclosureCountryVariant());
-    // Falls back to the permanent country when the session country is unknown.
-    delegate_.SetPermanentCountryCode("gb");
-    delegate_.SetSessionCountryCode("");
-    EXPECT_TRUE(
-        CreateGlobalEnabling().ShouldUseWebActuationDisclosureCountryVariant());
-  }
-  {
-    // Only the permanent country is used when session filtering is disabled.
-    base::test::ScopedFeatureList features;
-    features.InitWithFeatures(
-        {features::kGlicWebActuationDisclosureCountryVariant},
-        {features::kGlicUseSessionCountryForFiltering});
-    delegate_.SetPermanentCountryCode("us");
-    delegate_.SetSessionCountryCode("gb");
-    EXPECT_FALSE(
-        CreateGlobalEnabling().ShouldUseWebActuationDisclosureCountryVariant());
-    delegate_.SetPermanentCountryCode("gb");
-    delegate_.SetSessionCountryCode("us");
-    EXPECT_TRUE(
-        CreateGlobalEnabling().ShouldUseWebActuationDisclosureCountryVariant());
-  }
+  base::test::ScopedFeatureList features;
+  features.InitAndEnableFeature(
+      features::kGlicWebActuationDisclosureCountryVariant);
+  // Session country takes precedence over the permanent country.
+  delegate_.SetPermanentCountryCode("us");
+  delegate_.SetSessionCountryCode("gb");
+  EXPECT_TRUE(
+      CreateGlobalEnabling().ShouldUseWebActuationDisclosureCountryVariant());
+  delegate_.SetPermanentCountryCode("gb");
+  delegate_.SetSessionCountryCode("us");
+  EXPECT_FALSE(
+      CreateGlobalEnabling().ShouldUseWebActuationDisclosureCountryVariant());
+  // Falls back to the permanent country when the session country is unknown.
+  delegate_.SetPermanentCountryCode("gb");
+  delegate_.SetSessionCountryCode("");
+  EXPECT_TRUE(
+      CreateGlobalEnabling().ShouldUseWebActuationDisclosureCountryVariant());
 }
 
 base::flat_set<std::string> SplitCountryList(std::string_view country_list) {
@@ -782,7 +747,7 @@ class GlicEnablingProfileEligibilityTest : public testing::Test {
     testing_profile_manager->profile_manager()
         ->GetProfileAttributesStorage()
         .GetProfileAttributesWithPath(profile_->GetPath())
-        ->SetAvatarIconIndex(1);
+        ->SetAvatarIconIndex(profiles::GetModernAvatarIconStartIndex());
 
     identity_test_env_adaptor_ =
         std::make_unique<IdentityTestEnvironmentProfileAdaptor>(profile_);
@@ -1278,9 +1243,9 @@ TEST_F(GlicEnablingAnchorEntryPointTestBase,
                   base::Bucket(Reason::kPrimaryAccountNotCapable, 1)))));
 }
 
-// GEiC profiles don't anchor the entry point, since the anchored error state is
-// specific to consumer Gemini in Chrome (b/576834093). Without
-// `features::kGeicFre`, GEiC profiles are always consented.
+// Like consumer profiles, GEiC profiles anchor the entry point once they've
+// consented through their own FRE (`geic.completed_fre`), with
+// `features::kGeicAnchorEntryPointForOnboardedUsers`.
 class GlicEnablingGeicAnchorEntryPointTest
     : public GlicEnablingAnchorEntryPointTestBase {
  public:
@@ -1289,10 +1254,9 @@ class GlicEnablingGeicAnchorEntryPointTest
     // Glic provider.
     geic_feature_list_.InitWithFeaturesAndParameters(
         {{features::kGeic,
-          {{"enabled", "true"},
-           {"geic-guest-url",
-            "https://business.gemini.google/side-panel?configId=abc"}}}},
-        {features::kGeicFre});
+          {{"enabled", "true"}, {"geic-guest-url", kGuestUrl}}},
+         {features::kGeicFre, {}}},
+        {});
   }
 
   void SetUp() override {
@@ -1300,9 +1264,41 @@ class GlicEnablingGeicAnchorEntryPointTest
     if (IsSkipped()) {
       return;
     }
-    // Only GEiC profiles are consented without completing an FRE, so this also
-    // checks that the profile is in GEiC mode.
-    ASSERT_TRUE(GlicEnabling::HasConsentedForProfile(profile()));
+    // Checks that the profile is in GEiC mode, with the GEiC FRE.
+    ASSERT_EQ(GetGlicProviderSpec(profile()).GetFreStore().GetStatusPrefName(),
+              geic::prefs::kGeicCompletedFre);
+    ASSERT_FALSE(GlicEnabling::HasConsentedForProfile(profile()));
+  }
+
+ protected:
+  static constexpr char kGuestUrl[] =
+      "https://business.gemini.google/side-panel?configId=abc";
+
+  // Makes the country filter fail, so that only anchoring can show the entry
+  // point.
+  void DisableCountry() {
+    auto delegate = std::make_unique<TestDelegate>();
+    delegate->SetBothCountryCodes("zz");
+    g_browser_process->GetFeatures()
+        ->glic_global_enabling()
+        .UpdateStateForTesting(std::move(delegate));
+  }
+
+  // Makes the UI locale filter fail, which fails the global criteria. Call it
+  // after enabling `features::kGlicLocaleFiltering`, since the locale is only
+  // evaluated when the delegate is set.
+  void DisableLocale() {
+    auto delegate = std::make_unique<TestDelegate>();
+    delegate->SetLocale("xx-yy");
+    g_browser_process->GetFeatures()
+        ->glic_global_enabling()
+        .UpdateStateForTesting(std::move(delegate));
+  }
+
+  void CompleteOnboarding() {
+    GetGlicProviderSpec(profile()).GetFreStore().CompleteOnboarding(profile());
+    EXPECT_EQ(geic::GetFreStatus(profile()),
+              geic::prefs::GeicFreStatus::kCompleted);
   }
 
  private:
@@ -1311,9 +1307,11 @@ class GlicEnablingGeicAnchorEntryPointTest
 
 TEST_F(GlicEnablingGeicAnchorEntryPointTest,
        NotAnchoredWhenGlobalCriteriaFail) {
+  CompleteOnboarding();
   base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(
-      features::kGlicAnchorEntryPointForOnboardedUsers);
+  features.InitWithFeatures({features::kGlicAnchorEntryPointForOnboardedUsers,
+                             features::kGeicAnchorEntryPointForOnboardedUsers},
+                            {});
 
   // kGlic is disabled, so global criteria fail.
   EXPECT_FALSE(GlicEnabling::IsProfileEligible(profile()));
@@ -1323,15 +1321,31 @@ TEST_F(GlicEnablingGeicAnchorEntryPointTest,
   EXPECT_FALSE(enablement.ShouldShowGlicButton());
 }
 
-TEST_F(GlicEnablingGeicAnchorEntryPointTest, NotAnchoredForCountryDisabled) {
-  auto delegate = std::make_unique<TestDelegate>();
-  delegate->SetBothCountryCodes("zz");
-  g_browser_process->GetFeatures()
-      ->glic_global_enabling()
-      .UpdateStateForTesting(std::move(delegate));
-
+TEST_F(GlicEnablingGeicAnchorEntryPointTest,
+       AnchoredForCountryDisabledWhenOnboarded) {
   base::test::ScopedFeatureList features;
   features.InitWithFeatures({features::kGlicAnchorEntryPointForOnboardedUsers,
+                             features::kGeicAnchorEntryPointForOnboardedUsers,
+                             features::kGlic, features::kGlicCountryFiltering},
+                            {});
+  CompleteOnboarding();
+  DisableCountry();
+
+  GlicEnabling::ProfileEnablement enablement =
+      GlicEnabling::EnablementForProfile(profile());
+  EXPECT_FALSE(enablement.allowed_by_country_filter);
+  EXPECT_TRUE(enablement.anchor_entrypoint_override_active);
+  EXPECT_TRUE(enablement.ShouldShowGlicButton());
+  EXPECT_EQ(GlicEnabling::GetProfileReadyState(profile()),
+            mojom::ProfileReadyState::kLocationMismatch);
+}
+
+TEST_F(GlicEnablingGeicAnchorEntryPointTest,
+       NotAnchoredForCountryDisabledWithoutOnboarding) {
+  DisableCountry();
+  base::test::ScopedFeatureList features;
+  features.InitWithFeatures({features::kGlicAnchorEntryPointForOnboardedUsers,
+                             features::kGeicAnchorEntryPointForOnboardedUsers,
                              features::kGlic, features::kGlicCountryFiltering},
                             {});
 
@@ -1342,6 +1356,166 @@ TEST_F(GlicEnablingGeicAnchorEntryPointTest, NotAnchoredForCountryDisabled) {
   EXPECT_FALSE(enablement.ShouldShowGlicButton());
   EXPECT_EQ(GlicEnabling::GetProfileReadyState(profile()),
             mojom::ProfileReadyState::kIneligible);
+}
+
+TEST_F(GlicEnablingGeicAnchorEntryPointTest,
+       NotAnchoredForCountryDisabledWithoutGeicAnchorFeature) {
+  DisableCountry();
+  CompleteOnboarding();
+  base::test::ScopedFeatureList features;
+  features.InitWithFeatures({features::kGlicAnchorEntryPointForOnboardedUsers,
+                             features::kGlic, features::kGlicCountryFiltering},
+                            {features::kGeicAnchorEntryPointForOnboardedUsers});
+
+  GlicEnabling::ProfileEnablement enablement =
+      GlicEnabling::EnablementForProfile(profile());
+  EXPECT_FALSE(enablement.allowed_by_country_filter);
+  EXPECT_FALSE(enablement.anchor_entrypoint_override_active);
+  EXPECT_FALSE(enablement.ShouldShowGlicButton());
+  EXPECT_EQ(GlicEnabling::GetProfileReadyState(profile()),
+            mojom::ProfileReadyState::kIneligible);
+}
+
+TEST_F(GlicEnablingGeicAnchorEntryPointTest,
+       NotAnchoredForCountryDisabledWithoutGlicAnchorFeature) {
+  DisableCountry();
+  CompleteOnboarding();
+  base::test::ScopedFeatureList features;
+  features.InitWithFeatures({features::kGeicAnchorEntryPointForOnboardedUsers,
+                             features::kGlic, features::kGlicCountryFiltering},
+                            {features::kGlicAnchorEntryPointForOnboardedUsers});
+
+  GlicEnabling::ProfileEnablement enablement =
+      GlicEnabling::EnablementForProfile(profile());
+  EXPECT_FALSE(enablement.allowed_by_country_filter);
+  EXPECT_FALSE(enablement.anchor_entrypoint_override_active);
+  EXPECT_FALSE(enablement.ShouldShowGlicButton());
+  EXPECT_EQ(GlicEnabling::GetProfileReadyState(profile()),
+            mojom::ProfileReadyState::kIneligible);
+}
+
+// Without `features::kGeicFre`, every GEiC profile reads as consented, so GEiC
+// doesn't anchor at all rather than anchoring profiles that never onboarded.
+TEST_F(GlicEnablingGeicAnchorEntryPointTest,
+       NotAnchoredForCountryDisabledWithoutGeicFre) {
+  DisableCountry();
+  base::test::ScopedFeatureList features;
+  features.InitWithFeatures({features::kGlicAnchorEntryPointForOnboardedUsers,
+                             features::kGeicAnchorEntryPointForOnboardedUsers,
+                             features::kGlic, features::kGlicCountryFiltering},
+                            {features::kGeicFre});
+
+  GlicEnabling::ProfileEnablement enablement =
+      GlicEnabling::EnablementForProfile(profile());
+  EXPECT_TRUE(enablement.fre_is_consented);
+  EXPECT_FALSE(enablement.allowed_by_country_filter);
+  EXPECT_FALSE(enablement.anchor_entrypoint_override_active);
+  EXPECT_FALSE(enablement.ShouldShowGlicButton());
+  EXPECT_EQ(GlicEnabling::GetProfileReadyState(profile()),
+            mojom::ProfileReadyState::kIneligible);
+}
+
+TEST_F(GlicEnablingGeicAnchorEntryPointTest,
+       NotAnchoredForCountryDisabledWithOnlyConsumerFre) {
+  DisableCountry();
+  // The consumer FRE pref doesn't consent GEiC profiles.
+  profile()->GetPrefs()->SetInteger(
+      prefs::kGlicCompletedFre,
+      std::to_underlying(prefs::FreStatus::kCompleted));
+  base::test::ScopedFeatureList features;
+  features.InitWithFeatures({features::kGlicAnchorEntryPointForOnboardedUsers,
+                             features::kGeicAnchorEntryPointForOnboardedUsers,
+                             features::kGlic, features::kGlicCountryFiltering},
+                            {});
+
+  GlicEnabling::ProfileEnablement enablement =
+      GlicEnabling::EnablementForProfile(profile());
+  EXPECT_FALSE(enablement.fre_is_consented);
+  EXPECT_FALSE(enablement.anchor_entrypoint_override_active);
+  EXPECT_FALSE(enablement.ShouldShowGlicButton());
+}
+
+// GEiC consent is kept per GE instance, so onboarding to another GE instance
+// doesn't anchor this one.
+TEST_F(GlicEnablingGeicAnchorEntryPointTest,
+       NotAnchoredForCountryDisabledWhenOnboardedToOtherGuestUrl) {
+  DisableCountry();
+  {
+    ScopedDictPrefUpdate update(profile()->GetPrefs(),
+                                geic::prefs::kGeicCompletedFre);
+    update->Set("https://business.gemini.google/side-panel?configId=other",
+                base::DictValue().Set(
+                    "status", std::to_underlying(
+                                  geic::prefs::GeicFreStatus::kCompleted)));
+  }
+  base::test::ScopedFeatureList features;
+  features.InitWithFeatures({features::kGlicAnchorEntryPointForOnboardedUsers,
+                             features::kGeicAnchorEntryPointForOnboardedUsers,
+                             features::kGlic, features::kGlicCountryFiltering},
+                            {});
+
+  GlicEnabling::ProfileEnablement enablement =
+      GlicEnabling::EnablementForProfile(profile());
+  EXPECT_FALSE(enablement.fre_is_consented);
+  EXPECT_FALSE(enablement.anchor_entrypoint_override_active);
+  EXPECT_FALSE(enablement.ShouldShowGlicButton());
+}
+
+// A UI locale failure fails the global criteria, which anchors onboarded GEiC
+// profiles through the same path as consumer ones. It's reported as an
+// ineligible account, since there's no more specific reason.
+TEST_F(GlicEnablingGeicAnchorEntryPointTest,
+       AnchoredForLocaleDisabledWhenOnboarded) {
+  base::test::ScopedFeatureList features;
+  features.InitWithFeatures({features::kGlicAnchorEntryPointForOnboardedUsers,
+                             features::kGeicAnchorEntryPointForOnboardedUsers,
+                             features::kGlic, features::kGlicLocaleFiltering},
+                            {});
+  CompleteOnboarding();
+  DisableLocale();
+
+  EXPECT_TRUE(GlicEnabling::IsProfileEligible(profile()));
+  GlicEnabling::ProfileEnablement enablement =
+      GlicEnabling::EnablementForProfile(profile());
+  EXPECT_FALSE(enablement.allowed_by_locale_filter);
+  EXPECT_TRUE(enablement.anchor_entrypoint_override_active);
+  EXPECT_TRUE(enablement.ShouldShowGlicButton());
+  EXPECT_EQ(GlicEnabling::GetProfileReadyState(profile()),
+            mojom::ProfileReadyState::kIneligibleAccount);
+}
+
+TEST_F(GlicEnablingGeicAnchorEntryPointTest,
+       NotAnchoredForLocaleDisabledWithoutOnboarding) {
+  base::test::ScopedFeatureList features;
+  features.InitWithFeatures({features::kGlicAnchorEntryPointForOnboardedUsers,
+                             features::kGeicAnchorEntryPointForOnboardedUsers,
+                             features::kGlic, features::kGlicLocaleFiltering},
+                            {});
+  DisableLocale();
+
+  EXPECT_FALSE(GlicEnabling::IsProfileEligible(profile()));
+  GlicEnabling::ProfileEnablement enablement =
+      GlicEnabling::EnablementForProfile(profile());
+  EXPECT_FALSE(enablement.allowed_by_locale_filter);
+  EXPECT_FALSE(enablement.anchor_entrypoint_override_active);
+  EXPECT_FALSE(enablement.ShouldShowGlicButton());
+}
+
+TEST_F(GlicEnablingGeicAnchorEntryPointTest,
+       NotAnchoredForLocaleDisabledWithoutGeicAnchorFeature) {
+  CompleteOnboarding();
+  base::test::ScopedFeatureList features;
+  features.InitWithFeatures({features::kGlicAnchorEntryPointForOnboardedUsers,
+                             features::kGlic, features::kGlicLocaleFiltering},
+                            {features::kGeicAnchorEntryPointForOnboardedUsers});
+  DisableLocale();
+
+  EXPECT_FALSE(GlicEnabling::IsProfileEligible(profile()));
+  GlicEnabling::ProfileEnablement enablement =
+      GlicEnabling::EnablementForProfile(profile());
+  EXPECT_FALSE(enablement.allowed_by_locale_filter);
+  EXPECT_FALSE(enablement.anchor_entrypoint_override_active);
+  EXPECT_FALSE(enablement.ShouldShowGlicButton());
 }
 
 TEST_F(GlicEnablingAnchorEntryPointTestBase,
@@ -4948,6 +5122,51 @@ TEST(GlicAndroidFormFactorTest, UnsupportedFormFactorsNotAllowed) {
       ui::DEVICE_FORM_FACTOR_AUTOMOTIVE, /*is_foldable=*/false));
   EXPECT_FALSE(GlicGlobalEnabling::IsAndroidFormFactorAllowed(
       ui::DEVICE_FORM_FACTOR_XR, /*is_foldable=*/false));
+}
+
+TEST(GlicAndroidSidePanelFormFactorTest, DesktopUsesSidePanel) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(features::kGlicAndroidTablet);
+
+  EXPECT_TRUE(GlicGlobalEnabling::IsAndroidSidePanelFormFactor(
+      ui::DEVICE_FORM_FACTOR_DESKTOP, /*is_foldable=*/false));
+}
+
+TEST(GlicAndroidSidePanelFormFactorTest, TabletUsesSidePanelWithTabletFlag) {
+  {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitAndDisableFeature(features::kGlicAndroidTablet);
+    EXPECT_FALSE(GlicGlobalEnabling::IsAndroidSidePanelFormFactor(
+        ui::DEVICE_FORM_FACTOR_TABLET, /*is_foldable=*/false));
+  }
+  {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitAndEnableFeature(features::kGlicAndroidTablet);
+    EXPECT_TRUE(GlicGlobalEnabling::IsAndroidSidePanelFormFactor(
+        ui::DEVICE_FORM_FACTOR_TABLET, /*is_foldable=*/false));
+  }
+}
+
+TEST(GlicAndroidSidePanelFormFactorTest, PhoneUsesBottomSheet) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kGlicAndroidTablet);
+
+  EXPECT_FALSE(GlicGlobalEnabling::IsAndroidSidePanelFormFactor(
+      ui::DEVICE_FORM_FACTOR_PHONE, /*is_foldable=*/false));
+}
+
+// An unfolded foldable reports DEVICE_FORM_FACTOR_TABLET, but stays on the
+// bottom sheet in both postures.
+TEST(GlicAndroidSidePanelFormFactorTest, FoldableUsesBottomSheet) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kGlicAndroidTablet);
+
+  EXPECT_FALSE(GlicGlobalEnabling::IsAndroidSidePanelFormFactor(
+      ui::DEVICE_FORM_FACTOR_TABLET, /*is_foldable=*/true));
+  EXPECT_FALSE(GlicGlobalEnabling::IsAndroidSidePanelFormFactor(
+      ui::DEVICE_FORM_FACTOR_PHONE, /*is_foldable=*/true));
+  EXPECT_FALSE(GlicGlobalEnabling::IsAndroidSidePanelFormFactor(
+      ui::DEVICE_FORM_FACTOR_FOLDABLE, /*is_foldable=*/false));
 }
 #endif  // BUILDFLAG(IS_ANDROID)
 

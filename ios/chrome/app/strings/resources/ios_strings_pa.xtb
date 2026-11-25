@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">ਪਾਸਵਰਡ ਸਾਂਝੇ ਕਰੋ</translation>
 <translation id="1554043146674176775">AI ਮੋਡ ਨੂੰ ਬੰਦ ਕਰੋ</translation>
 <translation id="1554477036522844996">ਨਵੀਂ ਵਿੰਡੋ</translation>
+<translation id="1555014818414775661">ਚਿੱਤਰ ਸ਼ਾਮਲ ਕਰੋ</translation>
 <translation id="1557806604681757705">ਤੁਹਾਡਾ ਕੰਪਿਊਟਰ</translation>
 <translation id="1558391695376153246">ਇਨਕੋਗਨਿਟੋ ਟੈਬਾਂ ਨੂੰ ਬੰਦ ਕਰੋ</translation>
 <translation id="1560153516220021659">ਸੈਕੰਡਰੀ ਟੂਲਬਾਰ ਬਟਨ ਨੂੰ ਸਮੇਟਿਆ ਗਿਆ</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832"><ph name="BEGIN_BOLD" />Safari ਸੈਟਿੰਗਾਂ<ph name="END_BOLD" /> ਖੋਲ੍ਹੋ</translation>
 <translation id="3858860766373142691">ਨਾਮ</translation>
 <translation id="386224966259596343">ਅਗਲੀ ਵਾਰ ਜਦੋਂ ਤੁਸੀਂ ਕੋਈ ਢੁਕਵਾਂ ਫ਼ਾਰਮ ਭਰੋਗੇ, ਤਾਂ ਤੁਹਾਡੇ ਕੋਲ ਇਸ ਜਾਣਕਾਰੀ ਨੂੰ Wallet ਵਿੱਚ ਰੱਖਿਅਤ ਕਰਨ ਦਾ ਮੌਕਾ ਹੋਵੇਗਾ।</translation>
-<translation id="3868495844258915202">ਪੂਰਾ URL ਦਿਖਾਓ</translation>
 <translation id="3870931306085184145"><ph name="DOMAIN" /> ਲਈ ਕੋਈ ਰੱਖਿਅਤ ਕੀਤੇ ਪਾਸਵਰਡ ਨਹੀਂ</translation>
 <translation id="3875783148670536197">ਮੈਨੂੰ ਤਰੀਕਾ ਦਿਖਾਓ</translation>
 <translation id="3878657761594430423">ਸ਼ੀਟ ਗ੍ਰੈਬਰ</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">ਟਰੈਕਿੰਗ ਸੰਬੰਧੀ ਸੂਚਨਾਵਾਂ ਪ੍ਰਾਪਤ ਕਰਨ ਲਈ, ਆਪਣੀਆਂ iOS ਸੈਟਿੰਗਾਂ ਵਿੱਚ ਜਾ ਕੇ ਸੂਚਨਾਵਾਂ ਨੂੰ ਚਾਲੂ ਕਰੋ।</translation>
 <translation id="528857768909044842">ਟੈਬ ਗਰੁੱਪ ਇੱਥੇ ਰੱਖਿਅਤ ਕੀਤੇ ਗਏ ਹਨ</translation>
 <translation id="5294624619177114121">ਮੋਬਾਈਲ ਸੂਚਨਾਵਾਂ</translation>
-<translation id="5295239312320826323">ਕੀ ਖਾਤਾ <ph name="USER_EMAIL" /> ਨੂੰ ਹਟਾਉਣਾ ਹੈ?</translation>
 <translation id="5300589172476337783">ਦਿਖਾਓ</translation>
 <translation id="5311061401280561833">ਕੈਮਰੇ ਅਤੇ ਮਾਈਕ੍ਰੋਫ਼ੋਨ ਤੱਕ ਪਹੁੰਚ ਦੀ ਆਗਿਆ ਦਿੱਤੀ ਗਈ</translation>
 <translation id="5313967007315987356">ਸਾਈਟ ਜੋੜੋ</translation>
@@ -1788,6 +1787,7 @@ Handoff ਨੂੰ ਵੀ ਸੈਟਿੰਗਾਂ ਦੇ 'ਆਮ' ਸੈਕਸ਼�
 <translation id="6504541289630702018">ਆਪਣੇ ਡੈਸਕਟਾਪ ਟੈਬ ਗਰੁੱਪਾਂ ਤੱਕ ਆਸਾਨੀ ਨਾਲ ਪਹੁੰਚ ਕਰੋ</translation>
 <translation id="6505334220040167806">ਟੈਬ ਗਰੁੱਪ ਨੂੰ ਸਮੇਟੋ।</translation>
 <translation id="6506996418997555004">"<ph name="GROUP_NAME" />" ਟੈਬ ਗਰੁੱਪ ਸਾਂਝਾ ਕਰੋ</translation>
+<translation id="650770261448122895">ਤੁਹਾਨੂੰ ਜੋ ਕੁਝ ਦਿਖਾਈ ਦਿੰਦਾ ਹੈ, ਉਸਨੂੰ Lens ਨਾਲ ਖੋਜੋ</translation>
 <translation id="6507973708545996744">ਆਪਣੇ ਸਾਰੇ ਡੀਵਾਈਸਾਂ 'ਤੇ ਆਪਣੀ ਪੜ੍ਹਨ-ਸੂਚੀ ਪ੍ਰਾਪਤ ਕਰਨ ਲਈ ਸਾਈਨ-ਇਨ ਕਰੋ।</translation>
 <translation id="6518133107902771759">ਪ੍ਰਮਾਣਿਤ ਕਰੋ</translation>
 <translation id="6523575793810663688">ਮੈਨੂੰ ਤਰੀਕਾ ਦਿਖਾਓ</translation>
@@ -2147,7 +2147,6 @@ Handoff ਨੂੰ ਵੀ ਸੈਟਿੰਗਾਂ ਦੇ 'ਆਮ' ਸੈਕਸ਼�
 <translation id="7603852183842204213">ਪੌਪ-ਅਪਸ ਬਲੌਕ ਕੀਤੇ ਗਏ (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">ਸਿੰਕ ਕੰਮ ਨਹੀਂ ਕਰ ਰਿਹਾ ਹੈ</translation>
 <translation id="760667371114328991">ਸੁਰੱਖਿਆ ਜਾਂਚ ਲਈ ਸੂਚਨਾਵਾਂ ਨੂੰ ਬੰਦ ਕਰੋ</translation>
-<translation id="7612619742409846846">ਇਸ ਦੇ ਤੌਰ 'ਤੇ Google ਵਿੱਚ ਸਾਈਨ ਇਨ ਕੀਤਾ ਹੋਇਆ ਹੈ</translation>
 <translation id="7612849887607288481">AI ਪ੍ਰੋਟੋਟਾਈਪਿੰਗ ਮੀਨੂ ਖੋਲ੍ਹੋ</translation>
 <translation id="7618220760967055820">ਚੁਣੋ ਕਿ ਟੂਲਬਾਰ ਵਿੱਚ ਕਿਹੜਾ ਬਟਨ ਦਿਖਾਉਣਾ ਹੈ</translation>
 <translation id="7620522820075868385">ਰੱਦ ਕਰੋ</translation>
@@ -2430,6 +2429,7 @@ Handoff ਨੂੰ ਵੀ ਸੈਟਿੰਗਾਂ ਦੇ 'ਆਮ' ਸੈਕਸ਼�
 <translation id="8439758443371991593">'ਪੜ੍ਹਨ-ਸੂਚੀ ਵਿੱਚ ਸ਼ਾਮਲ ਕਰੋ' ਨੂੰ ਲੁਕਾਓ</translation>
 <translation id="8443986842926457191">URL 2048 ਅੱਖਰ-ਚਿੰਨ੍ਹਾਂ ਤੋਂ ਵੱਧ ਹੈ</translation>
 <translation id="8449869326050867919">ਪਾਸਵਰਡ ਸਾਂਝਾ ਕੀਤਾ ਗਿਆ</translation>
+<translation id="8473367210869452063">ਇਸ ਸਾਈਟ ਨਾਲ ਅੰਤਰਕਿਰਿਆ ਕਰਨ ਲਈ, ਮੌਜੂਦਾ ਕਾਰਜ ਨੂੰ ਰੋਕੋ ਜਾਂ Gemini ਦੇ ਕੰਮ ਪੂਰਾ ਕਰਨ ਦੀ ਉਡੀਕ ਕਰੋ</translation>
 <translation id="8473815223723723001">Gemini ਨਾਲ ਚਿੱਤਰ ਦਾ ਸੰਪਾਦਨ ਕਰੋ</translation>
 <translation id="8473863474539038330">ਪਤੇ ਅਤੇ ਹੋਰ</translation>
 <translation id="8474378002946546633">ਸੂਚਨਾਵਾਂ ਦੀ ਆਗਿਆ ਦਿਓ</translation>

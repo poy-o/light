@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "base/functional/callback.h"
+#include "base/i18n/language_tag.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
@@ -29,7 +30,7 @@ const char kGetUnmaskDetailsRequestPath[] =
 GetUnmaskDetailsRequest::GetUnmaskDetailsRequest(
     base::OnceCallback<void(PaymentsAutofillClient::PaymentsRpcResult,
                             UnmaskDetails&)> callback,
-    const std::string& app_locale,
+    const base::i18n::LanguageTag& app_locale,
     const bool full_sync_enabled)
     : callback_(std::move(callback)),
       app_locale_(app_locale),
@@ -48,7 +49,7 @@ std::string GetUnmaskDetailsRequest::GetRequestContentType() {
 std::string GetUnmaskDetailsRequest::GetRequestContent() {
   base::DictValue request_dict;
   base::DictValue context;
-  context.Set("language_code", app_locale_);
+  context.Set("language_code", app_locale_.tag_string());
   context.Set("billable_service", kUnmaskPaymentMethodBillableServiceNumber);
   request_dict.Set("context", std::move(context));
 
@@ -83,6 +84,11 @@ void GetUnmaskDetailsRequest::ParseResponse(const base::DictValue& response) {
   if (dictionary_value)
     unmask_details_.fido_request_options = dictionary_value->Clone();
 
+  if (const base::DictValue* creation_options =
+          response.FindDict("fido_creation_options")) {
+    unmask_details_.fido_creation_options = creation_options->Clone();
+  }
+
   const auto* fido_eligible_card_ids =
       response.FindList("fido_eligible_card_id");
   if (fido_eligible_card_ids) {
@@ -100,6 +106,22 @@ void GetUnmaskDetailsRequest::ParseResponse(const base::DictValue& response) {
           base::StringToInt64(result.GetString(), &instrument_id)) {
         unmask_details_.verified_instrument_ids.insert(instrument_id);
       }
+    }
+  }
+
+  // A status that is missing or not recognized leaves
+  // `mandatory_reauth_status` unset, so that the client keeps treating
+  // mandatory re-authentication as not controlled by the server.
+  if (const std::string* status =
+          response.FindString("mandatory_reauth_status")) {
+    using MandatoryReauthStatus = UnmaskDetails::MandatoryReauthStatus;
+    if (*status == "MANDATORY_REAUTH_STATUS_UNKNOWN") {
+      unmask_details_.mandatory_reauth_status = MandatoryReauthStatus::kUnknown;
+    } else if (*status == "MANDATORY_REAUTH_DISABLED") {
+      unmask_details_.mandatory_reauth_status =
+          MandatoryReauthStatus::kDisabled;
+    } else if (*status == "MANDATORY_REAUTH_ENABLED") {
+      unmask_details_.mandatory_reauth_status = MandatoryReauthStatus::kEnabled;
     }
   }
 }

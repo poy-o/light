@@ -14,6 +14,7 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/i18n/language_tag.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -81,7 +82,7 @@ void PaymentsNetworkInterface::Prepare() {
 
 void PaymentsNetworkInterface::GetUnmaskDetails(
     base::OnceCallback<void(PaymentsRpcResult, UnmaskDetails&)> callback,
-    const std::string& app_locale) {
+    const base::i18n::LanguageTag& app_locale) {
   IssueRequest(std::make_unique<GetUnmaskDetailsRequest>(
       std::move(callback), app_locale,
       account_info_getter_->IsSyncFeatureEnabledForPaymentsServerMetrics()));
@@ -120,7 +121,7 @@ void PaymentsNetworkInterface::GetCardUploadDetails(
     const std::vector<AutofillProfile>& addresses,
     const int detected_values,
     const std::vector<ClientBehaviorConstants>& client_behavior_signals,
-    const std::string& app_locale,
+    const base::i18n::LanguageTag& app_locale,
     GetCardUploadDetailsCallback callback,
     const int billable_service_number,
     const int64_t billing_customer_number,
@@ -158,7 +159,7 @@ void PaymentsNetworkInterface::UploadCard(
 }
 
 void PaymentsNetworkInterface::GetIbanUploadDetails(
-    const std::string& app_locale,
+    const base::i18n::LanguageTag& app_locale,
     const std::vector<ClientBehaviorConstants>& client_behavior_signals,
     int64_t billing_customer_number,
     const std::string& country_code,

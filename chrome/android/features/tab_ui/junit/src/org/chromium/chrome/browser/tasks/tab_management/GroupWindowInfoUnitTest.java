@@ -66,7 +66,7 @@ public class GroupWindowInfoUnitTest {
     public void testForSyncedGroup_explicitTitle() {
         Token token = new Token(1L, 2L);
         SavedTabGroup savedGroup = new SavedTabGroup();
-        savedGroup.localId = new LocalTabGroupId(token);
+        savedGroup.localId = new LocalTabGroupId(TabGroupId.fromRawToken(token));
         savedGroup.syncId = "sync-123";
         savedGroup.title = "My Group";
         savedGroup.color = TabGroupColorId.BLUE;
@@ -208,7 +208,9 @@ public class GroupWindowInfoUnitTest {
         assertEquals(groupId, info.localId);
         assertNull(info.syncId);
         assertEquals(
-                TabGroupTitleUtils.getDisplayableTitle(mContext, mTabModel, groupId), info.title);
+                TabGroupTitleUtils.getDisplayableTitle(
+                        mContext, mTabModel, TabGroupId.fromOptionalToken(groupId)),
+                info.title);
         assertEquals(TabGroupColorId.GREY, info.color);
         assertEquals(2, info.tabCount);
         assertEquals(GroupWindowState.IN_CURRENT_CLOSING, info.groupWindowState);
@@ -292,7 +294,7 @@ public class GroupWindowInfoUnitTest {
     public void testForSyncedGroup_prioritizesLocalDataWhenClosing() {
         Token token = new Token(11L, 12L);
         SavedTabGroup savedGroup = new SavedTabGroup();
-        savedGroup.localId = new LocalTabGroupId(token);
+        savedGroup.localId = new LocalTabGroupId(TabGroupId.fromRawToken(token));
         savedGroup.syncId = "sync-closing";
         savedGroup.title = "Stale Remote Title";
         savedGroup.color = TabGroupColorId.BLUE;
@@ -365,7 +367,7 @@ public class GroupWindowInfoUnitTest {
     public void testForSyncedGroup_flagDisabled_doesNotPrioritizeLocalDataWhenClosing() {
         Token token = new Token(11L, 12L);
         SavedTabGroup savedGroup = new SavedTabGroup();
-        savedGroup.localId = new LocalTabGroupId(token);
+        savedGroup.localId = new LocalTabGroupId(TabGroupId.fromRawToken(token));
         savedGroup.syncId = "sync-closing";
         savedGroup.title = "Remote Title";
         savedGroup.color = TabGroupColorId.BLUE;
@@ -427,7 +429,7 @@ public class GroupWindowInfoUnitTest {
     public void testForSyncedGroup_activeTabs_usesTabModelDirectlyWithoutComprehensiveModel() {
         Token token = new Token(21L, 22L);
         SavedTabGroup savedGroup = new SavedTabGroup();
-        savedGroup.localId = new LocalTabGroupId(token);
+        savedGroup.localId = new LocalTabGroupId(TabGroupId.fromRawToken(token));
         savedGroup.syncId = "sync-active";
 
         when(mTab1.getTabGroupId()).thenReturn(token);
@@ -458,7 +460,7 @@ public class GroupWindowInfoUnitTest {
     public void testForSyncedGroup_faviconsClampedToCornerCount() {
         Token token = new Token(31L, 32L);
         SavedTabGroup savedGroup = new SavedTabGroup();
-        savedGroup.localId = new LocalTabGroupId(token);
+        savedGroup.localId = new LocalTabGroupId(TabGroupId.fromRawToken(token));
         savedGroup.syncId = "sync-many-tabs";
 
         when(mTab1.getUrl()).thenReturn(JUnitTestGURLs.URL_1);
@@ -486,7 +488,7 @@ public class GroupWindowInfoUnitTest {
     public void testForSyncedGroup_collaborationAndArchived() {
         Token token = new Token(41L, 42L);
         SavedTabGroup savedGroup = new SavedTabGroup();
-        savedGroup.localId = new LocalTabGroupId(token);
+        savedGroup.localId = new LocalTabGroupId(TabGroupId.fromRawToken(token));
         savedGroup.syncId = "sync-collab";
         savedGroup.title = "Collab Group";
         savedGroup.color = TabGroupColorId.GREEN;
@@ -543,7 +545,7 @@ public class GroupWindowInfoUnitTest {
     public void testForSyncedGroup_withPreResolvedTabs() {
         Token token = new Token(1L, 2L);
         SavedTabGroup savedGroup = new SavedTabGroup();
-        savedGroup.localId = new LocalTabGroupId(token);
+        savedGroup.localId = new LocalTabGroupId(TabGroupId.fromRawToken(token));
         savedGroup.syncId = "sync-123";
         savedGroup.title = "My Group";
         savedGroup.color = TabGroupColorId.BLUE;

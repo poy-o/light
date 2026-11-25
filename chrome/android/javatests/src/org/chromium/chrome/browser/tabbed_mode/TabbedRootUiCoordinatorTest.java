@@ -25,6 +25,9 @@ import static org.chromium.base.test.transit.ViewFinder.waitForNoView;
 import static org.chromium.base.test.transit.ViewFinder.waitForView;
 
 import android.app.Activity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 import androidx.test.filters.LargeTest;
@@ -48,6 +51,7 @@ import org.chromium.base.FakeTimeTestRule;
 import org.chromium.base.ResettersForTesting;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Batch;
+import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
@@ -68,6 +72,7 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManagerSupplier;
 import org.chromium.chrome.browser.glic.GlicEnabling;
+import org.chromium.chrome.browser.glic.GlicUtils;
 import org.chromium.chrome.browser.glic.settings.GlicNavigationUtils;
 import org.chromium.chrome.browser.metrics.UmaSessionStats;
 import org.chromium.chrome.browser.metrics.UmaSessionStatsJni;
@@ -81,6 +86,10 @@ import org.chromium.chrome.browser.share.send_tab_to_self.SendTabToSelfAndroidBr
 import org.chromium.chrome.browser.share.send_tab_to_self.SendTabToSelfAndroidBridgeJni;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper;
+import org.chromium.chrome.browser.toolbar.top.TopToolbarCoordinator;
+import org.chromium.chrome.browser.toolbar.top.tab_strip.TabStripTransitionCoordinator;
+import org.chromium.chrome.browser.toolbar.top.tab_strip.TabStripTransitionCoordinator.TabStripTransitionObserver;
+import org.chromium.chrome.browser.ui.vertical_tabs.VerticalTabUtils;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.transit.ChromeTransitTestRules;
 import org.chromium.chrome.test.transit.FreshCtaTransitTestRule;
@@ -104,6 +113,10 @@ import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.base.DeviceFormFactor;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.TimeoutException;
 
 /** Tests for {@link TabbedRootUiCoordinator}. */
 @RunWith(ChromeJUnit4ClassRunner.class)
@@ -395,6 +408,53 @@ public class TabbedRootUiCoordinatorTest {
     @MediumTest
     @Restriction({DeviceFormFactor.ONLY_TABLET})
     @EnableFeatures(ChromeFeatureList.ANDROID_VERTICAL_TABS)
+    public void testGlicToolbarButtonWithVerticalTabs_SidePanelFormFactor() {
+        startWithVerticalTabsAndGlic(/* isSidePanelFormFactor= */ true);
+
+        // The pinned tab strip Glic button moves to the toolbar.
+        assertTrue(
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> getTopToolbarCoordinator().shouldShowGlicToolbarButton()));
+    }
+
+    @Test
+    @MediumTest
+    @Restriction({DeviceFormFactor.ONLY_TABLET})
+    @EnableFeatures(ChromeFeatureList.ANDROID_VERTICAL_TABS)
+    public void testGlicToolbarButtonWithVerticalTabs_NotSidePanelFormFactor() {
+        // Foldables use the Glic bottom sheet and have no tab strip Glic button, so Glic must not
+        // be pinned, which would hide the adaptive toolbar Glic button.
+        startWithVerticalTabsAndGlic(/* isSidePanelFormFactor= */ false);
+
+        assertFalse(
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> getTopToolbarCoordinator().shouldShowGlicToolbarButton()));
+    }
+
+    private void startWithVerticalTabsAndGlic(boolean isSidePanelFormFactor) {
+        GlicEnabling.setEnabledForTesting(true);
+        GlicUtils.setIsSidePanelFormFactorForTesting(isSidePanelFormFactor);
+        VerticalTabUtils.setVerticalTabsEnabled(true);
+        ResettersForTesting.register(VerticalTabUtils::resetSharedPrefsForTesting);
+
+        mPage = mActivityTestRule.startOnBlankPage();
+        // Vertical tabs are set up asynchronously, together with the pinned Glic state.
+        mPage.expectVerticalTabs();
+        mTabbedRootUiCoordinator =
+                (TabbedRootUiCoordinator) mPage.getActivity().getRootUiCoordinatorForTesting();
+    }
+
+    private TopToolbarCoordinator getTopToolbarCoordinator() {
+        return mTabbedRootUiCoordinator
+                .getToolbarManagerSupplier()
+                .get()
+                .getTopToolbarCoordinator();
+    }
+
+    @Test
+    @MediumTest
+    @Restriction({DeviceFormFactor.ONLY_TABLET})
+    @EnableFeatures(ChromeFeatureList.ANDROID_VERTICAL_TABS)
     public void testVerticalTabsSyntheticFieldTrial_StartupAndToggle() {
         UmaSessionStatsJni.setInstanceForTesting(mUmaSessionStatsJniMock);
 
@@ -522,6 +582,56 @@ public class TabbedRootUiCoordinatorTest {
                                 mPage.getActivity(), ActivityState.RESUMED);
                     });
         }
+    }
+
+    @Test
+    @MediumTest
+    @Restriction({DeviceFormFactor.ONLY_TABLET})
+    @EnableFeatures(ChromeFeatureList.ANDROID_VERTICAL_TABS)
+    public void testToggleVerticalTabs_ShowsTabList() throws TimeoutException {
+        registerVerticalTabsPrefsResetter();
+        ChromeSharedPreferences.getInstance()
+                .writeBoolean(ChromePreferenceKeys.VERTICAL_TABS_ENABLED, false);
+        mPage = mActivityTestRule.startOnBlankPage();
+        mTabbedRootUiCoordinator =
+                (TabbedRootUiCoordinator) mPage.getActivity().getRootUiCoordinatorForTesting();
+        ChromeTabbedActivity activity = mActivityTestRule.getActivity();
+        Tab tab =
+                mActivityTestRule.loadUrlInNewTab(
+                        mActivityTestRule.getTestServer().getURL(NavigatePageStations.PATH_ONE));
+        CriteriaHelper.pollUiThread(() -> tab.getTitle().equals("One"));
+
+        // Turn Vertical Tabs on.
+        ThreadUtils.runOnUiThreadBlocking(() -> mTabbedRootUiCoordinator.toggleTabStrip());
+        waitForVerticalTabList(activity, /* tabCount= */ 2, /* selectedTitle= */ "One");
+
+        // Turn Vertical Tabs off and wait for the horizontal tab strip to finish showing.
+        TabStripTransitionCoordinator transitionCoordinator =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> activity.getToolbarManager().getTabStripTransitionCoordinator());
+        assertNotNull(transitionCoordinator);
+        CallbackHelper tabStripShown = new CallbackHelper();
+        TabStripTransitionObserver observer =
+                success -> {
+                    if (success) tabStripShown.notifyCalled();
+                };
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    transitionCoordinator.addObserver(observer);
+                    mTabbedRootUiCoordinator.toggleTabStrip();
+                });
+        tabStripShown.waitForNext();
+        ThreadUtils.runOnUiThreadBlocking(() -> transitionCoordinator.removeObserver(observer));
+        CriteriaHelper.pollUiThread(
+                () ->
+                        activity.findViewById(R.id.vertical_tab_rail_container) == null
+                                && mTabbedRootUiCoordinator
+                                        .canActivateTabLayoutToggleMenu()
+                                        .getAsBoolean());
+
+        // Turn Vertical Tabs on again.
+        ThreadUtils.runOnUiThreadBlocking(() -> mTabbedRootUiCoordinator.toggleTabStrip());
+        waitForVerticalTabList(activity, /* tabCount= */ 2, /* selectedTitle= */ "One");
     }
 
     @Test
@@ -924,5 +1034,48 @@ public class TabbedRootUiCoordinatorTest {
         doReturn(EntryPointDisplayReason.OFFER_FEATURE)
                 .when(bridgeMock)
                 .getEntryPointDisplayReason(any(), eq(url));
+    }
+
+    private static void registerVerticalTabsPrefsResetter() {
+        ResettersForTesting.register(
+                () -> {
+                    ChromeSharedPreferences.getInstance()
+                            .removeKey(ChromePreferenceKeys.VERTICAL_TABS_ENABLED);
+                    ChromeSharedPreferences.getInstance()
+                            .removeKey(ChromePreferenceKeys.VERTICAL_TABS_ENABLED_TIMESTAMP);
+                });
+    }
+
+    /** Waits for the vertical tab rail to list {@code tabCount} tabs with one of them selected. */
+    private void waitForVerticalTabList(Activity activity, int tabCount, String selectedTitle) {
+        CriteriaHelper.pollUiThread(
+                () -> {
+                    if (!mTabbedRootUiCoordinator.canActivateTabLayoutToggleMenu().getAsBoolean()) {
+                        return false;
+                    }
+                    ViewGroup tabList = getVerticalTabList(activity);
+                    return tabList != null
+                            && tabList.isShown()
+                            && tabList.getChildCount() == tabCount;
+                });
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    ViewGroup tabList = getVerticalTabList(activity);
+                    assertNotNull(tabList);
+                    List<String> selectedTitles = new ArrayList<>();
+                    for (int i = 0; i < tabList.getChildCount(); i++) {
+                        View row = tabList.getChildAt(i);
+                        if (!row.isSelected()) continue;
+                        TextView title = row.findViewById(R.id.tab_title);
+                        selectedTitles.add(title.getText().toString());
+                    }
+                    assertEquals(List.of(selectedTitle), selectedTitles);
+                });
+    }
+
+    private static @Nullable ViewGroup getVerticalTabList(Activity activity) {
+        // The Hub uses the same list id, so look only inside the rail.
+        View rail = activity.findViewById(R.id.vertical_tab_rail_container);
+        return rail == null ? null : rail.findViewById(R.id.tab_list_recycler_view);
     }
 }

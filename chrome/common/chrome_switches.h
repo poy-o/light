@@ -990,6 +990,11 @@ inline constexpr char kNotificationLaunchId[] = "notification-launch-id";
 // update them to use the new method.
 inline constexpr char kPwaLauncherVersion[] = "pwa-launcher-version";
 
+#if BUILDFLAG(ENABLE_SEPARATE_RENDERER_BINARY)
+// Causes a renderer process to load chrome_renderer.dll rather than chrome.dll.
+inline constexpr char kSeparateRendererBinary[] = "separate-renderer-binary";
+#endif
+
 // See kHideIcons.
 inline constexpr char kShowIcons[] = "show-icons";
 
@@ -1030,6 +1035,11 @@ inline constexpr char kUninstallAppId[] = "uninstall-app-id";
 // Specifies that the browser is running isolated and should not attempt to
 // start a second isolated browser.
 inline constexpr char kIsolated[] = "isolated";
+
+// Passes the stub process's entry-point QPC timestamp (converted to
+// microseconds via `base::TimeDelta::FromQPCValue`) to the isolated browser
+// process so startup metrics reflect the initial stub launch time.
+inline constexpr char kIsolatedStubStartQpcUs[] = "isolated-stub-start-qpc-us";
 
 // Passes the Win32 HANDLE value (as an integer) of the parent process
 // to wait for during relaunch.

@@ -49,13 +49,6 @@ extern const char kForceFreFeatureShowcaseSteps[];
 // keep-sorted start allow_yaml_lists=yes case=no group_prefixes=["#if", "#else", "#endif", "extern const", "enum class", "};", "//", "bool", "base::", "BASE_DECLARE_FEATURE", "BASE_DECLARE_FEATURE_PARAM", "COMPONENT_EXPORT(SIGNIN_SWITCHES)"] by_regex=["BASE_DECLARE_FEATURE\\(.*\\);"] skip_lines=2
 // clang-format on
 
-#if BUILDFLAG(IS_IOS)
-// When enabled, the account retrieval waits for accounts to become available on
-// the first run after a restore operation.
-COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kAccountRetrievalWaitsForRestoration);
-#endif
-
 #if BUILDFLAG(IS_ANDROID)
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kAddSessionFallbackToPrimaryAccount);
@@ -262,6 +255,15 @@ COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kDiceLinkedAccounts);
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
+#if BUILDFLAG(IS_ANDROID)
+// When enabled, the "Add account to device" options are disabled if the device
+// doesn't allow adding accounts (the DISALLOW_MODIFY_ACCOUNTS user restriction
+// is set). If such a device also has no accounts, sign-in isn't supported, so
+// the sign-in promos are hidden.
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kDisableAddAccountWhenRestricted);
+#endif  // BUILDFLAG(IS_ANDROID)
+
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 // Controls whether the First Run animations are disabled or not. If the feature
 // is enabled, animations in the First Run are disabled, otherwise they're
@@ -273,6 +275,15 @@ BASE_DECLARE_FEATURE(kDiceLinkedAccounts);
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kDisableFirstRunAnimationsForTesting);
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+
+#if BUILDFLAG(IS_ANDROID)
+// Opens the desktop-like profile menu from the toolbar sign-in button on all
+// form factors, not only on Desktop Android. Requires
+// `kSigninButtonProfileMenu`. For testing purposes only (exposed as
+// chrome://flags/#enable-account-menu).
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kEnableAccountMenu);
+#endif  // BUILDFLAG(IS_ANDROID)
 
 // Enables fetching and storing preview data for signed-in accounts.
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
@@ -884,13 +895,6 @@ BASE_DECLARE_FEATURE(kSigninButtonProfileMenuRefinements);
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kSigninInterceptGraphicUpdate);
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
-
-#if BUILDFLAG(IS_ANDROID)
-// Experiment replacing signed out avatar with signin button on Android, see
-// crbug.com/475816843.
-COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kSigninLevelUpButton);
-#endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 // Uses the Material Next theme for the signin promo.

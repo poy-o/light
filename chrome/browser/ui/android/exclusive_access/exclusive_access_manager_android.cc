@@ -6,6 +6,7 @@
 
 #include <cstddef>
 
+#include "base/auto_reset.h"
 #include "chrome/android/chrome_jni_headers/ExclusiveAccessManager_jni.h"
 #include "chrome/browser/ui/android/exclusive_access/exclusive_access_context_android.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
@@ -32,6 +33,10 @@ ExclusiveAccessManagerAndroid::~ExclusiveAccessManagerAndroid() {
   if (eac_) {
     eac_->Destroy(jni_zero::AttachCurrentThread());
   }
+}
+
+void ExclusiveAccessManagerAndroid::HideExclusiveAccessBubble(JNIEnv* env) {
+  eac_->HideExclusiveAccessBubble();
 }
 
 bool ExclusiveAccessManagerAndroid::CanEnterFullscreenModeForTab(
@@ -63,7 +68,9 @@ void ExclusiveAccessManagerAndroid::ExitFullscreenModeForTab(
     const jni_zero::JavaRef<jobject>& jweb_contents) {
   content::WebContents* wc =
       content::WebContents::FromJavaWebContents(jweb_contents);
-  CHECK(wc != nullptr, base::NotFatalUntil::M162);
+  // TODO(crbug.com/589554572): CHECK-exclusion: Convert to a CHECK once we are
+  // confident it won't be triggered.
+  DCHECK(wc != nullptr);
   eam_.fullscreen_controller()->ExitFullscreenModeForTab(wc);
 }
 
@@ -144,6 +151,10 @@ void ExclusiveAccessManagerAndroid::ExitExclusiveAccess(JNIEnv* env) {
 }
 
 void ExclusiveAccessManagerAndroid::ExitAllExclusiveAccess(JNIEnv* env) {
+  // Suppress intermediate bubble updates (e.g. re-showing the browser
+  // fullscreen snackbar between popping nested tab fullscreen and popping
+  // browser immersive mode) while tearing down all exclusive access modes.
+  base::AutoReset<bool> suppress_bubble_updates = eac_->SuppressBubbleUpdates();
   eam_.ExitExclusiveAccess();
   // In nested fullscreen (tab fullscreen on top of browser immersive mode),
   // the first ExitExclusiveAccess() call only pops tab fullscreen. When tearing

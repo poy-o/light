@@ -32,6 +32,7 @@
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/autofill/core/common/autofill_switches.h"
+#include "components/bidi_mapper/buildflags.h"
 #include "components/history_clusters/core/file_clustering_backend.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/infobars/core/infobar_delegate.h"
@@ -50,6 +51,7 @@
 #include "net/base/switches.h"
 #include "sandbox/policy/switches.h"
 #include "services/network/public/cpp/network_switches.h"
+#include "services/webnn/public/cpp/webnn_features.h"
 #include "services/webnn/public/mojom/features.mojom.h"
 #include "third_party/abseil-cpp/absl/functional/overload.h"
 #include "third_party/blink/public/common/features_generated.h"
@@ -72,6 +74,10 @@
 #include "components/actor/core/actor_switches.h"
 #include "components/tabs/public/tab_interface.h"
 #include "services/device/public/cpp/hid/hid_switches.h"
+#endif
+
+#if BUILDFLAG(ENABLE_BIDI_MAPPER)
+#include "components/bidi_mapper/host/features.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -244,9 +250,6 @@ static const std::variant<const base::Feature*, const char*>
         // for testing purposes. Can only be enabled via the command line.
         &blink::features::kBypassPepcSecurityForTesting,
 
-        // This feature is under development and has known security risks.
-        &webnn::mojom::features::kWebMachineLearningNeuralNetwork,
-
         // This feature enables the test root store, which can contain roots
         // that are not actually trusted.
         &net::features::kTestRootStore,
@@ -262,6 +265,12 @@ static const std::variant<const base::Feature*, const char*>
         // This feature is under development and currently has security
         // concerns.
         &blink::features::kPersistentWidgetAPI,
+
+#if BUILDFLAG(ENABLE_BIDI_MAPPER)
+        // This feature lets extensions automate the whole browser with the
+        // chrome.driver API.
+        &bidi_mapper::features::kChromeDriverExtensionApi,
+#endif
 };
 
 void ShowBadFlagsInfoBarHelper(
@@ -328,8 +337,9 @@ void ShowBadFlagsPrompt(content::WebContents* web_contents) {
   }
 #endif
 
+  std::string_view bad_flag_name;
   for (const auto& flag_or_feature : kBadFeatureFlagsInAboutFlags) {
-    std::string_view bad_flag_name = std::visit(
+    bad_flag_name = std::visit(
         absl::Overload{[](const base::Feature* feature) -> std::string_view {
                          if (feature &&
                              base::FeatureList::IsEnabled(*feature)) {
@@ -348,17 +358,31 @@ void ShowBadFlagsPrompt(content::WebContents* web_contents) {
         flag_or_feature);
 
     if (!bad_flag_name.empty()) {
-#if BUILDFLAG(IS_ANDROID)
-      ShowBadFlagsSnackbar(web_contents, l10n_util::GetStringFUTF16(
-                                             IDS_BAD_FEATURES_WARNING_MESSAGE,
-                                             base::UTF8ToUTF16(bad_flag_name)));
-#else
-      ShowBadFlagsInfoBarHelper(
-          ConfirmInfoBarCreationAllowlist::GetPassKeyForMigration(),
-          web_contents, IDS_BAD_FEATURES_WARNING_MESSAGE, bad_flag_name);
-#endif
-      return;
+      break;
     }
+  }
+
+  // WebNN is under development and has known security risks unless security
+  // hardening flags are enabled.
+  if (bad_flag_name.empty() &&
+      base::FeatureList::IsEnabled(
+          webnn::mojom::features::kWebMachineLearningNeuralNetwork) &&
+      webnn::IsWebNNUnsafe()) {
+    bad_flag_name =
+        webnn::mojom::features::kWebMachineLearningNeuralNetwork.name;
+  }
+
+  if (!bad_flag_name.empty()) {
+#if BUILDFLAG(IS_ANDROID)
+    ShowBadFlagsSnackbar(web_contents, l10n_util::GetStringFUTF16(
+                                           IDS_BAD_FEATURES_WARNING_MESSAGE,
+                                           base::UTF8ToUTF16(bad_flag_name)));
+#else
+    ShowBadFlagsInfoBarHelper(
+        ConfirmInfoBarCreationAllowlist::GetPassKeyForMigration(), web_contents,
+        IDS_BAD_FEATURES_WARNING_MESSAGE, bad_flag_name);
+#endif
+    return;
   }
 }
 

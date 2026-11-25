@@ -20,6 +20,7 @@ import org.chromium.base.supplier.NonNullObservableSupplier;
 import org.chromium.base.supplier.ObservableSuppliers;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
+import org.chromium.components.browser_ui.adaptive_ui.AdaptiveUiProperties.Delegate;
 import org.chromium.components.browser_ui.adaptive_ui.AdaptiveUiProperties.SecondaryButtonBehavior;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
@@ -171,6 +172,15 @@ final class AdaptiveUiSheetCoordinator
                         : R.layout.adaptive_ui_sheet_body);
         bodyStub.inflate();
         mBodyScrollView = mContentView.findViewById(R.id.adaptive_ui_sheet_scroll_view);
+        if (mBodyScrollView != null) {
+            // A Tab stop only when it can scroll, like ModalDialogView's title scroll view.
+            mBodyScrollView.addOnLayoutChangeListener(
+                    (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+                        boolean isScrollable =
+                                v.canScrollVertically(-1) || v.canScrollVertically(1);
+                        v.setFocusable(isScrollable);
+                    });
+        }
         mCustomViewContainer =
                 mContentView.findViewById(R.id.adaptive_ui_sheet_custom_view_container);
 
@@ -396,8 +406,8 @@ final class AdaptiveUiSheetCoordinator
 
     private void onPrimaryButtonClicked() {
         if (isDismissing() || isWithinButtonTapProtectionPeriod()) return;
-        Runnable callback = mModel.get(AdaptiveUiProperties.ON_PRIMARY_BUTTON_CLICKED);
-        if (callback != null) callback.run();
+        Delegate delegate = mModel.get(AdaptiveUiProperties.DELEGATE);
+        if (delegate != null) delegate.onPrimaryButtonClicked();
         if (mModel.get(AdaptiveUiProperties.PRIMARY_BUTTON_KEEPS_OPEN)) return;
         requestDismiss(DismissReason.PRIMARY_ACTION);
     }
@@ -420,8 +430,8 @@ final class AdaptiveUiSheetCoordinator
     }
 
     private void runSecondaryButtonCallback() {
-        Runnable callback = mModel.get(AdaptiveUiProperties.ON_SECONDARY_BUTTON_CLICKED);
-        if (callback != null) callback.run();
+        Delegate delegate = mModel.get(AdaptiveUiProperties.DELEGATE);
+        if (delegate != null) delegate.onSecondaryButtonClicked();
     }
 
     private boolean isWithinButtonTapProtectionPeriod() {

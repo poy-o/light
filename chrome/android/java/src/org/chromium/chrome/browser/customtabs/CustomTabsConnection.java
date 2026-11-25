@@ -1470,27 +1470,44 @@ public class CustomTabsConnection {
     }
 
     /**
+     * Extracts internal-only extras from the launch intent to be persisted in {@link
+     * org.chromium.chrome.browser.browserservices.intents.CustomTabIntentDataHolder} across
+     * Activity recreation. Only allowlisted keys needed after recreation should be copied.
+     *
+     * <p>Called during pre-inflation startup before native library initialization; implementations
+     * must not query post-native feature flags or native state.
+     *
+     * @param intent The launch intent.
+     * @return A {@link Bundle} containing internal extras to persist, or null if none.
+     */
+    public @Nullable Bundle extractInternalExtras(Intent intent) {
+        return null;
+    }
+
+    /**
      * Shows a toast about any possible sign in issues encountered during custom tab startup.
      *
-     * @param intent The intent that launched the custom tab.
+     * @param intentDataProvider The {@link BrowserServicesIntentDataProvider} for the custom tab.
      * @param profileProviderSupplier The supplier of the current profile.
      */
     void showSignInToastIfNecessary(
-            Intent intent, Supplier<ProfileProvider> profileProviderSupplier) {}
+            BrowserServicesIntentDataProvider intentDataProvider,
+            Supplier<ProfileProvider> profileProviderSupplier) {}
 
     /**
      * Returns whether the app launching the CCT may display account mismatch notification UI.
      *
-     * @param intent The intent that launched the custom tab.
+     * @param intentDataProvider The {@link BrowserServicesIntentDataProvider} for the custom tab.
      */
-    boolean isAppForAccountMismatchNotification(@Nullable Intent intent) {
+    boolean isAppForAccountMismatchNotification(
+            BrowserServicesIntentDataProvider intentDataProvider) {
         return false;
     }
 
     /**
      * Whether the account mismatch notification UI should be shown.
      *
-     * @param intent The intent that launched the custom tab.
+     * @param intentDataProvider The {@link BrowserServicesIntentDataProvider} for the custom tab.
      * @param profile The current profile object.
      * @param accountId Account ID to be used to access notification data.
      * @param lastShownTime The last time the notification was shown to user.
@@ -1498,20 +1515,20 @@ public class CustomTabsConnection {
      * @return Whether the notification was shown or not.
      */
     boolean shouldShowAccountMismatchNotification(
-            @Nullable Intent intent,
+            BrowserServicesIntentDataProvider intentDataProvider,
             Profile profile,
             String accountId,
             long lastShownTime,
-            MismatchNotificationData mimData) {
+            @Nullable MismatchNotificationData mimData) {
         return false;
     }
 
     /**
-     * Show the name of the account in which the app launching the custom tab is signed.
+     * Returns the name of the account in which the app launching the custom tab is signed.
      *
-     * @param intent The intent that launched the custom tab.
+     * @param intentDataProvider The {@link BrowserServicesIntentDataProvider} for the custom tab.
      */
-    @Nullable String getAppAccountName(Intent intent) {
+    @Nullable String getAppAccountName(BrowserServicesIntentDataProvider intentDataProvider) {
         return null;
     }
 
@@ -1519,11 +1536,10 @@ public class CustomTabsConnection {
      * Updates the account currently used by the external app for account preview.
      *
      * @param profile The current profile.
-     * @param intent The intent that launched the custom tab.
-     * @param clientPackageName The package name of the client app.
+     * @param intentDataProvider The {@link BrowserServicesIntentDataProvider} for the custom tab.
      */
     public void updateAppAccountForAccountPreview(
-            Profile profile, Intent intent, @Nullable String clientPackageName) {}
+            Profile profile, BrowserServicesIntentDataProvider intentDataProvider) {}
 
     /**
      * Sends a callback using {@link CustomTabsCallback} with the first run result if necessary.

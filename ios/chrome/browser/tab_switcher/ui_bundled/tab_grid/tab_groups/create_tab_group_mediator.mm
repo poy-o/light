@@ -8,6 +8,7 @@
 
 #import "base/check.h"
 #import "base/memory/raw_ptr.h"
+#import "base/memory/weak_ptr.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
 #import "base/scoped_multi_source_observation.h"
@@ -52,7 +53,7 @@
   // Web state list where the tab group belong.
   raw_ptr<WebStateList> _webStateList;
   // Tab group to edit.
-  raw_ptr<const TabGroup, DanglingUntriaged> _tabGroup;
+  base::WeakPtr<const TabGroup> _tabGroup;
   // Item to fetch pictures.
   TabGroupItem* _groupItem;
   // Helper class to configure tab item images.
@@ -68,6 +69,9 @@
       _scopedWebStateListObservation;
   // Whether a new tab should be inserted into the new group.
   BOOL _createNewTabForGroup;
+  // Whether the mediator is editing an existing group rather than creating a
+  // new one.
+  BOOL _editMode;
 }
 
 - (instancetype)
@@ -147,17 +151,18 @@
                                   faviconLoader:faviconLoader];
 }
 
-- (instancetype)initTabGroupEditionWithConsumer:
-                    (id<TabGroupCreationConsumer>)consumer
-                                       tabGroup:(const TabGroup*)tabGroup
-                                        browser:(Browser*)browser
-                                  faviconLoader:(FaviconLoader*)faviconLoader {
+- (instancetype)
+    initTabGroupEditionWithConsumer:(id<TabGroupCreationConsumer>)consumer
+                           tabGroup:(base::WeakPtr<const TabGroup>)tabGroup
+                            browser:(Browser*)browser
+                      faviconLoader:(FaviconLoader*)faviconLoader {
   self = [super init];
   if (self) {
     CHECK(consumer);
     CHECK(tabGroup);
     CHECK(browser);
     _consumer = consumer;
+    _editMode = YES;
     _tabGroup = tabGroup;
     _webStateList = browser->GetWebStateList();
     // Observe the WebStateList in the case the group disappears.
@@ -167,7 +172,7 @@
         base::ScopedMultiSourceObservation<WebStateList, WebStateListObserver>>(
         _webStateListObserverBridge.get());
     _scopedWebStateListObservation->AddObservation(_webStateList);
-    _groupItem = [[TabGroupItem alloc] initWithTabGroup:_tabGroup];
+    _groupItem = [[TabGroupItem alloc] initWithTabGroup:_tabGroup.get()];
     _tabImagesConfigurator =
         std::make_unique<TabSnapshotAndFaviconConfigurator>(
             faviconLoader, SnapshotBrowserAgent::FromBrowser(browser));
@@ -194,12 +199,16 @@
 }
 
 - (void)disconnect {
-  if (_tabGroup) {
+  if (_scopedWebStateListObservation) {
     _scopedWebStateListObservation->RemoveAllObservations();
     _scopedWebStateListObservation.reset();
     _webStateListObserverBridge.reset();
-    _webStateList = nullptr;
   }
+  _tabImagesConfigurator.reset();
+  _webStateList = nullptr;
+  _groupItem = nil;
+  _tabGroup = nullptr;
+  _browser = nullptr;
 }
 
 #pragma mark - TabGroupCreationMutator
@@ -210,7 +219,8 @@
                      completion:(void (^)())completion {
   tab_groups::TabGroupVisualData visualData =
       tab_groups::TabGroupVisualData(base::SysNSStringToUTF16(title), colorID);
-  if (_tabGroup) {
+  if (_editMode) {
+    CHECK(_tabGroup);
     base::RecordAction(
         base::UserMetricsAction("MobileTabGroupUserUpdatedGroup"));
     if (![_tabGroup->GetRawTitle() isEqualToString:title]) {
@@ -221,7 +231,7 @@
       base::RecordAction(
           base::UserMetricsAction("MobileTabGroupUserUpdatedGroupColor"));
     }
-    _webStateList->UpdateGroupVisualData(_tabGroup, visualData);
+    _webStateList->UpdateGroupVisualData(_tabGroup.get(), visualData);
   } else {
     base::RecordAction(
         base::UserMetricsAction("MobileTabGroupUserCreatedNewGroup"));
@@ -276,7 +286,7 @@
     case WebStateListChange::Type::kGroupVisualDataUpdate: {
       const WebStateListChangeGroupVisualDataUpdate& visualDataUpdate =
           change.As<WebStateListChangeGroupVisualDataUpdate>();
-      if (_tabGroup == visualDataUpdate.updated_group()) {
+      if (_tabGroup.get() == visualDataUpdate.updated_group()) {
         // Dismiss the editor.
         [self.delegate
             createTabGroupMediatorEditedGroupWasExternallyMutated:self];
@@ -286,7 +296,9 @@
     case WebStateListChange::Type::kGroupDelete: {
       const WebStateListChangeGroupDelete& deletion =
           change.As<WebStateListChangeGroupDelete>();
-      if (_tabGroup == deletion.deleted_group()) {
+      if (_tabGroup.get() == deletion.deleted_group()) {
+        _groupItem = nil;
+        _tabGroup = nullptr;
         // Dismiss the editor.
         [self.delegate
             createTabGroupMediatorEditedGroupWasExternallyMutated:self];

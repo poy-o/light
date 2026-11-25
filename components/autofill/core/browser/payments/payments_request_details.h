@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/containers/flat_set.h"
+#include "base/i18n/language_tag.h"
 #include "base/values.h"
 #include "components/autofill/core/browser/data_model/addresses/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/payments/credit_card.h"
@@ -31,6 +32,17 @@ namespace autofill::payments {
 // Details for card unmasking, such as the suggested method of authentication,
 // along with any information required to facilitate the authentication.
 struct UnmaskDetails {
+  // The state of the mandatory re-authentication setting that the Payments
+  // server stores for a device.
+  enum class MandatoryReauthStatus {
+    // The setting has not been chosen for the device.
+    kUnknown,
+    // The user turned the setting off.
+    kDisabled,
+    // The setting is on: FIDO authentication is required to unmask a card.
+    kEnabled,
+  };
+
   UnmaskDetails();
   UnmaskDetails(const UnmaskDetails&);
   UnmaskDetails(UnmaskDetails&&);
@@ -47,11 +59,20 @@ struct UnmaskDetails {
   // Public Key Credential Request Options required for authentication.
   // https://www.w3.org/TR/webauthn/#dictdef-publickeycredentialrequestoptions
   base::DictValue fido_request_options;
+  // Public Key Credential Creation Options required for enrolling this device
+  // into FIDO authentication while unmasking a card. Empty unless the server
+  // expects a new credential to be created.
+  // https://www.w3.org/TR/webauthn/#dictdef-publickeycredentialcreationoptions
+  base::DictValue fido_creation_options;
   // Set of credit cards ids that are eligible for FIDO Authentication.
   std::set<std::string> fido_eligible_card_ids;
   // Set of card instrument IDs that have already been CVC-verified on this
   // device.
   base::flat_set<int64_t> verified_instrument_ids;
+  // The mandatory re-authentication status of this device. Not set if the
+  // server did not report one, which means that the server does not control
+  // mandatory re-authentication.
+  std::optional<MandatoryReauthStatus> mandatory_reauth_status;
 };
 
 // A collection of the information required to make a credit card unmask
@@ -69,6 +90,11 @@ struct UnmaskRequestDetails {
   std::string risk_data;
   CardUnmaskDelegate::UserProvidedUnmaskDetails user_response;
   std::optional<base::DictValue> fido_assertion_info;
+  // The WebAuthn response that enrolls this device into FIDO authentication
+  // with the same request that unmasks the card: either the attestation of a
+  // newly created credential or an assertion signed with an existing one.
+  // Mutually exclusive with `fido_assertion_info`, which only authenticates.
+  std::optional<base::DictValue> fido_authenticator_response;
   std::u16string otp;
   // An opaque token used to chain consecutive payments requests together.
   std::string context_token;
@@ -158,7 +184,7 @@ struct OptChangeRequestDetails {
   OptChangeRequestDetails(const OptChangeRequestDetails& other);
   ~OptChangeRequestDetails();
 
-  std::string app_locale;
+  base::i18n::LanguageTag app_locale = base::i18n::GetKnownLanguageTag("und");
 
   // The reason for making the request.
   enum class Reason {
@@ -211,7 +237,7 @@ struct MigrationRequestDetails {
   int64_t billing_customer_number = 0;
   std::u16string context_token;
   std::string risk_data;
-  std::string app_locale;
+  base::i18n::LanguageTag app_locale = base::i18n::GetKnownLanguageTag("und");
 };
 
 // A collection of the information required to make select challenge option
@@ -285,7 +311,7 @@ struct GetDetailsForEnrollmentRequestDetails {
   std::string risk_data;
 
   // |app_locale| is the Chrome locale.
-  std::string app_locale;
+  base::i18n::LanguageTag app_locale = base::i18n::GetKnownLanguageTag("und");
 };
 
 // A collection of information received in the response for a
@@ -341,7 +367,7 @@ struct UploadCardRequestDetails {
   std::vector<AutofillProfile> profiles;
   std::u16string context_token;
   std::string risk_data;
-  std::string app_locale;
+  base::i18n::LanguageTag app_locale = base::i18n::GetKnownLanguageTag("und");
   std::vector<ClientBehaviorConstants> client_behavior_signals;
   UploadCardSource upload_card_source = UploadCardSource::kUnknown;
 };
@@ -352,7 +378,7 @@ struct UploadIbanRequestDetails {
   UploadIbanRequestDetails(const UploadIbanRequestDetails& other);
   ~UploadIbanRequestDetails();
 
-  std::string app_locale;
+  base::i18n::LanguageTag app_locale = base::i18n::GetKnownLanguageTag("und");
   int64_t billing_customer_number = 0;
   std::u16string context_token;
   std::u16string value;
@@ -416,7 +442,7 @@ struct GetDetailsForCreateBnplPaymentInstrumentRequestDetails {
   ~GetDetailsForCreateBnplPaymentInstrumentRequestDetails();
 
   // `app_locale` is the Chrome locale.
-  std::string app_locale;
+  base::i18n::LanguageTag app_locale = base::i18n::GetKnownLanguageTag("und");
   // The billing customer number for the account this request is sent to.
   int64_t billing_customer_number = 0;
   // A vector of signals used to share client behavior with the Payments
@@ -441,7 +467,7 @@ struct CreateBnplPaymentInstrumentRequestDetails {
   ~CreateBnplPaymentInstrumentRequestDetails();
 
   // `app_locale` is the Chrome locale.
-  std::string app_locale;
+  base::i18n::LanguageTag app_locale = base::i18n::GetKnownLanguageTag("und");
   // The billing customer number for the account this request is sent to.
   int64_t billing_customer_number = 0;
   // The ID of the BNPL partner to be linked. i.e. Affirm
@@ -575,7 +601,7 @@ struct GetDetailsForUpdateBnplPaymentInstrumentRequestDetails {
   };
 
   // `app_locale` is the Chrome locale.
-  std::string app_locale;
+  base::i18n::LanguageTag app_locale = base::i18n::GetKnownLanguageTag("und");
   // The billing customer number for the account this request is sent to.
   int64_t billing_customer_number = 0;
   // A vector of signals used to share client behavior with the Payments
@@ -604,7 +630,7 @@ struct GetDetailsForUpdateCardRequestDetails {
   ~GetDetailsForUpdateCardRequestDetails();
 
   // The Chrome locale.
-  std::string app_locale;
+  base::i18n::LanguageTag app_locale = base::i18n::GetKnownLanguageTag("und");
   // The billing customer number for the account this request is sent to.
   int64_t billing_customer_number = 0;
   // The platform identifier for the instrument being updated.
@@ -636,7 +662,7 @@ struct UpdateBnplPaymentInstrumentRequestDetails {
   };
 
   // `app_locale` is the Chrome locale.
-  std::string app_locale;
+  base::i18n::LanguageTag app_locale = base::i18n::GetKnownLanguageTag("und");
   // The billing customer number for the account this request is sent to.
   int64_t billing_customer_number = 0;
   // The ID of the BNPL partner to be linked. i.e. Affirm
@@ -662,7 +688,7 @@ struct UpdateCardRequestDetails {
   ~UpdateCardRequestDetails();
 
   // The Chrome locale.
-  std::string app_locale;
+  base::i18n::LanguageTag app_locale = base::i18n::GetKnownLanguageTag("und");
   // The billing customer number for the account this request is sent to.
   int64_t billing_customer_number = 0;
   // The platform identifier for the instrument being updated.
@@ -691,7 +717,7 @@ struct GetWalletReminderNoticeRequestDetails {
   ~GetWalletReminderNoticeRequestDetails();
 
   // `app_locale` is the Chrome locale.
-  std::string app_locale;
+  base::i18n::LanguageTag app_locale = base::i18n::GetKnownLanguageTag("und");
   // The billing customer number for the account this request is sent to.
   int64_t billing_customer_number = 0;
   // The billable service number defined to distinguish this request.
@@ -746,7 +772,7 @@ struct RecordLegalReminderAcknowledgmentRequestDetails {
   };
 
   // `app_locale` is the Chrome locale.
-  std::string app_locale;
+  base::i18n::LanguageTag app_locale = base::i18n::GetKnownLanguageTag("und");
   // The billing customer number for the account this request is sent to.
   int64_t billing_customer_number = 0;
   // The billable service number defined to distinguish this request.
@@ -773,7 +799,7 @@ struct GetDataForAgentRequestDetails {
   // interpret or modify it.
   std::string opaque_token;
   // The Chrome locale.
-  std::string app_locale;
+  base::i18n::LanguageTag app_locale = base::i18n::GetKnownLanguageTag("und");
 };
 
 // The card credentials returned by a GetDataForAgent request.

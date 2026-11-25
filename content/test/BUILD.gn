@@ -1712,6 +1712,7 @@ test("content_browsertests") {
     "../browser/resource_loading_browsertest.cc",
     "../browser/screen_details/screen_details_browsertest.cc",
     "../browser/screen_orientation/screen_orientation_browsertest.cc",
+    "../browser/security/coep/cross_origin_embedder_policy_reporting_browsertest.cc",
     "../browser/security/coop/cross_origin_opener_policy_browsertest.cc",
     "../browser/security/cpsp/child_process_security_policy_browsertest.cc",
     "../browser/security/dip/document_isolation_policy_browsertest.cc",
@@ -2308,6 +2309,13 @@ test("content_browsertests") {
       proguard_enabled = true
     }
 
+    # Meet effects assets are only used by the GPU integration tests in
+    # //content/test/gpu, so do not push them to the device.
+    device_data_filters = [
+      "-//content/test/data/gpu/meet_effects/*",
+      "-//content/test/data/gpu/meet_effects_videos/*",
+    ]
+
     if (enable_chrome_android_internal) {
       data_deps += [ "//clank/build/bot/filters:content_browsertests_filters" ]
     }
@@ -2840,6 +2848,7 @@ test("content_unittests") {
     "../browser/renderer_host/clipboard_host_impl_unittest.cc",
     "../browser/renderer_host/code_cache_host_impl_unittest.cc",
     "../browser/renderer_host/commit_deferring_condition_runner_unittest.cc",
+    "../browser/renderer_host/crash_report_utils_unittest.cc",
     "../browser/renderer_host/cursor_manager_unittest.cc",
     "../browser/renderer_host/debug_urls_unittest.cc",
     "../browser/renderer_host/display_feature_unittest.cc",
@@ -3693,6 +3702,7 @@ test("content_unittests") {
     sources += [
       "../browser/android/android_overlay_provider_impl_unittest.cc",
       "../browser/android/battery_metrics_unittest.cc",
+      "../browser/android/java/gin_java_bridge_dispatcher_host_unittest.cc",
       "../browser/android/java/gin_java_method_invocation_helper_unittest.cc",
       "../browser/android/java/java_type_unittest.cc",
       "../browser/android/message_payload_unittest.cc",
@@ -3715,6 +3725,7 @@ test("content_unittests") {
       "//cc/slim",
       "//components/crash/android:anr_collector_java",
       "//components/download/internal/common:internal_java",
+      "//components/origin_matcher",
       "//content/browser:fontations_name_table_ffi",
       "//content/public/android:content_java",
       "//content/public/android:content_jni_headers",

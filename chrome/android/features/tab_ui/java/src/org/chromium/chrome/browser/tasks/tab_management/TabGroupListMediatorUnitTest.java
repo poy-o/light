@@ -237,8 +237,10 @@ public class TabGroupListMediatorUnitTest {
         TabWindowManager tabWindowManager = mock(TabWindowManager.class);
         TabWindowManagerSingleton.setTabWindowManagerForTesting(tabWindowManager);
         Token token = new Token(2, 3);
-        when(tabWindowManager.findWindowIdForTabGroup(eq(token), eq(true))).thenReturn(1);
-        SavedTabGroup group = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID1, token);
+        when(tabWindowManager.findWindowIdForTabGroup(eq(TabGroupId.fromRawToken(token)), eq(true)))
+                .thenReturn(1);
+        SavedTabGroup group =
+                mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID1, TabGroupId.fromRawToken(token));
         group.title = "Another Window Group";
         group.savedTabs = SyncedGroupTestHelper.tabsFromCount(1);
 
@@ -254,8 +256,10 @@ public class TabGroupListMediatorUnitTest {
         TabWindowManager tabWindowManager = mock(TabWindowManager.class);
         TabWindowManagerSingleton.setTabWindowManagerForTesting(tabWindowManager);
         Token token = new Token(2, 3);
-        when(tabWindowManager.findWindowIdForTabGroup(eq(token), eq(true))).thenReturn(1);
-        SavedTabGroup group = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID1, token);
+        when(tabWindowManager.findWindowIdForTabGroup(eq(TabGroupId.fromRawToken(token)), eq(true)))
+                .thenReturn(1);
+        SavedTabGroup group =
+                mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID1, TabGroupId.fromRawToken(token));
         group.title = "Another Window Group";
         group.savedTabs = SyncedGroupTestHelper.tabsFromCount(1);
 
@@ -272,8 +276,10 @@ public class TabGroupListMediatorUnitTest {
         TabWindowManager tabWindowManager = mock(TabWindowManager.class);
         TabWindowManagerSingleton.setTabWindowManagerForTesting(tabWindowManager);
         Token token = new Token(2, 3);
-        when(tabWindowManager.findWindowIdForTabGroup(eq(token), eq(true))).thenReturn(1);
-        SavedTabGroup group = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID1, token);
+        when(tabWindowManager.findWindowIdForTabGroup(eq(TabGroupId.fromRawToken(token)), eq(true)))
+                .thenReturn(1);
+        SavedTabGroup group =
+                mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID1, TabGroupId.fromRawToken(token));
         group.title = "Another Window Group";
         group.savedTabs = SyncedGroupTestHelper.tabsFromCount(1);
 
@@ -379,12 +385,12 @@ public class TabGroupListMediatorUnitTest {
         SavedTabGroup group1 = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID1);
         group1.title = "in current";
         group1.savedTabs = SyncedGroupTestHelper.tabsFromCount(1);
-        group1.localId = new LocalTabGroupId(LOCAL_GROUP_ID1);
+        group1.localId = new LocalTabGroupId(TabGroupId.fromRawToken(LOCAL_GROUP_ID1));
 
         SavedTabGroup group2 = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID2);
         group2.title = "in another";
         group2.savedTabs = SyncedGroupTestHelper.tabsFromCount(1);
-        group2.localId = new LocalTabGroupId(LOCAL_GROUP_ID2);
+        group2.localId = new LocalTabGroupId(TabGroupId.fromRawToken(LOCAL_GROUP_ID2));
 
         SavedTabGroup group3 = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID3);
         group3.title = "hidden";
@@ -421,7 +427,7 @@ public class TabGroupListMediatorUnitTest {
     public void testOpenRunnable() {
         SavedTabGroup group1 = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID1);
         group1.savedTabs = SyncedGroupTestHelper.tabsFromCount(1);
-        group1.localId = new LocalTabGroupId(LOCAL_GROUP_ID1);
+        group1.localId = new LocalTabGroupId(TabGroupId.fromRawToken(LOCAL_GROUP_ID1));
 
         SavedTabGroup group2 = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID2);
         group2.syncId = SYNC_GROUP_ID2;
@@ -454,7 +460,8 @@ public class TabGroupListMediatorUnitTest {
                                     mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID2);
                             updatedGroup2.syncId = SYNC_GROUP_ID2;
                             updatedGroup2.savedTabs = SyncedGroupTestHelper.tabsFromCount(1);
-                            updatedGroup2.localId = new LocalTabGroupId(LOCAL_GROUP_ID2);
+                            updatedGroup2.localId =
+                                    new LocalTabGroupId(TabGroupId.fromRawToken(LOCAL_GROUP_ID2));
 
                             when(mTabModel.containsTabGroup(
                                             TabGroupId.fromOptionalToken(LOCAL_GROUP_ID2)))
@@ -476,7 +483,7 @@ public class TabGroupListMediatorUnitTest {
     public void testOpenRunnable_CurrentClosing_Racy() {
         SavedTabGroup group1 = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID1);
         group1.savedTabs = SyncedGroupTestHelper.tabsFromIds(TAB_ID1);
-        group1.localId = new LocalTabGroupId(LOCAL_GROUP_ID1);
+        group1.localId = new LocalTabGroupId(TabGroupId.fromRawToken(LOCAL_GROUP_ID1));
 
         List<Tab> tabList = List.of(mTab1);
         when(mComprehensiveModel.iterator()).thenAnswer(invocation -> tabList.iterator());
@@ -496,7 +503,8 @@ public class TabGroupListMediatorUnitTest {
         when(mComprehensiveModel.getCount()).thenReturn(0);
         MockitoHelper.doRunnable(
                         () -> {
-                            group1.localId = new LocalTabGroupId(LOCAL_GROUP_ID1);
+                            group1.localId =
+                                    new LocalTabGroupId(TabGroupId.fromRawToken(LOCAL_GROUP_ID1));
                             when(mTabModel.containsTabGroup(
                                             TabGroupId.fromOptionalToken(LOCAL_GROUP_ID1)))
                                     .thenReturn(true);
@@ -516,7 +524,7 @@ public class TabGroupListMediatorUnitTest {
     public void testOpenRunnable_CurrentClosing_NoRace() {
         SavedTabGroup group1 = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID1);
         group1.savedTabs = SyncedGroupTestHelper.tabsFromIds(TAB_ID1);
-        group1.localId = new LocalTabGroupId(LOCAL_GROUP_ID1);
+        group1.localId = new LocalTabGroupId(TabGroupId.fromRawToken(LOCAL_GROUP_ID1));
 
         List<Tab> tabList = List.of(mTab1);
         when(mComprehensiveModel.iterator()).thenAnswer(invocation -> tabList.iterator());
@@ -542,7 +550,7 @@ public class TabGroupListMediatorUnitTest {
     public void testOpenRunnable_ClosingAfterShowing() {
         SavedTabGroup group1 = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID1);
         group1.savedTabs = SyncedGroupTestHelper.tabsFromIds(TAB_ID1, TAB_ID2);
-        group1.localId = new LocalTabGroupId(LOCAL_GROUP_ID1);
+        group1.localId = new LocalTabGroupId(TabGroupId.fromRawToken(LOCAL_GROUP_ID1));
 
         List<Tab> tabList = List.of(mTab1, mTab2);
         when(mComprehensiveModel.iterator()).thenAnswer(invocation -> tabList.iterator());
@@ -580,7 +588,7 @@ public class TabGroupListMediatorUnitTest {
     public void testDeleteRunnable() {
         SavedTabGroup group1 = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID1);
         group1.savedTabs = SyncedGroupTestHelper.tabsFromCount(1);
-        group1.localId = new LocalTabGroupId(LOCAL_GROUP_ID1);
+        group1.localId = new LocalTabGroupId(TabGroupId.fromRawToken(LOCAL_GROUP_ID1));
 
         SavedTabGroup group2 = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID2);
         group2.savedTabs = SyncedGroupTestHelper.tabsFromCount(1);
@@ -627,7 +635,7 @@ public class TabGroupListMediatorUnitTest {
     public void testDeleteRunnable_CurrentClosing() {
         SavedTabGroup group1 = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID1);
         group1.savedTabs = SyncedGroupTestHelper.tabsFromIds(TAB_ID1);
-        group1.localId = new LocalTabGroupId(LOCAL_GROUP_ID1);
+        group1.localId = new LocalTabGroupId(TabGroupId.fromRawToken(LOCAL_GROUP_ID1));
 
         when(mTabModel.getTabsInGroup(TabGroupId.fromOptionalToken(LOCAL_GROUP_ID1)))
                 .thenReturn(Arrays.asList(mTab1));
@@ -701,7 +709,7 @@ public class TabGroupListMediatorUnitTest {
     public void testDeleteRunnable_SharedGroup() {
         SavedTabGroup group1 = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID1);
         group1.savedTabs = SyncedGroupTestHelper.tabsFromCount(1);
-        group1.localId = new LocalTabGroupId(LOCAL_GROUP_ID1);
+        group1.localId = new LocalTabGroupId(TabGroupId.fromRawToken(LOCAL_GROUP_ID1));
         group1.collaborationId = COLLABORATION_ID1;
 
         when(mTabModel.getTabsInGroup(TabGroupId.fromOptionalToken(LOCAL_GROUP_ID1)))
@@ -730,7 +738,7 @@ public class TabGroupListMediatorUnitTest {
     public void testLeaveRunnable() {
         SavedTabGroup group1 = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID1);
         group1.savedTabs = SyncedGroupTestHelper.tabsFromCount(1);
-        group1.localId = new LocalTabGroupId(LOCAL_GROUP_ID1);
+        group1.localId = new LocalTabGroupId(TabGroupId.fromRawToken(LOCAL_GROUP_ID1));
         group1.collaborationId = COLLABORATION_ID1;
 
         when(mTabModel.getTabsInGroup(TabGroupId.fromOptionalToken(LOCAL_GROUP_ID1)))
@@ -759,7 +767,7 @@ public class TabGroupListMediatorUnitTest {
         SavedTabGroup group1 = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID1);
         group1.syncId = SYNC_GROUP_ID1;
         group1.savedTabs = SyncedGroupTestHelper.tabsFromCount(1);
-        group1.localId = new LocalTabGroupId(LOCAL_GROUP_ID1);
+        group1.localId = new LocalTabGroupId(TabGroupId.fromRawToken(LOCAL_GROUP_ID1));
         group1.collaborationId = COLLABORATION_ID1;
 
         when(mTabModel.getTabsInGroup(TabGroupId.fromOptionalToken(LOCAL_GROUP_ID1)))

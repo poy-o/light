@@ -35,6 +35,7 @@
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/shared/public/commands/activity_service_commands.h"
+#import "ios/chrome/browser/shared/public/commands/actor_overlay_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/contextual_panel_entrypoint_iph_commands.h"
@@ -56,6 +57,7 @@
 #import "ios/chrome/browser/shared/public/commands/text_zoom_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/toolbar/coordinator/buttons/toolbar_buttons_mediator.h"
 #import "ios/chrome/browser/toolbar/coordinator/toolbar_mediator.h"
 #import "ios/chrome/browser/toolbar/legacy/ui_bundled/fullscreen/toolbars_size_browser_agent.h"
 #import "ios/chrome/browser/toolbar/legacy/ui_bundled/legacy_toolbar_mediator.h"
@@ -77,9 +79,10 @@
 #import "ui/base/l10n/l10n_util.h"
 #import "url/gurl.h"
 
-// Exposes `LegacyToolbarMediatorDelegate` and `ToolbarMediatorDelegate` in
-// order to invoke delegate methods in tests.
+// Exposes `LegacyToolbarMediatorDelegate`, `ToolbarButtonsMediatorDelegate`
+// and `ToolbarMediatorDelegate` in order to invoke delegate methods in tests.
 @interface MainToolbarCoordinator (Testing) <LegacyToolbarMediatorDelegate,
+                                             ToolbarButtonsMediatorDelegate,
                                              ToolbarMediatorDelegate>
 @property(nonatomic, strong, readonly)
     LegacyToolbarMediator* legacyToolbarMediator;
@@ -235,6 +238,12 @@ class MainToolbarCoordinatorTest : public PlatformTest {
     [browser->GetCommandDispatcher()
         startDispatchingToTarget:tab_picker_commands_handler
                      forProtocol:@protocol(TabPickerCommands)];
+
+    id mock_actor_overlay_handler =
+        OCMProtocolMock(@protocol(ActorOverlayCommands));
+    [browser->GetCommandDispatcher()
+        startDispatchingToTarget:mock_actor_overlay_handler
+                     forProtocol:@protocol(ActorOverlayCommands)];
 
     OmniboxFocusBrowserAgent::CreateForBrowser(browser);
     AutocompleteBrowserAgent::CreateForBrowser(browser);
@@ -409,7 +418,7 @@ TEST_F(MainToolbarCoordinatorTest, TestAssistantButtonTappedInIncognito) {
                 }]
              completionAction:[OCMArg any]]);
 
-  [coordinator_ toolbarMediatorDidTapAssistantInIncognito:nil];
+  [coordinator_ toolbarButtonsMediatorDidTapAssistantInIncognito:nil];
 
   EXPECT_EQ(user_action_tester.GetActionCount(
                 "MobileToolbarAssistantIncognitoTapped"),

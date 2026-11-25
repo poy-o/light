@@ -14,6 +14,7 @@ import type {TabInfo} from 'chrome://resources/mojo/components/omnibox/browser/s
 import {ToolMode} from 'chrome://resources/mojo/components/omnibox/composebox/composebox_query.mojom-webui.js';
 import type {InputState} from 'chrome://resources/mojo/components/omnibox/composebox/composebox_query.mojom-webui.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {MockTimer} from 'chrome://webui-test/mock_timer.js';
 import {TestPluralStringProxy} from 'chrome://webui-test/test_plural_string_proxy.js';
 import {$$, eventToPromise, microtasksFinished} from 'chrome://webui-test/test_util.js';
 
@@ -115,6 +116,15 @@ suite('ContextualEntrypointAndMenu', () => {
     const entrypoint = $$(entrypointAndMenu, '#entrypointButton');
 
     assertFalse(!!entrypoint);
+  });
+
+  test('getEntrypoint returns the "+" only while it renders', async () => {
+    const entrypoint = await entrypointAndMenu.getEntrypoint();
+    assertTrue(!!entrypoint);
+    assertEquals('entrypoint', entrypoint.id);
+
+    entrypointAndMenu.inputState = null;
+    assertEquals(null, await entrypointAndMenu.getEntrypoint());
   });
 
   test('menu does not open if entrypoint button is hidden', async () => {
@@ -392,6 +402,26 @@ suite('ContextualEntrypointAndMenu', () => {
           entrypointAndMenu.composeboxContextMenuTooltipsEnabled = false;
           await microtasksFinished();
           assertFalse(entrypointAndMenu.$.menu.contextMenuTooltipsEnabled);
+        });
+
+    test(
+        'closeMenu cancels pending open timeout while tab suggestions load',
+        async () => {
+          entrypointAndMenu.tabSuggestionsState = TabSuggestionsState.LOADING;
+          await microtasksFinished();
+
+          const mockTimer = new MockTimer();
+          mockTimer.install();
+          try {
+            entrypointAndMenu.openMenu();
+            entrypointAndMenu.closeMenu();
+            mockTimer.tick(entrypointAndMenu.menuOpenDelayMs);
+          } finally {
+            mockTimer.uninstall();
+          }
+          await microtasksFinished();
+
+          assertFalse(entrypointAndMenu.$.menu.$.menu.open);
         });
   });
 });

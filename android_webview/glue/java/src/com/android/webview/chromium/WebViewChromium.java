@@ -294,11 +294,15 @@ class WebViewChromium
                     sRecordWholeDocumentEnabledByApi
                             || mAppTargetSdkVersion < Build.VERSION_CODES.LOLLIPOP);
 
+            boolean isTransfer = mAwWebContent.isInitialized();
+
             final AwBrowserContext browserContext;
             // Temporary workaround for setting the profile at WebView startup.
             Integer appProfileNameTagKey =
                     ManifestMetadataUtil.getAppMultiProfileProfileNameTagKey();
-            if (appProfileNameTagKey != null
+            if (isTransfer) {
+                browserContext = mAwWebContent.getAwContents().getBrowserContextInternal();
+            } else if (appProfileNameTagKey != null
                     && mWebView.getTag(appProfileNameTagKey) instanceof String profileName) {
                 browserContext = AwBrowserContextStore.getNamedContext(profileName, true);
             } else {
@@ -306,8 +310,6 @@ class WebViewChromium
                         AwBrowserContextStore.getNamedContext(
                                 AwBrowserContext.getDefaultContextName(), true);
             }
-
-            boolean isTransfer = mAwWebContent.isInitialized();
 
             mAwContents =
                     mAwWebContent.adopt(
@@ -501,17 +503,25 @@ class WebViewChromium
 
         mIsDestroyed = true;
 
-        mAwWebContent = getSharedDestroyedAwWebContent();
+        AwBrowserContext browserContext = mAwContents.getBrowserContextInternal();
+        mAwWebContent = getSharedDestroyedAwWebContent(browserContext);
         mAwContents = mAwWebContent.getAwContents();
-        mSharedWebViewChromium.setAwContentsForTransfer(mAwContents);
+        // Calls on this WebView, e.g. an app clearing its clients in onDestroy(), shouldn't change
+        // the WebContent that moved away. Use a new adapter rather than the shared destroyed
+        // AwContents' one so that it doesn't keep clients set here alive.
+        mContentsClientAdapter =
+                new WebViewContentsClientAdapter(mAwContents, mFactory.getWebViewDelegate());
+        mWebSettings = mFactory.createContentSettingsAdapter(mAwContents.getSettings());
+        mSharedWebViewChromium.setAwContentsForTransfer(mAwContents, mContentsClientAdapter);
     }
 
     /** Returns the process-wide destroyed {@link AwWebContent} that detached instances point at. */
-    private AwWebContent getSharedDestroyedAwWebContent() {
+    private AwWebContent getSharedDestroyedAwWebContent(AwBrowserContext browserContext) {
         if (sSharedDestroyedAwWebContent == null) {
             sSharedDestroyedAwWebContent =
                     AwWebContent.createDestroyedAwWebContent(
                             mStartupController,
+                            browserContext,
                             awContents ->
                                     new WebViewContentsClientAdapter(
                                             awContents, mFactory.getWebViewDelegate()));

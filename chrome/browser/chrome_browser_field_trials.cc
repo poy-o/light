@@ -33,6 +33,7 @@
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/background_thread_pool_field_trial.h"
 #include "base/android/bundle_utils.h"
+#include "base/android/device_info.h"
 #include "base/task/thread_pool/environment_config.h"
 #include "build/android_buildflags.h"
 #include "cc/base/features.h"
@@ -69,12 +70,27 @@
 #include "chrome/browser/metrics/client_id_backup_correctness_fix_field_trial.h"
 #endif  // BUILDFLAG(IS_POSIX)
 
-ChromeBrowserFieldTrials::ChromeBrowserFieldTrials(PrefService* local_state)
-    : local_state_(local_state) {
-  CHECK(local_state_, base::NotFatalUntil::M162);
-}
+#if BUILDFLAG(IS_WIN)
+#include "chrome/browser/metrics/chrome_metrics_services_manager_client.h"
+#include "chrome/install_static/install_util.h"
+#endif  // BUILDFLAG(IS_WIN)
+
+ChromeBrowserFieldTrials::ChromeBrowserFieldTrials() = default;
 
 ChromeBrowserFieldTrials::~ChromeBrowserFieldTrials() = default;
+
+void ChromeBrowserFieldTrials::OnVariationsSetupComplete() {
+#if BUILDFLAG(IS_WIN)
+  // Set the registry value so that Crashpad will have the sampling state now
+  // and for subsequent runs. Note that Crashpad uses *both* the registry value
+  // and the value sent from SetUploadConsent() in
+  // ChromeMetricsServicesManagerClient::UpdateRunningServices().
+  // We use IsClientInSampleForCrashes() which checks the feature for whether
+  // crash reports should be sent.
+  install_static::SetCollectStatsInSample(
+      ChromeMetricsServicesManagerClient::IsClientInSampleForCrashes());
+#endif  // BUILDFLAG(IS_WIN)
+}
 
 void ChromeBrowserFieldTrials::SetUpClientSideFieldTrials(
     bool has_seed,
@@ -115,6 +131,7 @@ void ChromeBrowserFieldTrials::SetUpClientSideFieldTrials(
 #endif  // BUILDFLAG(IS_POSIX)
 }
 
+// static
 void ChromeBrowserFieldTrials::RegisterSyntheticTrials() {
 #if BUILDFLAG(IS_ANDROID)
   {
@@ -394,5 +411,13 @@ void ChromeBrowserFieldTrials::RegisterFeatureOverrides(
 #endif  // BUILDFLAG(IS_DESKTOP_ANDROID)
   // Desktop-first features which are past incubation should either end up here,
   // or to a finch trial that enables it for all form factors.
+
+  // Sets the default for `kTranslationAPI` to disabled on Android Automotive,
+  // which has tight memory and storage limits. Finch trials and command-line
+  // flags win over this override, so `OnDeviceTranslationInstallerImpl` also
+  // reports Automotive devices as unsupported.
+  if (base::android::device_info::is_automotive()) {
+    feature_overrides.DisableFeature(blink::features::kTranslationAPI);
+  }
 #endif  // BUILDFLAG(IS_ANDROID)
 }

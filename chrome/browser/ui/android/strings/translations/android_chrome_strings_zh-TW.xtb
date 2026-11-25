@@ -150,7 +150,6 @@
 <translation id="1543035591122163372">登入即可存取<ph name="DEVICE_TYPE" />中的密碼和其他資訊</translation>
 <translation id="1544084554881119930">系統將不會加密付款方式和地址，也不會同步 Chrome 中的瀏覽記錄。
 只有知道通關密語的人才能讀取你的加密資料。系統不會將通關密語傳送給 Google，Google 也不會儲存通關密語。如果忘記通關密語或想變更這項設定，請<ph name="BEGIN_LINK" />清除帳戶中的 Chrome 資料<ph name="END_LINK" />。</translation>
-<translation id="1544826120773021464">如要管理你的 Google 帳戶，請輕觸 [管理帳戶] 按鈕</translation>
 <translation id="1549000191223877751">移至其他視窗</translation>
 <translation id="1553358976309200471">更新 Chrome</translation>
 <translation id="1554352084785952638"><ph name="SEARCH_ENGINE" />：「<ph name="SEARCH_TERMS" />」</translation>
@@ -167,7 +166,6 @@
 <translation id="1600756129506222718"><ph name="TAB_TITLE" />，正在分享內容的分頁</translation>
 <translation id="1601378265092360672">瀏覽資料包括瀏覽記錄、Cookie 和其他網站資料、快取圖片和檔案，以及開啟的分頁</translation>
 <translation id="160275202205869636">開啟時，可在 Google 帳戶中使用及儲存資料。關閉後，資料只會儲存到這部裝置。</translation>
-<translation id="160403827062749147">歡迎使用 Google Chrome，全球最安全的瀏覽器</translation>
 <translation id="1628019612362412531">{NUM_SELECTED,plural, =1{移除 1 個選取的項目}other{移除 # 個選取的項目}}</translation>
 <translation id="1639239467298939599">載入中</translation>
 <translation id="1641113438599504367">安全瀏覽</translation>
@@ -283,6 +281,7 @@
 <translation id="2122601567107267586">無法開啟應用程式</translation>
 <translation id="2128579426409352593"><ph name="TAB_TITLE" />，多選的固定分頁，正在分享內容</translation>
 <translation id="213279576345780926">已關閉「<ph name="TAB_TITLE" />」</translation>
+<translation id="2133857665503360653">重新嘗試下載「<ph name="FILE_NAME" />」</translation>
 <translation id="2138283760993967204">「管理」圖示</translation>
 <translation id="2138632817776076519"><ph name="TAB_TITLE" />，選取的分頁，正在錄製媒體</translation>
 <translation id="2141396931810938595">根據你的使用情形</translation>
@@ -386,6 +385,7 @@
 <translation id="2496180316473517155">瀏覽記錄</translation>
 <translation id="250020030759455918">你將可在 Chrome 中查看 <ph name="SITE_NAME" /> 登入狀態、瀏覽資料和網站資料</translation>
 <translation id="2501278716633472235">返回</translation>
+<translation id="2505742559092758182">{COUNT,plural, =1{正在進行 # 項下載}other{正在進行 # 項下載}}</translation>
 <translation id="2510106555128151389">正在安裝「<ph name="WEBAPK_NAME" />」...</translation>
 <translation id="2512234228327349533">搜尋購買選項</translation>
 <translation id="2513403576141822879">如需更多隱私權、安全性和資料收集的相關設定，請參閱<ph name="BEGIN_LINK" />同步處理和 Google 服務<ph name="END_LINK" /></translation>
@@ -449,6 +449,7 @@
 <translation id="2762000892062317888">剛剛</translation>
 <translation id="276378135349383280">在底部工具列顯示 Gemini</translation>
 <translation id="276969039800130567">以 <ph name="USER_EMAIL_ADDRESS" /> 的身分登入。</translation>
+<translation id="2770082596325051055">暫停下載 <ph name="FILE_NAME" /></translation>
 <translation id="2777555524387840389">還剩 <ph name="SECONDS" /> 秒</translation>
 <translation id="2779651927720337254">失敗</translation>
 <translation id="2781151931089541271">還剩 1 秒</translation>
@@ -697,6 +698,7 @@
 <translation id="3740290940447881599">請確認你信任這個網站</translation>
 <translation id="3740525748616366977">這部裝置不支援語音搜尋功能</translation>
 <translation id="3749289110408117711">檔案名稱</translation>
+<translation id="3751708358601675711">編輯價格追蹤</translation>
 <translation id="3756823472711156529">還原群組</translation>
 <translation id="3759306015475526475">管理使用情形和當機資料設定</translation>
 <translation id="3763110477555836428">使用這張卡片結帳時，系統會填入虛擬卡號，保護你的實際卡片資料。你可以在 Google 錢包管理卡片。<ph name="BEGIN_LINK1" />進一步瞭解虛擬卡片<ph name="END_LINK1" /></translation>
@@ -789,6 +791,7 @@
 <translation id="4121654769234887259">你不需要記住這組密碼，系統會將密碼儲存至 <ph name="USERNAME" /> 的 Google 密碼管理工具中。</translation>
 <translation id="4128312955780560730">鎖定無痕分頁</translation>
 <translation id="4132137475637520539">允許知道連結的使用者加入</translation>
+<translation id="4132969033912447558">繼續下載 <ph name="FILE_NAME" /></translation>
 <translation id="4136632885151622181"><ph name="TAB_TITLE" />，多選的固定分頁，正在錄製媒體</translation>
 <translation id="4137746084635924146">目前裝置語言</translation>
 <translation id="414128724510021958">預設設定要求顯示電腦版網站</translation>
@@ -864,7 +867,6 @@
 <translation id="4374192654218566997">\n\n你也可以從這部裝置移除下列資料：</translation>
 <translation id="4378154925671717803">電話</translation>
 <translation id="4380055775103003110">如果這個問題持續發生，可以試著在「<ph name="SITE_ETLD_PLUS_ONE" />」上透過其他方法繼續操作。</translation>
-<translation id="4381351546374507910">在任何裝置上登入帳戶，都能存取你的書籤、密碼和自動填入資訊。</translation>
 <translation id="4384468725000734951">現已使用 Sogou 搜尋</translation>
 <translation id="4387647248986092471">建立汽車設定檔鎖定方式</translation>
 <translation id="4387817230000841154">開啟下載內容頁面</translation>
@@ -1891,6 +1893,7 @@
 <translation id="8152331954420209374">開啟智慧鏡頭</translation>
 <translation id="8153206878708357851">切換鍵盤瀏覽模式</translation>
 <translation id="8154784523622173959">自訂此頁面的背景</translation>
+<translation id="8161480780962562636">確保密碼安全、檢查密碼是否外洩，並提供可保護上網安全的建議</translation>
 <translation id="8163820386638255770">如要將密碼儲存到 Google 帳戶，或使用帳戶中的密碼，請驗證身分</translation>
 <translation id="8174047975335711832">裝置資訊</translation>
 <translation id="8175940240143658258">{ARCHIVED_TAB_COUNT,plural, =1{(1) 個閒置項目}other{(#) 個閒置項目}}</translation>
@@ -1905,7 +1908,6 @@
 <translation id="8210770465353466621">這裡會顯示你的分頁</translation>
 <translation id="8212799748012101103">開啟分頁搜尋功能</translation>
 <translation id="8215740705341534369">側邊工作表</translation>
-<translation id="8218622182176210845">管理你的帳戶</translation>
 <translation id="8221985041778490865">正在刪除瀏覽資料</translation>
 <translation id="8223642481677794647">動態消息資訊卡選單</translation>
 <translation id="82296173028782770">編輯搜尋查詢：<ph name="SEARCH_QUERY" /></translation>
@@ -2036,6 +2038,7 @@
 <translation id="8676789164135894283">登入驗證</translation>
 <translation id="867914734596684889">顯示或隱藏書籤列</translation>
 <translation id="8683039184091909753">圖片</translation>
+<translation id="8687103160920393343">取消下載 <ph name="FILE_NAME" /></translation>
 <translation id="8688183792442786085"><ph name="TAB_TITLE" />，選取的分頁</translation>
 <translation id="8694622119922491927"><ph name="APP_NAME" /> 需要相關權限，才能讓這個網站使用人機介面裝置 (HID)。你之後可以前往「設定」&gt;「應用程式」&gt;「特殊應用程式存取權」變更這項設定。</translation>
 <translation id="8696297579102085705">傳送到裝置</translation>

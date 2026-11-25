@@ -53,12 +53,11 @@ export class PrivacyGuideCompletionFragmentElement extends
 
   static override get properties() {
     return {
-      shouldShowAiSettings_: {type: Boolean},
       shouldShowWaa_: {type: Boolean},
     };
   }
 
-  protected accessor shouldShowAiSettings_: boolean =
+  protected readonly shouldShowAiSettings_: boolean =
       loadTimeData.getBoolean('showAiPage');
   protected accessor shouldShowWaa_: boolean = false;
   private metricsBrowserProxy_: MetricsBrowserProxy =
@@ -91,7 +90,7 @@ export class PrivacyGuideCompletionFragmentElement extends
   }
 
   protected getSubheader_(): string {
-    return !this.shouldShowWaa_ ?
+    return !this.shouldShowWaa_ && !this.shouldShowAiSettings_ ?
         this.i18n('privacyGuideCompletionCardSubHeaderNoLinks') :
         this.i18n('privacyGuideCompletionCardSubHeader');
   }

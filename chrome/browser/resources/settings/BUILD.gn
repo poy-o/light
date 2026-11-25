@@ -16,6 +16,7 @@ build_webui("build") {
     "images/cvc.svg",
     "images/cvc_amex.svg",
     "images/googleg_standard_clr_32px.svg",
+    "images/horizontal_tabs_browser_preview.svg",
     "images/iban.svg",
     "images/iban_old.svg",
     "images/password_check_neutral.svg",
@@ -44,6 +45,8 @@ build_webui("build") {
     "images/privacy_guide/welcome_banner_dark.svg",
     "images/signin_banner.svg",
     "images/signin_banner_dark.svg",
+    "images/toolbar_browser_preview.svg",
+    "images/vertical_tabs_browser_preview.svg",
     "settings.html",
   ]
 
@@ -707,6 +710,7 @@ build_webui("build") {
     "languages_page/languages_page.css",
     "languages_page/languages_page_index.css",
     "languages_page/spell_check_page.css",
+    "on_startup_page/on_startup_page.css",
     "on_startup_page/startup_url_entry.css",
     "on_startup_page/startup_urls_page.css",
     "people_page/account_page.css",
@@ -748,6 +752,7 @@ build_webui("build") {
     "privacy_page/security/security_keys_reset_dialog.css",
     "privacy_page/security/security_keys_set_pin_dialog.css",
     "privacy_page/security/security_page.css",
+    "reset_page/reset_page.css",
     "reset_page/reset_profile_banner.css",
     "reset_page/reset_profile_dialog.css",
     "safety_hub/extensions_module.css",
@@ -799,6 +804,8 @@ build_webui("build") {
     "site_settings/site_list_entry.css",
     "site_settings/site_settings_shared.css",
     "site_settings/site_settings_shared_lit.css",
+    "site_settings/storage_access_site_list_entry.css",
+    "site_settings/storage_access_static_site_list_entry.css",
     "site_settings/zoom_levels.css",
     "system_page/system_page.css",
   ]

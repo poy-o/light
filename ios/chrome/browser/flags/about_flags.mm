@@ -296,6 +296,9 @@ constexpr FeatureEntry::Choice kOmniboxTruncateSearchUrlChoices[] = {
      "TruncateSearchUrlOq:truncate_search_url_oq_length/1024"},
     {"Enabled Oq2kQNoTruncation (2k oq, q disabled)", switches::kEnableFeatures,
      "TruncateSearchUrlOq:truncate_search_url_oq_length/2048"},
+    {"Enabled Oq1kQ9k (1k oq, 9k q)", switches::kEnableFeatures,
+     "TruncateSearchUrlOq:truncate_search_url_oq_length/1024,"
+     "TruncateSearchUrlQ:truncate_search_url_q_length/9216"},
     {flags_ui::kGenericExperimentChoiceDisabled, switches::kDisableFeatures,
      "TruncateSearchUrlOq,TruncateSearchUrlQ"},
 };
@@ -982,6 +985,43 @@ constexpr FeatureEntry::FeatureVariation
     kComposeboxConditionalPlusButtonVariations[] = {
         {"(Hide Plus button in pre-edit)",
          kComposeboxConditionalPlusButtonHidePreEdit, nullptr}};
+
+// Lets testers pick which attachments go to the Search results page.
+constexpr FeatureEntry::FeatureParam kDynamicAimFulfillmentSrpInputNone[] = {
+    {"srp_input_mode", "none"}};
+constexpr FeatureEntry::FeatureParam
+    kDynamicAimFulfillmentSrpInputSingleImage[] = {
+        {"srp_input_mode", "single_image"}};
+constexpr FeatureEntry::FeatureParam
+    kDynamicAimFulfillmentSrpInputMultiImage[] = {
+        {"srp_input_mode", "multi_image"}};
+constexpr FeatureEntry::FeatureParam
+    kDynamicAimFulfillmentSrpInputAnyCombinationImagesFiles[] = {
+        {"srp_input_mode", "any_combination_images_files"}};
+constexpr FeatureEntry::FeatureParam
+    kDynamicAimFulfillmentSrpInputAnyCombinationImagesFilesTabs[] = {
+        {"srp_input_mode", "any_combination_images_files_tabs"}};
+constexpr FeatureEntry::FeatureParam
+    kDynamicAimFulfillmentSrpInputAnyCombinationImagesFilesDrive[] = {
+        {"srp_input_mode", "any_combination_images_files_drive"}};
+constexpr FeatureEntry::FeatureParam
+    kDynamicAimFulfillmentSrpInputAnyCombinationAllTypes[] = {
+        {"srp_input_mode", "any_combination_all_types"}};
+
+constexpr FeatureEntry::FeatureVariation kDynamicAimFulfillmentVariations[] = {
+    {"- SRP inputs: none", kDynamicAimFulfillmentSrpInputNone, nullptr},
+    {"- SRP inputs: single image", kDynamicAimFulfillmentSrpInputSingleImage,
+     nullptr},
+    {"- SRP inputs: multi image", kDynamicAimFulfillmentSrpInputMultiImage,
+     nullptr},
+    {"- SRP inputs: images and files",
+     kDynamicAimFulfillmentSrpInputAnyCombinationImagesFiles, nullptr},
+    {"- SRP inputs: images, files, and tabs",
+     kDynamicAimFulfillmentSrpInputAnyCombinationImagesFilesTabs, nullptr},
+    {"- SRP inputs: images, files, and Drive files",
+     kDynamicAimFulfillmentSrpInputAnyCombinationImagesFilesDrive, nullptr},
+    {"- SRP inputs: all types",
+     kDynamicAimFulfillmentSrpInputAnyCombinationAllTypes, nullptr}};
 
 constexpr FeatureEntry::FeatureParam kMobilePromoOnDesktopLens[] = {
     {kMobilePromoOnDesktopPromoTypeParam, "1"},
@@ -2108,10 +2148,6 @@ constexpr auto kFeatureEntries = std::to_array<flags_ui::FeatureEntry>({
      flag_descriptions::kAppSwitcherAISummarizationName,
      flag_descriptions::kAppSwitcherAISummarizationDescription,
      flags_ui::kOsIos, FEATURE_VALUE_TYPE(kAppSwitcherAISummarization)},
-    {"proactive-suggestions-framework",
-     flag_descriptions::kProactiveSuggestionsFrameworkName,
-     flag_descriptions::kProactiveSuggestionsFrameworkDescription,
-     flags_ui::kOsIos, FEATURE_VALUE_TYPE(kProactiveSuggestionsFramework)},
     {"ask-gemini-chip-ignore-criteria",
      flag_descriptions::kAskGeminiChipIgnoreCriteriaName,
      flag_descriptions::kAskGeminiChipIgnoreCriteriaDescription,
@@ -2385,10 +2421,6 @@ constexpr auto kFeatureEntries = std::to_array<flags_ui::FeatureEntry>({
      flag_descriptions::kAIMEligibilityRefreshNTPModulesName,
      flag_descriptions::kAIMEligibilityRefreshNTPModulesDescription,
      flags_ui::kOsIos, FEATURE_VALUE_TYPE(kAIMEligibilityRefreshNTPModules)},
-    {"ios-web-context-menu-new-title",
-     flag_descriptions::kIOSWebContextMenuNewTitleName,
-     flag_descriptions::kIOSWebContextMenuNewTitleDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(kIOSWebContextMenuNewTitle)},
     {"composebox-attachments-typed-state",
      flag_descriptions::kComposeboxAttachmentsTypedStateName,
      flag_descriptions::kComposeboxAttachmentsTypedStateDescription,
@@ -2836,10 +2868,6 @@ constexpr auto kFeatureEntries = std::to_array<flags_ui::FeatureEntry>({
      flag_descriptions::kDefaultBottomOmniboxOnIOSName,
      flag_descriptions::kDefaultBottomOmniboxOnIOSDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kDefaultBottomOmniboxOnIOS)},
-    {"atmemory-context-menu-entry-point",
-     flag_descriptions::kAtMemoryContextMenuEntryPointName,
-     flag_descriptions::kAtMemoryContextMenuEntryPointDescription,
-     flags_ui::kOsIos, FEATURE_VALUE_TYPE(kAtMemoryContextMenuEntryPoint)},
     {"glass-toolbar", flag_descriptions::kGlassToolbarName,
      flag_descriptions::kGlassToolbarDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kGlassToolbar)},
@@ -2847,6 +2875,11 @@ constexpr auto kFeatureEntries = std::to_array<flags_ui::FeatureEntry>({
      flag_descriptions::kComposeboxConnectedAppsSettingName,
      flag_descriptions::kComposeboxConnectedAppsSettingDescription,
      flags_ui::kOsIos, FEATURE_VALUE_TYPE(kComposeboxConnectedAppsSetting)},
+    {"dynamic-aim-fulfillment", flag_descriptions::kDynamicAimFulfillmentName,
+     flag_descriptions::kDynamicAimFulfillmentDescription, flags_ui::kOsIos,
+     FEATURE_WITH_PARAMS_VALUE_TYPE(omnibox::kDynamicAimFulfillment,
+                                    kDynamicAimFulfillmentVariations,
+                                    "DynamicAimFulfillment")},
     {"next-old-design", flag_descriptions::kNextOldDesignName,
      flag_descriptions::kNextOldDesignDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kNextOldDesign)},
@@ -3138,6 +3171,10 @@ constexpr auto kFeatureEntries = std::to_array<flags_ui::FeatureEntry>({
     {"gemini-native-header", flag_descriptions::kGeminiNativeHeaderName,
      flag_descriptions::kGeminiNativeHeaderDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kGeminiNativeHeader)},
+    {"enable-gemini-live-in-bottom-sheet",
+     flag_descriptions::kEnableGeminiLiveInBottomSheetName,
+     flag_descriptions::kEnableGeminiLiveInBottomSheetDescription,
+     flags_ui::kOsIos, FEATURE_VALUE_TYPE(kEnableGeminiLiveInBottomSheet)},
     {"ios-actor-suppress-dialogs",
      flag_descriptions::kIOSActorSuppressDialogsName,
      flag_descriptions::kIOSActorSuppressDialogsDescription, flags_ui::kOsIos,
@@ -3156,6 +3193,16 @@ constexpr auto kFeatureEntries = std::to_array<flags_ui::FeatureEntry>({
      FEATURE_WITH_PARAMS_VALUE_TYPE(kFreLiveActivity,
                                     kFreLiveActivityVariations,
                                     "FreLiveActivity")},
+    {"autofill-fix-vcn-strike-database-fallback",
+     flag_descriptions::kAutofillFixVcnStrikeDatabaseFallbackName,
+     flag_descriptions::kAutofillFixVcnStrikeDatabaseFallbackDescription,
+     flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(
+         autofill::features::kAutofillFixVcnStrikeDatabaseFallback)},
+    {"gemini-model-quality-client-id",
+     flag_descriptions::kGeminiModelQualityClientIDName,
+     flag_descriptions::kGeminiModelQualityClientIDDescription,
+     flags_ui::kOsIos, FEATURE_VALUE_TYPE(kGeminiModelQualityClientID)},
 });
 
 bool SkipConditionalFeatureEntry(const flags_ui::FeatureEntry& entry) {

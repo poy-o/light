@@ -9,6 +9,7 @@
 #include <array>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "ash/constants/web_app_id_constants.h"
 #include "base/byte_size.h"
@@ -78,6 +79,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
@@ -102,7 +104,6 @@
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/unload_controller.h"
-#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/ui/window_feature_controller/window_feature_controller.h"
 #include "chrome/browser/ui/window_metadata/window_metadata_controller.h"
@@ -146,7 +147,6 @@
 #include "components/tabs/public/tab_interface.h"
 #include "components/translate/core/browser/language_state.h"
 #include "components/translate/core/common/language_detection_details.h"
-#include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "components/webapps/common/web_app_id.h"
 #include "components/zoom/zoom_controller.h"
 #include "content/public/browser/browser_context.h"
@@ -193,8 +193,6 @@
 #include "ui/base/page_transition_types.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/display/types/display_constants.h"
-#include "ui/views/controls/webview/webview.h"
-#include "ui/views/focus/focus_manager.h"
 
 #if BUILDFLAG(IS_MAC)
 #include "base/apple/scoped_nsautorelease_pool.h"
@@ -665,70 +663,6 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, NoJavaScriptDialogsActivateTab) {
   alert_wait.Run();
   EXPECT_EQ(2, browser()->tab_strip_model()->count());
   EXPECT_EQ(0, browser()->tab_strip_model()->active_index());
-}
-
-// Regression test for crbug.com/40624231.
-IN_PROC_BROWSER_TEST_F(
-    BrowserTest,
-    ClosingBackgroundSameProcessTabRestoresFocusToActiveWebContents) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url(embedded_test_server()->GetURL("/empty.html"));
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
-
-  TabStripModel* tab_strip_model = browser()->tab_strip_model();
-  content::WebContents* active_contents =
-      tab_strip_model->GetActiveWebContents();
-  ASSERT_TRUE(active_contents);
-  ASSERT_TRUE(content::ExecJs(
-      active_contents,
-      "document.body.innerHTML = '<input id=\"q\" autofocus>';"));
-  content::ExecuteScriptAsync(active_contents,
-                              R"JS(
-        let popupWin = window.open('', '_blank');
-        popupWin.document.open();
-        popupWin.document.write(
-            '<html><body onload="window.print()">HTML</body></html>');
-        popupWin.document.close();
-      )JS");
-  ASSERT_TRUE(
-      base::test::RunUntil([&]() { return tab_strip_model->count() == 2; }));
-
-  content::WebContents* closing_contents = tab_strip_model->GetWebContentsAt(1);
-  ASSERT_TRUE(closing_contents);
-  ASSERT_TRUE(content::WaitForLoadStop(closing_contents));
-  auto* dialog_manager =
-      web_modal::WebContentsModalDialogManager::FromWebContents(
-          closing_contents);
-  ASSERT_TRUE(dialog_manager);
-  ASSERT_TRUE(
-      base::test::RunUntil([&]() { return dialog_manager->IsDialogActive(); }));
-
-  // Put focus back on the opener and close the popup tab in the background.
-  tab_strip_model->ActivateTabAt(0);
-  ASSERT_EQ(active_contents, tab_strip_model->GetActiveWebContents());
-  ASSERT_EQ(active_contents->GetPrimaryMainFrame()->GetProcess(),
-            closing_contents->GetPrimaryMainFrame()->GetProcess())
-      << "Test relies on active and closing tabs sharing a renderer process.";
-
-  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
-  ASSERT_TRUE(browser_view);
-  views::View* active_webview = browser_view->GetActiveContentsWebView();
-  ASSERT_TRUE(active_webview);
-  views::FocusManager* focus_manager = browser_view->GetFocusManager();
-  ASSERT_TRUE(focus_manager);
-
-  tab_strip_model->CloseWebContentsAt(1, CLOSE_USER_GESTURE);
-  ASSERT_TRUE(
-      base::test::RunUntil([&]() { return tab_strip_model->count() == 1; }));
-  ASSERT_TRUE(base::test::RunUntil([&]() {
-    content::RenderWidgetHostView* rwhv =
-        active_contents->GetRenderWidgetHostView();
-    return rwhv && rwhv->HasFocus() &&
-           focus_manager->GetFocusedView() == active_webview;
-  }));
-
-  content::SimulateMouseClickOrTapElementWithId(active_contents, "q");
-  EXPECT_EQ("q", content::EvalJs(active_contents, "document.activeElement.id"));
 }
 
 // Create 34 tabs and verify that a lot of processes have been created. The
@@ -1704,7 +1638,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, StartMaximized) {
       /*from_user_gesture=*/true));
   for (auto& param : params) {
     param.initial_show_state = ui::mojom::WindowShowState::kMaximized;
-    AddBlankTabAndShow(CreateBrowserWindow(std::move(param)));
+    AddBlankTabAndShow(CreateBrowserWindowForTesting(std::move(param)));
   }
 }
 
@@ -1731,7 +1665,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, StartMinimized) {
       /*from_user_gesture=*/true));
   for (auto& param : params) {
     param.initial_show_state = ui::mojom::WindowShowState::kMinimized;
-    AddBlankTabAndShow(CreateBrowserWindow(std::move(param)),
+    AddBlankTabAndShow(CreateBrowserWindowForTesting(std::move(param)),
                        /*wait_for_activation=*/false);
   }
 }
@@ -1790,7 +1724,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, DisableMenuItemsWhenIncognitoIsForced) {
   EXPECT_TRUE(command_updater->IsCommandEnabled(IDC_NEW_INCOGNITO_WINDOW));
 
   // Create an Incognito browser.
-  BrowserWindowInterface* new_browser = CreateBrowserWindow(
+  BrowserWindowInterface* new_browser = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(browser()->GetProfile()->GetPrimaryOTRProfile(
                                     /*create_if_needed=*/true),
                                 /*from_user_gesture=*/true));
@@ -1826,7 +1760,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest,
   EXPECT_TRUE(command_updater->IsCommandEnabled(IDC_OPTIONS));
 
   // Create a new browser.
-  BrowserWindowInterface* new_browser = CreateBrowserWindow(
+  BrowserWindowInterface* new_browser = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(browser()->GetProfile(),
                                 /*from_user_gesture=*/true));
   CommandUpdater* new_command_updater =
@@ -2481,6 +2415,18 @@ class AppModeTest : public BrowserTest {
     GURL url = chrome_test_utils::GetTestUrl(
         base::FilePath(), base::FilePath().AppendASCII("title1.html"));
     command_line->AppendSwitchASCII(switches::kApp, url.spec());
+  }
+
+  void SetUpOnMainThread() override {
+    // The --app window may open after startup, once the web app registry has
+    // loaded. It may already exist by now even though browser() wasn't set.
+    if (!browser()) {
+      std::vector<BrowserWindowInterface*> browsers =
+          GetAllBrowserWindowInterfaces();
+      SetBrowser(browsers.empty() ? ui_test_utils::WaitForBrowserToOpen()
+                                  : browsers[0]);
+    }
+    BrowserTest::SetUpOnMainThread();
   }
 };
 
@@ -3501,7 +3447,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest,
 
 IN_PROC_BROWSER_TEST_F(BrowserTest, ClosedBrowsersShouldNotShow) {
   // Create a new browser but do not show it yet.
-  BrowserWindowInterface* const new_browser = CreateBrowserWindow(
+  BrowserWindowInterface* const new_browser = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(GetProfile(), /*from_user_gesture=*/true));
   ui::BaseWindow* const new_window = new_browser->GetWindow();
   EXPECT_FALSE(new_window->IsVisible());

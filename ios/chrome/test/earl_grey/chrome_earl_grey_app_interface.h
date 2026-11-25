@@ -699,8 +699,8 @@ enum class TipsNotificationType;
 // Returns YES if DemographicMetricsReporting feature is enabled.
 + (BOOL)isDemographicMetricsReportingEnabled [[nodiscard]];
 
-// Returns YES if ProactiveSuggestionsFramework is enabled.
-+ (BOOL)isProactiveSuggestionsFrameworkEnabled [[nodiscard]];
+// Returns YES if PageActionMenu is enabled.
++ (BOOL)isPageActionMenuEnabled [[nodiscard]];
 
 // Returns YES if the `launchSwitch` is found in host app launch switches.
 + (BOOL)appHasLaunchSwitch:(NSString*)launchSwitch;
@@ -719,6 +719,10 @@ enum class TipsNotificationType;
 
 // Returns whether the UseLensToSearchForImage feature is enabled.
 + (BOOL)isUseLensToSearchForImageEnabled;
+
+// Returns whether Lens is available for the current device and default search
+// engine, matching the production Lens availability check.
++ (BOOL)isLensAvailable;
 
 // Returns whether the current layout is showing the bottom omnibox.
 + (BOOL)isCurrentLayoutBottomOmnibox;

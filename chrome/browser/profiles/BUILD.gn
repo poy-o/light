@@ -695,6 +695,7 @@ source_set("profile_util_impl") {
     "//components/browsing_data/core",
     "//components/embedder_support:user_agent",
     "//components/enterprise/common/proto:connectors_proto",
+    "//components/enterprise/isolated_mode",
     "//components/keyed_service/content",
     "//components/policy/core/browser",
     "//components/policy/core/common",
@@ -1050,6 +1051,7 @@ source_set("profiles_extra_parts_impl") {
   if (is_win || is_mac || is_linux) {
     deps += [
       "//chrome/browser/browser_switcher",
+      "//chrome/browser/dino",
       "//chrome/browser/search_integrity",
     ]
   }
@@ -1331,7 +1333,7 @@ if (!is_android) {
       "//chrome/test/base:profile_lifecycle_test_utils",
       "//chrome/test/base:testing_browser_process",
       "//components/commerce/core:feature_list",
-      "//components/enterprise/isolated_mode",
+      "//components/enterprise/isolated_mode:test_support",
       "//components/policy/core/common:test_support",
       "//components/spellcheck/common",
       "//components/universal_optout:features",
@@ -1402,6 +1404,7 @@ source_set("test_support") {
   ]
   deps = [
     "//chrome/test/base:testing_browser_process",
+    "//components/enterprise/isolated_mode:test_support",
     "//testing/gtest",
   ]
 

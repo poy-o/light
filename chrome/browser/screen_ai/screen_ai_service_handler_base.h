@@ -5,10 +5,13 @@
 #ifndef CHROME_BROWSER_SCREEN_AI_SCREEN_AI_SERVICE_HANDLER_BASE_H_
 #define CHROME_BROWSER_SCREEN_AI_SCREEN_AI_SERVICE_HANDLER_BASE_H_
 
+#include <stdint.h>
+
 #include <optional>
 #include <set>
 #include <string_view>
 
+#include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
@@ -36,14 +39,14 @@ class ScreenAIServiceHandlerBase
       delete;
   ~ScreenAIServiceHandlerBase() override;
 
+  // Static method to return suggested wait time before next reconnect attempt.
+  static base::TimeDelta SuggestedWaitTimeBeforeReAttempt(
+      uint32_t reattempt_number);
+
   // Schedules library download and initializes the service if needed, and
   // calls `callback` with initialization result when service is ready or
   // failed to initialize.
-  // Returns the already known state of the service (see `GetServiceState`).
-  std::optional<bool> GetServiceStateAsync(ServiceStateCallback callback);
-
-  // Called when library availability state is changed.
-  void OnLibraryAvailablityChanged(bool available);
+  void GetServiceStateAsync(ServiceStateCallback callback);
 
   // screen_ai::mojom::ScreenAIServiceShutdownHandler::
   void ShuttingDownOnIdle() override;
@@ -74,7 +77,6 @@ class ScreenAIServiceHandlerBase
   }
 
  private:
-  friend class ScreenAIServiceRouterFactory;
   friend class ScreenAIServiceShutdownHandlerTest;
 
   bool GetAndRecordSuspendedState();
@@ -100,6 +102,9 @@ class ScreenAIServiceHandlerBase
   // Called when ScreenAI service factory is disconnected.
   void OnScreenAIServiceDisconnected();
 
+  // Called by the library provider when it knows if the library is available.
+  void OnLibraryAvailabilityChanged(bool available);
+
   // Returns the service name.
   virtual std::string GetServiceName() const = 0;
 
@@ -113,6 +118,8 @@ class ScreenAIServiceHandlerBase
   virtual bool IsServiceEnabled() const = 0;
   virtual void ResetConnection() = 0;
 
+  // Gives access to the library. Not owned: the provider must outlive this
+  // object. In production it is a singleton that is never destroyed.
   const raw_ptr<ScreenAILibraryProvider> library_provider_;
 
   // Pending requests to receive service state for each service type.
@@ -131,6 +138,13 @@ class ScreenAIServiceHandlerBase
       screen_ai_service_shutdown_handler_;
 
   mojo::Remote<mojom::ScreenAIServiceFactory> screen_ai_service_factory_;
+
+  // True from the time the library provider is asked for the library until it
+  // answers.
+  bool waiting_for_library_ = false;
+
+  // Keeps the request to the library provider alive while it is pending.
+  base::CallbackListSubscription library_subscription_;
 
   base::WeakPtrFactory<ScreenAIServiceHandlerBase> weak_ptr_factory_{this};
 };

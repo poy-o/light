@@ -108,6 +108,14 @@ BASE_FEATURE_ENUM_PARAM(
     AsyncTouchMoveThrottlingPolicy::kUnthrottledWhenGsuUnconsumed,
     &async_touch_move_throttling_policies);
 
+BASE_FEATURE(kConfigurableAsyncTouchMoveInterval,
+             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE_PARAM(base::TimeDelta,
+                   kConfigurableAsyncTouchMoveIntervalParam,
+                   &kConfigurableAsyncTouchMoveInterval,
+                   "interval",
+                   base::Milliseconds(25));
+
 // Exports this feature so that Rust code can use it.
 extern "C" {
 // Block all MIDI access with the MIDI_SYSEX permission
@@ -834,6 +842,32 @@ BASE_FEATURE_PARAM(size_t,
                    &kHTMLParserYieldByUserTiming,
                    "timeout_ms",
                    20);
+
+BASE_FEATURE(kHTMLTokenizerSimdScan, base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE_PARAM(bool,
+                   kHTMLTokenizerSimdScanScriptData,
+                   &kHTMLTokenizerSimdScan,
+                   "script_data",
+                   true);
+
+BASE_FEATURE_PARAM(bool,
+                   kHTMLTokenizerSimdScanRawtext,
+                   &kHTMLTokenizerSimdScan,
+                   "rawtext",
+                   true);
+
+BASE_FEATURE_PARAM(bool,
+                   kHTMLTokenizerSimdScanAttributeValue,
+                   &kHTMLTokenizerSimdScan,
+                   "attribute_value",
+                   true);
+
+BASE_FEATURE_PARAM(size_t,
+                   kHTMLTokenizerSimdScanMinLength,
+                   &kHTMLTokenizerSimdScan,
+                   "min_length",
+                   64);
 
 BASE_FEATURE(kHeapVectorPromptlyFree, base::FEATURE_ENABLED_BY_DEFAULT);
 
@@ -1835,8 +1869,6 @@ BASE_FEATURE(kReuseNoStoreImageOnSameSrcReassignment,
 BASE_FEATURE(kRenderSizeInScoreAdBrowserSignals,
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kResamplingInputEvents, base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kResamplingScrollEvents, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE_PARAM(base::TimeDelta,
                    kScrollPredictorMaxResampleTime,
@@ -2159,9 +2191,6 @@ BASE_FEATURE(kStreamlineRendererInit, base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kSubSampleWindowProxyUsageMetrics,
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kTaskAttributionTraceMicrotaskTaskState,
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kThreadedBodyLoader, base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kThreadedPreloadScanner, base::FEATURE_DISABLED_BY_DEFAULT);
@@ -2336,13 +2365,6 @@ BASE_FEATURE(kWebAppEnableScopeExtensionsBySite,
 // navigations without scope extensions.
 BASE_FEATURE(kWebAppEnableScopeExtensionsForIsolatedWebApps,
              base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Controls parsing of the "lock_screen" dictionary field and its "start_url"
-// entry in web app manifests.  See explainer for more information:
-// https://github.com/WICG/lock-screen/
-// Note: the lock screen API and OS integration is separately controlled by
-// the content feature `kWebLockScreenApi`.
-BASE_FEATURE(kWebAppManifestLockScreen, base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Use deferred pull status update instead of updating the status directly
 // on audio thread. See https://crbug.com/40249972.

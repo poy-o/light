@@ -2560,6 +2560,33 @@ public class AutocompleteMediatorUnitTest {
     }
 
     @Test
+    public void loadUrlFromVoice_nonHttpMatch_fallsBackToSearch() {
+        mMediator.beginInput(createSession(AutocompleteRequestType.SEARCH));
+        doReturn(createExactUrlMatch(JUnitTestGURLs.CHROME_ABOUT))
+                .when(mAutocompleteController)
+                .classify(any());
+        doReturn(JUnitTestGURLs.BLUE_1).when(mTemplateUrlService).getUrlForVoiceSearchQuery(any());
+
+        mMediator.loadUrlFromVoice("chrome://about", /* fallbackProfile= */ null);
+
+        verify(mAutocompleteDelegate).loadUrl(mOmniboxLoadUrlParamsCaptor.capture());
+        assertEquals(JUnitTestGURLs.BLUE_1.getSpec(), mOmniboxLoadUrlParamsCaptor.getValue().url);
+    }
+
+    @Test
+    public void loadUrlFromVoice_nonHttpMatchWithoutDefaultSearch_doesNotLoadUrl() {
+        mMediator.beginInput(createSession(AutocompleteRequestType.SEARCH));
+        doReturn(createExactUrlMatch(JUnitTestGURLs.CHROME_ABOUT))
+                .when(mAutocompleteController)
+                .classify(any());
+        doReturn(GURL.emptyGURL()).when(mTemplateUrlService).getUrlForVoiceSearchQuery(any());
+
+        mMediator.loadUrlFromVoice("chrome://about", /* fallbackProfile= */ null);
+
+        verify(mAutocompleteDelegate, never()).loadUrl(any());
+    }
+
+    @Test
     public void fuseboxStateChanges() {
         doReturn(false).when(mEmbedder).isPhoneStyleWindow();
         mMediator.beginInput(createEmptySession());
@@ -3857,7 +3884,7 @@ public class AutocompleteMediatorUnitTest {
                         "accessibility",
                         "keyword",
                         StarterPackId.TABS);
-        mMediator.onOmniboxActionClicked(siteSearchAction, 0);
+        mMediator.onOmniboxActionClicked(mSuggestionsList.get(0), siteSearchAction, 0);
         verify(mOmniboxActionDelegate)
                 .setSiteSearchData(
                         new SiteSearchData(
@@ -3873,7 +3900,35 @@ public class AutocompleteMediatorUnitTest {
                         "hint",
                         "accessibility",
                         OmniboxPedalId.LAUNCH_INCOGNITO);
-        mMediator.onOmniboxActionClicked(pedalAction, 0);
+        mMediator.onOmniboxActionClicked(mSuggestionsList.get(0), pedalAction, 0);
+        verify(mOmniboxActionDelegate).openIncognitoTab();
+        verify(mAutocompleteDelegate).clearOmniboxFocus();
+    }
+
+    @Test
+    public void getDefaultMatch_returnsNullWhenEmptyOrMissing() {
+        assertNull(mMediator.getDefaultMatch());
+        assertNull(mMediator.getSuggestionAtForTest(0));
+
+        mMediator.beginInput(createEmptySession());
+        mMediator.onSuggestionsReceived(mAutocompleteResult, /* isFinal= */ true);
+        assertEquals(mSuggestionsList.get(0), mMediator.getDefaultMatch());
+        assertNull(mMediator.getSuggestionAtForTest(-1));
+        assertNull(mMediator.getSuggestionAtForTest(mSuggestionsList.size()));
+    }
+
+    @Test
+    public void onOmniboxActionClicked_stalePositionDoesNotCrash() {
+        mMediator.beginInput(createEmptySession());
+        mMediator.onSuggestionsReceived(mAutocompleteResult, /* isFinal= */ true);
+        OmniboxPedal pedalAction =
+                new OmniboxPedal(
+                        /* nativeInstance= */ 2,
+                        "hint",
+                        "accessibility",
+                        OmniboxPedalId.LAUNCH_INCOGNITO);
+        mMediator.onOmniboxActionClicked(
+                mSuggestionsList.get(0), pedalAction, mSuggestionsList.size() + 1);
         verify(mOmniboxActionDelegate).openIncognitoTab();
         verify(mAutocompleteDelegate).clearOmniboxFocus();
     }

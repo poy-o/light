@@ -1,0 +1,90 @@
+# Copyright 2021 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//extensions/buildflags/buildflags.gni")
+import("//tools/grit/grit_rule.gni")
+import("//ui/webui/resources/tools/generate_grd.gni")
+
+assert(is_chromeos)
+assert(enable_extensions_core)
+
+# Use a static library here because many test binaries depend on this but don't
+# require many files from it. This makes linking more efficient.
+static_library("telemetry") {
+  sources = [
+    "chromeos_system_extension_info.cc",
+    "chromeos_system_extension_info.h",
+    "chromeos_system_extensions_api_permissions.cc",
+    "chromeos_system_extensions_api_permissions.h",
+    "chromeos_system_extensions_api_provider.cc",
+    "chromeos_system_extensions_api_provider.h",
+    "chromeos_system_extensions_manifest_constants.cc",
+    "chromeos_system_extensions_manifest_constants.h",
+    "chromeos_system_extensions_manifest_handler.cc",
+    "chromeos_system_extensions_manifest_handler.h",
+  ]
+
+  public_deps = [ "//components/web_package" ]
+
+  deps = [
+    ":resources",
+    "api",
+    "api:extensions_features",
+    "//ash/constants",
+    "//base",
+    "//chromeos/constants",
+    "//components/webapps/isolated_web_apps:scheme",
+    "//extensions/common",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "chromeos_system_extension_info_unittest.cc",
+    "manifest_tests/extension_manifests_chromeos_system_extension_unittest.cc",
+  ]
+  deps = [
+    ":telemetry",
+    "//ash/constants",
+    "//base",
+    "//base/test:test_support",
+    "//components/version_info",
+    "//components/web_package",
+    "//components/webapps/isolated_web_apps:scheme",
+    "//extensions:test_support",
+    "//extensions/common",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//url",
+  ]
+  data = [ "//chromeos/ash/experiences/extensions/test/data/" ]
+}
+
+grd_file = "$target_gen_dir/chromeos_system_extensions_resources.grd"
+
+generate_grd("build_grd") {
+  grd_prefix = "chromeos_system_extensions"
+  out_grd = grd_file
+  input_files = [ "api/_api_features.json" ]
+  input_files_base_dir = rebase_path(".", "//")
+}
+
+grit("resources") {
+  source = grd_file
+  enable_input_discovery_for_gn_analyze = false
+  output_dir =
+      "$root_gen_dir/chromeos/ash/experiences/extensions/common/telemetry"
+  output_name = "chromeos_system_extensions_resources"
+  outputs = [
+    "grit/chromeos_system_extensions_resources.h",
+    "grit/chromeos_system_extensions_resources_map.cc",
+    "grit/chromeos_system_extensions_resources_map.h",
+    "chromeos_system_extensions_resources.pak",
+  ]
+  deps = [ ":build_grd" ]
+
+  # TODO(crbug.com/584115494): Remove once grit() adds this dependency.
+  public_deps = [ "//ui/base:webui_resource_path" ]
+}

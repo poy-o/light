@@ -45,6 +45,7 @@
 #include "components/search_engines/search_engines_test_environment.h"
 #include "components/search_engines/search_terms_data.h"
 #include "components/search_engines/template_url.h"
+#include "components/search_engines/template_url_data_util.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/search_engines/template_url_prepopulate_data_resolver.h"
 #include "components/search_engines/template_url_service.h"
@@ -58,13 +59,30 @@
 #include "sql/statement.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/search_engines_data/resources/definitions/prepopulated_engines.h"
 #include "third_party/search_engines_data/resources/definitions/regional_settings.h"
 
 namespace {
 
 using regional_capabilities::CountryIdHolder;
+using TemplateURLPrepopulateData::PrepopulatedEngine;
+using TemplateURLPrepopulateData::PrepopulatedEngineVector;
 
-constexpr std::u16string_view sample_engine_name = u"Search engine name";
+constexpr char16_t kSampleEngineName[] = u"Search engine name";
+constexpr std::u16string_view sample_engine_name = kSampleEngineName;
+
+PrepopulatedEngine CreatePrepopulatedEngine(
+    int prepopulate_id,
+    const char16_t* keyword,
+    const char* search_url = "https://search.url") {
+  return {
+      .name = kSampleEngineName,
+      .keyword = keyword,
+      .search_url = search_url,
+      .encoding = "UTF-8",
+      .id = prepopulate_id,
+  };
+}
 
 std::unique_ptr<TemplateURLData> CreatePrepopulateTemplateURLData(
     int prepopulate_id,
@@ -103,12 +121,12 @@ std::unique_ptr<TemplateURL> CreatePrepopulateTemplateURL(
 }
 
 TEST(TemplateURLServiceUtilTest, RemoveDuplicatePrepopulateIDs) {
-  std::vector<std::unique_ptr<TemplateURLData>> prepopulated_turls;
+  const auto engine_1 = CreatePrepopulatedEngine(1, u"winner4");
+  const auto engine_2 = CreatePrepopulatedEngine(2, u"xxx");
+  const auto engine_3 = CreatePrepopulatedEngine(3, u"yyy");
+  PrepopulatedEngineVector prepopulated_engines = {&engine_1, &engine_2,
+                                                   &engine_3};
   TemplateURLService::OwnedTemplateURLVector local_turls;
-
-  prepopulated_turls.push_back(CreatePrepopulateTemplateURLData(1, "winner4"));
-  prepopulated_turls.push_back(CreatePrepopulateTemplateURLData(2, "xxx"));
-  prepopulated_turls.push_back(CreatePrepopulateTemplateURLData(3, "yyy"));
 
   // Create a sets of different TURLs grouped by prepopulate ID. Each group
   // will test a different heuristic of RemoveDuplicatePrepopulateIDs.
@@ -151,12 +169,12 @@ TEST(TemplateURLServiceUtilTest, RemoveDuplicatePrepopulateIDs) {
   local_turls.push_back(
       CreatePrepopulateTemplateURL(3, "loser6", TemplateURLID(15)));
 
-  RemoveDuplicatePrepopulateIDs(nullptr, prepopulated_turls, default_turl,
+  RemoveDuplicatePrepopulateIDs(nullptr, prepopulated_engines, default_turl,
                                 &local_turls, SearchTermsData(), nullptr);
 
   // Verify that the expected local TURLs survived the process.
   EXPECT_EQ(local_turls.size(),
-            prepopulated_turls.size() + num_non_prepopulated_urls);
+            prepopulated_engines.size() + num_non_prepopulated_urls);
   for (const auto& turl : local_turls) {
     EXPECT_TRUE(base::StartsWith(turl->keyword(), u"winner",
                                  base::CompareCase::SENSITIVE));
@@ -174,7 +192,6 @@ class TemplateURLServiceUtilWithEnvTest : public testing::Test {
 // update.
 TEST_F(TemplateURLServiceUtilWithEnvTest,
        MergeEnginesFromPrepopulateData_PlayAPI) {
-  std::vector<std::unique_ptr<TemplateURLData>> prepopulated_turls;
   TemplateURLService::OwnedTemplateURLVector local_turls;
 
   // Start with single search engine created from Play API data.
@@ -183,11 +200,12 @@ TEST_F(TemplateURLServiceUtilWithEnvTest,
 
   // Test that prepopulated search engine with matching keyword is merged with
   // Play API search engine. Search URL should come from Play API search engine.
-  const std::string prepopulated_search_url = "http://prepopulated.url";
-  prepopulated_turls.push_back(CreatePrepopulateTemplateURLData(1, "play"));
-  prepopulated_turls.back()->SetURL(prepopulated_search_url);
+  constexpr char kPrepopulatedSearchUrl[] = "http://prepopulated.url";
+  const auto play_engine =
+      CreatePrepopulatedEngine(1, u"play", kPrepopulatedSearchUrl);
+  PrepopulatedEngineVector prepopulated_engines = {&play_engine};
   MergeEnginesFromPrepopulateData(
-      nullptr, &prepopulated_turls, &local_turls, nullptr,
+      nullptr, prepopulated_engines, &local_turls, nullptr,
       search_engines_test_environment_.prepopulate_data_resolver(), nullptr);
   ASSERT_EQ(local_turls.size(), 1U);
   // Merged search engine should have both Play API flag and valid
@@ -195,14 +213,14 @@ TEST_F(TemplateURLServiceUtilWithEnvTest,
   ASSERT_EQ(local_turls[0]->GetRegulatoryExtensionType(),
             RegulatoryExtensionType::kAndroidEEA);
   EXPECT_EQ(1, local_turls[0]->prepopulate_id());
-  EXPECT_NE(prepopulated_search_url, local_turls[0]->url());
+  EXPECT_NE(kPrepopulatedSearchUrl, local_turls[0]->url());
 
   // Test that merging prepopulated search engine with matching prepopulate_id
   // preserves keyword of Play API search engine.
-  prepopulated_turls.clear();
-  prepopulated_turls.push_back(CreatePrepopulateTemplateURLData(1, "play2"));
+  const auto play2_engine = CreatePrepopulatedEngine(1, u"play2");
+  prepopulated_engines = {&play2_engine};
   MergeEnginesFromPrepopulateData(
-      nullptr, &prepopulated_turls, &local_turls, nullptr,
+      nullptr, prepopulated_engines, &local_turls, nullptr,
       search_engines_test_environment_.prepopulate_data_resolver(), nullptr);
   ASSERT_EQ(local_turls.size(), 1U);
   ASSERT_EQ(local_turls[0]->GetRegulatoryExtensionType(),
@@ -211,9 +229,9 @@ TEST_F(TemplateURLServiceUtilWithEnvTest,
 
   // Test that removing search engine from prepopulated list doesn't delete Play
   // API search engine record.
-  prepopulated_turls.clear();
+  prepopulated_engines.clear();
   MergeEnginesFromPrepopulateData(
-      nullptr, &prepopulated_turls, &local_turls, nullptr,
+      nullptr, prepopulated_engines, &local_turls, nullptr,
       search_engines_test_environment_.prepopulate_data_resolver(), nullptr);
   ASSERT_EQ(local_turls.size(), 1U);
   ASSERT_EQ(local_turls[0]->GetRegulatoryExtensionType(),
@@ -246,11 +264,9 @@ TEST_F(
   existing_urls.push_back(std::make_unique<TemplateURL>(reg_data1));
   existing_urls.push_back(std::make_unique<TemplateURL>(reg_data2));
 
-  std::vector<std::unique_ptr<TemplateURLData>> prepopulated_urls;
-
   base::HistogramTester histogram_tester;
   CreateActionsFromCurrentPrepopulateData(
-      &prepopulated_urls, existing_urls,
+      /*prepopulated_engines=*/{}, existing_urls,
       /*default_search_provider=*/nullptr,
       search_engines_test_environment_.prepopulate_data_resolver());
 
@@ -285,11 +301,9 @@ TEST_F(
   existing_urls.push_back(std::make_unique<TemplateURL>(reg_data1));
   existing_urls.push_back(std::make_unique<TemplateURL>(reg_data2));
 
-  std::vector<std::unique_ptr<TemplateURLData>> prepopulated_urls;
-
   base::HistogramTester histogram_tester;
   CreateActionsFromCurrentPrepopulateData(
-      &prepopulated_urls, existing_urls,
+      /*prepopulated_engines=*/{}, existing_urls,
       /*default_search_provider=*/nullptr,
       search_engines_test_environment_.prepopulate_data_resolver());
 
@@ -739,7 +753,8 @@ TEST_F(TemplateURLServiceUtilLoadTest, PrepopulatedDecryptionRecovery) {
     custom.id = TemplateURLID(1);
     custom.safe_for_autoreplace = false;
     result.keywords.push_back(custom);
-    TemplateURLData edited = *prepopulated.back();
+    TemplateURLData edited(
+        *TemplateURLDataFromPrepopulatedEngine(*prepopulated.back()));
     edited.id = TemplateURLID(2);
     edited.SetShortName(u"Edited name");
     edited.SetKeyword(u"edited");
@@ -777,10 +792,10 @@ TEST_F(TemplateURLServiceUtilLoadTest, PrepopulatedDecryptionRecovery) {
       EXPECT_EQ((*edited_it)->short_name(), edited.short_name());
       EXPECT_EQ((*edited_it)->sync_guid(), edited.sync_guid);
       if (had_prepopulated_decryption_failure) {
-        for (const auto& engine : prepopulated) {
-          EXPECT_NE(std::ranges::find(urls, engine->prepopulate_id,
-                                      &TemplateURL::prepopulate_id),
-                    urls.end());
+        for (const PrepopulatedEngine* engine : prepopulated) {
+          EXPECT_NE(
+              std::ranges::find(urls, engine->id, &TemplateURL::prepopulate_id),
+              urls.end());
         }
       }
     }
@@ -997,10 +1012,10 @@ class TemplateURLServiceDecryptionLoadTest
                                        urls, [](const TemplateURL* url) {
                                          return url->prepopulate_id() > 0;
                                        })));
-    for (const auto& engine : prepopulated) {
-      EXPECT_NE(std::ranges::find(urls, engine->prepopulate_id,
-                                  &TemplateURL::prepopulate_id),
-                urls.end());
+    for (const PrepopulatedEngine* engine : prepopulated) {
+      EXPECT_NE(
+          std::ranges::find(urls, engine->id, &TemplateURL::prepopulate_id),
+          urls.end());
     }
   }
 
@@ -1068,13 +1083,13 @@ TEST_P(TemplateURLServiceDecryptionLoadTest, StarterPackDecryptionRecovery) {
   ASSERT_GT(prepopulated.size(), 2u);
   const int fallback_id =
       env.prepopulate_data_resolver().GetFallbackSearch()->prepopulate_id;
-  const auto selected =
-      std::ranges::find_if(prepopulated, [fallback_id](const auto& data) {
-        return data->prepopulate_id != fallback_id;
+  const auto selected = std::ranges::find_if(
+      prepopulated, [fallback_id](const PrepopulatedEngine* engine) {
+        return engine->id != fallback_id;
       });
   ASSERT_NE(selected, prepopulated.end());
   auto* selected_engine =
-      service_->GetTemplateURLForKeyword((*selected)->keyword());
+      service_->GetTemplateURLForKeyword((*selected)->keyword);
   ASSERT_TRUE(selected_engine);
   service_->SetUserSelectedDefaultSearchProvider(selected_engine);
   const int selected_id = selected_engine->prepopulate_id();
@@ -1084,12 +1099,12 @@ TEST_P(TemplateURLServiceDecryptionLoadTest, StarterPackDecryptionRecovery) {
   if (!GetParam()) {
     // A starter pack failure must not undo a deliberate regional deletion.
     const auto removed = std::ranges::find_if(
-        prepopulated, [fallback_id, selected_id](const auto& data) {
-          return data->prepopulate_id != fallback_id &&
-                 data->prepopulate_id != selected_id;
+        prepopulated,
+        [fallback_id, selected_id](const PrepopulatedEngine* engine) {
+          return engine->id != fallback_id && engine->id != selected_id;
         });
     ASSERT_NE(removed, prepopulated.end());
-    removed_keyword = (*removed)->keyword();
+    removed_keyword = (*removed)->keyword;
     auto* removed_engine = service_->GetTemplateURLForKeyword(removed_keyword);
     ASSERT_TRUE(removed_engine);
     service_->Remove(removed_engine);
@@ -1149,13 +1164,13 @@ TEST_F(TemplateURLServiceDecryptionLoadTest,
           .GetPrepopulatedEngines();
   ASSERT_GT(prepopulated.size(), 1u);
   const int default_id = service_->GetDefaultSearchProvider()->prepopulate_id();
-  const auto removed =
-      std::ranges::find_if(prepopulated, [default_id](const auto& data) {
-        return data->prepopulate_id != default_id;
+  const auto removed = std::ranges::find_if(
+      prepopulated, [default_id](const PrepopulatedEngine* engine) {
+        return engine->id != default_id;
       });
   ASSERT_NE(removed, prepopulated.end());
   auto* removed_engine =
-      service_->GetTemplateURLForKeyword((*removed)->keyword());
+      service_->GetTemplateURLForKeyword((*removed)->keyword);
   ASSERT_TRUE(removed_engine);
   service_->Remove(removed_engine);
   const auto starter_pack =
@@ -1180,7 +1195,7 @@ TEST_F(TemplateURLServiceDecryptionLoadTest,
   EXPECT_FALSE(service_->GetTemplateURLForKeyword(custom.keyword()));
   // A custom row's decryption failure must not restore deliberately removed
   // built-in engines when the metadata is current.
-  EXPECT_FALSE(service_->GetTemplateURLForKeyword((*removed)->keyword()));
+  EXPECT_FALSE(service_->GetTemplateURLForKeyword((*removed)->keyword));
   EXPECT_FALSE(service_->GetTemplateURLForKeyword(removed_starter_keyword));
   const auto urls = service_->GetTemplateURLs();
   EXPECT_EQ(prepopulated.size() - 1, static_cast<size_t>(std::ranges::count_if(
@@ -1197,14 +1212,14 @@ TEST_P(TemplateURLServiceDecryptionLoadTest,
   ASSERT_GT(prepopulated.size(), 1u);
   const int fallback_id =
       env.prepopulate_data_resolver().GetFallbackSearch()->prepopulate_id;
-  const auto selected =
-      std::ranges::find_if(prepopulated, [fallback_id](const auto& data) {
-        return data->prepopulate_id != fallback_id;
+  const auto selected = std::ranges::find_if(
+      prepopulated, [fallback_id](const PrepopulatedEngine* engine) {
+        return engine->id != fallback_id;
       });
   ASSERT_NE(selected, prepopulated.end());
-  const int selected_id = (*selected)->prepopulate_id;
+  const int selected_id = (*selected)->id;
   auto* selected_engine =
-      service_->GetTemplateURLForKeyword((*selected)->keyword());
+      service_->GetTemplateURLForKeyword((*selected)->keyword);
   ASSERT_TRUE(selected_engine);
   service_->SetUserSelectedDefaultSearchProvider(selected_engine);
   const std::string selected_guid = selected_engine->sync_guid();

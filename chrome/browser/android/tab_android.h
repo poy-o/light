@@ -290,6 +290,8 @@ class TabAndroid : public tabs::TabInterface,
       PinnedStateChangedCallback callback) override;
   base::CallbackListSubscription RegisterGroupChanged(
       GroupChangedCallback callback) override;
+  base::CallbackListSubscription RegisterSplitChanged(
+      SplitChangedCallback callback) override;
   base::CallbackListSubscription RegisterBlockedStateChanged(
       BlockedStateChangedCallback callback) override;
   bool CanShowModalUI() const override;
@@ -391,6 +393,12 @@ template <>
 inline TabAndroid* FromJniType<TabAndroid*>(JNIEnv* env,
                                             const JavaRef<jobject>& j_object) {
   return j_object.is_null() ? nullptr : TabAndroid::GetNativeTab(env, j_object);
+}
+template <>
+inline tabs::TabInterface* FromJniType<tabs::TabInterface*>(
+    JNIEnv* env,
+    const JavaRef<jobject>& j_object) {
+  return FromJniType<TabAndroid*>(env, j_object);
 }
 template <>
 inline ScopedJavaLocalRef<jobject> ToJniType<TabAndroid>(

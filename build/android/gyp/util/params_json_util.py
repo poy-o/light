@@ -433,23 +433,13 @@ class ParamsJson(dict):
         """Returns True if the target type has a classpath."""
         if self.is_library():
             return bool(
-                self.get('dex_needs_classpath')
-                or self.get('bytecode_rewriter_target')
-                or not self.is_prebuilt()
+                self.get('needs_full_javac_classpath') or not self.is_prebuilt()
             )
         return self.type in _CLASSPATH_TYPES
 
     def is_compile_type(self):
         """Returns True if the target has a compile step."""
         return not self.is_prebuilt() and self.type in _COMPILE_TYPES
-
-    def needs_transitive_rtxt(self):
-        """Returns True if the target populates "dependency_rtxt_files"."""
-        return self.type == 'dist_aar' or (
-            self.is_library()
-            and not self.is_prebuilt()
-            and 'package_name' in self
-        )
 
     def is_prebuilt(self):
         """If it's a java_library prebuilt."""
@@ -622,10 +612,6 @@ class ParamsJson(dict):
 
     def resource_deps(self):
         """Returns the transitive resource dependencies."""
-        # For Java libraries, restrict to resource targets that are direct deps, or
-        # are indirect via other resource targets.
-        if self.is_library():
-            return self.deps().of_type('android_resources')
         return (
             self.deps().recursive_resource_deps().of_type('android_resources')
         )

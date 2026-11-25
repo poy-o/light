@@ -277,7 +277,11 @@ class GeminiGlicProviderSpec final : public GlicProviderSpec {
       case GlicFeature::kIndigoOpenGlic:
         return base::FeatureList::IsEnabled(features::kIndigoOpenGlic);
       case GlicFeature::kDynamicChromeTools:
+#if !BUILDFLAG(IS_ANDROID)
         return base::FeatureList::IsEnabled(features::kGlicDynamicChromeTools);
+#else
+        return false;
+#endif  // !BUILDFLAG(IS_ANDROID)
       case GlicFeature::kDrivePicker:
 #if BUILDFLAG(IS_ANDROID)
         return false;
@@ -386,9 +390,16 @@ class GeminiEnterpriseGlicProviderSpec final : public GlicProviderSpec,
     return url.is_empty() ? url : GetLocalizedGuestURL(url);
   }
   const GeicSpec* GetGeicSpec() const override { return this; }
-  // The anchored error state shows consumer copy and help links.
-  // TODO(b/576834093): Support anchoring with GEiC error states.
-  bool SupportsAnchoredEntryPoint() const override { return false; }
+  // Without `features::kGeicFre`, every GEiC profile reads as consented (see
+  // `GeminiEnterpriseGlicFreStore::GetStatus()`), so anchoring would also show
+  // the entry point to profiles that never onboarded.
+  // TODO(b/589847184): The anchored error state uses the consumer copy and help
+  // link; switch to Gemini Enterprise ones.
+  bool SupportsAnchoredEntryPoint() const override {
+    return base::FeatureList::IsEnabled(features::kGeicFre) &&
+           base::FeatureList::IsEnabled(
+               features::kGeicAnchorEntryPointForOnboardedUsers);
+  }
   const GlicFreStore& GetFreStore() const override { return *fre_store_; }
   std::string GetGuestUrlKey() const override {
     // GE profiles are only latched with a valid guest URL (see
@@ -466,10 +477,12 @@ class GeminiEnterpriseGlicProviderSpec final : public GlicProviderSpec,
     return base::FeatureList::IsEnabled(features::kGeicApiBundleResource) ||
            base::FeatureList::IsEnabled(features::kGlicCic);
   }
-  // GEiC uses explicit single-tab attachment; tabs created via CreateTab or
-  // link clicks (e.g. Send feedback, Help, citations) should not be auto-pinned
-  // as shared tab context.
-  bool PinOnBindEnabled() const override { return false; }
+  // Whether tabs created via `CreateTab()` or link clicks are auto-pinned as
+  // shared tab context. Gated by `kGeicPinOnBind` for rollout parity with
+  // consumer Gemini.
+  bool PinOnBindEnabled() const override {
+    return base::FeatureList::IsEnabled(features::kGeicPinOnBind);
+  }
   bool CanSwitchToProvider(Profile& profile,
                            GlicProvider target) const override {
     return target == GlicProvider::kGemini &&

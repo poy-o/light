@@ -22,7 +22,6 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
 #include "base/threading/thread_restrictions.h"
-#include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/browser/accessibility/page_colors_controller.h"
 #include "chrome/browser/accessibility/page_colors_controller_factory.h"
@@ -45,6 +44,7 @@
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/browser/shell_integration.h"
 #include "chrome/browser/tab_list/tab_list_interface.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
@@ -69,7 +69,7 @@
 #include "components/enterprise/connectors/core/cloud_content_scanning/clipboard_request_handler.h"
 #include "components/enterprise/connectors/core/cloud_content_scanning/common.h"
 #include "components/enterprise/data_controls/core/browser/test_utils.h"
-#include "components/enterprise/isolated_mode/isolated_mode_features.h"
+#include "components/enterprise/isolated_mode/scoped_isolated_mode_override_for_testing.h"
 #include "components/guest_view/browser/guest_view_base.h"
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "components/guest_view/browser/guest_view_manager_delegate.h"
@@ -134,13 +134,10 @@
 #include "ui/color/color_provider_utils.h"
 #include "ui/native_theme/mock_os_settings_provider.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/webui/buildflags.h"
 #include "ui/webui/webui_allowlist.h"
 #include "url/gurl.h"
 #include "url/origin.h"
-
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
-#include "chrome/test/base/scoped_channel_override.h"
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/common/constants.h"
@@ -684,18 +681,9 @@ INSTANTIATE_TEST_SUITE_P(
     });
 
 class PrefersColorSchemeEnterpriseIsolatedTest : public InProcessBrowserTest {
- public:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(
-        enterprise_isolated_mode::switches::
-            kForceEnterpriseIsolatedModeReplacesIncognito);
-  }
-
  private:
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
-  chrome::ScopedChannelOverride channel_override_{
-      chrome::ScopedChannelOverride::Channel::kDev};
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
+  enterprise_isolated_mode::ScopedIsolatedModeOverrideForTesting
+      scoped_isolated_mode_;
 };
 
 IN_PROC_BROWSER_TEST_F(PrefersColorSchemeEnterpriseIsolatedTest,
@@ -928,6 +916,9 @@ class ProtocolHandlerLocalOnlyBaseTest : public ProtocolHandlerTest {
   ProtocolHandlerLocalOnlyBaseTest() {
     feature_list_.InitWithFeatures(
         {features::kLocalOnlyAppProtocolPrefix,
+#if BUILDFLAG(IS_WIN)
+         features::kLocalOnlyAppProtocolWindows,
+#endif  // BUILDFLAG(IS_WIN)
          policy::features::kUseManagementServiceForSensitivePolicies},
         {});
   }
@@ -941,7 +932,7 @@ class ProtocolHandlerLocalOnlyBaseTest : public ProtocolHandlerTest {
  protected:
   void SetURLAllowlistAndWait(const GURL& url) {
     base::ListValue allowlist;
-    allowlist.Append("local+custom:*");
+    allowlist.Append(base::StrCat({url.GetScheme(), ":*"}));
     browser()->GetProfile()->GetPrefs()->SetList(
         policy::policy_prefs::kUrlAllowlist, std::move(allowlist));
     PolicyBlocklistService* policy_service =
@@ -1050,6 +1041,13 @@ class FakeExternalProtocolHandlerWorker
 
   std::u16string GetDefaultClientNameImpl() override { return program_name_; }
 
+#if BUILDFLAG(IS_WIN)
+  shell_integration::LocalOnlyAppProtocolState
+  GetLocalOnlyAppProtocolStateImpl() override {
+    return shell_integration::LocalOnlyAppProtocolState::kLocalOnly;
+  }
+#endif
+
   void SetAsDefaultImpl(base::OnceClosure on_finished_callback) override {
     std::move(on_finished_callback).Run();
   }
@@ -1080,7 +1078,8 @@ class ScopedFakeExternalProtocolHandlerDelegate
   }
 
   void BlockRequest() override {
-    FAIL() << "Unexpected BlockRequest call received";
+    blocked_ = true;
+    launch_url_run_loop_.Quit();
   }
 
   void RunExternalProtocolDialog(
@@ -1110,6 +1109,7 @@ class ScopedFakeExternalProtocolHandlerDelegate
   bool external_protocol_dialog_called() const {
     return external_protocol_dialog_called_;
   }
+  bool blocked() const { return blocked_; }
   std::string_view launched_url_without_security_check() const {
     return launched_url_without_security_check_;
   }
@@ -1124,6 +1124,7 @@ class ScopedFakeExternalProtocolHandlerDelegate
   base::RunLoop launch_url_run_loop_;
   const std::u16string program_name_ = u"custom";
   bool external_protocol_dialog_called_ = false;
+  bool blocked_ = false;
   std::string launched_url_without_security_check_;
   std::string launched_url_with_security_check_;
   std::optional<url::Origin> initiating_origin_;
@@ -1157,6 +1158,38 @@ IN_PROC_BROWSER_TEST_F(ProtocolHandlerLocalOnlyTest,
             delegate.launched_url_without_security_check());
   EXPECT_EQ("", delegate.launched_url_with_security_check());
 }
+
+#if BUILDFLAG(IS_WIN)
+IN_PROC_BROWSER_TEST_F(ProtocolHandlerLocalOnlyTest,
+                       URLAllowlistOverridesWindowsLocalOnlyBlock) {
+  const GURL local_only_url("custom:test");
+  content::WebContents* const web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  {
+    ScopedFakeExternalProtocolHandlerDelegate delegate;
+    ASSERT_TRUE(
+        content::ExecJs(web_contents, "location.href = 'custom:test';"));
+    delegate.WaitExternalUrlLaunchCompleted();
+
+    EXPECT_TRUE(delegate.blocked());
+    EXPECT_FALSE(delegate.external_protocol_dialog_called());
+    EXPECT_EQ("", delegate.launched_url_without_security_check());
+    EXPECT_EQ("", delegate.launched_url_with_security_check());
+  }
+
+  SetURLAllowlistAndWait(local_only_url);
+
+  ScopedFakeExternalProtocolHandlerDelegate delegate;
+  ASSERT_TRUE(content::ExecJs(web_contents, "location.href = 'custom:test';"));
+  delegate.WaitExternalUrlLaunchCompleted();
+
+  EXPECT_FALSE(delegate.blocked());
+  EXPECT_FALSE(delegate.external_protocol_dialog_called());
+  EXPECT_EQ(local_only_url.spec(),
+            delegate.launched_url_without_security_check());
+  EXPECT_EQ("", delegate.launched_url_with_security_check());
+}
+#endif  // BUILDFLAG(IS_WIN)
 
 IN_PROC_BROWSER_TEST_F(ProtocolHandlerLocalOnlyTest,
                        AllowsBrowserInitiatedNavigation) {
@@ -1192,6 +1225,25 @@ IN_PROC_BROWSER_TEST_F(ProtocolHandlerLocalOnlyUnmanagedTest,
   ASSERT_EQ(1u, observer.messages().size());
 }
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+
+#if BUILDFLAG(IS_WIN)
+IN_PROC_BROWSER_TEST_F(ProtocolHandlerLocalOnlyUnmanagedTest,
+                       URLAllowlistDoesNotOverrideWindowsLocalOnlyBlock) {
+  const GURL local_only_url("custom:test");
+  SetURLAllowlistAndWait(local_only_url);
+
+  content::WebContents* const web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ScopedFakeExternalProtocolHandlerDelegate delegate;
+  ASSERT_TRUE(content::ExecJs(web_contents, "location.href = 'custom:test';"));
+  delegate.WaitExternalUrlLaunchCompleted();
+
+  EXPECT_TRUE(delegate.blocked());
+  EXPECT_FALSE(delegate.external_protocol_dialog_called());
+  EXPECT_EQ("", delegate.launched_url_without_security_check());
+  EXPECT_EQ("", delegate.launched_url_with_security_check());
+}
+#endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(IS_CHROMEOS)
 // URLs which are explicitly allowlisted by policy can bypass security checks.
@@ -2427,29 +2479,36 @@ IN_PROC_BROWSER_TEST_F(ChromeContentBrowserClientClipboardTest,
   EXPECT_TRUE(web_contents->HasRecentInteraction());
 }
 
+struct BundledCodeCacheClientTestParams {
+  const char* test_suffix;
+  bool bundled_code_cache_enabled;
+  bool ntp_bundled_code_cache_enabled;
+};
+
 class BundledCodeCacheChromeContentBrowserClientTest
     : public InProcessBrowserTest,
-      public testing::WithParamInterface<bool> {
+      public testing::WithParamInterface<BundledCodeCacheClientTestParams> {
  public:
   BundledCodeCacheChromeContentBrowserClientTest() {
-    feature_list_.InitWithFeatureState(features::kWebUIBundledCodeCache,
-                                       IsBundledCodeCacheEnabled());
+    feature_list_.InitWithFeatureStates(
+        {{features::kWebUIBundledCodeCache,
+          GetParam().bundled_code_cache_enabled},
+         {features::kWebUIBundledCodeCacheForNewTabPage,
+          GetParam().ntp_bundled_code_cache_enabled}});
   }
-
-  bool IsBundledCodeCacheEnabled() const { return GetParam(); }
 
  private:
   base::test::ScopedFeatureList feature_list_;
 };
 
-// Assert top-chrome webui renderers disallow v8 feature flag overrides only
-// when the bundled webui code cache is enabled.
+// Assert top-chrome and New Tab Page webui renderers disallow v8 feature flag
+// overrides only when their bundled webui code cache features are enabled.
 IN_PROC_BROWSER_TEST_P(BundledCodeCacheChromeContentBrowserClientTest,
                        ConfiguresRendererForDisallowV8FeatureOverrides) {
   ASSERT_TRUE(embedded_test_server()->Start());
   const GURL top_chrome_url1(chrome::kChromeUITabSearchURL);
   const GURL top_chrome_url2(chrome::kChromeUIReadLaterURL);
-  const GURL& non_top_chrome_url1 = chrome::ChromeUINewTabPageURLAsGURL();
+  const GURL non_top_chrome_url1(chrome::kChromeUISettingsURL);
   const GURL non_top_chrome_url2(
       embedded_test_server()->GetURL("/title1.html"));
   EXPECT_TRUE(top_chrome_url1.DomainIs(chrome::kChromeUITopChromeDomain));
@@ -2457,8 +2516,8 @@ IN_PROC_BROWSER_TEST_P(BundledCodeCacheChromeContentBrowserClientTest,
   EXPECT_FALSE(non_top_chrome_url1.DomainIs(chrome::kChromeUITopChromeDomain));
   EXPECT_FALSE(non_top_chrome_url2.DomainIs(chrome::kChromeUITopChromeDomain));
 
-  // Disallow V8 feature flag overrides should only apply to top-chrome URLs
-  // when bundled code caching is enabled.
+  // Disallow V8 feature flag overrides should apply only to opted-in WebUI
+  // sites whose bundled code cache features are enabled.
   auto navigate_and_expect_policy_result = [this](const GURL& url,
                                                   bool expectation) {
     content::RenderFrameHost* rfh =
@@ -2466,21 +2525,37 @@ IN_PROC_BROWSER_TEST_P(BundledCodeCacheChromeContentBrowserClientTest,
     EXPECT_EQ(expectation, rfh->GetProcess()->DisallowV8FeatureFlagOverrides());
   };
   navigate_and_expect_policy_result(top_chrome_url1,
-                                    IsBundledCodeCacheEnabled());
+                                    GetParam().bundled_code_cache_enabled);
   navigate_and_expect_policy_result(top_chrome_url2,
-                                    IsBundledCodeCacheEnabled());
+                                    GetParam().bundled_code_cache_enabled);
   navigate_and_expect_policy_result(non_top_chrome_url1, false);
   navigate_and_expect_policy_result(non_top_chrome_url2, false);
+#if BUILDFLAG(ENABLE_WEBUI_NTP)
+#if BUILDFLAG(ENABLE_WEBUI_GENERATE_CODE_CACHE)
+  const bool expect_ntp_disallow_overrides =
+      GetParam().bundled_code_cache_enabled &&
+      GetParam().ntp_bundled_code_cache_enabled;
+#else
+  const bool expect_ntp_disallow_overrides = false;
+#endif
+  navigate_and_expect_policy_result(chrome::ChromeUINewTabPageURLAsGURL(),
+                                    expect_ntp_disallow_overrides);
+#endif
 }
 
 INSTANTIATE_TEST_SUITE_P(
     ,
     BundledCodeCacheChromeContentBrowserClientTest,
-    ::testing::Bool(),
+    ::testing::Values(
+        BundledCodeCacheClientTestParams{"BundledCodeCacheDisabled_NtpEnabled",
+                                         false, true},
+        BundledCodeCacheClientTestParams{"BundledCodeCacheEnabled_NtpDisabled",
+                                         true, false},
+        BundledCodeCacheClientTestParams{"BundledCodeCacheEnabled_NtpEnabled",
+                                         true, true}),
     [](const ::testing::TestParamInfo<
         BundledCodeCacheChromeContentBrowserClientTest::ParamType>& info) {
-      return base::StrCat(
-          {"BundledCodeCache", info.param ? "Enabled" : "Disabled"});
+      return info.param.test_suffix;
     });
 
 class DevToolsOverridesThirdPartyCookiesBrowserTest

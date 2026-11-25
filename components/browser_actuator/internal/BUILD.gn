@@ -11,11 +11,23 @@ source_set("internal") {
   sources = [
     "browser_actuator_service_impl.cc",
     "browser_actuator_service_impl.h",
+    "browser_actuator_task_client_impl.cc",
+    "browser_actuator_task_client_impl.h",
   ]
 
-  public_deps = [ "//components/browser_actuator/public" ]
+  public_deps = [
+    ":transport_handler",
+    "//base",
+    "//components/browser_actuator/internal/proto:task_ingress_proto",
+    "//components/browser_actuator/public",
+    "//components/stream_transport/public",
+  ]
 
-  deps = [ "//base" ]
+  deps = [
+    "//components/stream_transport/public:payload_type_mapping",
+    "//components/stream_transport/public:service",
+    "//third_party/protobuf:protobuf_lite",
+  ]
 }
 
 source_set("transport_handler") {
@@ -32,7 +44,7 @@ source_set("transport_handler") {
     "task_ingress_transport_handler_factory.h",
   ]
 
-  deps = [
+  public_deps = [
     "//base",
     "//components/browser_actuator/internal/proto:task_ingress_proto",
     "//components/stream_transport/public",
@@ -44,6 +56,7 @@ source_set("unit_tests") {
 
   sources = [
     "browser_actuator_service_impl_unittest.cc",
+    "browser_actuator_task_client_impl_unittest.cc",
     "task_ingress_transport_handler_unittest.cc",
   ]
 
@@ -53,10 +66,15 @@ source_set("unit_tests") {
     "//base",
     "//base/test:test_support",
     "//components/browser_actuator/internal/proto:task_ingress_proto",
+    "//components/browser_actuator/public",
+    "//components/browser_actuator/public/proto:auto_password_change_proto",
+    "//components/browser_actuator/test_support:fake_task_client",
     "//components/stream_transport/public",
     "//components/stream_transport/public:payload_type_mapping",
+    "//components/stream_transport/public:service",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/protobuf:protobuf_lite",
   ]
 
   visibility = [ "//components/browser_actuator:unit_tests" ]

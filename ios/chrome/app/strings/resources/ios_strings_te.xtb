@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">పాస్‌వర్డ్‌లను షేర్ చేయండి</translation>
 <translation id="1554043146674176775">AI మోడ్‌ను ఆఫ్ చేయండి</translation>
 <translation id="1554477036522844996">కొత్త విండో</translation>
+<translation id="1555014818414775661">ఇమేజ్‌లను జోడించండి</translation>
 <translation id="1557806604681757705">మీ కంప్యూటర్</translation>
 <translation id="1558391695376153246">అజ్ఞాత ట్యాబ్‌లను మూసివేయండి</translation>
 <translation id="1560153516220021659">కుదించబడిన సెకండరీ టూల్‌బార్ బటన్</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832"><ph name="BEGIN_BOLD" />Safari సెట్టింగ్‌ల<ph name="END_BOLD" />ను తెరవండి</translation>
 <translation id="3858860766373142691">పేరు</translation>
 <translation id="386224966259596343">తర్వాతిసారి మీరు సంబంధిత ఫారమ్‌ను పూరించినప్పుడు ఈ సమాచారాన్ని Walletలో సేవ్ చేసే అవకాశం మీకు లభిస్తుంది.</translation>
-<translation id="3868495844258915202">పూర్తి URLను చూడండి</translation>
 <translation id="3870931306085184145"><ph name="DOMAIN" /> కోసం సేవ్ చేసిన పాస్‌వర్డ్‌లు లేవు</translation>
 <translation id="3875783148670536197">ఎలా చేయాలో నాకు చూపించు</translation>
 <translation id="3878657761594430423">షీట్ గ్రాబర్</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">ధర ట్రాకింగ్ నోటిఫికేషన్‌లను పొందడానికి, మీ iOS సెట్టింగ్‌లలో నోటిఫికేషన్‌లను ఆన్ చేయండి.</translation>
 <translation id="528857768909044842">ట్యాబ్ గ్రూప్‌లు ఇక్కడ సేవ్ అవుతాయి</translation>
 <translation id="5294624619177114121">మొబైల్ నోటిఫికేషన్‌లు</translation>
-<translation id="5295239312320826323"><ph name="USER_EMAIL" /> ఖాతాను తీసివేయాలా?</translation>
 <translation id="5300589172476337783">చూపించు</translation>
 <translation id="5311061401280561833">కెమెరా, మైక్రోఫోన్ యాక్సెస్ అనుమతించబడ్డాయి</translation>
 <translation id="5313967007315987356">సైట్‌ను జోడించండి</translation>
@@ -1788,6 +1787,7 @@
 <translation id="6504541289630702018">మీ డెస్క్‌టాప్ ట్యాబ్ గ్రూప్‌లను సులభంగా యాక్సెస్ చేయండి</translation>
 <translation id="6505334220040167806">ట్యాబ్ గ్రూప్‌ను కుదించండి.</translation>
 <translation id="6506996418997555004">"<ph name="GROUP_NAME" />" ట్యాబ్ గ్రూప్‌ను షేర్ చేయండి</translation>
+<translation id="650770261448122895">మీకు కనిపించే వాటిని Lensతో సెర్చ్ చేయండి</translation>
 <translation id="6507973708545996744">సైన్ ఇన్ చేసి, మీ చదవాల్సిన లిస్ట్‌ను మీ పరికరాలన్నింటిలో పొందండి.</translation>
 <translation id="6518133107902771759">ధృవీకరించు</translation>
 <translation id="6523575793810663688">ఎలా చేయాలో చూడండి</translation>
@@ -2147,7 +2147,6 @@
 <translation id="7603852183842204213">పాప్-అప్‌లు బ్లాక్ చేయబడ్డాయి (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">సింక్‌ పని చేయడం లేదు</translation>
 <translation id="760667371114328991">సేఫ్టీ చెక్ కోసం నోటిఫికేషన్‌లను ఆఫ్ చేయండి</translation>
-<translation id="7612619742409846846">Googleకు ఇలా సైన్ ఇన్ చేశారు</translation>
 <translation id="7612849887607288481">AI ప్రోటోటైప్ మెనూను తెరవండి</translation>
 <translation id="7618220760967055820">టూల్‌బార్‌లో ఏ బటన్‌ను చూపించాలో ఎంచుకోండి</translation>
 <translation id="7620522820075868385">రద్దు చేయండి</translation>
@@ -2430,6 +2429,7 @@
 <translation id="8439758443371991593">'చదవాల్సిన లిస్ట్‌కు జోడించండి'ని దాచండి</translation>
 <translation id="8443986842926457191">URLలో 2048 కంటే ఎక్కువ అక్షరాలు ఉన్నాయి</translation>
 <translation id="8449869326050867919">పాస్‌వర్డ్ షేర్ చేయబడింది</translation>
+<translation id="8473367210869452063">ఈ సైట్‌తో ఇంటరాక్ట్ అవ్వడానికి, ప్రస్తుత టాస్క్‌ను ఆపివేయండి లేదా Gemini తన పనిని పూర్తి చేసే వరకు వేచి ఉండండి</translation>
 <translation id="8473815223723723001">Gemini సాయంతో ఇమేజ్‌ను ఎడిట్ చేయండి</translation>
 <translation id="8473863474539038330">అడ్రస్‌లు, మరికొన్ని వివరాలు</translation>
 <translation id="8474378002946546633">ప్రకటనలను అనుమతించండి</translation>

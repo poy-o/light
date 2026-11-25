@@ -4,18 +4,23 @@
 #include "chrome/browser/ui/webui/side_panel/read_anything/read_anything_untrusted_page_handler.h"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 #include "base/base_paths.h"
 #include "base/command_line.h"
+#include "base/containers/flat_map.h"
+#include "base/containers/span.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
+#include "base/functional/function_ref.h"
 #include "base/i18n/language_tag.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
@@ -83,8 +88,11 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/accessibility/accessibility_features.h"
+#include "ui/accessibility/ax_enums.mojom-shared.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_node_id_forward.h"
 #include "ui/accessibility/ax_tree_id.h"
+#include "ui/accessibility/ax_tree_update.h"
 #include "ui/accessibility/ax_updates_and_events.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
@@ -107,6 +115,17 @@ using read_anything::mojom::ReadAnythingOpenTrigger;
 namespace {
 
 using testing::_;
+
+constexpr std::string_view kLinkClickHistogram =
+    "Accessibility.ReadAnything.RendererRequestForLinkClick.Result";
+
+std::string GetHtmlId(const ui::AXNodeData& node) {
+  return node.GetStringAttribute(ax::mojom::StringAttribute::kHtmlId);
+}
+
+std::string GetLinkRoleKey(const ui::AXNodeData& node) {
+  return node.role == ax::mojom::Role::kLink ? "link" : "";
+}
 
 class MockPage : public read_anything::mojom::UntrustedPage {
  public:
@@ -241,6 +260,9 @@ class TestReadAnythingUntrustedPageHandler
                                          /*use_screen_ai_service=*/false) {}
 #endif
   using ReadAnythingUntrustedPageHandler::OnImageDataDownloaded;
+#if BUILDFLAG(ENABLE_PDF)
+  using ReadAnythingUntrustedPageHandler::OnPdfImageDataReceived;
+#endif  // BUILDFLAG(ENABLE_PDF)
 };
 
 class FakeTtsEngineDelegate : public content::TtsEngineDelegate {
@@ -295,7 +317,8 @@ class ReadAnythingUntrustedPageHandlerTest : public InProcessBrowserTest {
  public:
   ReadAnythingUntrustedPageHandlerTest() {
     std::vector<base::test::FeatureRef> enabled_features = {
-        features::kReadAnythingImprovedUi};
+        features::kReadAnythingImprovedUi,
+        features::kPdfAccessibilityHeuristicEnhancements};
     std::vector<base::test::FeatureRef> disabled_features;
     scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
     // `TestReadAnythingUntrustedPageHandler` disables ScreenAI service, which
@@ -526,6 +549,68 @@ class ReadAnythingUntrustedPageHandlerTest : public InProcessBrowserTest {
     handler_->AccessibilityEventReceived(details);
   }
 
+  void ClickLinkAndFlush(const ui::AXTreeID& tree_id, ui::AXNodeID node_id) {
+    handler_remote_->OnLinkClicked(tree_id, node_id);
+    handler_remote_.FlushForTesting();
+  }
+
+  bool IsAllowedLinkNode(const ui::AXTreeID& tree_id, ui::AXNodeID node_id) {
+    return handler_->IsAllowedLinkNodeForTesting(tree_id, node_id);
+  }
+
+  // Runs `trigger` and waits until `expected_tree_id` reports a node for every
+  // key in `keys`, where `get_key` returns a node's key. Resets the mock
+  // callback before returning so later events cannot access the local map.
+  base::flat_map<std::string, ui::AXNodeID> RunAndWaitForNodes(
+      base::FunctionRef<void()> trigger,
+      const ui::AXTreeID& expected_tree_id,
+      base::span<const std::string_view> keys,
+      base::FunctionRef<std::string(const ui::AXNodeData&)> get_key) {
+    base::flat_map<std::string, ui::AXNodeID> node_ids;
+    ON_CALL(page_, AccessibilityEventReceived)
+        .WillByDefault([&](const ui::AXTreeID& tree_id,
+                           const std::vector<ui::AXTreeUpdate>& updates,
+                           const std::vector<ui::AXEvent>&) {
+          if (tree_id != expected_tree_id) {
+            return;
+          }
+          for (const ui::AXTreeUpdate& update : updates) {
+            for (const ui::AXNodeData& node : update.nodes) {
+              std::string key = get_key(node);
+              if (std::ranges::contains(keys, key)) {
+                node_ids[std::move(key)] = node.id;
+              }
+            }
+          }
+        });
+    trigger();
+    EXPECT_TRUE(
+        base::test::RunUntil([&]() { return node_ids.size() == keys.size(); }));
+    ON_CALL(page_, AccessibilityEventReceived).WillByDefault(testing::Return());
+    return node_ids;
+  }
+
+  base::flat_map<std::string, ui::AXNodeID> SetUpHandlerAndWaitForNodesByHtmlId(
+      const ui::AXTreeID& expected_tree_id,
+      base::span<const std::string_view> html_ids) {
+    return RunAndWaitForNodes([this]() { SetUpHandler(); }, expected_tree_id,
+                              html_ids, &GetHtmlId);
+  }
+
+  void SetBodyHtml(const content::ToRenderFrameHost& target,
+                   const std::string& html) {
+    ASSERT_TRUE(content::ExecJs(
+        target, content::JsReplace("document.body.innerHTML = $1;", html),
+        content::EXECUTE_SCRIPT_NO_USER_GESTURE));
+  }
+
+  bool EvalBoolWithoutUserGesture(content::WebContents* contents,
+                                  std::string_view script) {
+    return content::EvalJs(contents, script,
+                           content::EXECUTE_SCRIPT_NO_USER_GESTURE)
+        .ExtractBool();
+  }
+
   void OnImageDataDownloaded(const ui::AXTreeID& target_tree_id,
                              ui::AXNodeID node_id,
                              int id,
@@ -537,6 +622,47 @@ class ReadAnythingUntrustedPageHandlerTest : public InProcessBrowserTest {
         ->OnImageDataDownloaded(target_tree_id, node_id, id, http_status_code,
                                 image_url, bitmaps, sizes);
   }
+
+#if BUILDFLAG(ENABLE_PDF)
+  void OnPdfImageDataReceived(const ui::AXTreeID& target_tree_id,
+                              ui::AXNodeID node_id,
+                              const SkBitmap& bitmap) {
+    static_cast<TestReadAnythingUntrustedPageHandler*>(handler_.get())
+        ->OnPdfImageDataReceived(target_tree_id, node_id, bitmap);
+  }
+
+  // Sets up the handler and waits for the first node with `role` in
+  // `pdf_tree_id` to be received via AccessibilityEventReceived().
+  ui::AXNodeID SetUpHandlerAndFindPdfNodeWithRole(
+      const ui::AXTreeID& pdf_tree_id,
+      ax::mojom::Role role) {
+    ui::AXNodeID found_node_id = ui::kInvalidAXNodeID;
+    EXPECT_CALL(page_, AccessibilityEventReceived)
+        .WillRepeatedly([&](const ui::AXTreeID& tree_id,
+                            const std::vector<ui::AXTreeUpdate>& updates,
+                            const std::vector<ui::AXEvent>&) {
+          if (tree_id != pdf_tree_id || found_node_id != ui::kInvalidAXNodeID) {
+            return;
+          }
+          for (const auto& update : updates) {
+            for (const auto& node : update.nodes) {
+              if (node.role == role) {
+                found_node_id = node.id;
+                return;
+              }
+            }
+          }
+        });
+    SetUpHandler();
+    EXPECT_TRUE(base::test::RunUntil(
+        [&]() { return found_node_id != ui::kInvalidAXNodeID; }));
+    // Clear the expectation before returning: the lambda above captures local
+    // variables (`found_node_id` and `role`) by reference, so leaving it
+    // active would access destroyed stack memory on later accessibility events.
+    testing::Mock::VerifyAndClearExpectations(&page_);
+    return found_node_id;
+  }
+#endif  // BUILDFLAG(ENABLE_PDF)
 
   void OnActiveAXTreeIDChanged() { handler_->OnActiveAXTreeIDChanged(); }
 
@@ -568,6 +694,16 @@ class ReadAnythingUntrustedPageHandlerTest : public InProcessBrowserTest {
       return nullptr;
     }
     return pdf_extension_test_util::GetOnlyPdfExtensionHost(web_contents);
+  }
+
+  // Returns the PDF content frame, unlike LoadPdf() which returns the PDF
+  // extension host. Returns nullptr if the PDF fails to load.
+  content::RenderFrameHost* LoadPdfAndGetContentFrame(const GURL& url) {
+    if (!LoadPdf(url)) {
+      return nullptr;
+    }
+    return pdf_extension_test_util::GetOnlyPdfPluginFrame(
+        browser()->tab_strip_model()->GetActiveWebContents());
   }
 
  protected:
@@ -707,38 +843,27 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
                        NavigateToPdfAfterHandlerCreated_NotifiesOfPdfChange) {
   ASSERT_TRUE(embedded_test_server()->Start());
   handler_ = CreateHandler();
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
 
   EXPECT_CALL(page_, OnActiveAXTreeIDChanged(_, _, /*is_pdf=*/false)).Times(1);
   ui::AXTreeID notified_pdf_tree_id;
   EXPECT_CALL(page_, OnActiveAXTreeIDChanged(_, _, /*is_pdf=*/true))
       .WillOnce(testing::SaveArg<0>(&notified_pdf_tree_id));
 
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), embedded_test_server()->GetURL("/pdf/test.pdf")));
-  ASSERT_TRUE(pdf_extension_test_util::EnsurePDFHasLoaded(web_contents));
+  content::RenderFrameHost* pdf_rfh = LoadPdfAndGetContentFrame(
+      embedded_test_server()->GetURL("/pdf/test.pdf"));
+  ASSERT_TRUE(pdf_rfh);
   handler_->DidStopLoading();
 
-  content::RenderFrameHost* pdf_rfh =
-      pdf_extension_test_util::GetOnlyPdfPluginFrame(web_contents);
-  ASSERT_TRUE(pdf_rfh);
   EXPECT_EQ(notified_pdf_tree_id, pdf_rfh->GetAXTreeID());
 }
 
 IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
                        NavigateToPdfBeforeHandlerCreated_NotifiesOfPdfChange) {
   ASSERT_TRUE(embedded_test_server()->Start());
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), embedded_test_server()->GetURL("/pdf/test.pdf")));
-  ASSERT_TRUE(pdf_extension_test_util::EnsurePDFHasLoaded(web_contents));
-
-  content::RenderFrameHost* pdf_rfh =
-      pdf_extension_test_util::GetOnlyPdfPluginFrame(web_contents);
+  content::RenderFrameHost* pdf_rfh = LoadPdfAndGetContentFrame(
+      embedded_test_server()->GetURL("/pdf/test.pdf"));
   ASSERT_TRUE(pdf_rfh);
+
   EXPECT_CALL(page_, OnActiveAXTreeIDChanged(pdf_rfh->GetAXTreeID(), _,
                                              /*is_pdf=*/true))
       .Times(1);
@@ -750,15 +875,10 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
 IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
                        OnActiveAXTreeIDChanged_NotifiesOfPdfChange) {
   ASSERT_TRUE(embedded_test_server()->Start());
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), embedded_test_server()->GetURL("/pdf/test.pdf")));
-  ASSERT_TRUE(pdf_extension_test_util::EnsurePDFHasLoaded(web_contents));
-
-  content::RenderFrameHost* pdf_rfh =
-      pdf_extension_test_util::GetOnlyPdfPluginFrame(web_contents);
+  content::RenderFrameHost* pdf_rfh = LoadPdfAndGetContentFrame(
+      embedded_test_server()->GetURL("/pdf/test.pdf"));
   ASSERT_TRUE(pdf_rfh);
+
   EXPECT_CALL(page_, OnActiveAXTreeIDChanged(pdf_rfh->GetAXTreeID(), _,
                                              /*is_pdf=*/true))
       .Times(2);
@@ -775,14 +895,8 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
 IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
                        PdfContentFrameDeleted_ChecksForPdfContentAgain) {
   ASSERT_TRUE(embedded_test_server()->Start());
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), embedded_test_server()->GetURL("/pdf/test.pdf")));
-  ASSERT_TRUE(pdf_extension_test_util::EnsurePDFHasLoaded(web_contents));
-
-  content::RenderFrameHost* pdf_rfh =
-      pdf_extension_test_util::GetOnlyPdfPluginFrame(web_contents);
+  content::RenderFrameHost* pdf_rfh = LoadPdfAndGetContentFrame(
+      embedded_test_server()->GetURL("/pdf/test.pdf"));
   ASSERT_TRUE(pdf_rfh);
   // Once on construction, then again after the content frame is deleted.
   EXPECT_CALL(page_, OnActiveAXTreeIDChanged(pdf_rfh->GetAXTreeID(), _,
@@ -1468,29 +1582,22 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
       "a.com", "/cross_site_iframe_factory.html?a(a)");
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
 
-  SetUpHandler();
-
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   content::RenderFrameHost* main_frame = web_contents->GetPrimaryMainFrame();
   content::RenderFrameHost* child_frame = content::ChildFrameAt(main_frame, 0);
   ASSERT_TRUE(child_frame);
+  SetBodyHtml(child_frame, R"(<a id="link" href="#clicked">Link</a>)");
 
-  // The observed tab also sends its own accessibility events while the test
-  // runs; allow those so only the expectation below is checked.
-  EXPECT_CALL(page_, AccessibilityEventReceived).Times(testing::AnyNumber());
-  ui::AXUpdatesAndEvents child_details;
-  child_details.ax_tree_id = child_frame->GetAXTreeID();
-  EXPECT_CALL(page_, AccessibilityEventReceived(child_details.ax_tree_id, _, _))
-      .Times(testing::AtLeast(1));
-  AccessibilityEventReceived(child_details);
-  page_.receiver_.FlushForTesting();
+  // The child frame's link node is forwarded and can be clicked.
+  const ui::AXTreeID child_tree_id = child_frame->GetAXTreeID();
+  constexpr std::array<std::string_view, 1> kHtmlIds = {"link"};
+  const base::flat_map<std::string, ui::AXNodeID> node_ids =
+      SetUpHandlerAndWaitForNodesByHtmlId(child_tree_id, kHtmlIds);
+  ASSERT_EQ(node_ids.size(), kHtmlIds.size());
 
-  content::RenderFrameHost* rfh = web_contents_->GetPrimaryMainFrame();
-  GrantUserActivation(rfh);
-  handler_remote_->OnLinkClicked(child_frame->GetAXTreeID(),
-                                 /*target_node_id=*/1);
-  handler_remote_.FlushForTesting();
+  GrantUserActivation(web_contents_->GetPrimaryMainFrame());
+  ClickLinkAndFlush(child_tree_id, node_ids.at("link"));
   histogram_tester.ExpectUniqueSample(
       "Accessibility.ReadAnything.RendererRequestForLinkClick.Result",
       ReadAnythingRendererRequestResult::kAllowed,
@@ -1624,18 +1731,11 @@ IN_PROC_BROWSER_TEST_F(
 IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
                        AccessibilityEventReceived_PdfFramesForwarded) {
   ASSERT_TRUE(embedded_test_server()->Start());
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), embedded_test_server()->GetURL("/pdf/test.pdf")));
-  ASSERT_TRUE(pdf_extension_test_util::EnsurePDFHasLoaded(web_contents));
+  content::RenderFrameHost* pdf_plugin_frame = LoadPdfAndGetContentFrame(
+      embedded_test_server()->GetURL("/pdf/test.pdf"));
+  ASSERT_TRUE(pdf_plugin_frame);
 
   handler_ = CreateHandler();
-
-  content::RenderFrameHost* pdf_plugin_frame =
-      pdf_extension_test_util::GetOnlyPdfPluginFrame(web_contents);
-  ASSERT_TRUE(pdf_plugin_frame);
 
   // The observed tab also sends its own accessibility events while the test
   // runs; allow those so only the expectations below are checked.
@@ -1650,7 +1750,8 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
   page_.receiver_.FlushForTesting();
 
   content::RenderFrameHost* pdf_extension_host =
-      pdf_frame_util::FindFullPagePdfExtensionHost(web_contents);
+      pdf_frame_util::FindFullPagePdfExtensionHost(
+          browser()->tab_strip_model()->GetActiveWebContents());
   ASSERT_TRUE(pdf_extension_host);
 
   ui::AXUpdatesAndEvents extension_details;
@@ -3217,8 +3318,6 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerDistillerTest,
                        NavigateToPdfAfterHandlerCreated_NotifiesOfPdfChange) {
   ASSERT_TRUE(embedded_test_server()->Start());
   handler_ = CreateHandler();
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
 
   // Regression test for crbug.com/487308693. RM receives 3 sequential signals
   // about the current page when it's a pdf.
@@ -3235,9 +3334,7 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerDistillerTest,
   // kDistillationInProgress, once for kDistillationEmpty).
   EXPECT_CALL(page_, OnReadabilityDistillationStateChanged).Times(2);
 
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), embedded_test_server()->GetURL("/pdf/test.pdf")));
-  ASSERT_TRUE(pdf_extension_test_util::EnsurePDFHasLoaded(web_contents));
+  ASSERT_TRUE(LoadPdf(embedded_test_server()->GetURL("/pdf/test.pdf")));
   handler_->DidStopLoading();
 }
 
@@ -4084,16 +4181,12 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerDistillerRefactorTest,
                        NavigateToPdfAfterHandlerCreated_NotifiesOfPdfChange) {
   ASSERT_TRUE(embedded_test_server()->Start());
   handler_ = CreateHandler();
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
 
   // The renderer starts Readability distillation, so the browser never
   // sends distillation state changes on its own.
   EXPECT_CALL(page_, OnReadabilityDistillationStateChanged).Times(0);
 
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), embedded_test_server()->GetURL("/pdf/test.pdf")));
-  ASSERT_TRUE(pdf_extension_test_util::EnsurePDFHasLoaded(web_contents));
+  ASSERT_TRUE(LoadPdf(embedded_test_server()->GetURL("/pdf/test.pdf")));
   handler_->DidStopLoading();
   page_.receiver_.FlushForTesting();
 }
@@ -4298,27 +4391,320 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
   ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/simple.html")));
-  SetUpHandler();
-
-  content::RenderFrameHost* rfh = web_contents_->GetPrimaryMainFrame();
   content::RenderFrameHost* main_rfh =
       browser()->GetActiveTabInterface()->GetContents()->GetPrimaryMainFrame();
-  ui::AXTreeID tree_id = main_rfh->GetAXTreeID();
-  ui::AXNodeID node_id = 1;
+  SetBodyHtml(main_rfh, R"(<a id="link" href="#clicked">Link</a>)");
+  const ui::AXTreeID tree_id = main_rfh->GetAXTreeID();
+  constexpr std::array<std::string_view, 1> kHtmlIds = {"link"};
+  const base::flat_map<std::string, ui::AXNodeID> node_ids =
+      SetUpHandlerAndWaitForNodesByHtmlId(tree_id, kHtmlIds);
+  ASSERT_EQ(node_ids.size(), kHtmlIds.size());
+  const ui::AXNodeID link_id = node_ids.at("link");
+
+  content::RenderFrameHost* rfh = web_contents_->GetPrimaryMainFrame();
 
   // Initial state with no transient user activation
   EXPECT_FALSE(rfh->HasTransientUserActivation());
-  handler_remote_->OnLinkClicked(tree_id, node_id);
+  handler_remote_->OnLinkClicked(tree_id, link_id);
   handler_remote_.FlushForTesting();
   histogram_tester.ExpectTotalCount(histogram_name, 0);
 
   // Grant User Activation via simulated mouse click.
   GrantUserActivation(rfh);
-  handler_remote_->OnLinkClicked(tree_id, node_id);
+  handler_remote_->OnLinkClicked(tree_id, link_id);
   handler_remote_.FlushForTesting();
   histogram_tester.ExpectUniqueSample(
       histogram_name, ReadAnythingRendererRequestResult::kAllowed,
       /*expected_bucket_count=*/1);
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
+                       OnLinkClicked_RejectsNonLinkNodes) {
+  base::HistogramTester histogram_tester;
+
+  ASSERT_TRUE(embedded_test_server()->Start());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/simple.html")));
+
+  content::WebContents* main_contents =
+      browser()->GetActiveTabInterface()->GetContents();
+  ASSERT_TRUE(content::ExecJs(main_contents,
+                              R"(
+    document.body.innerHTML = `
+      <button id="danger" onclick="window.buttonClicked = true">Transfer</button>
+      <div id="aria-link" role="link" onclick="window.ariaLinkClicked = true">
+        Aria Link
+      </div>
+      <a id="js-link" href="javascript:window.jsLinkClicked = true">JS Link</a>
+      <a id="safe" href="#clicked" onclick="window.linkClicked = true">Safe</a>
+    `;
+  )",
+                              content::EXECUTE_SCRIPT_NO_USER_GESTURE));
+
+  const ui::AXTreeID main_tree_id =
+      main_contents->GetPrimaryMainFrame()->GetAXTreeID();
+  constexpr std::array<std::string_view, 4> kHtmlIds = {"danger", "aria-link",
+                                                        "js-link", "safe"};
+  const base::flat_map<std::string, ui::AXNodeID> node_ids =
+      SetUpHandlerAndWaitForNodesByHtmlId(main_tree_id, kHtmlIds);
+  ASSERT_EQ(node_ids.size(), kHtmlIds.size());
+
+  GrantUserActivation(web_contents_->GetPrimaryMainFrame());
+
+  // Buttons, non-anchor ARIA links, and javascript: links must be rejected
+  // without clicking or granting user activation to the observed page.
+  ClickLinkAndFlush(main_tree_id, node_ids.at("danger"));
+  ClickLinkAndFlush(main_tree_id, node_ids.at("aria-link"));
+  ClickLinkAndFlush(main_tree_id, node_ids.at("js-link"));
+
+  EXPECT_FALSE(
+      EvalBoolWithoutUserGesture(main_contents, "!!window.buttonClicked"));
+  EXPECT_FALSE(
+      EvalBoolWithoutUserGesture(main_contents, "!!window.ariaLinkClicked"));
+  EXPECT_FALSE(
+      EvalBoolWithoutUserGesture(main_contents, "!!window.jsLinkClicked"));
+  EXPECT_FALSE(EvalBoolWithoutUserGesture(main_contents,
+                                          "navigator.userActivation.isActive"));
+  histogram_tester.ExpectUniqueSample(
+      kLinkClickHistogram,
+      ReadAnythingRendererRequestResult::kDisallowedActionOnNode,
+      /*expected_bucket_count=*/3);
+
+  // A real HTTP(S) link is allowed and clicked.
+  ClickLinkAndFlush(main_tree_id, node_ids.at("safe"));
+  EXPECT_TRUE(base::test::RunUntil([&]() {
+    return EvalBoolWithoutUserGesture(main_contents, "!!window.linkClicked");
+  }));
+  histogram_tester.ExpectBucketCount(
+      kLinkClickHistogram, ReadAnythingRendererRequestResult::kAllowed, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
+                       OnLinkClicked_RejectsLinkMutatedToNonLink) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/simple.html")));
+  content::WebContents* main_contents =
+      browser()->GetActiveTabInterface()->GetContents();
+  SetBodyHtml(main_contents, R"(
+      <a id="link" href="#link" onclick="window.clicked = true">Link</a>
+  )");
+
+  const ui::AXTreeID tree_id =
+      main_contents->GetPrimaryMainFrame()->GetAXTreeID();
+  constexpr std::array<std::string_view, 1> kHtmlIds = {"link"};
+  const base::flat_map<std::string, ui::AXNodeID> node_ids =
+      SetUpHandlerAndWaitForNodesByHtmlId(tree_id, kHtmlIds);
+  ASSERT_EQ(node_ids.size(), kHtmlIds.size());
+  const ui::AXNodeID link_id = node_ids.at("link");
+  EXPECT_TRUE(IsAllowedLinkNode(tree_id, link_id));
+
+  ASSERT_TRUE(content::ExecJs(
+      main_contents,
+      "document.getElementById('link').setAttribute('role', 'button');",
+      content::EXECUTE_SCRIPT_NO_USER_GESTURE));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return !IsAllowedLinkNode(tree_id, link_id); }));
+
+  GrantUserActivation(web_contents_->GetPrimaryMainFrame());
+  base::HistogramTester histogram_tester;
+  ClickLinkAndFlush(tree_id, link_id);
+  histogram_tester.ExpectUniqueSample(
+      kLinkClickHistogram,
+      ReadAnythingRendererRequestResult::kDisallowedActionOnNode, 1);
+  EXPECT_FALSE(EvalBoolWithoutUserGesture(main_contents, "!!window.clicked"));
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
+                       OnLinkClicked_RejectsRemovedOrHiddenLinks) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/simple.html")));
+  content::WebContents* main_contents =
+      browser()->GetActiveTabInterface()->GetContents();
+  SetBodyHtml(main_contents, R"(
+      <a id="removed" href="#removed" onclick="window.clicked = true">A</a>
+      <a id="aria-hidden" href="#hidden" onclick="window.clicked = true">B</a>
+      <a id="invisible" href="#invisible" onclick="window.clicked = true">C</a>
+      <div id="inert-container">
+        <a id="inert" href="#inert" onclick="window.clicked = true">D</a>
+      </div>
+      <a id="surviving" href="#surviving">E</a>
+  )");
+
+  const ui::AXTreeID tree_id =
+      main_contents->GetPrimaryMainFrame()->GetAXTreeID();
+  constexpr std::array<std::string_view, 5> kHtmlIds = {
+      "removed", "aria-hidden", "invisible", "inert", "surviving"};
+  const base::flat_map<std::string, ui::AXNodeID> node_ids =
+      SetUpHandlerAndWaitForNodesByHtmlId(tree_id, kHtmlIds);
+  ASSERT_EQ(node_ids.size(), kHtmlIds.size());
+  for (const auto& [html_id, node_id] : node_ids) {
+    EXPECT_TRUE(IsAllowedLinkNode(tree_id, node_id)) << html_id;
+  }
+
+  // These changes can drop a link from its parent's children without sending
+  // the link node again.
+  ASSERT_TRUE(content::ExecJs(main_contents, R"(
+      document.getElementById('removed').remove();
+      const hidden = document.getElementById('aria-hidden');
+      hidden.removeAttribute('href');
+      hidden.setAttribute('aria-hidden', 'true');
+      document.getElementById('invisible').style.visibility = 'hidden';
+      document.getElementById('inert-container').inert = true;
+      document.getElementById('inert').setAttribute('role', 'button');
+  )",
+                              content::EXECUTE_SCRIPT_NO_USER_GESTURE));
+  constexpr std::array<std::string_view, 4> kRejectedHtmlIds = {
+      "removed", "aria-hidden", "invisible", "inert"};
+  ASSERT_TRUE(base::test::RunUntil([&]() {
+    return std::ranges::none_of(kRejectedHtmlIds, [&](std::string_view id) {
+      return IsAllowedLinkNode(tree_id, node_ids.at(std::string(id)));
+    });
+  }));
+  EXPECT_TRUE(IsAllowedLinkNode(tree_id, node_ids.at("surviving")));
+
+  GrantUserActivation(web_contents_->GetPrimaryMainFrame());
+  base::HistogramTester histogram_tester;
+  for (std::string_view html_id : kRejectedHtmlIds) {
+    ClickLinkAndFlush(tree_id, node_ids.at(std::string(html_id)));
+  }
+  histogram_tester.ExpectUniqueSample(
+      kLinkClickHistogram,
+      ReadAnythingRendererRequestResult::kDisallowedActionOnNode,
+      kRejectedHtmlIds.size());
+  EXPECT_FALSE(EvalBoolWithoutUserGesture(main_contents, "!!window.clicked"));
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
+                       OnLinkClicked_RejectsLinksInClearedOrRemovedTree) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/simple.html")));
+  content::WebContents* main_contents =
+      browser()->GetActiveTabInterface()->GetContents();
+  SetBodyHtml(main_contents, R"(
+      <p id="container"><a id="nested" href="#nested">Nested</a></p>
+      <a id="surviving" href="#surviving">Surviving</a>
+  )");
+
+  const ui::AXTreeID tree_id =
+      main_contents->GetPrimaryMainFrame()->GetAXTreeID();
+  constexpr std::array<std::string_view, 3> kHtmlIds = {"container", "nested",
+                                                        "surviving"};
+  const base::flat_map<std::string, ui::AXNodeID> node_ids =
+      SetUpHandlerAndWaitForNodesByHtmlId(tree_id, kHtmlIds);
+  ASSERT_EQ(node_ids.size(), kHtmlIds.size());
+  const ui::AXNodeID nested_id = node_ids.at("nested");
+  const ui::AXNodeID surviving_id = node_ids.at("surviving");
+  EXPECT_TRUE(IsAllowedLinkNode(tree_id, nested_id));
+  EXPECT_TRUE(IsAllowedLinkNode(tree_id, surviving_id));
+
+  // Clearing the container removes its descendants, even though the update
+  // only sends the container itself again.
+  ui::AXUpdatesAndEvents details;
+  details.ax_tree_id = tree_id;
+  ui::AXTreeUpdate& update = details.updates.emplace_back();
+  update.node_id_to_clear = node_ids.at("container");
+  ui::AXNodeData& container = update.nodes.emplace_back();
+  container.id = node_ids.at("container");
+  container.role = ax::mojom::Role::kParagraph;
+  AccessibilityEventReceived(details);
+  EXPECT_FALSE(IsAllowedLinkNode(tree_id, nested_id));
+  EXPECT_TRUE(IsAllowedLinkNode(tree_id, surviving_id));
+
+  GrantUserActivation(web_contents_->GetPrimaryMainFrame());
+  {
+    base::HistogramTester histogram_tester;
+    ClickLinkAndFlush(tree_id, nested_id);
+    histogram_tester.ExpectUniqueSample(
+        kLinkClickHistogram,
+        ReadAnythingRendererRequestResult::kDisallowedActionOnNode, 1);
+  }
+
+  // TreeRemoved() drops the removed tree.
+  static_cast<ui::AXActionHandlerObserver*>(handler_.get())
+      ->TreeRemoved(tree_id);
+  EXPECT_FALSE(IsAllowedLinkNode(tree_id, surviving_id));
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
+                       OnLinkClicked_AllowsLinksAfterAccessibilityReset) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/simple.html")));
+  content::WebContents* main_contents =
+      browser()->GetActiveTabInterface()->GetContents();
+  SetBodyHtml(main_contents, R"(
+      <a id="removed" href="#removed">Removed</a>
+      <a id="link" href="#link">Link</a>
+  )");
+
+  const ui::AXTreeID tree_id =
+      main_contents->GetPrimaryMainFrame()->GetAXTreeID();
+  constexpr std::array<std::string_view, 2> kHtmlIds = {"removed", "link"};
+  const base::flat_map<std::string, ui::AXNodeID> node_ids =
+      SetUpHandlerAndWaitForNodesByHtmlId(tree_id, kHtmlIds);
+  ASSERT_EQ(node_ids.size(), kHtmlIds.size());
+  ASSERT_TRUE(content::ExecJs(main_contents,
+                              "document.getElementById('removed').remove();",
+                              content::EXECUTE_SCRIPT_NO_USER_GESTURE));
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return !IsAllowedLinkNode(tree_id, node_ids.at("removed")); }));
+
+  // Resetting accessibility sends the whole tree again, which replaces the
+  // handler's copy of it.
+  constexpr std::array<std::string_view, 1> kLinkHtmlId = {"link"};
+  const base::flat_map<std::string, ui::AXNodeID> reset_node_ids =
+      RunAndWaitForNodes([&]() { main_contents->ResetAccessibility(); },
+                         tree_id, kLinkHtmlId, &GetHtmlId);
+  ASSERT_EQ(reset_node_ids.size(), kLinkHtmlId.size());
+  EXPECT_TRUE(IsAllowedLinkNode(tree_id, reset_node_ids.at("link")));
+  EXPECT_FALSE(IsAllowedLinkNode(tree_id, node_ids.at("removed")));
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
+                       OnLinkClicked_PdfAllowsHttpLink) {
+  base::HistogramTester histogram_tester;
+
+  ASSERT_TRUE(embedded_test_server()->Start());
+  content::RenderFrameHost* pdf_content_rfh = LoadPdfAndGetContentFrame(
+      embedded_test_server()->GetURL("/pdf/test-link.pdf"));
+  ASSERT_TRUE(pdf_content_rfh);
+
+  const ui::AXTreeID pdf_tree_id = pdf_content_rfh->GetAXTreeID();
+  constexpr std::array<std::string_view, 1> kKeys = {"link"};
+  const base::flat_map<std::string, ui::AXNodeID> node_ids = RunAndWaitForNodes(
+      [this]() { SetUpHandler(); }, pdf_tree_id, kKeys, &GetLinkRoleKey);
+  ASSERT_EQ(node_ids.size(), kKeys.size());
+
+  GrantUserActivation(web_contents_->GetPrimaryMainFrame());
+  ClickLinkAndFlush(pdf_tree_id, node_ids.at("link"));
+  histogram_tester.ExpectUniqueSample(
+      kLinkClickHistogram, ReadAnythingRendererRequestResult::kAllowed, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
+                       OnLinkClicked_PdfRejectsInternalLink) {
+  base::HistogramTester histogram_tester;
+
+  ASSERT_TRUE(embedded_test_server()->Start());
+  content::RenderFrameHost* pdf_content_rfh = LoadPdfAndGetContentFrame(
+      embedded_test_server()->GetURL("/pdf/test-internal-link.pdf"));
+  ASSERT_TRUE(pdf_content_rfh);
+
+  const ui::AXTreeID pdf_tree_id = pdf_content_rfh->GetAXTreeID();
+  constexpr std::array<std::string_view, 1> kKeys = {"link"};
+  const base::flat_map<std::string, ui::AXNodeID> node_ids = RunAndWaitForNodes(
+      [this]() { SetUpHandler(); }, pdf_tree_id, kKeys, &GetLinkRoleKey);
+  ASSERT_EQ(node_ids.size(), kKeys.size());
+
+  // Internal links have no HTTP(S) URL.
+  GrantUserActivation(web_contents_->GetPrimaryMainFrame());
+  ClickLinkAndFlush(pdf_tree_id, node_ids.at("link"));
+  histogram_tester.ExpectUniqueSample(
+      kLinkClickHistogram,
+      ReadAnythingRendererRequestResult::kDisallowedActionOnNode, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
@@ -4601,12 +4987,12 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
   content::RenderFrameHost* rfh = web_contents_->GetPrimaryMainFrame();
   GrantUserActivation(rfh);
 
-  // Link clicks succeed for PDF tree.
+  // Link clicks pass the tree checks, but node 1 isn't a link.
   handler_remote_->OnLinkClicked(pdf_rfh->GetAXTreeID(), /*target_node_id=*/1);
   handler_remote_.FlushForTesting();
   histogram_tester.ExpectUniqueSample(
       "Accessibility.ReadAnything.RendererRequestForLinkClick.Result",
-      ReadAnythingRendererRequestResult::kAllowed,
+      ReadAnythingRendererRequestResult::kDisallowedActionOnNode,
       /*expected_bucket_count=*/1);
 
   // Image data requests succeed for PDF tree.
@@ -4652,12 +5038,12 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
   content::RenderFrameHost* rfh = web_contents_->GetPrimaryMainFrame();
   GrantUserActivation(rfh);
 
-  // Link clicks succeed for local PDF tree.
+  // Link clicks pass the tree checks, but node 1 isn't a link.
   handler_remote_->OnLinkClicked(pdf_rfh->GetAXTreeID(), /*target_node_id=*/1);
   handler_remote_.FlushForTesting();
   histogram_tester.ExpectUniqueSample(
       "Accessibility.ReadAnything.RendererRequestForLinkClick.Result",
-      ReadAnythingRendererRequestResult::kAllowed,
+      ReadAnythingRendererRequestResult::kDisallowedActionOnNode,
       /*expected_bucket_count=*/1);
 
   // Image data requests succeed for local PDF tree.
@@ -4695,24 +5081,21 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
   base::HistogramTester histogram_tester;
 
   ASSERT_TRUE(embedded_test_server()->Start());
-  ASSERT_TRUE(LoadPdf(embedded_test_server()->GetURL("/pdf/test.pdf")));
-  SetUpHandler();
-
-  content::RenderFrameHost* pdf_content_rfh =
-      pdf_extension_test_util::GetOnlyPdfPluginFrame(
-          browser()->tab_strip_model()->GetActiveWebContents());
+  content::RenderFrameHost* pdf_content_rfh = LoadPdfAndGetContentFrame(
+      embedded_test_server()->GetURL("/pdf/test.pdf"));
   ASSERT_TRUE(pdf_content_rfh);
+  SetUpHandler();
 
   content::RenderFrameHost* rfh = web_contents_->GetPrimaryMainFrame();
   GrantUserActivation(rfh);
 
-  // Link clicks succeed for PDF content frame tree.
+  // Link clicks pass the tree checks, but node 1 isn't a link.
   handler_remote_->OnLinkClicked(pdf_content_rfh->GetAXTreeID(),
                                  /*target_node_id=*/1);
   handler_remote_.FlushForTesting();
   histogram_tester.ExpectUniqueSample(
       "Accessibility.ReadAnything.RendererRequestForLinkClick.Result",
-      ReadAnythingRendererRequestResult::kAllowed,
+      ReadAnythingRendererRequestResult::kDisallowedActionOnNode,
       /*expected_bucket_count=*/1);
 
   // Image data requests succeed for PDF content frame tree.
@@ -4749,26 +5132,23 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
                        LocalPdfContentFrame_AllowsActions) {
   base::HistogramTester histogram_tester;
 
-  ASSERT_TRUE(LoadPdf(chrome_test_utils::GetTestUrl(
-      base::FilePath(FILE_PATH_LITERAL("pdf")),
-      base::FilePath(FILE_PATH_LITERAL("test.pdf")))));
-  SetUpHandler();
-
   content::RenderFrameHost* pdf_content_rfh =
-      pdf_extension_test_util::GetOnlyPdfPluginFrame(
-          browser()->tab_strip_model()->GetActiveWebContents());
+      LoadPdfAndGetContentFrame(chrome_test_utils::GetTestUrl(
+          base::FilePath(FILE_PATH_LITERAL("pdf")),
+          base::FilePath(FILE_PATH_LITERAL("test.pdf"))));
   ASSERT_TRUE(pdf_content_rfh);
+  SetUpHandler();
 
   content::RenderFrameHost* rfh = web_contents_->GetPrimaryMainFrame();
   GrantUserActivation(rfh);
 
-  // Link clicks succeed for local PDF content frame tree.
+  // Link clicks pass the tree checks, but node 1 isn't a link.
   handler_remote_->OnLinkClicked(pdf_content_rfh->GetAXTreeID(),
                                  /*target_node_id=*/1);
   handler_remote_.FlushForTesting();
   histogram_tester.ExpectUniqueSample(
       "Accessibility.ReadAnything.RendererRequestForLinkClick.Result",
-      ReadAnythingRendererRequestResult::kAllowed,
+      ReadAnythingRendererRequestResult::kDisallowedActionOnNode,
       /*expected_bucket_count=*/1);
 
   // Image data requests succeed for local PDF content frame tree.
@@ -4800,6 +5180,77 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
       ReadAnythingRendererRequestResult::kAllowed,
       /*expected_bucket_count=*/1);
 }
+
+#if BUILDFLAG(ENABLE_PDF)
+IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
+                       OnImageDataRequested_Pdf_ForwardsImageBitmap) {
+  base::HistogramTester histogram_tester;
+
+  ASSERT_TRUE(embedded_test_server()->Start());
+  content::RenderFrameHost* pdf_content_rfh = LoadPdfAndGetContentFrame(
+      embedded_test_server()->GetURL("/pdf/accessibility/image_alt_text.pdf"));
+  ASSERT_TRUE(pdf_content_rfh);
+  const ui::AXTreeID pdf_tree_id = pdf_content_rfh->GetAXTreeID();
+
+  const ui::AXNodeID image_node_id =
+      SetUpHandlerAndFindPdfNodeWithRole(pdf_tree_id, ax::mojom::Role::kImage);
+  ASSERT_NE(image_node_id, ui::kInvalidAXNodeID);
+
+  base::test::TestFuture<ui::AXTreeID, int, SkBitmap> bitmap_future;
+  EXPECT_CALL(page_, OnImageDataDownloaded(pdf_tree_id, image_node_id, _))
+      .WillOnce(base::test::InvokeFuture(bitmap_future));
+
+  handler_remote_->OnImageDataRequested(pdf_tree_id, image_node_id);
+  EXPECT_FALSE(bitmap_future.Get<2>().drawsNothing());
+
+  histogram_tester.ExpectUniqueSample(
+      "Accessibility.ReadAnything.RendererRequestForImageDataDownload.Result",
+      ReadAnythingRendererRequestResult::kAllowed,
+      /*expected_bucket_count=*/1);
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
+                       OnPdfImageDataReceived_EmptyBitmap_DoesNotForward) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  content::RenderFrameHost* pdf_content_rfh = LoadPdfAndGetContentFrame(
+      embedded_test_server()->GetURL("/pdf/test.pdf"));
+  ASSERT_TRUE(pdf_content_rfh);
+  const ui::AXTreeID pdf_tree_id = pdf_content_rfh->GetAXTreeID();
+  SetUpHandler();
+
+  SkBitmap valid_bitmap;
+  valid_bitmap.allocN32Pixels(10, 10);
+  base::test::TestFuture<ui::AXTreeID, int, SkBitmap> bitmap_future;
+  EXPECT_CALL(page_, OnImageDataDownloaded(pdf_tree_id, /*node_id=*/1, _))
+      .WillOnce(base::test::InvokeFuture(bitmap_future));
+  OnPdfImageDataReceived(pdf_tree_id, /*node_id=*/1, valid_bitmap);
+  EXPECT_FALSE(bitmap_future.Get<2>().drawsNothing());
+
+  EXPECT_CALL(page_, OnImageDataDownloaded(_, _, _)).Times(0);
+  OnPdfImageDataReceived(pdf_tree_id, /*node_id=*/1, SkBitmap());
+  page_.receiver_.FlushForTesting();
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingUntrustedPageHandlerTest,
+                       OnPdfImageDataReceived_FrameGone_NoCrash) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  content::RenderFrameHost* pdf_content_rfh = LoadPdfAndGetContentFrame(
+      embedded_test_server()->GetURL("/pdf/test.pdf"));
+  ASSERT_TRUE(pdf_content_rfh);
+  const ui::AXTreeID pdf_tree_id = pdf_content_rfh->GetAXTreeID();
+  SetUpHandler();
+
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL)));
+
+  SkBitmap bitmap;
+  bitmap.allocN32Pixels(10, 10);
+
+  EXPECT_CALL(page_, OnImageDataDownloaded(_, _, _)).Times(0);
+  OnPdfImageDataReceived(pdf_tree_id, /*node_id=*/1, bitmap);
+  page_.receiver_.FlushForTesting();
+}
+#endif  // BUILDFLAG(ENABLE_PDF)
 
 class ReadAnythingUntrustedPageHandlerUserEducationTest
     : public ReadAnythingUntrustedPageHandlerTest {

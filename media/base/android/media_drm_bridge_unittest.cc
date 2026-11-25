@@ -5,15 +5,33 @@
 #include "media/base/android/media_drm_bridge.h"
 
 #include <memory>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
+#include "base/android/jni_android.h"
+#include "base/barrier_closure.h"
+#include "base/containers/to_vector.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
+#include "base/notreached.h"
 #include "base/run_loop.h"
+#include "base/task/single_thread_task_runner.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "base/test/run_until.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
+#include "base/test/test_future.h"
+#include "base/unguessable_token.h"
+#include "media/base/android/media_drm_bridge_factory.h"
+#include "media/base/cdm_config.h"
+#include "media/base/media_drm_storage.h"
 #include "media/base/media_switches.h"
 #include "media/base/mock_filters.h"
 #include "media/base/provision_fetcher.h"
@@ -291,6 +309,62 @@ TEST_F(MediaDrmBridgeTest, Provision_Widevine) {
   base::RunLoop().RunUntilIdle();
 }
 
+// Provisioning for MediaCrypto creation is serialized across all
+// MediaDrmBridge instances in the process: while one instance provisions,
+// others that need provisioning wait for it. Destroying the provisioning
+// instance before its request completes must wake the waiting instances, and
+// waiting instances that were destroyed in the meantime must be skipped.
+TEST_F(MediaDrmBridgeTest, ProvisionAfterDestroyedWhileProvisioning_Widevine) {
+  if (!MediaDrmBridge::IsKeySystemSupported(kWidevineKeySystem)) {
+    GTEST_SKIP() << "Widevine not supported on device.";
+  }
+
+  // Each MediaDrmBridge uses a new origin ID, so creating its MediaCrypto
+  // requires provisioning. Retrieve() drops the request, so provisioning never
+  // completes. Only `bridge1` and `bridge3` should send a request.
+  int retrieve_count = 0;
+  EXPECT_CALL(*this, CreateProvisionFetcher())
+      .Times(2)
+      .WillRepeatedly([this]() -> std::unique_ptr<ProvisionFetcher> {
+        return std::make_unique<ProvisionFetcherWrapper>(this);
+      });
+  EXPECT_CALL(*this, Retrieve(_, _, _)).Times(2).WillRepeatedly([&]() {
+    ++retrieve_count;
+  });
+
+  auto create_with_media_crypto = [this]() {
+    return MediaDrmBridge::CreateInternal(
+        MediaDrmBridge::GetUUID(kWidevineKeySystem),
+        base::UnguessableToken::Create().ToString(), kL3, "Test",
+        /*requires_media_crypto=*/true,
+        std::make_unique<MediaDrmStorageBridge>(),
+        base::BindRepeating(&MediaDrmBridgeTest::CreateProvisionFetcher,
+                            base::Unretained(this)),
+        SessionMessageCB(), SessionClosedCB(), SessionKeysChangeCB(),
+        SessionExpirationUpdateCB());
+  };
+
+  // `bridge1` starts provisioning.
+  MediaDrmBridge::CdmCreationResult bridge1 = create_with_media_crypto();
+  ASSERT_TRUE(bridge1.has_value());
+  ASSERT_TRUE(base::test::RunUntil([&]() { return retrieve_count == 1; }));
+
+  // `bridge2` and `bridge3` also need provisioning, so they wait for `bridge1`.
+  MediaDrmBridge::CdmCreationResult bridge2 = create_with_media_crypto();
+  ASSERT_TRUE(bridge2.has_value());
+  MediaDrmBridge::CdmCreationResult bridge3 = create_with_media_crypto();
+  ASSERT_TRUE(bridge3.has_value());
+
+  // Destroy `bridge2` while it is waiting.
+  bridge2 = base::unexpected(CreateCdmStatus::kUnknownError);
+
+  // Destroy `bridge1` while its provisioning is pending. The destroyed
+  // `bridge2` must be skipped, and `bridge3` must send its own provisioning
+  // request.
+  bridge1 = base::unexpected(CreateCdmStatus::kUnknownError);
+  EXPECT_TRUE(base::test::RunUntil([&]() { return retrieve_count == 2; }));
+}
+
 TEST_F(MediaDrmBridgeTest, Provision_Widevine_NoOrigin) {
   // Only test this if Widevine is supported. Otherwise
   // CreateWithoutSessionSupport() will return null and it can't be tested.
@@ -444,6 +518,323 @@ TEST_F(MediaDrmBridgeTest, MaybeParseCdmVersion) {
   base::Version invalid_version =
       MediaDrmBridge::MaybeParseCdmVersion("invalid_version");
   EXPECT_FALSE(invalid_version.IsValid());
+}
+
+namespace {
+
+class FakeMediaDrmStorage : public MediaDrmStorage {
+ public:
+  explicit FakeMediaDrmStorage(InitCB* out_init_cb)
+      : out_init_cb_(out_init_cb) {}
+  void Initialize(InitCB init_cb) override {
+    *out_init_cb_ = std::move(init_cb);
+  }
+  void OnProvisioned(ResultCB) override { NOTREACHED(); }
+  void SavePersistentSession(const std::string&,
+                             const SessionData&,
+                             ResultCB) override {
+    NOTREACHED();
+  }
+  void LoadPersistentSession(const std::string&,
+                             LoadPersistentSessionCB) override {
+    NOTREACHED();
+  }
+  void RemovePersistentSession(const std::string&, ResultCB) override {
+    NOTREACHED();
+  }
+  base::WeakPtr<MediaDrmStorage> AsWeakPtr() override {
+    return weak_factory_.GetWeakPtr();
+  }
+
+ private:
+  raw_ptr<InitCB> out_init_cb_;
+  base::WeakPtrFactory<FakeMediaDrmStorage> weak_factory_{this};
+};
+
+}  // namespace
+
+class MediaDrmBridgeFactoryTest : public testing::Test {
+ protected:
+  static std::unique_ptr<MediaDrmBridgeFactory> CreateFactory(
+      MediaDrmStorage::InitCB* out_init_cb) {
+    return std::make_unique<MediaDrmBridgeFactory>(
+        base::BindRepeating(
+            []() -> std::unique_ptr<ProvisionFetcher> { NOTREACHED(); }),
+        base::BindRepeating(
+            [](MediaDrmStorage::InitCB* out_init_cb)
+                -> std::unique_ptr<MediaDrmStorage> {
+              return std::make_unique<FakeMediaDrmStorage>(out_init_cb);
+            },
+            out_init_cb));
+  }
+
+  static void TriggerMediaCryptoFailure(
+      MediaDrmBridgeFactory* factory,
+      std::optional<MediaDrmBridge::MediaDrmCreateError> error) {
+    MediaDrmBridge* bridge = factory->media_drm_bridge_.get();
+    ASSERT_TRUE(bridge);
+    bridge->SetMediaCryptoReadyCB(
+        base::BindOnce(&MediaDrmBridgeFactory::OnMediaCryptoReady,
+                       factory->weak_factory_.GetWeakPtr()));
+    JNIEnv* env = base::android::AttachCurrentThread();
+    if (error.has_value()) {
+      bridge->OnCreateError(env, static_cast<int32_t>(*error));
+    }
+    bridge->OnMediaCryptoReady(env, nullptr);
+  }
+
+  static bool HasBridge(MediaDrmBridgeFactory* factory) {
+    return factory->media_drm_bridge_ != nullptr;
+  }
+
+  static MediaDrmBridge* GetBridge(MediaDrmBridgeFactory* factory) {
+    return factory->media_drm_bridge_.get();
+  }
+
+  static scoped_refptr<MediaDrmBridge> CreateL3Bridge() {
+    auto result = MediaDrmBridge::CreateInternal(
+        MediaDrmBridge::GetUUID(kWidevineKeySystem), kEmptyOrigin, kL3, "Test",
+        /*requires_media_crypto=*/false,
+        std::make_unique<MediaDrmStorageBridge>(), base::NullCallback(),
+        base::DoNothing(), base::DoNothing(), base::DoNothing(),
+        base::DoNothing());
+    EXPECT_TRUE(result.has_value());
+    return result.has_value() ? std::move(result).value() : nullptr;
+  }
+
+  static CreateCdmStatus GetLastCreateErrorStatus(
+      const MediaDrmBridge* bridge) {
+    return bridge->GetLastCreateErrorStatus();
+  }
+
+  base::test::TaskEnvironment task_environment_;
+};
+
+TEST_F(MediaDrmBridgeFactoryTest, NotifyMediaCryptoReady_NoDoubleCallback) {
+  if (!MediaDrmBridge::IsKeySystemSupported(kWidevineKeySystem)) {
+    GTEST_SKIP() << "Widevine not supported on device.";
+  }
+
+  base::HistogramTester histogram_tester;
+  scoped_refptr<MediaDrmBridge> bridge = CreateL3Bridge();
+  ASSERT_TRUE(bridge);
+
+  base::test::TestFuture<base::android::ScopedJavaGlobalRef<jobject>, bool>
+      first_ready;
+  bridge->SetMediaCryptoReadyCB(first_ready.GetCallback());
+  JNIEnv* env = base::android::AttachCurrentThread();
+  bridge->OnCreateError(
+      env,
+      static_cast<int32_t>(
+          MediaDrmBridge::MediaDrmCreateError::FAILED_MEDIA_CRYPTO_SESSION));
+  bridge->OnMediaCryptoReady(env, nullptr);
+  EXPECT_TRUE(first_ready.Get<0>().is_null());
+  EXPECT_FALSE(first_ready.Get<1>());
+  EXPECT_EQ(GetLastCreateErrorStatus(bridge.get()),
+            CreateCdmStatus::kAndroidFailedMediaCryptoSession);
+  histogram_tester.ExpectUniqueSample("Media.EME.MediaCryptoAvailable", false,
+                                      1);
+
+  base::test::TestFuture<base::android::ScopedJavaGlobalRef<jobject>, bool>
+      second_ready;
+  bridge->SetMediaCryptoReadyCB(second_ready.GetCallback());
+  EXPECT_TRUE(second_ready.IsReady());
+  EXPECT_TRUE(second_ready.Get<0>().is_null());
+  histogram_tester.ExpectTotalCount("Media.EME.MediaCryptoAvailable", 1);
+}
+
+TEST_F(MediaDrmBridgeFactoryTest, OnMediaCryptoReadySurfacesCreateErrors) {
+  if (!MediaDrmBridge::IsKeySystemSupported(kWidevineKeySystem)) {
+    GTEST_SKIP() << "Widevine not supported on device.";
+  }
+
+  CdmConfig config;
+  config.key_system = kWidevineKeySystem;
+  {
+    MediaDrmStorage::InitCB init_cb;
+    auto factory = CreateFactory(&init_cb);
+    base::test::TestFuture<const scoped_refptr<ContentDecryptionModule>&,
+                           CreateCdmStatus>
+        future;
+    factory->Create(config, base::DoNothing(), base::DoNothing(),
+                    base::DoNothing(), base::DoNothing(), future.GetCallback());
+    std::move(init_cb).Run(false, std::nullopt);
+    EXPECT_FALSE(future.Get<0>());
+    EXPECT_EQ(future.Get<1>(), CreateCdmStatus::kGetCdmOriginIdFailed);
+  }
+
+  const struct {
+    std::optional<MediaDrmBridge::MediaDrmCreateError> error;
+    CreateCdmStatus expected_status;
+  } kCases[] = {
+      {std::nullopt, CreateCdmStatus::kMediaCryptoNotAvailable},
+      {MediaDrmBridge::MediaDrmCreateError::FAILED_SECURITY_ORIGIN,
+       CreateCdmStatus::kAndroidFailedSecurityOrigin},
+      {MediaDrmBridge::MediaDrmCreateError::FAILED_MEDIA_CRYPTO_SESSION,
+       CreateCdmStatus::kAndroidFailedMediaCryptoSession},
+      {MediaDrmBridge::MediaDrmCreateError::FAILED_TO_START_PROVISIONING,
+       CreateCdmStatus::kAndroidFailedToStartProvisioning},
+      {MediaDrmBridge::MediaDrmCreateError::FAILED_MEDIA_CRYPTO_CREATE,
+       CreateCdmStatus::kAndroidFailedMediaCryptoCreate},
+      {MediaDrmBridge::MediaDrmCreateError::UNSUPPORTED_MEDIACRYPTO_SCHEME,
+       CreateCdmStatus::kAndroidUnsupportedMediaCryptoScheme},
+  };
+  for (const auto& tc : kCases) {
+    base::HistogramTester histogram_tester;
+    MediaDrmStorage::InitCB init_cb;
+    auto factory = CreateFactory(&init_cb);
+    base::test::TestFuture<const scoped_refptr<ContentDecryptionModule>&,
+                           CreateCdmStatus>
+        future;
+    factory->Create(config, base::DoNothing(), base::DoNothing(),
+                    base::DoNothing(), base::DoNothing(), future.GetCallback());
+    TriggerMediaCryptoFailure(factory.get(), tc.error);
+    EXPECT_FALSE(future.Get<0>());
+    EXPECT_EQ(future.Get<1>(), tc.expected_status);
+    EXPECT_FALSE(HasBridge(factory.get()));
+    histogram_tester.ExpectUniqueSample("Media.EME.MediaCryptoAvailable", false,
+                                        1);
+  }
+}
+
+// Drives init_cb -> OnStorageInitialized(true) -> CompleteInitialization()
+// with setOrigin() failing in Java. The create callback must not run
+// synchronously from CompleteInitialization(); it must wait for Java's
+// release() to notify a null MediaCrypto, and report the origin error once.
+TEST_F(MediaDrmBridgeFactoryTest, CompleteInitializationFailureWaitsForJava) {
+  if (!MediaDrmBridge::IsKeySystemSupported(kWidevineKeySystem)) {
+    GTEST_SKIP() << "Widevine not supported on device.";
+  }
+
+  base::HistogramTester histogram_tester;
+  CdmConfig config;
+  config.key_system = kWidevineKeySystem;
+  MediaDrmStorage::InitCB init_cb;
+  auto factory = CreateFactory(&init_cb);
+  base::test::TestFuture<const scoped_refptr<ContentDecryptionModule>&,
+                         CreateCdmStatus>
+      future;
+  factory->Create(config, base::DoNothing(), base::DoNothing(),
+                  base::DoNothing(), base::DoNothing(), future.GetCallback());
+  ASSERT_TRUE(init_cb);
+  ASSERT_TRUE(HasBridge(factory.get()));
+  GetBridge(factory.get())->SetFailSetOriginForTesting(true);
+
+  std::move(init_cb).Run(true, base::UnguessableToken::Create());
+  EXPECT_FALSE(future.IsReady());
+
+  EXPECT_FALSE(future.Get<0>());
+  EXPECT_EQ(future.Get<1>(), CreateCdmStatus::kAndroidFailedSecurityOrigin);
+  EXPECT_FALSE(HasBridge(factory.get()));
+  histogram_tester.ExpectUniqueSample("Media.EME.MediaCryptoAvailable", false,
+                                      1);
+}
+
+TEST_F(MediaDrmBridgeFactoryTest, AbortDuringPendingMediaCryptoReady) {
+  if (!MediaDrmBridge::IsKeySystemSupported(kWidevineKeySystem)) {
+    GTEST_SKIP() << "Widevine not supported on device.";
+  }
+
+  CdmConfig config;
+  config.key_system = kWidevineKeySystem;
+  base::test::TestFuture<const scoped_refptr<ContentDecryptionModule>&,
+                         CreateCdmStatus>
+      future;
+  MediaDrmStorage::InitCB init_cb;
+  {
+    auto factory = CreateFactory(&init_cb);
+    factory->Create(config, base::DoNothing(), base::DoNothing(),
+                    base::DoNothing(), base::DoNothing(), future.GetCallback());
+    TriggerMediaCryptoFailure(
+        factory.get(),
+        MediaDrmBridge::MediaDrmCreateError::FAILED_MEDIA_CRYPTO_SESSION);
+  }
+  if (init_cb) {
+    std::move(init_cb).Run(false, std::nullopt);
+  }
+  base::RunLoop run_loop;
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, run_loop.QuitClosure());
+  run_loop.Run();
+  EXPECT_FALSE(future.Get<0>());
+  EXPECT_EQ(future.Get<1>(), CreateCdmStatus::kCdmCreationAborted);
+}
+
+TEST_F(MediaDrmBridgeTest,
+       UpdateSession_ClearKey_DeliversListenerCallbacksOnTaskRunner) {
+  StrictMock<MockCdmClient> client;
+  auto creation_result = MediaDrmBridge::CreateInternal(
+      base::ToVector(kClearKeyUuid), kEmptyOrigin, kDefault, "Test",
+      /*requires_media_crypto=*/true, std::make_unique<MediaDrmStorageBridge>(),
+      base::NullCallback(),
+      base::BindRepeating(&MockCdmClient::OnSessionMessage,
+                          base::Unretained(&client)),
+      base::BindRepeating(&MockCdmClient::OnSessionClosed,
+                          base::Unretained(&client)),
+      base::BindRepeating(&MockCdmClient::OnSessionKeysChange,
+                          base::Unretained(&client)),
+      base::BindRepeating(&MockCdmClient::OnSessionExpirationUpdate,
+                          base::Unretained(&client)));
+  if (!creation_result.has_value() &&
+      creation_result.error() == CreateCdmStatus::kUnsupportedKeySystem) {
+    GTEST_SKIP() << "ClearKey not supported on device.";
+  }
+  ASSERT_TRUE(creation_result.has_value());
+  scoped_refptr<MediaDrmBridge> bridge = std::move(creation_result).value();
+
+  std::string session_id;
+  base::RunLoop create_loop;
+  EXPECT_CALL(client, OnSessionMessage(_, _, _)).WillOnce([&] {
+    create_loop.Quit();
+  });
+  bridge->CreateSessionAndGenerateRequest(
+      CdmSessionType::kTemporary, EmeInitDataType::WEBM,
+      std::vector<uint8_t>(16, 0x01),
+      std::make_unique<MockCdmSessionPromise>(/*expect_success=*/true,
+                                              &session_id));
+  create_loop.Run();
+  ASSERT_FALSE(session_id.empty());
+
+  // ClearKey's provideKeyResponse() fires onEvent, onExpirationUpdate, and
+  // onKeyStatusChange. Because TaskEnvironment does not pump Android's Looper,
+  // callbacks only arrive via PostToTaskRunner() after UpdateSession()
+  // resolves.
+  base::RunLoop update_loop;
+  bool update_resolved = false;
+  base::RepeatingClosure done =
+      base::BarrierClosure(4, update_loop.QuitClosure());
+  auto update_promise =
+      std::make_unique<MockCdmPromise>(/*expect_success=*/true);
+  ON_CALL(*update_promise, resolve()).WillByDefault([&] {
+    update_resolved = true;
+    done.Run();
+  });
+  auto expect_after_resolve = [&] {
+    EXPECT_TRUE(update_resolved);
+    done.Run();
+  };
+  EXPECT_CALL(client, OnSessionMessage(session_id, _, _))
+      .WillOnce(expect_after_resolve);
+  EXPECT_CALL(client, OnSessionKeysChangeCalled(session_id, true))
+      .WillOnce(expect_after_resolve);
+  EXPECT_CALL(client, OnSessionExpirationUpdate(session_id, _))
+      .WillOnce(expect_after_resolve);
+
+  constexpr std::string_view kClearKeyJwkSet =
+      R"({"keys":[{"kty":"oct","kid":"AQEBAQEBAQEBAQEBAQEBAQ",)"
+      R"("k":"AQEBAQEBAQEBAQEBAQEBAQ"}]})";
+  bridge->UpdateSession(session_id, base::ToVector<uint8_t>(kClearKeyJwkSet),
+                        std::move(update_promise));
+  update_loop.Run();
+  EXPECT_FALSE(client.keys_info().empty());
+
+  base::RunLoop close_loop;
+  auto close_promise =
+      std::make_unique<MockCdmPromise>(/*expect_success=*/true);
+  ON_CALL(*close_promise, resolve()).WillByDefault([&] { close_loop.Quit(); });
+  EXPECT_CALL(client, OnSessionClosed(session_id, _));
+  bridge->CloseSession(session_id, std::move(close_promise));
+  close_loop.Run();
 }
 
 }  // namespace media

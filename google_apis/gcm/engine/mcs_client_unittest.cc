@@ -19,9 +19,12 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/test/bind.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "base/test/task_environment.h"
 #include "google_apis/gcm/base/fake_encryptor.h"
+#include "google_apis/gcm/base/gcm_features.h"
 #include "google_apis/gcm/base/mcs_util.h"
 #include "google_apis/gcm/engine/fake_connection_factory.h"
 #include "google_apis/gcm/engine/fake_connection_handler.h"
@@ -109,7 +112,7 @@ class TestMCSClient : public MCSClient {
   uint32_t next_id_;
 };
 
-class MCSClientTest : public testing::Test {
+class MCSClientTest : public testing::Test, public MCSClient::Delegate {
  public:
   MCSClientTest();
   ~MCSClientTest() override;
@@ -120,7 +123,9 @@ class MCSClientTest : public testing::Test {
   void BuildMCSClient();
   void InitializeClient();
   void StoreCredentials();
-  void LoginClient(const std::vector<std::string>& acknowledged_ids);
+  void LoginClient(const std::vector<std::string>& acknowledged_ids,
+                   bool flush_post_login_heartbeat = true);
+  void ExpectOutgoingHeartbeatPing(int last_stream_id_received = 1);
 
   base::SimpleTestClock* clock() { return &clock_; }
   TestMCSClient* mcs_client() const { return mcs_client_.get(); }
@@ -142,12 +147,13 @@ class MCSClientTest : public testing::Test {
   void WaitForMCSEvent();
   void PumpLoop();
 
- private:
-  void MessageReceivedCallback(const MCSMessage& message);
-  void MessageSentCallback(const std::string& app_id,
-                           const std::string& message_id,
-                           MCSClient::MessageSendStatus status);
+  // MCSClient::Delegate implementation.
+  void OnMessageReceivedFromMCS(const MCSMessage& message) override;
+  void OnMessageSentToMCS(const std::string& app_id,
+                          const std::string& message_id,
+                          MCSClient::MessageSendStatus status) override;
 
+ private:
   base::SimpleTestClock clock_;
 
   base::ScopedTempDir temp_directory_;
@@ -185,6 +191,7 @@ void MCSClientTest::SetUp() {
 }
 
 void MCSClientTest::TearDown() {
+  mcs_client_.reset();
   gcm_store_.reset();
   task_environment_.RunUntilIdle();
   testing::Test::TearDown();
@@ -200,20 +207,18 @@ void MCSClientTest::BuildMCSClient() {
 }
 
 void MCSClientTest::InitializeClient() {
-  gcm_store_->Load(
-      GCMStore::CREATE_IF_MISSING,
-      base::BindOnce(
-          &MCSClient::Initialize, base::Unretained(mcs_client_.get()),
-          base::BindRepeating(&MCSClientTest::MessageReceivedCallback,
-                              base::Unretained(this)),
-          base::BindRepeating(&MCSClientTest::MessageSentCallback,
-                              base::Unretained(this))));
+  gcm_store_->Load(GCMStore::CREATE_IF_MISSING,
+                   base::BindOnce(&MCSClient::Initialize,
+                                  base::Unretained(mcs_client_.get()),
+                                  /*delegate=*/base::Unretained(this)));
   run_loop_->RunUntilIdle();
   run_loop_ = std::make_unique<base::RunLoop>();
 }
 
 void MCSClientTest::LoginClient(
-    const std::vector<std::string>& acknowledged_ids) {
+    const std::vector<std::string>& acknowledged_ids,
+    bool flush_post_login_heartbeat) {
+  const bool had_no_pending_sends = (mcs_client_->GetSendQueueSize() == 0);
   std::unique_ptr<mcs_proto::LoginRequest> login_request =
       BuildLoginRequest(kAndroidId, kSecurityToken, "");
   for (const std::string& acknowledged_id : acknowledged_ids) {
@@ -222,6 +227,17 @@ void MCSClientTest::LoginClient(
   GetFakeHandler()->ExpectOutgoingMessage(
       MCSMessage(kLoginRequestTag, std::move(login_request)));
   mcs_client_->Login(kAndroidId, kSecurityToken);
+  if (flush_post_login_heartbeat && had_no_pending_sends &&
+      mcs_client_->state() == MCSClient::CONNECTED) {
+    ExpectOutgoingHeartbeatPing(/*last_stream_id_received=*/1);
+    PumpLoop();
+  }
+}
+
+void MCSClientTest::ExpectOutgoingHeartbeatPing(int last_stream_id_received) {
+  mcs_proto::HeartbeatPing ping;
+  ping.set_last_stream_id_received(last_stream_id_received);
+  GetFakeHandler()->ExpectOutgoingMessage(MCSMessage(kHeartbeatPingTag, ping));
 }
 
 void MCSClientTest::StoreCredentials() {
@@ -248,7 +264,7 @@ void MCSClientTest::PumpLoop() {
   run_loop_ = std::make_unique<base::RunLoop>();
 }
 
-void MCSClientTest::MessageReceivedCallback(const MCSMessage& message) {
+void MCSClientTest::OnMessageReceivedFromMCS(const MCSMessage& message) {
   received_message_ = std::make_unique<MCSMessage>(message);
   if (message.tag() == kLoginResponseTag) {
     return;
@@ -257,9 +273,9 @@ void MCSClientTest::MessageReceivedCallback(const MCSMessage& message) {
   run_loop_->Quit();
 }
 
-void MCSClientTest::MessageSentCallback(const std::string& app_id,
-                                        const std::string& message_id,
-                                        MCSClient::MessageSendStatus status) {
+void MCSClientTest::OnMessageSentToMCS(const std::string& app_id,
+                                       const std::string& message_id,
+                                       MCSClient::MessageSendStatus status) {
   DVLOG(1) << "Message sent callback invoked, killing loop.";
   sent_message_id_ = message_id;
   message_send_status_ = status;
@@ -382,6 +398,7 @@ TEST_F(MCSClientTest, SendMessageRMQWhileDisconnected) {
                                        kTTLValue, 1, kTTLValue - 1, "", 0,
                                        IMMEDIATE_ACK_NO));
   GetFakeHandler()->ExpectOutgoingMessage(message2);
+  ExpectOutgoingHeartbeatPing(/*last_stream_id_received=*/1);
   mcs_client()->SendMessage(message);
   PumpLoop();         // Wait for the queuing to happen.
   EXPECT_EQ(MCSClient::QUEUED, message_send_status());
@@ -432,6 +449,7 @@ TEST_F(MCSClientTest, SendMessageRMQOnRestart) {
                                        IMMEDIATE_ACK_NO));
   LoginClient(std::vector<std::string>());
   GetFakeHandler()->ExpectOutgoingMessage(message2);
+  ExpectOutgoingHeartbeatPing(/*last_stream_id_received=*/1);
   PumpLoop();
   EXPECT_TRUE(GetFakeHandler()->AllOutgoingMessagesReceived());
 }
@@ -456,7 +474,7 @@ TEST_F(MCSClientTest, SendMessageRMQWithStreamAck) {
 
   // Receive the ack.
   std::unique_ptr<mcs_proto::IqStanza> ack = BuildStreamAck();
-  ack->set_last_stream_id_received(kMessageBatchSize + 1);
+  ack->set_last_stream_id_received(kMessageBatchSize + 2);
   GetFakeHandler()->ReceiveMessage(MCSMessage(kIqStanzaTag, std::move(ack)));
   WaitForMCSEvent();
 
@@ -540,6 +558,7 @@ TEST_F(MCSClientTest, SendMessageRMQPartialAckOnReconnect) {
         kTTLValue, 1, 0, "", 0, IMMEDIATE_ACK_NO));
     GetFakeHandler()->ExpectOutgoingMessage(message);
   }
+  ExpectOutgoingHeartbeatPing(/*last_stream_id_received=*/2);
   std::unique_ptr<mcs_proto::IqStanza> ack(BuildSelectiveAck(acked_ids));
   GetFakeHandler()->ReceiveMessage(MCSMessage(kIqStanzaTag, std::move(ack)));
   WaitForMCSEvent();
@@ -624,6 +643,7 @@ TEST_F(MCSClientTest, SelectiveAckMidStream) {
                                         kTTLValue, 1, 0, "", 0,
                                         IMMEDIATE_ACK_NO));
   GetFakeHandler()->ExpectOutgoingMessage(cMessage4);
+  ExpectOutgoingHeartbeatPing(/*last_stream_id_received=*/1);
   PumpLoop();
   EXPECT_TRUE(GetFakeHandler()->AllOutgoingMessagesReceived());
 }
@@ -710,7 +730,7 @@ TEST_F(MCSClientTest, AckWhenLimitReachedWithHeartbeat) {
   // Receive a heartbeat confirming the ack (and receive the heartbeat ack).
   std::unique_ptr<mcs_proto::HeartbeatPing> heartbeat(
       new mcs_proto::HeartbeatPing());
-  heartbeat->set_last_stream_id_received(2);
+  heartbeat->set_last_stream_id_received(3);
 
   std::unique_ptr<mcs_proto::HeartbeatAck> heartbeat_ack(
       new mcs_proto::HeartbeatAck());
@@ -790,15 +810,19 @@ TEST_F(MCSClientTest, CollapseKeysSameApp) {
                                       kTTLValue, 1, 0, "token", 0,
                                       IMMEDIATE_ACK_NO));
   mcs_client()->SendMessage(message);
+  PumpLoop();
 
   MCSMessage message2(BuildDataMessage("from", "app", "message id 2", 1, "1",
                                        kTTLValue, 1, 0, "token", 0,
                                        IMMEDIATE_ACK_NO));
   mcs_client()->SendMessage(message2);
+  PumpLoop();
 
   LoginClient(std::vector<std::string>());
   GetFakeHandler()->ExpectOutgoingMessage(message2);
+  ExpectOutgoingHeartbeatPing(/*last_stream_id_received=*/1);
   PumpLoop();
+  EXPECT_TRUE(GetFakeHandler()->AllOutgoingMessagesReceived());
 }
 
 // Sending two messages with the same collapse key and different app id while
@@ -810,16 +834,20 @@ TEST_F(MCSClientTest, CollapseKeysDifferentApp) {
                                       kTTLValue, 1, 0, "token", 0,
                                       IMMEDIATE_ACK_NO));
   mcs_client()->SendMessage(message);
+  PumpLoop();
 
   MCSMessage message2(BuildDataMessage("from", "app 2", "message id 2", 1, "2",
                                        kTTLValue, 1, 0, "token", 0,
                                        IMMEDIATE_ACK_NO));
   mcs_client()->SendMessage(message2);
+  PumpLoop();
 
   LoginClient(std::vector<std::string>());
   GetFakeHandler()->ExpectOutgoingMessage(message);
   GetFakeHandler()->ExpectOutgoingMessage(message2);
+  ExpectOutgoingHeartbeatPing(/*last_stream_id_received=*/1);
   PumpLoop();
+  EXPECT_TRUE(GetFakeHandler()->AllOutgoingMessagesReceived());
 }
 
 // Sending two messages with the same collapse key and app id, but different
@@ -831,16 +859,20 @@ TEST_F(MCSClientTest, CollapseKeysDifferentUser) {
                                       kTTLValue, 1, 0, "token", 0,
                                       IMMEDIATE_ACK_NO));
   mcs_client()->SendMessage(message);
+  PumpLoop();
 
   MCSMessage message2(BuildDataMessage("from", "app", "message id 2", 1, "2",
                                        kTTLValue, 1, 0, "token", 1,
                                        IMMEDIATE_ACK_NO));
   mcs_client()->SendMessage(message2);
+  PumpLoop();
 
   LoginClient(std::vector<std::string>());
   GetFakeHandler()->ExpectOutgoingMessage(message);
   GetFakeHandler()->ExpectOutgoingMessage(message2);
+  ExpectOutgoingHeartbeatPing(/*last_stream_id_received=*/1);
   PumpLoop();
+  EXPECT_TRUE(GetFakeHandler()->AllOutgoingMessagesReceived());
 }
 
 // Receive a message with immediate ack request, which should trigger an
@@ -878,6 +910,174 @@ TEST_F(MCSClientTest, AckWhenImmediateAckRequested) {
   PumpLoop();
 
   EXPECT_TRUE(GetFakeHandler()->AllOutgoingMessagesReceived());
+}
+
+TEST_F(MCSClientTest,
+       InitialConnectionReadyWaitsForHeartbeatAckAndSurvivesDisconnect) {
+  BuildMCSClient();
+  InitializeClient();
+  int ready_count = 0;
+  std::string message_at_first_ready_callback;
+  mcs_client()->WaitForInitialConnectionReady(base::BindLambdaForTesting([&]() {
+    ++ready_count;
+    if (received_message()) {
+      message_at_first_ready_callback = received_message()->SerializeAsString();
+    }
+  }));
+  ASSERT_EQ(0, ready_count);
+
+  // Logging in sends a post-login `HeartbeatPing` without reporting readiness
+  // yet.
+  LoginClient(std::vector<std::string>(),
+              /*flush_post_login_heartbeat=*/false);
+  ExpectOutgoingHeartbeatPing(/*last_stream_id_received=*/1);
+  PumpLoop();
+  ASSERT_TRUE(GetFakeHandler()->AllOutgoingMessagesReceived());
+  ASSERT_EQ(0, ready_count);
+
+  // Receiving a queued `DataMessageStanza` ahead of `HeartbeatAck` must not
+  // prematurely satisfy readiness.
+  MCSMessage queued_message(BuildDataMessage(
+      /*from=*/"from", /*category=*/"category", /*message_id=*/"X",
+      /*last_stream_id_received=*/1, /*persistent_id=*/"s1",
+      /*ttl=*/kTTLValue, /*sent=*/1, /*queued=*/0, /*token=*/"",
+      /*user_id=*/0, /*immediate_ack=*/IMMEDIATE_ACK_NO));
+  GetFakeHandler()->ReceiveMessage(queued_message);
+  WaitForMCSEvent();
+  PumpLoop();
+  ASSERT_EQ(0, ready_count);
+
+  // A transient disconnect before `HeartbeatAck` resets state so the reconnect
+  // sends a fresh post-login `HeartbeatPing`.
+  connection_factory()->set_delay_reconnect(true);
+  GetFakeHandler()->ReceiveMessage(MCSMessage(kCloseTag, mcs_proto::Close()));
+  PumpLoop();
+  ASSERT_EQ(0, ready_count);
+
+  std::unique_ptr<mcs_proto::LoginRequest> relogin_request =
+      BuildLoginRequest(kAndroidId, kSecurityToken, "");
+  relogin_request->add_received_persistent_id("s1");
+  GetFakeHandler()->ExpectOutgoingMessage(
+      MCSMessage(kLoginRequestTag, std::move(relogin_request)));
+  ExpectOutgoingHeartbeatPing(/*last_stream_id_received=*/1);
+  connection_factory()->set_delay_reconnect(false);
+  connection_factory()->Connect();
+  PumpLoop();
+  ASSERT_TRUE(GetFakeHandler()->AllOutgoingMessagesReceived());
+  ASSERT_EQ(0, ready_count);
+
+  // Deliver a queued `DataMessageStanza` and `HeartbeatAck` back-to-back
+  // without pumping in between, and register a second readiness callback while
+  // in `kReadyPendingDelivery`. Readiness callbacks must run only after
+  // `queued_message_before_ack` has been delivered to the delegate.
+  MCSMessage queued_message_before_ack(BuildDataMessage(
+      /*from=*/"from", /*category=*/"category", /*message_id=*/"Y",
+      /*last_stream_id_received=*/1, /*persistent_id=*/"s2",
+      /*ttl=*/kTTLValue, /*sent=*/1, /*queued=*/0, /*token=*/"",
+      /*user_id=*/0, /*immediate_ack=*/IMMEDIATE_ACK_NO));
+  GetFakeHandler()->ReceiveMessage(queued_message_before_ack);
+
+  mcs_proto::HeartbeatAck heartbeat_ack;
+  heartbeat_ack.set_last_stream_id_received(2);
+  GetFakeHandler()->ReceiveMessage(MCSMessage(kHeartbeatAckTag, heartbeat_ack));
+  ASSERT_EQ(0, ready_count);
+
+  std::string message_at_second_ready_callback;
+  mcs_client()->WaitForInitialConnectionReady(base::BindLambdaForTesting([&]() {
+    ++ready_count;
+    if (received_message()) {
+      message_at_second_ready_callback =
+          received_message()->SerializeAsString();
+    }
+  }));
+  ASSERT_EQ(0, ready_count);
+
+  WaitForMCSEvent();
+  PumpLoop();
+  EXPECT_EQ(2, ready_count);
+  EXPECT_EQ(queued_message_before_ack.SerializeAsString(),
+            message_at_first_ready_callback);
+  EXPECT_EQ(queued_message_before_ack.SerializeAsString(),
+            message_at_second_ready_callback);
+
+  // Subsequent calls to `WaitForInitialConnectionReady()` run immediately while
+  // reconnects do not send extra post-login pings.
+  mcs_client()->WaitForInitialConnectionReady(
+      base::BindLambdaForTesting([&]() { ++ready_count; }));
+  EXPECT_EQ(3, ready_count);
+
+  connection_factory()->set_delay_reconnect(true);
+  GetFakeHandler()->ReceiveMessage(MCSMessage(kCloseTag, mcs_proto::Close()));
+  PumpLoop();
+  std::unique_ptr<mcs_proto::LoginRequest> post_ready_relogin_request =
+      BuildLoginRequest(kAndroidId, kSecurityToken, "");
+  post_ready_relogin_request->add_received_persistent_id("s2");
+  GetFakeHandler()->ExpectOutgoingMessage(
+      MCSMessage(kLoginRequestTag, std::move(post_ready_relogin_request)));
+  connection_factory()->set_delay_reconnect(false);
+  connection_factory()->Connect();
+  PumpLoop();
+  EXPECT_TRUE(GetFakeHandler()->AllOutgoingMessagesReceived());
+  EXPECT_EQ(3, ready_count);
+}
+
+TEST_F(MCSClientTest,
+       InitialConnectionReadyQueuesHeartbeatBehindPendingOutgoingMessage) {
+  BuildMCSClient();
+  InitializeClient();
+
+  int ready_count = 0;
+  mcs_client()->WaitForInitialConnectionReady(
+      base::BindLambdaForTesting([&]() { ++ready_count; }));
+
+  MCSMessage pending_outgoing(BuildDataMessage(
+      /*from=*/"from", /*category=*/"app", /*message_id=*/"msg1",
+      /*last_stream_id_received=*/1, /*persistent_id=*/"1",
+      /*ttl=*/kTTLValue, /*sent=*/1, /*queued=*/0, /*token=*/"token",
+      /*user_id=*/0, /*immediate_ack=*/IMMEDIATE_ACK_NO));
+  mcs_client()->SendMessage(pending_outgoing);
+  PumpLoop();
+
+  LoginClient(std::vector<std::string>());
+  GetFakeHandler()->ExpectOutgoingMessage(pending_outgoing);
+  ExpectOutgoingHeartbeatPing(/*last_stream_id_received=*/1);
+  PumpLoop();
+  ASSERT_TRUE(GetFakeHandler()->AllOutgoingMessagesReceived());
+  ASSERT_EQ(0, ready_count);
+
+  mcs_proto::HeartbeatAck heartbeat_ack;
+  heartbeat_ack.set_last_stream_id_received(3);
+  GetFakeHandler()->ReceiveMessage(MCSMessage(kHeartbeatAckTag, heartbeat_ack));
+  WaitForMCSEvent();
+  PumpLoop();
+  EXPECT_EQ(1, ready_count);
+}
+
+TEST_F(MCSClientTest, InitialConnectionReadyShortCircuitsWhenFeatureDisabled) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(
+      features::kGCMWaitForInitialConnectionReady);
+
+  BuildMCSClient();
+  InitializeClient();
+
+  // `WaitForInitialConnectionReady()` runs immediately even before login.
+  int ready_count = 0;
+  mcs_client()->WaitForInitialConnectionReady(
+      base::BindLambdaForTesting([&]() { ++ready_count; }));
+  EXPECT_EQ(1, ready_count);
+
+  // Logging in does not send a post-login `HeartbeatPing`
+  // (`FakeConnectionHandler` fails if any unexpected outgoing packet is sent).
+  LoginClient(std::vector<std::string>(),
+              /*flush_post_login_heartbeat=*/false);
+  PumpLoop();
+  EXPECT_TRUE(GetFakeHandler()->AllOutgoingMessagesReceived());
+  EXPECT_EQ(0, mcs_client()->GetSendQueueSize());
+
+  mcs_client()->WaitForInitialConnectionReady(
+      base::BindLambdaForTesting([&]() { ++ready_count; }));
+  EXPECT_EQ(2, ready_count);
 }
 
 } // namespace

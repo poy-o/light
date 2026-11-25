@@ -78,6 +78,7 @@
 <translation id="112840717907525620">Cachegeheugen van beleid is OK</translation>
 <translation id="1131264053432022307">Afbeelding die je hebt gekopieerd</translation>
 <translation id="1132735979845538847"><ph name="ORIGIN" />: als je het volledige scherm wilt sluiten, sleep je vanaf de bovenkant en tik je op de terugknop</translation>
+<translation id="11370190534773372">Kaartgegevens ingevuld</translation>
 <translation id="1138458427267715730">Krijg meldingen als de prijs daalt op een site op internet</translation>
 <translation id="1142713751288681188">Type papier</translation>
 <translation id="1142965388643537393">Reisinformatie</translation>
@@ -583,6 +584,7 @@ Anders wordt dit geblokkeerd door je privacyinstellingen. Hierdoor werkt de cont
 <translation id="1988881251331415125">Als de spelling klopt, <ph name="BEGIN_LINK" />voer je een verbindingsdiagnose uit<ph name="END_LINK" />.</translation>
 <translation id="1991370806334788445">Sta cookies van derden toe. Dit betekent dat je minder browserbeveiliging hebt, maar dat sitefuncties waarschijnlijk wel werken zoals verwacht.</translation>
 <translation id="1992331125980284532">JIS B3</translation>
+<translation id="1995173078718234136">Content scannen...</translation>
 <translation id="1996557034791506430">Recht verwijderen?</translation>
 <translation id="1997484222658892567"><ph name="URL" /> vraagt toestemming om permanent grote gegevens op je lokale computer op te slaan</translation>
 <translation id="1997774360448418989">Papier (lichtgewicht)</translation>
@@ -666,7 +668,6 @@ Anders wordt dit geblokkeerd door je privacyinstellingen. Hierdoor werkt de cont
 <translation id="2126374524350484896">Pdf gemaakt met:</translation>
 <translation id="2127090458081644412">Wachtwoord opgeslagen op dit apparaat</translation>
 <translation id="2127747486437921899">Cursief</translation>
-<translation id="2129163794581571479">Mogelijk gemaakt door Gemini met Personal Intelligence. Je verzoeken, paginatitels en URL's kunnen worden beoordeeld om verbeterd automatisch invullen te verbeteren. <ph name="BEGIN_LINK" />Instellingen beheren<ph name="END_LINK" /></translation>
 <translation id="2130448033692577677">De gespecificeerde templates worden misschien niet toegepast omdat het beleid DnsOverHttpsMode niet is ingesteld.</translation>
 <translation id="2130699163006053678">A3x7</translation>
 <translation id="2131006834960167560">Automatisch invullen van betalingen aanzetten is op volledige hoogte geopend.</translation>
@@ -1216,7 +1217,6 @@ Anders wordt dit geblokkeerd door je privacyinstellingen. Hierdoor werkt de cont
 <translation id="3041584414879052436">Lijst met aanbieders van Koop nu, betaal later is gesloten.</translation>
 <translation id="3041612393474885105">Certificaatgegevens</translation>
 <translation id="3041835740069544003">Chrome kan nu meer formulieren herkennen en invullen met Slimmer formulieren invullen. Hiervoor kunnen paginacontent en URL's worden verwerkt in een privégedeelte in de cloud. Je beheert dit in de instellingen.</translation>
-<translation id="3047054686095898948">Sla je informatie op in <ph name="IDS_AUTOFILL_GOOGLE_WALLET_TITLE_1" /> en doe sneller dingen, zoals formulieren invullen in Google-producten. Je kunt <ph name="BEGIN_LINK" />je informatie beheren<ph name="END_LINK" /> voor <ph name="ACCOUNT" /> in <ph name="IDS_AUTOFILL_GOOGLE_WALLET_TITLE_2" /></translation>
 <translation id="305162504811187366">Chrome Remote Desktop-geschiedenis, waaronder tijdstempels, hosts en clientsessie-ID's</translation>
 <translation id="3052868890529250114">Meestal maak je veilig verbinding met sites, maar Chrome kan op dit moment geen beveiligde verbinding gebruiken. Een aanvaller probeert je netwerkverbinding af te luisteren of aan te passen. <ph name="BEGIN_LEARN_MORE_LINK" />Meer informatie over deze waarschuwing<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="3052964831964880138">Prijsdaling van <ph name="PRICE_DROP" /> voor <ph name="PRODUCT_NAME" /></translation>
@@ -1582,7 +1582,6 @@ Het kan langer dan normaal duren voordat je app wordt gestart.</translation>
 <translation id="3655670868607891010">Als je deze melding vaker ziet, probeer je deze <ph name="HELP_LINK" />.</translation>
 <translation id="3658742229777143148">Revisie</translation>
 <translation id="3659521826520353662">Welke door de beheerder gedefinieerde websites worden bezocht en wanneer: <ph name="ALLOWLISTED_WEBSITES" /></translation>
-<translation id="3663760610864720538">Mogelijk gemaakt door Gemini met Personal Intelligence. <ph name="BEGIN_LINK" />Instellingen beheren<ph name="END_LINK" /></translation>
 <translation id="3664479564786885722">Zoek meer koopopties van andere winkels die dit product verkopen.</translation>
 <translation id="3664782872746246217">Zoekwoorden:</translation>
 <translation id="3670030362669914947">Nummer</translation>
@@ -1860,7 +1859,6 @@ Je kunt ook contact opnemen met de site-eigenaar en voorstellen dat die upgradet
 <translation id="4112140312785995938">Achteruit zoeken</translation>
 <translation id="4114007503059268298">Wil je deze kaart in je Google-account en op dit apparaat opslaan?</translation>
 <translation id="4114146879518089587">Doorgaan naar site</translation>
-<translation id="4115378294792113321">Magenta</translation>
 <translation id="4116701314593212016">JIS B7</translation>
 <translation id="4116798170070772848">RA2</translation>
 <translation id="4117700440116928470">Beleidsbereik wordt niet ondersteund.</translation>
@@ -3443,6 +3441,7 @@ Je kunt ook contact opnemen met de site-eigenaar en voorstellen dat die upgradet
 <translation id="6727094998759448074">SRA4</translation>
 <translation id="672853333773293432">Ingelogd met account</translation>
 <translation id="6732087373923685049">camera</translation>
+<translation id="6736243959894955139">Adres</translation>
 <translation id="6738516213925468394">Je gegevens zijn op <ph name="TIME" /> versleuteld met je <ph name="BEGIN_LINK" />wachtwoordzin voor synchronisatie<ph name="END_LINK" />. Geef deze op om de synchronisatie te starten.</translation>
 <translation id="6740851646645036700">Je hebt voor nu je limiet voor schrijfhulp bereikt. Probeer het later opnieuw.</translation>
 <translation id="674375294223700098">Onbekende fout met servercertificaat.</translation>
@@ -4542,6 +4541,7 @@ Aanvullende informatie:
 <translation id="8577348305244205642">Virtuele kaart niet beschikbaar</translation>
 <translation id="8579000896558714521">Toetsenbordoverschrijving</translation>
 <translation id="8579561564816585231">Ingelogd met een Google-service zoals Wachtwoordmanager</translation>
+<translation id="8580478010934016252">Naar betaalmethoden</translation>
 <translation id="8581064022803799721">Deze pagina is opgeslagen in <ph name="LAST_BOOKMARKS_FOLDER" />.</translation>
 <translation id="858637041960032120">Telnr. toevoegen</translation>
 <translation id="8587100480629037893">Handen volgen niet toegestaan</translation>

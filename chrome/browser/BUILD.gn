@@ -1279,6 +1279,7 @@ source_set("core") {
     "//chrome/browser/ui/webui/subresource_filter",
     "//chrome/browser/ui/webui/suggest_internals",
     "//chrome/browser/ui/webui/suggest_internals:mojo_bindings",
+    "//chrome/browser/ui/webui/top_chrome",
     "//chrome/browser/ui/webui/usb_internals",
     "//chrome/browser/update_client",
     "//chrome/browser/updater",
@@ -1488,6 +1489,7 @@ source_set("core") {
       "icon_loader_android.cc",
       "incognito/android/incognito_utils_android.cc",
       "memory_details_android.cc",
+      "platform_util.cc",
       "platform_util_android.cc",
       "shell_integration_android.cc",
     ]
@@ -1502,6 +1504,7 @@ source_set("core") {
       "//chrome/browser/commerce/android:shopping_service_jni",
       "//chrome/browser/composeplate/android:jni_headers",
       "//chrome/browser/dev_ui",
+      "//chrome/browser/download/android:jni_headers",
       "//chrome/browser/feed",
       "//chrome/browser/finds/core",
       "//chrome/browser/flags:flags_android",
@@ -1622,7 +1625,6 @@ source_set("core") {
       "//chrome/browser/ui/webui/password_manager:password_manager_ui",
       "//chrome/browser/ui/webui/signin/cross_device_signin_qr_bubble:mojo_bindings",
       "//chrome/browser/ui/webui/skills:mojo_bindings",
-      "//chrome/browser/ui/webui/top_chrome",
       "//chrome/browser/ui/webui/user_education_internals",
       "//chrome/browser/ui/webui/util",
       "//chrome/browser/ui/webui/webnn_internals",
@@ -1760,6 +1762,7 @@ source_set("core") {
       "//chrome/chrome_elf:dll_hash",
       "//chrome/chrome_elf:third_party_shared_defines",
       "//chrome/common:version_header",
+      "//chrome/common/win:core_dlls",
       "//chrome/credential_provider/common:common_constants",
       "//chrome/elevation_service:public_headers",
       "//chrome/install_static:install_static_util",
@@ -2039,10 +2042,10 @@ source_set("core") {
       "//chrome/browser/ui/webui/ash/settings/pages/main",
       "//chrome/browser/webshare",
       "//chrome/browser/webshare:impl",
-      "//chrome/common/chromeos/extensions",
       "//chromeos/ash/components/memory",
       "//chromeos/ash/components/mojo_service_manager:mojo_service_manager_connection",
       "//chromeos/ash/components/quickoffice",
+      "//chromeos/ash/experiences/extensions/common/telemetry",
       "//chromeos/ash/experiences/isolated_web_app",
       "//chromeos/ash/services/multidevice_setup/public/cpp:first_run_field_trial",
       "//chromeos/ash/services/network_health/public/cpp",
@@ -2205,7 +2208,7 @@ source_set("core") {
     deps += [ "//chrome/browser/chrome_for_testing:browser" ]
   }
 
-  if (safe_browsing_mode == 1) {
+  if (safe_browsing_mode != 0) {
     deps += [ "//chrome/browser/ui/webui/reset_password" ]
   }
 
@@ -4752,8 +4755,8 @@ grit("resources") {
   }
 }
 
-action_with_pydeps("expired_flags_list_gen") {
-  script = "//tools/flags/generate_expired_list.py"
+python_action("expired_flags_list_gen") {
+  python_binary = "//tools/flags:generate_expired_list"
   sources = [ "flag-metadata.json" ]
   inputs = [ "//chrome/VERSION" ]
   outputs = [ "$root_gen_dir/chrome/browser/expired_flags_list.cc" ]
@@ -5087,8 +5090,12 @@ source_set("core_unit_tests") {
   ]
 
   if (is_android) {
-    sources += [ "chrome_content_browser_client_android_unittest.cc" ]
+    sources += [
+      "chrome_content_browser_client_android_unittest.cc",
+      "platform_util_android_unittest.cc",
+    ]
     deps += [
+      ":platform_util_internal",
       "//chrome/browser/android",
       "//chrome/browser/android:web_contents_theme_client",
     ]
@@ -5136,9 +5143,11 @@ source_set("core_unit_tests") {
       "//chrome/browser/shortcuts",
       "//chrome/browser/web_applications",
       "//chrome/browser/win:chrome_process_finder",
+      "//chrome/chrome_elf:nt_registry",
       "//chrome/install_static:install_static_util",
       "//chrome/installer/util:with_no_strings",
       "//components/webui/flags",
+      "//components/webui/flags:switches",
     ]
   }
 
@@ -5155,9 +5164,19 @@ source_set("core_unit_tests") {
       ":global_keyboard_shortcuts_mac",
       ":shutdown_watchdog_mac",
       "//chrome/app:command_ids",
+      "//chrome/browser/download",
+      "//chrome/browser/download:test_support",
+      "//chrome/browser/prefs",
       "//chrome/browser/profiles:profile",
+      "//chrome/browser/profiles:profile_util",
+      "//chrome/browser/sessions",
+      "//chrome/browser/signin",
+      "//chrome/browser/ui/browser_window",
       "//chrome/common:channel_info",
       "//chrome/test/base:chrome_test_scoped_utils",
+      "//components/keyed_service/core",
+      "//components/sessions",
+      "//components/sessions:test_support",
       "//components/version_info:channel",
     ]
   }
@@ -5262,7 +5281,6 @@ if (!is_android) {
       "crash_recovery_browsertest.cc",
       "fast_shutdown_browsertest.cc",
       "file_select_helper_browsertest.cc",
-      "icon_loader_browsertest.cc",
       "iframe_browsertest.cc",
       "l10n_util_browsertest.cc",
       "locale_tests_browsertest.cc",
@@ -5282,7 +5300,6 @@ if (!is_android) {
       ":chrome_browser_main",
       ":chrome_content_browser_client",
       ":file_select_helper",
-      ":icon_loader",
       ":platform_util_internal",
       "//base",
       "//chrome/browser/accessibility",
@@ -5314,13 +5331,13 @@ if (!is_android) {
       "//chrome/browser/ui/search:test_support_ui",
       "//chrome/browser/ui/webui/top_chrome",
       "//chrome/services/speech/buildflags",
-      "//chrome/test/base:chrome_test_scoped_utils",
       "//chrome/test/base:profile_lifecycle_test_utils",
       "//chrome/test/base:test_launcher_utils",
       "//chrome/test/base:testing_browser_process",
       "//chrome/test/base:ui_test_utils",
       "//components/embedder_support",
       "//components/enterprise/data_controls/core/browser:test_support",
+      "//components/enterprise/isolated_mode:test_support",
       "//components/guest_view/browser",
       "//components/guest_view/browser:test_support",
       "//components/javascript_dialogs",
@@ -5344,6 +5361,7 @@ if (!is_android) {
       "//ui/native_theme:test_support",
       "//ui/shell_dialogs:test_support",
       "//ui/views:test_support",
+      "//ui/webui:buildflags",
     ]
 
     if (is_win || is_linux || is_chromeos) {
@@ -5511,12 +5529,14 @@ source_set("platform_browser_tests") {
 
   sources = [
     "chrome_content_browser_client_platform_browsertest.cc",
+    "icon_loader_browsertest.cc",
     "loadtimes_extension_bindings_browsertest.cc",
     "no_best_effort_tasks_browsertest.cc",
   ]
 
   deps = [
     ":chrome_content_browser_client",
+    ":icon_loader",
     "//chrome/test:test_support",
     "//chrome/test/base:chrome_test_utils",
     "//content/test:test_support",

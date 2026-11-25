@@ -8,13 +8,11 @@
 
 #include "base/check.h"
 #include "base/check_op.h"
-#include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_shader.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_style.h"
-#include "chrome/browser/ui/views/frame/themed_background.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
@@ -22,30 +20,26 @@
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/scoped_canvas.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/scroll_view.h"
-#include "ui/views/widget/widget.h"
 
 // static
-int HorizontalTabStripOverflowIndicatorView::GetMaxOpaqueThickness() {
+int HorizontalTabStripOverflowIndicatorView::GetMaxOverlap() {
   return std::max(TabStyle::Get()->GetBottomExtensionWidth(),
                   TabStyle::Get()->GetTabOverlap());
 }
 
 // static
 int HorizontalTabStripOverflowIndicatorView::GetMaxTotalThickness() {
-  return GetMaxOpaqueThickness() + kShadowThickness;
+  return GetMaxOverlap() + kShadowThickness;
 }
 
 HorizontalTabStripOverflowIndicatorView::
     HorizontalTabStripOverflowIndicatorView(
-        views::OverflowIndicatorAlignment side,
-        BrowserView* browser_view)
-    : side_(side), browser_view_(browser_view) {
+        views::OverflowIndicatorAlignment side)
+    : side_(side) {
   CHECK(side_ == views::OverflowIndicatorAlignment::kLeft ||
         side_ == views::OverflowIndicatorAlignment::kRight);
-  CHECK(browser_view_);
   SetCanProcessEventsWithinSubtree(false);
   // The tabstrip overlaps the toolbar below it. Inset the bottom of the
   // indicator by the toolbar overlap so the shadow gradient does not extend
@@ -57,26 +51,14 @@ HorizontalTabStripOverflowIndicatorView::
 HorizontalTabStripOverflowIndicatorView::
     ~HorizontalTabStripOverflowIndicatorView() = default;
 
-void HorizontalTabStripOverflowIndicatorView::SetOpaqueThickness(
-    int opaque_thickness) {
-  CHECK_GE(opaque_thickness, 0);
-  CHECK_LE(opaque_thickness, GetMaxOpaqueThickness());
-  if (opaque_thickness_ == opaque_thickness) {
+void HorizontalTabStripOverflowIndicatorView::SetOverlap(int overlap) {
+  CHECK_GE(overlap, 0);
+  CHECK_LE(overlap, GetMaxOverlap());
+  if (overlap_ == overlap) {
     return;
   }
-  opaque_thickness_ = opaque_thickness;
+  overlap_ = overlap;
   SchedulePaint();
-}
-
-void HorizontalTabStripOverflowIndicatorView::AddedToWidget() {
-  paint_as_active_subscription_ =
-      GetWidget()->RegisterPaintAsActiveChangedCallback(base::BindRepeating(
-          &HorizontalTabStripOverflowIndicatorView::SchedulePaint,
-          base::Unretained(this)));
-}
-
-void HorizontalTabStripOverflowIndicatorView::RemovedFromWidget() {
-  paint_as_active_subscription_ = {};
 }
 
 void HorizontalTabStripOverflowIndicatorView::OnPaint(gfx::Canvas* canvas) {
@@ -88,26 +70,15 @@ void HorizontalTabStripOverflowIndicatorView::OnPaint(gfx::Canvas* canvas) {
   const ui::ColorProvider* color_provider = GetColorProvider();
   const bool is_left = (side_ == views::OverflowIndicatorAlignment::kLeft) !=
                        base::i18n::IsRTL();
-  const int opaque_width = std::min(opaque_thickness_, contents_bounds.width());
-  if (opaque_width > 0) {
-    const gfx::Rect opaque_bounds(
-        is_left ? contents_bounds.x() : contents_bounds.right() - opaque_width,
-        contents_bounds.y(), opaque_width, contents_bounds.height());
-    gfx::ScopedCanvas scoped_canvas(canvas);
-    canvas->ClipRect(opaque_bounds);
-    ThemedBackground::PaintBackground(
-        canvas, this, browser_view_,
-        ThemedBackground::ThemeChoice::kFrameTheme);
-  }
-
+  const int inset_width = std::min(overlap_, contents_bounds.width());
   const int shadow_width =
-      std::min(kShadowThickness, contents_bounds.width() - opaque_width);
+      std::min(kShadowThickness, contents_bounds.width() - inset_width);
   if (shadow_width <= 0) {
     return;
   }
   const gfx::Rect shadow_bounds(
-      is_left ? contents_bounds.x() + opaque_width
-              : contents_bounds.right() - opaque_width - shadow_width,
+      is_left ? contents_bounds.x() + inset_width
+              : contents_bounds.right() - inset_width - shadow_width,
       contents_bounds.y(), shadow_width, contents_bounds.height());
 
   const SkColor base_color =

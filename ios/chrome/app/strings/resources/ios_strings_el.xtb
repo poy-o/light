@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">Κοινή χρήση κωδικών πρόσβασης</translation>
 <translation id="1554043146674176775">Απενεργοποίηση της Λειτουργίας AI</translation>
 <translation id="1554477036522844996">Νέο παράθυρο</translation>
+<translation id="1555014818414775661">Προσθήκη εικόνων</translation>
 <translation id="1557806604681757705">τον υπολογιστή σας</translation>
 <translation id="1558391695376153246">Κλείσιμο ανών. περιήγησης</translation>
 <translation id="1560153516220021659">Συμπτυγμένο κουμπί δευτερεύουσας γραμμής εργαλείων</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">Ανοίξτε τις <ph name="BEGIN_BOLD" />Ρυθμίσεις στο Safari<ph name="END_BOLD" /></translation>
 <translation id="3858860766373142691">Όνομα</translation>
 <translation id="386224966259596343">Θα έχετε την ευκαιρία να αποθηκεύσετε αυτές τις πληροφορίες στο Πορτοφόλι την επόμενη φορά που θα συμπληρώσετε μια σχετική φόρμα.</translation>
-<translation id="3868495844258915202">Εμφάνιση πλήρους URL</translation>
 <translation id="3870931306085184145">Δεν υπάρχουν αποθηκευμένοι κωδικοί πρόσβασης για τον τομέα <ph name="DOMAIN" /></translation>
 <translation id="3875783148670536197">Οδηγίες</translation>
 <translation id="3878657761594430423">Συλλέκτης φύλλων</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">Για να λαμβάνετε ειδοποιήσεις παρακολούθησης τιμών, ενεργοποιήστε τις ειδοποιήσεις στις Ρυθμίσεις iOS.</translation>
 <translation id="528857768909044842">Οι ομάδες καρτελών αποθηκεύονται εδώ</translation>
 <translation id="5294624619177114121">Ειδοποιήσεις για κινητές συσκευές</translation>
-<translation id="5295239312320826323">Να καταργηθεί ο λογαριασμός <ph name="USER_EMAIL" />;</translation>
 <translation id="5300589172476337783">Εμφάνιση</translation>
 <translation id="5311061401280561833">Επιτρέπεται η πρόσβαση στην κάμερα και το μικρόφωνο</translation>
 <translation id="5313967007315987356">Προσθήκη ιστότοπου</translation>
@@ -1789,6 +1788,7 @@
 <translation id="6504541289630702018">Αποκτήστε εύκολα πρόσβαση στις ομάδες καρτελών της επιφάνειας εργασίας</translation>
 <translation id="6505334220040167806">Σύμπτυξη ομάδας καρτελών.</translation>
 <translation id="6506996418997555004">Κοινή χρήση ομάδας καρτελών <ph name="GROUP_NAME" /></translation>
+<translation id="650770261448122895">Αναζητήστε ό,τι βλέπετε με το Lens</translation>
 <translation id="6507973708545996744">Συνδεθείτε για να λάβετε τη Λίστα ανάγνωσης σε όλες τις συσκευές σας.</translation>
 <translation id="6518133107902771759">Επαλήθευση</translation>
 <translation id="6523575793810663688">Οδηγίες</translation>
@@ -2148,7 +2148,6 @@
 <translation id="7603852183842204213">Αποκλεισμ. αναδ. (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Ο συγχρονισμός δεν λειτουργεί</translation>
 <translation id="760667371114328991">Απενεργοποίηση ειδοποιήσεων για τον Έλεγχο ασφαλείας</translation>
-<translation id="7612619742409846846">Έχετε συνδεθεί στην Google ως</translation>
 <translation id="7612849887607288481">Άνοιγμα μενού δημιουργίας πρωτοτύπων AI</translation>
 <translation id="7618220760967055820">Επιλέξτε ποιο κουμπί θα εμφανίζεται στη γραμμή εργαλείων</translation>
 <translation id="7620522820075868385">Ακύρωση</translation>
@@ -2431,6 +2430,7 @@
 <translation id="8439758443371991593">Απόκρυψη της επιλογής Προσθήκη στη λίστα ανάγνωσης</translation>
 <translation id="8443986842926457191">Το URL περιέχει περισσότερους από 2048 χαρακτήρες.</translation>
 <translation id="8449869326050867919">Ο κωδικός πρόσβασης κοινοποιήθηκε</translation>
+<translation id="8473367210869452063">Για να αλληλεπιδράσετε με αυτόν τον ιστότοπο, διακόψτε την τρέχουσα εργασία ή περιμένετε να ολοκληρώσει το Gemini την επεξεργασία</translation>
 <translation id="8473815223723723001">Επεξεργασία εικόνας με το Gemini</translation>
 <translation id="8473863474539038330">Διευθύνσεις και άλλα</translation>
 <translation id="8474378002946546633">Να επιτρέπονται ειδοποιήσεις</translation>

@@ -159,7 +159,14 @@ BASE_FEATURE(kPasswordGenerationDropFullscreenAndCheckPointerLock,
 BASE_FEATURE(kPasswordManagerLogToTerminal, base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kPasswordManagerOnDeviceEncryptionMetricsReporter,
-             base::FEATURE_ENABLED_BY_DEFAULT);
+#if BUILDFLAG(IS_ANDROID)
+             // TODO(crbug.com/540854648): Re-enable on Android once empty
+             // passkey security domains no longer trigger backend requests.
+             base::FEATURE_DISABLED_BY_DEFAULT
+#else
+             base::FEATURE_ENABLED_BY_DEFAULT
+#endif
+);
 
 BASE_FEATURE(kPasswordManagerOnDeviceEncryptionTimeToUnlockMetrics,
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -226,6 +233,11 @@ BASE_FEATURE(kSkipUndecryptablePasswords,
              base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 );
+
+#if BUILDFLAG(IS_ANDROID)
+BASE_FEATURE(kTouchToFillSheetShowsFrameOrigin,
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_ANDROID)
 
 BASE_FEATURE(kTriggerPasswordResyncWhenUndecryptablePasswordsDetected,
              base::FEATURE_ENABLED_BY_DEFAULT);

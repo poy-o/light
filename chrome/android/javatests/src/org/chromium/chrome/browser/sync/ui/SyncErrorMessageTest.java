@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.sync.ui;
 
 import static androidx.test.espresso.intent.Intents.intended;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.CoreMatchers.allOf;
@@ -28,6 +29,7 @@ import androidx.fragment.app.Fragment;
 import androidx.test.espresso.intent.Intents;
 import androidx.test.espresso.intent.matcher.IntentMatchers;
 import androidx.test.filters.LargeTest;
+import androidx.test.runner.lifecycle.Stage;
 
 import org.hamcrest.Matcher;
 import org.junit.Assert;
@@ -42,6 +44,7 @@ import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
@@ -65,6 +68,8 @@ import org.chromium.chrome.browser.sync.SyncSettingsUtils;
 import org.chromium.chrome.browser.sync.SyncTestRule;
 import org.chromium.chrome.browser.sync.settings.ManageSyncSettings;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.transit.ChromeTransitTestRules;
+import org.chromium.chrome.test.transit.FreshCtaTransitTestRule;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.messages.DismissReason;
@@ -77,6 +82,7 @@ import org.chromium.google_apis.gaia.DeviceManagementErrorDetails;
 import org.chromium.google_apis.gaia.GoogleServiceAuthError;
 import org.chromium.google_apis.gaia.GoogleServiceAuthErrorState;
 import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.ui.test.util.BlankUiTestActivity;
 
 import java.io.IOException;
 
@@ -93,7 +99,7 @@ public class SyncErrorMessageTest {
 
     @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
 
-    @Rule
+    @Rule(order = 0)
     public final SyncTestRule mSyncTestRule =
             new SyncTestRule() {
                 @Override
@@ -101,6 +107,10 @@ public class SyncErrorMessageTest {
                     return new FakeSyncServiceImpl();
                 }
             };
+
+    @Rule(order = 1)
+    public final FreshCtaTransitTestRule mCtaTestRule =
+            ChromeTransitTestRules.freshChromeTabbedActivityRule();
 
     private static final int RENDER_TEST_REVISION = 3;
     private static final String RENDER_TEST_DESCRIPTION = "Sync error message for identity errors.";
@@ -115,6 +125,7 @@ public class SyncErrorMessageTest {
 
     @Before
     public void setUp() {
+        mCtaTestRule.startOnBlankPage();
         PasswordManagerUtilBridgeJni.setInstanceForTesting(mPasswordManagerUtilBridgeJniMock);
         SyncErrorMessageImpressionTracker.resetLastShownTime();
         mFakeSyncServiceImpl = (FakeSyncServiceImpl) mSyncTestRule.getSyncService();
@@ -142,7 +153,7 @@ public class SyncErrorMessageTest {
         mSyncTestRule.setUpAccountAndSignInForTesting();
         mFakeSyncServiceImpl.setAuthError(
                 new GoogleServiceAuthError(GoogleServiceAuthErrorState.INVALID_GAIA_CREDENTIALS));
-        mSyncTestRule.loadUrl(UrlConstants.VERSION_URL);
+        mCtaTestRule.loadUrl(UrlConstants.VERSION_URL);
         verifyHasShownMessage();
         watchIdentityErrorMessageShownHistogram.assertExpected();
 
@@ -172,7 +183,7 @@ public class SyncErrorMessageTest {
         mFakeSyncServiceImpl.setAuthError(
                 GoogleServiceAuthError.fromDeviceManagementError(
                         new DeviceManagementErrorDetails(pendingIntent)));
-        mSyncTestRule.loadUrl(UrlConstants.VERSION_URL);
+        mCtaTestRule.loadUrl(UrlConstants.VERSION_URL);
         verifyHasShownMessage();
         watchIdentityErrorMessageShownHistogram.assertExpected();
 
@@ -194,7 +205,7 @@ public class SyncErrorMessageTest {
         mSyncTestRule.setUpAccountAndSignInForTesting();
         mFakeSyncServiceImpl.setEngineInitialized(true);
         mFakeSyncServiceImpl.setPassphraseRequiredForPreferredDataTypes(true);
-        mSyncTestRule.loadUrl(UrlConstants.VERSION_URL);
+        mCtaTestRule.loadUrl(UrlConstants.VERSION_URL);
         verifyHasShownMessage();
         watchIdentityErrorMessageShownHistogram.assertExpected();
 
@@ -214,7 +225,7 @@ public class SyncErrorMessageTest {
         // Sign in.
         mSyncTestRule.setUpAccountAndSignInForTesting();
         mFakeSyncServiceImpl.setRequiresClientUpgrade(true);
-        mSyncTestRule.loadUrl(UrlConstants.VERSION_URL);
+        mCtaTestRule.loadUrl(UrlConstants.VERSION_URL);
         verifyHasShownMessage();
         watchIdentityErrorMessageShownHistogram.assertExpected();
 
@@ -235,7 +246,7 @@ public class SyncErrorMessageTest {
         mSyncTestRule.setUpAccountAndSignInForTesting();
         mFakeSyncServiceImpl.setEngineInitialized(true);
         mFakeSyncServiceImpl.setTrustedVaultKeyRequiredForPreferredDataTypes(true);
-        mSyncTestRule.loadUrl(UrlConstants.VERSION_URL);
+        mCtaTestRule.loadUrl(UrlConstants.VERSION_URL);
         verifyHasShownMessage();
         watchIdentityErrorMessageShownHistogram.assertExpected();
 
@@ -254,7 +265,7 @@ public class SyncErrorMessageTest {
         mSyncTestRule.setUpAccountAndSignInForTesting();
         mFakeSyncServiceImpl.setEngineInitialized(true);
         mFakeSyncServiceImpl.setTrustedVaultKeyRequiredForPreferredDataTypes(true);
-        mSyncTestRule.loadUrl(UrlConstants.VERSION_URL);
+        mCtaTestRule.loadUrl(UrlConstants.VERSION_URL);
 
         // Verify the correct message gets shown.
         verify(mMessageDispatcher).enqueueWindowScopedMessage(modelCaptor.capture(), anyBoolean());
@@ -279,7 +290,7 @@ public class SyncErrorMessageTest {
                 ThreadUtils.runOnUiThreadBlocking(
                         () -> {
                             return SyncErrorMessageImpressionTracker.canShowNow(
-                                    UserPrefs.get(mSyncTestRule.getProfile(false)));
+                                    UserPrefs.get(mCtaTestRule.getProfile(false)));
                         }));
     }
 
@@ -293,7 +304,7 @@ public class SyncErrorMessageTest {
         mSyncTestRule.setUpAccountAndSignInForTesting();
         mFakeSyncServiceImpl.setEngineInitialized(true);
         mFakeSyncServiceImpl.setTrustedVaultKeyRequiredForPreferredDataTypes(true);
-        mSyncTestRule.loadUrl(UrlConstants.VERSION_URL);
+        mCtaTestRule.loadUrl(UrlConstants.VERSION_URL);
 
         // Verify the correct message gets shown.
         verify(mMessageDispatcher).enqueueWindowScopedMessage(modelCaptor.capture(), anyBoolean());
@@ -323,7 +334,7 @@ public class SyncErrorMessageTest {
                 ThreadUtils.runOnUiThreadBlocking(
                         () -> {
                             return SyncErrorMessageImpressionTracker.canShowNow(
-                                    UserPrefs.get(mSyncTestRule.getProfile(false)));
+                                    UserPrefs.get(mCtaTestRule.getProfile(false)));
                         }));
     }
 
@@ -340,7 +351,7 @@ public class SyncErrorMessageTest {
         mSyncTestRule.setUpAccountAndSignInForTesting();
         mFakeSyncServiceImpl.setEngineInitialized(true);
         mFakeSyncServiceImpl.setTrustedVaultRecoverabilityDegraded(true);
-        mSyncTestRule.loadUrl(UrlConstants.VERSION_URL);
+        mCtaTestRule.loadUrl(UrlConstants.VERSION_URL);
         verifyHasShownMessage();
         watchIdentityErrorMessageShownHistogram.assertExpected();
 
@@ -361,7 +372,7 @@ public class SyncErrorMessageTest {
         // Sign in.
         mSyncTestRule.setUpAccountAndSignInForTesting();
         mFakeSyncServiceImpl.setBookmarksLimitExceeded(true);
-        mSyncTestRule.loadUrl(UrlConstants.VERSION_URL);
+        mCtaTestRule.loadUrl(UrlConstants.VERSION_URL);
         verifyHasShownMessage();
         watchIdentityErrorMessageShownHistogram.assertExpected();
 
@@ -389,7 +400,7 @@ public class SyncErrorMessageTest {
         mFakeSyncServiceImpl.setPassphraseRequiredForPreferredDataTypes(false);
         mFakeSyncServiceImpl.setRequiresClientUpgrade(false);
 
-        mSyncTestRule.loadUrl(UrlConstants.VERSION_URL);
+        mCtaTestRule.loadUrl(UrlConstants.VERSION_URL);
         verifyHasNeverShownMessage();
     }
 
@@ -404,11 +415,11 @@ public class SyncErrorMessageTest {
                 ThreadUtils.runOnUiThreadBlocking(
                         () -> {
                             return SyncSettingsUtils.getSyncError(
-                                    mSyncTestRule.getProfile(/* incognito= */ false));
+                                    mCtaTestRule.getProfile(/* incognito= */ false));
                         });
         Assert.assertEquals(UserActionableError.NEEDS_UPM_BACKEND_UPGRADE, syncError);
 
-        mSyncTestRule.loadUrl(UrlConstants.VERSION_URL);
+        mCtaTestRule.loadUrl(UrlConstants.VERSION_URL);
         verifyHasNeverShownMessage();
     }
 
@@ -421,11 +432,33 @@ public class SyncErrorMessageTest {
         mSyncTestRule.setUpAccountAndSignInForTesting();
         mFakeSyncServiceImpl.setAuthError(
                 new GoogleServiceAuthError(GoogleServiceAuthErrorState.INVALID_GAIA_CREDENTIALS));
-        mSyncTestRule.loadUrl(UrlConstants.VERSION_URL);
-        ViewGroup view = mSyncTestRule.getActivity().findViewById(R.id.message_container);
+        mCtaTestRule.loadUrl(UrlConstants.VERSION_URL);
+        ViewGroup view = mCtaTestRule.getActivity().findViewById(R.id.message_container);
         // Wait until the message ui is shown.
         CriteriaHelper.pollUiThread(() -> Criteria.checkThat(view.getChildCount(), Matchers.is(1)));
         mRenderTestRule.render(view, "identity_error_message_auth_error");
+    }
+
+    @Test
+    @LargeTest
+    @Feature("RenderTest")
+    public void testSyncErrorMessageForDeviceManagementErrorViewForSignedInUsers()
+            throws IOException {
+        SyncErrorMessage.setMessageDispatcherForTesting(null);
+        // Sign in.
+        mSyncTestRule.setUpAccountAndSignInForTesting();
+        PendingIntent pendingIntent =
+                PendingIntent.getActivity(mContext, 0, new Intent(), PendingIntent.FLAG_IMMUTABLE);
+        mFakeSyncServiceImpl.setAuthError(
+                GoogleServiceAuthError.fromDeviceManagementError(
+                        new DeviceManagementErrorDetails(pendingIntent)));
+
+        mCtaTestRule.loadUrl(UrlConstants.VERSION_URL);
+
+        ViewGroup view = mCtaTestRule.getActivity().findViewById(R.id.message_container);
+        // Wait until the message ui is shown.
+        CriteriaHelper.pollUiThread(() -> Criteria.checkThat(view.getChildCount(), Matchers.is(1)));
+        mRenderTestRule.render(view, "identity_error_message_device_management_error");
     }
 
     @Test
@@ -437,8 +470,8 @@ public class SyncErrorMessageTest {
         mSyncTestRule.setUpAccountAndSignInForTesting();
         mFakeSyncServiceImpl.setEngineInitialized(true);
         mFakeSyncServiceImpl.setPassphraseRequiredForPreferredDataTypes(true);
-        mSyncTestRule.loadUrl(UrlConstants.VERSION_URL);
-        ViewGroup view = mSyncTestRule.getActivity().findViewById(R.id.message_container);
+        mCtaTestRule.loadUrl(UrlConstants.VERSION_URL);
+        ViewGroup view = mCtaTestRule.getActivity().findViewById(R.id.message_container);
         // Wait until the message ui is shown.
         CriteriaHelper.pollUiThread(() -> Criteria.checkThat(view.getChildCount(), Matchers.is(1)));
         mRenderTestRule.render(view, "identity_error_message_passphrase_required");
@@ -452,11 +485,59 @@ public class SyncErrorMessageTest {
         // Sign in.
         mSyncTestRule.setUpAccountAndSignInForTesting();
         mFakeSyncServiceImpl.setRequiresClientUpgrade(true);
-        mSyncTestRule.loadUrl(UrlConstants.VERSION_URL);
-        ViewGroup view = mSyncTestRule.getActivity().findViewById(R.id.message_container);
+        mCtaTestRule.loadUrl(UrlConstants.VERSION_URL);
+        ViewGroup view = mCtaTestRule.getActivity().findViewById(R.id.message_container);
         // Wait until the message ui is shown.
         CriteriaHelper.pollUiThread(() -> Criteria.checkThat(view.getChildCount(), Matchers.is(1)));
         mRenderTestRule.render(view, "identity_error_message_client_out_of_date");
+    }
+
+    @Test
+    @LargeTest
+    public void testActionForDeviceManagementErrorForSignedInUsers() throws Exception {
+        SyncErrorMessage.setMessageDispatcherForTesting(null);
+
+        HistogramWatcher histogramWatcher =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecord(
+                                "Sync.IdentityErrorMessage.DeviceManagementError",
+                                SyncSettingsUtils.ErrorUiAction.SHOWN)
+                        .expectIntRecord(
+                                "Sync.IdentityErrorMessage.DeviceManagementError",
+                                SyncSettingsUtils.ErrorUiAction.BUTTON_CLICKED)
+                        .build();
+
+        // Sign in.
+        mSyncTestRule.setUpAccountAndSignInForTesting();
+        PendingIntent pendingIntent =
+                PendingIntent.getActivity(
+                        mContext,
+                        0,
+                        new Intent(mContext, BlankUiTestActivity.class),
+                        PendingIntent.FLAG_IMMUTABLE);
+        mFakeSyncServiceImpl.setAuthError(
+                GoogleServiceAuthError.fromDeviceManagementError(
+                        new DeviceManagementErrorDetails(pendingIntent)));
+
+        mCtaTestRule.loadUrl(UrlConstants.VERSION_URL);
+        BlankUiTestActivity resolutionActivity =
+                ApplicationTestUtils.waitForActivityWithClass(
+                        BlankUiTestActivity.class,
+                        Stage.CREATED,
+                        /* uiThreadTrigger= */ null,
+                        /* backgroundThreadTrigger= */ () ->
+                                waitForView(
+                                                allOf(
+                                                        withId(R.id.message_primary_button),
+                                                        withText(
+                                                                R.string
+                                                                        .identity_error_card_button_device_management_error)))
+                                        .click());
+        ApplicationTestUtils.finishActivity(resolutionActivity);
+
+        CriteriaHelper.pollInstrumentationThread(
+                () -> Criteria.checkThat(getSyncErrorMessage(), Matchers.nullValue()));
+        histogramWatcher.assertExpected();
     }
 
     @Test
@@ -478,7 +559,7 @@ public class SyncErrorMessageTest {
         mSyncTestRule.setUpAccountAndSignInForTesting();
         mFakeSyncServiceImpl.setEngineInitialized(true);
         mFakeSyncServiceImpl.setPassphraseRequiredForPreferredDataTypes(true);
-        mSyncTestRule.loadUrl(UrlConstants.VERSION_URL);
+        mCtaTestRule.loadUrl(UrlConstants.VERSION_URL);
 
         Intents.init();
         waitForView(withText("Enter")).click();
@@ -506,7 +587,7 @@ public class SyncErrorMessageTest {
         // Sign in.
         mSyncTestRule.setUpAccountAndSignInForTesting();
         mFakeSyncServiceImpl.setBookmarksLimitExceeded(true);
-        mSyncTestRule.loadUrl(UrlConstants.VERSION_URL);
+        mCtaTestRule.loadUrl(UrlConstants.VERSION_URL);
 
         Intents.init();
         waitForView(withText("Learn more")).click();
@@ -572,7 +653,7 @@ public class SyncErrorMessageTest {
                 () ->
                         SyncErrorMessage.getKeyForTesting()
                                 .retrieveDataFromHost(
-                                        mSyncTestRule
+                                        mCtaTestRule
                                                 .getActivity()
                                                 .getWindowAndroid()
                                                 .getUnownedUserDataHost()));

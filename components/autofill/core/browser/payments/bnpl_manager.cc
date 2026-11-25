@@ -24,6 +24,7 @@
 #include "base/containers/span.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
+#include "base/i18n/language_tag.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -166,7 +167,7 @@ void BnplManager::OnUserDecisionToUseBnpl(
   ongoing_flow_state_ = std::make_unique<OngoingFlowState>();
   ongoing_flow_state_->final_checkout_amount = std::move(final_checkout_amount);
   ongoing_flow_state_->app_locale =
-      browser_autofill_manager_->client().GetAppLocale().tag_string();
+      browser_autofill_manager_->client().GetAppLocale();
   ongoing_flow_state_->billing_customer_number =
       GetBillingCustomerId(payments_autofill_client().GetPaymentsDataManager());
   ongoing_flow_state_->on_bnpl_vcn_fetched_callback =

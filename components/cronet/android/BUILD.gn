@@ -9,6 +9,7 @@ import("//build/config/android/rules.gni")
 import("//build/config/coverage/coverage.gni")
 import("//build/config/cronet/config.gni")
 import("//build/config/gclient_args.gni")
+import("//build/config/python.gni")
 import("//build/config/zip.gni")
 import("//build/util/lastchange.gni")
 import("//build/util/process_version.gni")
@@ -1209,6 +1210,10 @@ cronet_package_apk("cronet_package_with_nativejava_apk") {
   proguard_configs = [ "cronet_package_proguard.cfg" ]
 }
 
+python_binary("jar_src_py") {
+  script = "//components/cronet/tools/jar_src.py"
+}
+
 # Generates a source jar.
 #
 # The main purpose of us packaging source jars is for downstream consumers to be
@@ -1223,11 +1228,11 @@ cronet_package_apk("cronet_package_with_nativejava_apk") {
 # jar unless we take extra steps to post-process it. See also
 # https://crbug.com/498920641 for some context.
 template("jar_src") {
-  action_with_pydeps(target_name) {
+  python_action(target_name) {
     _rebased_src_search_dirs =
         rebase_path(invoker.src_search_dirs, root_build_dir)
 
-    script = "//components/cronet/tools/jar_src.py"
+    python_binary = ":jar_src_py"
     depfile = "$target_gen_dir/$target_name.d"
     outputs = [ invoker.jar_path ]
     args = [
@@ -2315,6 +2320,7 @@ copy("cronet_package_copy_test_files") {
     "//net/data/ssl/certificates/cronet-quic-leaf-cert.key.pkcs8.pem",
     "//net/data/ssl/certificates/cronet-quic-root.pem",
     "//net/data/ssl/certificates/expired_cert.pem",
+    "//net/data/ssl/certificates/localhost_cert.pem",
     "//net/data/ssl/certificates/ok_cert.pem",
     "//net/data/ssl/certificates/quic-chain.pem",
     "//net/data/ssl/certificates/quic-leaf-cert.key",
@@ -2416,6 +2422,8 @@ LICENSE_SOURCES = [
   "//components/cronet/license/metadata_dictionary.py",
 ]
 
+# Root target groups queried via `gn desc` by
+# //components/cronet/gn2bp/targets.py. Keep even without in-GN dependents.
 group("gn2bp_production_targets") {
   deps = [
     ":cronet",
@@ -2444,25 +2452,11 @@ group("gn2bp_test_targets") {
 }
 
 action("cronet_gn2bp_aosp_feedback_loop") {
-  # This is only added here to allow GN2BP to depend on
-  # test-only libraries. See below for more information
-  testonly = true
   script = "//components/cronet/gn2bp/run_gn2bp.py"
   sources = GN2BP_SOURCES + LICENSE_SOURCES + [
               "$_gclient_path",
               "//components/cronet/gn2bp/copy.bara.sky",
             ]
-  deps = [
-    # This dependency exists to work around the issue of the gn2bp trybot
-    # skipping CLs that touch Cronet code but not gn2bp itself.
-    # TODO(https://crbug.com/414789446): this is a hack. It forces the
-    # bot to pointlessly build Cronet. Surely there is a cleaner way.
-    # This is still prone to failure if we decide to run GN2BP against
-    # a change that does not affect these particular targets.
-    ":cronet_non_test_package",
-    ":gn2bp_production_targets",
-    ":gn2bp_test_targets",
-  ]
   _stamp_path = "$target_gen_dir/$target_name.stamp"
   args = [
     # Do not specify the channel via --channel`. Doing so risks misconfiguring

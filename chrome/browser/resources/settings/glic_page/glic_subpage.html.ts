@@ -4,8 +4,6 @@
 
 import {html} from '//resources/lit/v3_0/lit.rollup.js';
 
-import {RestartType} from '../relaunch_mixin_lit.js';
-
 import type {SettingsGlicSubpageElement} from './glic_subpage.js';
 
 export function getHtml(this: SettingsGlicSubpageElement) {
@@ -602,25 +600,47 @@ export function getHtml(this: SettingsGlicSubpageElement) {
     `}
   </div>
   ${this.showDevicePolicyToggle_ ? html`
-    <div id="devicePolicyRow" class="cr-row">
-      <div class="flex cr-padded-text">
-        <div id="devicePolicyLabel">$i18n{glicSwitchToGeicToggle}</div>
-        <div id="devicePolicySublabel" class="secondary">
-          ${this.i18n('glicSwitchToGeicToggleSublabel')}
+    <div id="devicePolicySection" class="hr">
+      <div id="devicePolicyRow" class="cr-row first">
+        <div class="flex cr-padded-text">
+          <div id="devicePolicyLabel">$i18n{glicSwitchToGeicToggle}</div>
+          <div id="devicePolicySublabel" class="secondary">
+            $i18n{glicSwitchToGeicToggleSublabel}
+          </div>
+        </div>
+        <cr-button id="devicePolicyButton"
+            aria-describedby="devicePolicyLabel devicePolicySublabel"
+            ?disabled="${this.devicePolicyButtonDisabled_}"
+            @click="${this.onDevicePolicyButtonClick_}">
+          $i18n{geicDevicePolicyButton}
+        </cr-button>
+      </div>
+      <div id="devicePolicyConsider" class="settings-columned-section">
+        <div class="column">
+          <h2 class="description-header">$i18n{columnHeadingConsider}</h2>
+          <ul class="icon-bulleted-list">
+            <li>
+              <cr-icon aria-hidden="true" icon="settings20:security"></cr-icon>
+              <div class="secondary">$i18n{glicSwitchToGeicConsider1}</div>
+            </li>
+            <li>
+              <cr-icon aria-hidden="true" icon="settings20:shield-spark">
+              </cr-icon>
+              <div class="secondary">$i18n{glicSwitchToGeicConsider2}</div>
+            </li>
+            <li>
+              <cr-icon aria-hidden="true" icon="settings20:chat-spark">
+              </cr-icon>
+              <div class="secondary">$i18n{geicSwitchConsiderChatHistory}</div>
+            </li>
+          </ul>
         </div>
       </div>
-      <cr-button id="devicePolicyButton"
-          aria-describedby="devicePolicyLabel devicePolicySublabel"
-          ?disabled="${this.devicePolicyButtonDisabled_}"
-          @click="${this.onDevicePolicyButtonClick_}">
-        $i18n{geicDevicePolicyButton}
-      </cr-button>
     </div>
   ` : ''}
 <if expr="not is_chromeos">
   ${this.shouldShowRelaunchDialog ? html`
-    <relaunch-confirmation-dialog .restartType="${RestartType.RESTART}"
-        @close="${this.onRelaunchDialogClose}">
+    <relaunch-confirmation-dialog @close="${this.onRelaunchDialogClose}">
     </relaunch-confirmation-dialog>
   ` : ''}
 </if>

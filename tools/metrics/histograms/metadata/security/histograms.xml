@@ -22,6 +22,15 @@ chromium-metrics-reviews@google.com.
 
 <histograms>
 
+<!-- LINT.IfChange(InputProtectionWidgetIdentifier) -->
+
+<variants name="InputProtectionWidgetIdentifier">
+  <variant name="All" summary="all widgets"/>
+  <variant name="TestWidget" summary="test widgets"/>
+</variants>
+
+<!-- LINT.ThenChange(//ui/views/input_protection/input_protection_event_handler.h:InputProtectionWidgetIdentifier) -->
+
 <variants name="RequestHeaderIntegrityResourceType">
   <variant name="MainResource" summary="top-level frame / window navigation"/>
   <variant name="Prefetch" summary="navigational prefetch"/>
@@ -40,7 +49,7 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <histogram name="OSCrypt.AppBoundEncryption.SupportLevel"
-    enum="AppBoundEncryptionSupportLevel" expires_after="2027-03-21">
+    enum="AppBoundEncryptionSupportLevel" expires_after="2027-05-23">
   <owner>wfh@chromium.org</owner>
   <owner>nparker@chromium.org</owner>
   <summary>
@@ -62,7 +71,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="OSCrypt.AppBoundProvider.Decrypt.ResultLastError"
-    enum="WinGetLastError" expires_after="2027-03-21">
+    enum="WinGetLastError" expires_after="2027-05-23">
   <owner>wfh@chromium.org</owner>
   <owner>nparker@chromium.org</owner>
   <summary>
@@ -275,7 +284,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="OSCrypt.Win.KeyDecryptionError" enum="WinGetLastError"
-    expires_after="2027-02-07">
+    expires_after="2027-05-23">
   <owner>wfh@chromium.org</owner>
   <owner>forshaw@chromium.org</owner>
   <summary>
@@ -445,7 +454,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.HttpsFirstMode.SettingEnabledAtStartup2"
-    enum="HttpsFirstModeSetting" expires_after="2027-03-21">
+    enum="HttpsFirstModeSetting" expires_after="2027-05-23">
   <owner>cthomp@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
   <summary>
@@ -550,6 +559,21 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram
+    name="Security.InputEvent.InputProtectionBlockReason.{WidgetIdentifier}"
+    enum="InputProtectionBlockReason" expires_after="2027-04-01">
+  <owner>bkeen@google.com</owner>
+  <owner>dfried@chromium.org</owner>
+  <owner>media-dev-uma@chromium.org</owner>
+  <summary>
+    Records the reason why an input event was blocked in the Views input
+    protection framework for {WidgetIdentifier}. Logged each time an input event
+    is blocked, indicating whether it was blocked by always-on-top window
+    occlusion protection or by an input protection policy on a protected widget.
+  </summary>
+  <token key="WidgetIdentifier" variants="InputProtectionWidgetIdentifier"/>
+</histogram>
+
 <histogram name="Security.iOS.KeychainMigration.Result"
     enum="IOSKeychainMigrationResult" expires_after="2027-04-25">
   <owner>marq@chromium.org</owner>
@@ -598,7 +622,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.PageInfo.AboutThisSiteInteraction"
-    enum="AboutThisSiteInteraction" expires_after="2027-03-21">
+    enum="AboutThisSiteInteraction" expires_after="2027-05-23">
   <owner>dullweber@chromium.org</owner>
   <owner>olesiamarukhno@chromium.org</owner>
   <summary>
@@ -732,7 +756,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Security.PrivateNetworkAccess.CheckResult"
-    enum="LocalNetworkAccessCheckResult" expires_after="2027-03-21">
+    enum="LocalNetworkAccessCheckResult" expires_after="2027-05-23">
   <owner>hchao@chromium.org</owner>
   <owner>clamy@chromium.org</owner>
   <owner>cthomp@chromium.org</owner>

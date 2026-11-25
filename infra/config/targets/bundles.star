@@ -52,16 +52,9 @@ targets.bundle(
 )
 
 targets.bundle(
-    name = "android_11_emulator_fyi_gtests",
-    targets = [
-        "content_browsertests",
-        "android_emulator_specific_chrome_public_tests",
-    ],
-)
-
-targets.bundle(
     name = "android_11_emulator_gtests",
     targets = [
+        "android_emulator_specific_chrome_public_tests",
         "android_smoke_tests",
         "android_specific_chromium_gtests",  # Already includes gl_gtests.
         "chrome_public_bundle_smoke_test",
@@ -1874,6 +1867,7 @@ targets.bundle(
     name = "chromium_linux_rel_isolated_scripts_once",
     targets = [
         "chromedriver_py_tests_isolated_scripts",
+        "chromium_websocket_h3_isolated_scripts",
         "desktop_chromium_isolated_scripts",
         "desktop_once_isolated_scripts",
         "linux_specific_chromium_isolated_scripts",
@@ -1971,6 +1965,7 @@ targets.bundle(
     name = "chromium_mac_rel_isolated_scripts_once",
     targets = [
         "chromedriver_py_tests_isolated_scripts",
+        "chromium_websocket_h3_isolated_scripts",
         "components_perftests_isolated_scripts",
         "desktop_chromium_isolated_scripts",
         "desktop_once_isolated_scripts",
@@ -2078,6 +2073,21 @@ targets.bundle(
     },
 )
 
+targets.bundle(
+    name = "chromium_websocket_h3_isolated_scripts",
+    targets = [
+        "websocket_h3_content_shell_wpt_tests",
+        "websocket_h3_headless_shell_wpt_tests",
+    ],
+    mixins = [
+        targets.mixin(
+            ci_only = True,
+            # TODO(crbug.com/40210995): Promote out of experimental once stable.
+            experiment_percentage = 100,
+        ),
+    ],
+)
+
 # Pixel tests only enabled on Win 10. So this is
 # 'chromium_win_gtests' + 'pixel_browser_tests_gtests' +
 # 'non_android_chromium_gtests_skia_gold'. When changing
@@ -2155,6 +2165,7 @@ targets.bundle(
     name = "chromium_win_rel_isolated_scripts_once",
     targets = [
         "chromedriver_py_tests_isolated_scripts",
+        "chromium_websocket_h3_isolated_scripts",
         "components_perftests_isolated_scripts",
         "desktop_chromium_isolated_scripts",
         "desktop_once_isolated_scripts",
@@ -3706,10 +3717,16 @@ targets.bundle(
 targets.bundle(
     name = "gpu_dawn_isolated_scripts",
     targets = [
-        "gpu_dawn_common_isolated_scripts",
+        "gpu_dawn_isolated_scripts_hardware",
+        "dawn_chromium_isolated_scripts_software",
+    ],
+)
+
+targets.bundle(
+    name = "gpu_dawn_isolated_scripts_hardware",
+    targets = [
+        "dawn_chromium_isolated_scripts_hardware",
         "gpu_dawn_perf_smoke_isolated_scripts",
-        "gpu_dawn_webgpu_blink_web_tests",
-        "gpu_dawn_webgpu_blink_web_tests_force_swiftshader",
     ],
 )
 
@@ -3731,7 +3748,6 @@ targets.bundle(
 targets.bundle(
     name = "gpu_dawn_telemetry_tests_fxc",
     targets = [
-        "gpu_dawn_web_platform_webgpu_cts_force_swiftshader",
         "gpu_dawn_webgpu_cts_fxc",
     ],
 )
@@ -3739,7 +3755,6 @@ targets.bundle(
 targets.bundle(
     name = "gpu_dawn_telemetry_win_x64_tests",
     targets = [
-        "gpu_dawn_web_platform_webgpu_cts_force_swiftshader",
         "gpu_dawn_webgpu_cts",
         "gpu_dawn_webgpu_cts_fxc",
     ],
@@ -3771,6 +3786,12 @@ targets.bundle(
                     "--xvfb",
                     "--extra-browser-args=--use-vulkan=swiftshader --use-angle=swiftshader",
                 ],
+                win_args = [
+                    # TODO(crbug.com/541312843): Rename this suite or split the
+                    # Windows variant out since this technically runs with WARP
+                    # rather than SwiftShader.
+                    "--extra-browser-args=--ignore-gpu-blocklist",
+                ],
                 swarming = targets.swarming(
                     shards = 2,
                 ),
@@ -3789,6 +3810,12 @@ targets.bundle(
                 linux_args = [
                     "--xvfb",
                     "--extra-browser-args=--use-vulkan=swiftshader --use-angle=swiftshader",
+                ],
+                win_args = [
+                    # TODO(crbug.com/541312843): Rename this suite or split the
+                    # Windows variant out since this technically runs with WARP
+                    # rather than SwiftShader.
+                    "--extra-browser-args=--ignore-gpu-blocklist",
                 ],
                 swarming = targets.swarming(
                     shards = 2,
@@ -5996,6 +6023,23 @@ targets.bundle(
         "views_examples_unittests": [
             "skia_gold_test",
         ],
+    },
+)
+
+targets.bundle(
+    name = "openscreen_chromium_gtests",
+    targets = [
+        "cast_unittests",
+        "components_unittests",
+        "media_unittests",
+        "openscreen_unittests",
+    ],
+    per_test_modifications = {
+        "components_unittests": targets.mixin(
+            swarming = targets.swarming(
+                shards = 2,
+            ),
+        ),
     },
 )
 

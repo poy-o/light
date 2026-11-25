@@ -10,7 +10,6 @@
 #include "base/test/bind.h"
 #include "base/test/run_until.h"
 #include "base/test/scoped_feature_list.h"
-#include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/devtools/devtools_toggle_action.h"
@@ -46,7 +45,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
-#include "components/enterprise/isolated_mode/isolated_mode_features.h"
+#include "components/enterprise/isolated_mode/scoped_isolated_mode_override_for_testing.h"
 #include "components/surface_embed/common/features.h"
 #include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "content/public/browser/devtools_agent_host.h"
@@ -64,10 +63,6 @@
 #include "ui/base/mojom/window_open_disposition.mojom-shared.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
-
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
-#include "chrome/test/base/scoped_channel_override.h"
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
 
 // Use an anonymous namespace here to avoid colliding with the other
 // WebUIBrowserTest defined in chrome/test/base/ash/web_ui_browser_test.h
@@ -544,7 +539,7 @@ IN_PROC_BROWSER_TEST_F(WebUIBrowserTest, SetContentsSizeResizesWindow) {
 IN_PROC_BROWSER_TEST_F(WebUIBrowserTest, SetContentsSizeEarlyResizesWindow) {
   // 1) Create a new browser window and add a default tab
   BrowserWindowInterface* new_browser =
-      CreateBrowserWindow(BrowserWindowCreateParams(
+      CreateBrowserWindowForTesting(BrowserWindowCreateParams(
           BrowserWindowInterface::Type::TYPE_NORMAL, browser()->GetProfile(),
           /*from_user_gesture=*/true));
   chrome::AddTabAt(new_browser, GURL(), -1, true);
@@ -583,7 +578,7 @@ IN_PROC_BROWSER_TEST_F(WebUIBrowserTest,
                        ActiveTabHasNonZeroSizeOnWindowCreation) {
   // Create a new browser window with a tab.
   BrowserWindowInterface* new_browser =
-      CreateBrowserWindow(BrowserWindowCreateParams(
+      CreateBrowserWindowForTesting(BrowserWindowCreateParams(
           BrowserWindowInterface::Type::TYPE_NORMAL, browser()->GetProfile(),
           /*from_user_gesture=*/true));
   chrome::AddTabAt(new_browser, GURL(), -1, true);
@@ -678,19 +673,9 @@ IN_PROC_BROWSER_TEST_F(WebUIBrowserTest, ColorProviderKeyIncognito) {
 }
 
 class WebUIBrowserEnterpriseIsolatedTest : public WebUIBrowserTest {
- public:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    WebUIBrowserTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch(
-        enterprise_isolated_mode::switches::
-            kForceEnterpriseIsolatedModeReplacesIncognito);
-  }
-
  private:
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
-  chrome::ScopedChannelOverride channel_override_{
-      chrome::ScopedChannelOverride::Channel::kDev};
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
+  enterprise_isolated_mode::ScopedIsolatedModeOverrideForTesting
+      scoped_isolated_mode_;
 };
 
 IN_PROC_BROWSER_TEST_F(WebUIBrowserEnterpriseIsolatedTest,

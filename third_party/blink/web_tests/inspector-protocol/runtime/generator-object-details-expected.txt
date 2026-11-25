@@ -1,0 +1,71 @@
+Tests that Runtime.getProperties returns generator object details.
+
+Running test: testIterNotStarted
+iterNotStarted: type = object, subtype = generator
+lineNumber = 8
+columnNumber = 19
+script is valid: yes
+[[GeneratorState]] = suspended
+[[GeneratorFunction]] = function* gen()
+      {
+          yield 1;
+          yield 2;
+          yield 3;
+      }
+[[GeneratorReceiver]] = Window
+
+Running test: testIterSuspended
+iterSuspended: type = object, subtype = generator
+lineNumber = 10
+columnNumber = 10
+script is valid: yes
+[[GeneratorState]] = suspended
+[[GeneratorFunction]] = function* gen()
+      {
+          yield 1;
+          yield 2;
+          yield 3;
+      }
+[[GeneratorReceiver]] = Window
+
+Running test: testIterClosed
+iterClosed: type = object, subtype = generator
+lineNumber = 8
+columnNumber = 19
+script is valid: yes
+[[GeneratorState]] = closed
+[[GeneratorFunction]] = function* gen()
+      {
+          yield 1;
+          yield 2;
+          yield 3;
+      }
+[[GeneratorReceiver]] = Window
+
+Running test: testIterObjGenerator
+iterObjGenerator: type = object, subtype = generator
+lineNumber = 19
+columnNumber = 14
+script is valid: yes
+[[GeneratorState]] = suspended
+[[GeneratorFunction]] = function*()
+          {
+              yield 11;
+              yield 12;
+              yield 13;
+          }
+[[GeneratorReceiver]] = Object
+
+Running test: testAnonymousGenIter
+anonymousGenIter: type = object, subtype = generator
+lineNumber = 33
+columnNumber = 10
+script is valid: yes
+[[GeneratorState]] = suspended
+[[GeneratorFunction]] = function*() {
+          yield 21;
+          yield 22;
+          yield 23;
+      }
+[[GeneratorReceiver]] = Window
+

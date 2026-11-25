@@ -30,10 +30,9 @@
 #include "build/build_config.h"
 #include "chrome/browser/autofill/mock_manual_filling_view.h"
 #include "chrome/browser/keyboard_accessory/test_utils/android/mock_address_accessory_controller.h"
-#include "chrome/browser/keyboard_accessory/test_utils/android/mock_at_memory_accessory_controller.h"
-#include "chrome/browser/password_manager/chrome_password_change_service.h"
 #include "chrome/browser/password_manager/factories/password_manager_settings_service_factory.h"
 #include "chrome/browser/password_manager/factories/profile_password_store_factory.h"
+#include "chrome/browser/password_manager/mock_chrome_password_change_service.h"
 #include "chrome/browser/password_manager/password_change_delegate_mock.h"
 #include "chrome/browser/password_manager/password_change_service_factory.h"
 #include "chrome/browser/safe_browsing/interstitials/user_interaction_observer.h"
@@ -75,6 +74,7 @@
 #include "components/password_manager/core/browser/password_store/mock_password_store_interface.h"
 #include "components/password_manager/core/browser/password_store/password_form_converters.h"
 #include "components/password_manager/core/browser/password_store/password_store_consumer.h"
+#include "components/password_manager/core/common/browser_assisted_login_type.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/buildflags.h"
@@ -399,34 +399,14 @@ class MockPasswordAccessoryControllerImpl
 
 #endif
 
-class MockPasswordChangeService : public ChromePasswordChangeService {
- public:
-  MockPasswordChangeService()
-      : ChromePasswordChangeService(/*pref_service*/ nullptr,
-                                    /*affiliation_service=*/nullptr,
-                                    /*optimization_keyed_service=*/nullptr,
-                                    /*settings_service=*/nullptr,
-                                    /*feature_manager=*/nullptr,
-                                    /*log_router*/ nullptr) {}
-
-  MOCK_METHOD(void,
-              OfferPasswordChangeUi,
-              (password_manager::LeakedPasswordDetails, content::WebContents*),
-              (override));
-  MOCK_METHOD(PasswordChangeDelegate*,
-              GetPasswordChangeDelegate,
-              (content::WebContents*),
-              (override));
-};
-
 std::unique_ptr<KeyedService> CreateTestSyncService(
     content::BrowserContext* context) {
   return std::make_unique<syncer::TestSyncService>();
 }
 
-std::unique_ptr<KeyedService> CreateMockPasswordChangeService(
+std::unique_ptr<KeyedService> CreateMockChromePasswordChangeService(
     content::BrowserContext* context) {
-  return std::make_unique<MockPasswordChangeService>();
+  return std::make_unique<MockChromePasswordChangeService>();
 }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -484,9 +464,9 @@ class ChromePasswordManagerClientTest : public ChromeRenderViewHostTestHarness {
         }));
   }
 
-  void SetupMockPasswordChangeService() {
+  void SetupMockChromePasswordChangeService() {
     PasswordChangeServiceFactory::GetInstance()->SetTestingFactoryAndUse(
-        profile(), base::BindRepeating(&CreateMockPasswordChangeService));
+        profile(), base::BindRepeating(&CreateMockChromePasswordChangeService));
   }
 
  protected:
@@ -503,8 +483,8 @@ class ChromePasswordManagerClientTest : public ChromeRenderViewHostTestHarness {
     return static_cast<syncer::TestSyncService*>(
         SyncServiceFactory::GetInstance()->GetForProfile(profile()));
   }
-  MockPasswordChangeService* password_change_service() {
-    return static_cast<MockPasswordChangeService*>(
+  MockChromePasswordChangeService* password_change_service() {
+    return static_cast<MockChromePasswordChangeService*>(
         PasswordChangeServiceFactory::GetInstance()->GetForProfile(profile()));
   }
 
@@ -556,7 +536,7 @@ void ChromePasswordManagerClientTest::SetUp() {
   ChromePasswordManagerClient::CreateForWebContents(web_contents());
 
   SetupSettingsServiceFactory();
-  SetupMockPasswordChangeService();
+  SetupMockChromePasswordChangeService();
 }
 
 void ChromePasswordManagerClientTest::TearDown() {
@@ -764,20 +744,48 @@ TEST_F(ChromePasswordManagerClientTest, OnNonPasswordLoginDetectedDelegation) {
   autofill::ChromeAutofillClient::CreateForWebContents(
       popup_web_contents.get());
   ChromePasswordManagerClient::CreateForWebContents(popup_web_contents.get());
-  ChromePasswordManagerClient* popup_client =
-      ChromePasswordManagerClient::FromWebContents(popup_web_contents.get());
 
   // Set the main WebContents as the opener of the popup.
   content::WebContentsTester::For(popup_web_contents.get())
       ->SetOpener(web_contents());
 
   // Trigger non-password login detection on the popup.
-  popup_client->OnNonFedCmFederatedLogin();
+  ChromePasswordManagerClient::NotifyNonFedCmFederatedLogin(
+      popup_web_contents.get());
 
   // The notification should have been delegated to the main WebContents'
   // PasswordManager, which records the histogram.
   histogram_tester.ExpectUniqueSample(
       "PasswordManager.FederatedLogin.SavePromptPrevented", false, 1);
+}
+
+TEST_F(ChromePasswordManagerClientTest,
+       NotifyNonFedCmFederatedLoginRecordsMetricAndDelegates) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      password_manager::features::kPreventPasswordManagerOnFederatedLogin);
+
+  base::HistogramTester histogram_tester;
+  ChromePasswordManagerClient::NotifyNonFedCmFederatedLogin(web_contents());
+
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.BrowserAssistedLogin.Type",
+      password_manager::metrics_util::BrowserAssistedLoginType::kNonFedCmOAuth,
+      1);
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.FederatedLogin.SavePromptPrevented", false, 1);
+
+  // Also verify null-safe behavior when no ChromePasswordManagerClient is
+  // attached to the WebContents.
+  std::unique_ptr<content::WebContents> bare_web_contents(
+      content::WebContentsTester::CreateTestWebContents(
+          web_contents()->GetBrowserContext(), nullptr));
+  ChromePasswordManagerClient::NotifyNonFedCmFederatedLogin(
+      bare_web_contents.get());
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.BrowserAssistedLogin.Type",
+      password_manager::metrics_util::BrowserAssistedLoginType::kNonFedCmOAuth,
+      2);
 }
 
 TEST_F(ChromePasswordManagerClientTest, OnNonPasswordLoginDetectedOpenerCycle) {
@@ -793,8 +801,6 @@ TEST_F(ChromePasswordManagerClientTest, OnNonPasswordLoginDetectedOpenerCycle) {
           web_contents()->GetBrowserContext(), nullptr));
   autofill::ChromeAutofillClient::CreateForWebContents(web_contents_a.get());
   ChromePasswordManagerClient::CreateForWebContents(web_contents_a.get());
-  ChromePasswordManagerClient* client_a =
-      ChromePasswordManagerClient::FromWebContents(web_contents_a.get());
 
   std::unique_ptr<content::WebContents> web_contents_b(
       content::WebContentsTester::CreateTestWebContents(
@@ -811,7 +817,8 @@ TEST_F(ChromePasswordManagerClientTest, OnNonPasswordLoginDetectedOpenerCycle) {
   // Trigger non-password login detection on A.
   // With the recursion removed, this will directly invoke the PasswordManager
   // on B and return immediately, without causing infinite recursion or hanging.
-  client_a->OnNonFedCmFederatedLogin();
+  ChromePasswordManagerClient::NotifyNonFedCmFederatedLogin(
+      web_contents_a.get());
 
   // B's PasswordManager should have handled the notification and recorded the
   // histogram. A's PasswordManager is not called.
@@ -1987,7 +1994,6 @@ class ChromePasswordManagerClientAndroidTest
   NiceMock<MockAddressAccessoryController> mock_address_controller_;
   NiceMock<MockPaymentMethodAccessoryController>
       mock_payment_method_controller_;
-  NiceMock<MockAtMemoryAccessoryController> mock_at_memory_controller_;
   std::unique_ptr<
       password_manager::MockKeyboardReplacingSurfaceVisibilityController>
       visibility_controller_;
@@ -2020,7 +2026,6 @@ void ChromePasswordManagerClientAndroidTest::CreateManualFillingController(
       web_contents, mock_pwd_controller_.AsWeakPtr(),
       mock_address_controller_.AsWeakPtr(),
       mock_payment_method_controller_.AsWeakPtr(),
-      mock_at_memory_controller_.AsWeakPtr(),
       std::make_unique<NiceMock<MockManualFillingView>>());
 }
 

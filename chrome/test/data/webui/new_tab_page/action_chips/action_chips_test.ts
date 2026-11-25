@@ -4,7 +4,7 @@
 
 import 'chrome://new-tab-page/lazy_load.js';
 
-import {ActionChipsRetrievalState} from 'chrome://new-tab-page/lazy_load.js';
+import {ActionChipsRetrievalState, resetRequestTimingRecordedForTesting} from 'chrome://new-tab-page/lazy_load.js';
 import type {ActionChipClickDetail, ActionChipsElement} from 'chrome://new-tab-page/lazy_load.js';
 import {ActionChipsHandlerRemote, actionChipsProxyFactory, IconType, InputSource, QueryActionOverride, SearchboxOverride, SuggestInventory} from 'chrome://new-tab-page/new_tab_page.js';
 import type {ActionChip, ActionChipsPageRemote as PageRemote, TabInfo} from 'chrome://new-tab-page/new_tab_page.js';
@@ -102,6 +102,7 @@ suite('NewTabPageActionChipsTest', () => {
     windowTimestampEnd: number;
     prefersReducedMotion: boolean;
     disablementContextMenuEnabled: boolean;
+    isAndroid: boolean;
     ntpSmallActionChipsEnabled: boolean;
     ntpSmallActionChipsUncappedWidthEnabled: boolean;
   }
@@ -114,6 +115,7 @@ suite('NewTabPageActionChipsTest', () => {
       windowTimestampEnd: Date.now().valueOf() + 1,
       prefersReducedMotion: false,
       disablementContextMenuEnabled: true,
+      isAndroid: false,
       ntpSmallActionChipsEnabled: false,
       ntpSmallActionChipsUncappedWidthEnabled: false,
     };
@@ -141,6 +143,7 @@ suite('NewTabPageActionChipsTest', () => {
 
     loadTimeData.overrideValues({
       addTabUploadDelayOnActionChipClick: true,
+      isAndroid: options.isAndroid,
       ntpNextDisablementContextMenuEnabled:
           options.disablementContextMenuEnabled,
       ntpSmallActionChipsEnabled: options.ntpSmallActionChipsEnabled,
@@ -576,6 +579,87 @@ suite('NewTabPageActionChipsTest', () => {
         metrics.count(
             'NewTabPage.ActionChips.WebUI.InitialLoadLatency',
             expectedLatency));
+  });
+
+  suite('request timing', () => {
+    setup(() => {
+      resetRequestTimingRecordedForTesting();
+    });
+
+    test('records timing when the prefetch is triggered first', async () => {
+      // Setup.
+      const metrics: MetricsTracker = fakeMetricsPrivate();
+      loadTimeData.overrideValues({ntpLoadDuringStartup: false});
+      windowProxy.setResultFor('waitForLoadEventEnd', Promise.resolve(300));
+
+      // Act. `now()` returns `windowTimestampEnd` when chips are requested.
+      await initializeChips({windowTimestampStart: 0, windowTimestampEnd: 400});
+      await microtasksFinished();
+
+      // Assert.
+      assertEquals(
+          1,
+          metrics.count(
+              'NewTabPage.RequestTiming.ActionChipsRetrievalStart.NonStartup',
+              400));
+      assertEquals(
+          1,
+          metrics.count(
+              'NewTabPage.RequestTiming.ZeroSuggestPrefetchTrigger.NonStartup',
+              300));
+      assertEquals(
+          1,
+          metrics.count(
+              'NewTabPage.RequestTiming.ZeroSuggestPrefetchTriggerLead' +
+                  '.NonStartup',
+              100));
+      assertEquals(
+          0,
+          metrics.count(
+              'NewTabPage.RequestTiming.ZeroSuggestPrefetchTriggerLag' +
+              '.NonStartup'));
+    });
+
+    test('records timing when chips are requested first', async () => {
+      // Setup.
+      const metrics: MetricsTracker = fakeMetricsPrivate();
+      loadTimeData.overrideValues({ntpLoadDuringStartup: true});
+      windowProxy.setResultFor('waitForLoadEventEnd', Promise.resolve(500));
+
+      // Act.
+      await initializeChips({windowTimestampStart: 0, windowTimestampEnd: 400});
+      await microtasksFinished();
+
+      // Assert.
+      assertEquals(
+          1,
+          metrics.count(
+              'NewTabPage.RequestTiming.ZeroSuggestPrefetchTriggerLag.Startup',
+              100));
+      assertEquals(
+          0,
+          metrics.count(
+              'NewTabPage.RequestTiming.ZeroSuggestPrefetchTriggerLead' +
+              '.Startup'));
+    });
+
+    test('records timing at most once per NTP load', async () => {
+      // Setup.
+      const metrics: MetricsTracker = fakeMetricsPrivate();
+      loadTimeData.overrideValues({ntpLoadDuringStartup: false});
+      windowProxy.setResultFor('waitForLoadEventEnd', Promise.resolve(300));
+
+      // Act.
+      await initializeChips({windowTimestampStart: 0, windowTimestampEnd: 400});
+      await initializeChips({windowTimestampStart: 0, windowTimestampEnd: 400});
+      await microtasksFinished();
+
+      // Assert.
+      assertEquals(
+          1,
+          metrics.count(
+              'NewTabPage.RequestTiming.ActionChipsRetrievalStart.NonStartup'));
+    });
   });
 
   test('latency is not recorded for empty action chips', async () => {
@@ -1098,6 +1182,80 @@ suite('NewTabPageActionChipsTest', () => {
             tab: null,
           };
           await initializeChips({
+            ntpSmallActionChipsEnabled: true,
+            actionChips: [chip, chip, chip],
+          });
+          chips.style.display = 'block';
+          chips.style.width = '1000px';
+          const allChips = chips.shadowRoot.querySelectorAll<HTMLButtonElement>(
+              '.action-chip');
+          assertEquals(3, allChips.length);
+          assertEquals(allChips[0]!.offsetTop, allChips[2]!.offsetTop);
+        });
+
+    // Android Desktop Tests
+    test('applies Android typography and cap-height alignment', async () => {
+      await initializeChips({
+        isAndroid: true,
+        ntpSmallActionChipsEnabled: true,
+      });
+      assertTrue(chips.hasAttribute('is-android'));
+      const title = chips.shadowRoot.querySelector<HTMLElement>('.chip-title');
+      assertTrue(!!title);
+      const style = getComputedStyle(title);
+      assertEquals('14px', style.fontSize);
+      assertEquals('500', style.fontWeight);
+      assertEquals('20px', style.lineHeight);
+      assertEquals('clip', style.overflowX);
+      assertEquals('visible', style.overflowY);
+      assertEquals('trim-both', style.getPropertyValue('text-box-trim'));
+      assertEquals('cap alphabetic', style.getPropertyValue('text-box-edge'));
+    });
+
+    test(
+        'keeps desktop typography and alignment when not Android', async () => {
+          await initializeChips({
+            isAndroid: false,
+            ntpSmallActionChipsEnabled: true,
+          });
+          assertFalse(chips.hasAttribute('is-android'));
+          const title =
+              chips.shadowRoot.querySelector<HTMLElement>('.chip-title');
+          assertTrue(!!title);
+          const style = getComputedStyle(title);
+          assertEquals('13px', style.fontSize);
+          assertEquals('400', style.fontWeight);
+          assertEquals('20px', style.lineHeight);
+          assertEquals('hidden', style.overflowX);
+          assertEquals('hidden', style.overflowY);
+          assertEquals('none', style.getPropertyValue('text-box-trim'));
+        });
+
+    test(
+        'does not truncate a 45 character title or wrap 3 chips on Android',
+        async () => {
+          const chip: TestActionChip = {
+            suggestTemplateInfo: {
+              typeIcon: IconType.kGlobeWithSearchLoop,
+              primaryText: 'Ask about the pages you have recently visited',
+              secondaryText: null,
+            },
+            suggestion: '',
+            tab: null,
+          };
+          await initializeChips({
+            isAndroid: true,
+            ntpSmallActionChipsEnabled: true,
+            ntpSmallActionChipsUncappedWidthEnabled: true,
+            actionChips: [chip],
+          });
+          const title =
+              chips.shadowRoot.querySelector<HTMLElement>('.chip-title');
+          assertTrue(!!title);
+          assertEquals(title.clientWidth, title.scrollWidth);
+
+          await initializeChips({
+            isAndroid: true,
             ntpSmallActionChipsEnabled: true,
             actionChips: [chip, chip, chip],
           });

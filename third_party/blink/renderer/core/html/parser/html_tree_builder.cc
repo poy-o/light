@@ -1244,10 +1244,12 @@ void HTMLTreeBuilder::ProcessStartTagForInBody(AtomicHTMLToken* token) {
 }
 
 namespace {
-String DeclarativeShadowRootModeFromToken(AtomicHTMLToken* token,
-                                          Document& document,
-                                          bool include_shadow_roots,
-                                          bool is_fragment_context) {
+String DeclarativeShadowRootModeFromToken(
+    AtomicHTMLToken* token,
+    Document& document,
+    bool include_shadow_roots,
+    bool is_fragment_context,
+    bool parser_created_by_document_open) {
   Attribute* mode_attribute =
       token->GetAttributeItem(html_names::kShadowrootmodeAttr);
   if (!mode_attribute) {
@@ -1259,6 +1261,14 @@ String DeclarativeShadowRootModeFromToken(AtomicHTMLToken* token,
         is_fragment_context
             ? WebFeature::kDeclarativeShadowDomRejectedByFragmentParser
             : WebFeature::kDeclarativeShadowDomRejectedByNormalParser);
+    if (parser_created_by_document_open) {
+      // The document's "allow declarative shadow roots" is false, and this
+      // parser was created via document.open() or document.write(). This
+      // measures the compat impact of always allowing declarative shadow roots
+      // for document.open(): https://github.com/whatwg/html/issues/12652
+      UseCounter::Count(
+          document, WebFeature::kDeclarativeShadowDomRejectedByDocumentOpen);
+    }
 
     document.AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
         mojom::blink::ConsoleMessageSource::kOther,
@@ -1274,16 +1284,20 @@ String DeclarativeShadowRootModeFromToken(AtomicHTMLToken* token,
 
 void HTMLTreeBuilder::ProcessTemplateStartTag(AtomicHTMLToken* token) {
   tree_.ActiveFormattingElements()->AppendMarker();
+  const bool is_fragment_context = !!fragment_context_.FragmentTarget();
   tree_.InsertHTMLTemplateElement(
       token, DeclarativeShadowRootModeFromToken(
                  token, tree_.OwnerDocumentForCurrentNode(),
-                 include_shadow_roots_, !!fragment_context_.FragmentTarget()));
+                 include_shadow_roots_, is_fragment_context,
+                 !is_fragment_context && parser_ &&
+                     parser_->WasCreatedByDocumentOpen()));
   frameset_ok_ = false;
   template_insertion_modes_.push_back(kTemplateContentsMode);
   SetInsertionMode(kTemplateContentsMode);
 }
 
-bool HTMLTreeBuilder::ProcessTemplateEndTag(AtomicHTMLToken* token) {
+bool HTMLTreeBuilder::ProcessTemplateEndTag(AtomicHTMLToken* token,
+                                            bool is_eof) {
   DCHECK_EQ(token->GetName(), html_names::kTemplateTag.LocalName());
   if (!tree_.OpenElements()->HasTemplateInHTMLScope()) {
     DCHECK(template_insertion_modes_.empty() ||
@@ -1297,6 +1311,12 @@ bool HTMLTreeBuilder::ProcessTemplateEndTag(AtomicHTMLToken* token) {
     ParseError(token);
   tree_.OpenElements()->PopUntil(HTMLTag::kTemplate);
   HTMLStackItem* template_stack_item = tree_.OpenElements()->TopStackItem();
+  if (!is_eof && template_stack_item) {
+    if (auto* template_element =
+            DynamicTo<HTMLTemplateElement>(template_stack_item->GetElement())) {
+      template_element->SetClosedNormally();
+    }
+  }
   tree_.OpenElements()->Pop();
   tree_.ActiveFormattingElements()->ClearToLastMarker();
   template_insertion_modes_.pop_back();
@@ -1310,8 +1330,9 @@ bool HTMLTreeBuilder::ProcessTemplateEndTag(AtomicHTMLToken* token) {
 bool HTMLTreeBuilder::ProcessEndOfFileForInTemplateContents(
     AtomicHTMLToken* token) {
   AtomicHTMLToken end_template(HTMLToken::kEndTag, HTMLTag::kTemplate);
-  if (!ProcessTemplateEndTag(&end_template))
+  if (!ProcessTemplateEndTag(&end_template, /*is_eof=*/true)) {
     return false;
+  }
 
   ProcessEndOfFile(token);
   return true;

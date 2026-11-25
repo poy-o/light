@@ -67,7 +67,7 @@ def __step_config(ctx, step_config):
         },
         {
             "name": "android/ijar",
-            "command_prefix": platform.python_bin + " ../../build/android/gyp/ijar.py",
+            "command_prefix": platform.python_bin + " obj/build/android/ijar.pyz",
             "remote": remote_run,
             "restat_content": True,
             "timeout": "2m",
@@ -104,7 +104,7 @@ def __step_config(ctx, step_config):
         },
         {
             "name": "android/compile_resources",
-            "command_prefix": platform.python_bin + " ../../build/android/gyp/compile_resources.py",
+            "command_prefix": platform.python_bin + " obj/build/android/compile_resources.pyz",
             "handler": "android_compile_resources",
             "exclude_input_patterns": [
                 "*.a",
@@ -214,7 +214,7 @@ def __step_config(ctx, step_config):
         },
         {
             "name": "android/filter_zip",
-            "command_prefix": platform.python_bin + " ../../build/android/gyp/filter_zip.py",
+            "command_prefix": platform.python_bin + " obj/build/android/filter_zip.pyz",
             "remote": remote_run,
             "restat_content": True,
             "timeout": "2m",
@@ -233,7 +233,7 @@ def __step_config(ctx, step_config):
         },
         {
             "name": "android/trace_event_bytecode_rewriter",
-            "command_prefix": platform.python_bin + " ../../build/android/gyp/trace_event_bytecode_rewriter.py",
+            "command_prefix": platform.python_bin + " obj/build/android/trace_event_bytecode_rewriter.pyz",
             "handler": "android_trace_event_bytecode_rewriter",
             "remote": remote_all,
             # The GN action declares only an empty .stamp output that
@@ -245,7 +245,7 @@ def __step_config(ctx, step_config):
         },
         {
             "name": "android/proguard/local",
-            "command_prefix": platform.python_bin + " ../../build/android/gyp/proguard.py",
+            "command_prefix": platform.python_bin + " obj/build/android/proguard.pyz",
             "action_outs": [
                 # http://crbug.com/396004680#comment15: It slows down CQ build.
                 # It's better to run it locally.
@@ -256,7 +256,7 @@ def __step_config(ctx, step_config):
         },
         {
             "name": "android/proguard",
-            "command_prefix": platform.python_bin + " ../../build/android/gyp/proguard.py",
+            "command_prefix": platform.python_bin + " obj/build/android/proguard.pyz",
             "handler": "android_proguard",
             "exclude_input_patterns": [
                 "*.a",
@@ -276,7 +276,7 @@ def __step_config(ctx, step_config):
         },
         {
             "name": "android/trace_references",
-            "command_prefix": platform.python_bin + " ../../build/android/gyp/tracereferences.py",
+            "command_prefix": platform.python_bin + " obj/build/android/tracereferences.pyz",
             "handler": "android_trace_references",
             "exclude_input_patterns": [
                 "*.a",
@@ -295,7 +295,7 @@ def __step_config(ctx, step_config):
         },
         {
             "name": "android/apkbuilder",
-            "command_prefix": platform.python_bin + " ../../build/android/gyp/apkbuilder.py",
+            "command_prefix": platform.python_bin + " obj/build/android/apkbuilder.pyz",
             "handler": "android_apkbuilder",
             "remote": config.get(ctx, "remote-link") or config.get(ctx, "default-remote") or config.get(ctx, "builder"),
             "restat_content": True,
@@ -312,13 +312,13 @@ def __step_config(ctx, step_config):
             # Runs locally to avoid transferring large .aab outputs. The
             # handler ensures the .zipspec inputs are materialized locally.
             "name": "android/create_app_bundle",
-            "command_prefix": platform.python_bin + " ../../build/android/gyp/create_app_bundle.py",
+            "command_prefix": platform.python_bin + " obj/build/android/create_app_bundle.pyz",
             "handler": "android_create_app_bundle",
             "remote": False,
         },
         {
             "name": "android/create_size_info_files",
-            "command_prefix": platform.python_bin + " ../../build/android/gyp/create_size_info_files.py",
+            "command_prefix": platform.python_bin + " obj/build/android/create_size_info_files.pyz",
             "handler": "android_create_size_info_files",
             "remote": remote_run,
             "restat_content": True,
@@ -454,13 +454,11 @@ def __android_trace_event_bytecode_rewriter(ctx, cmd):
     # python3 ../../build/android/gyp/trace_event_bytecode_rewriter.py \
     #   --stamp obj/chrome/android/trichrome_chrome_bundle.trace_event_rewrite.stamp \
     #   --depfile gen/chrome/android/trichrome_chrome_bundle__trace_event_rewritten.d \
-    #   --script bin/helper/trace_event_adder \
     #   --classpath @FileArg\(gen/chrome/android/trichrome_chrome_bundle.build_config.json:android:sdk_jars\) \
     #   --input-jars @FileArg\(gen/chrome/android/trichrome_chrome_bundle.build_config.json:deps_info:device_classpath\) \
     #   --output-jars @FileArg\(gen/chrome/android/trichrome_chrome_bundle.build_config.json:deps_info:trace_event_rewritten_device_classpath\)
     inputs = []
     outputs = []
-    script = ""
     for i, arg in enumerate(cmd.args):
         if arg in ["--input-jars", "--classpath"]:
             fn, v = __filearg(ctx, cmd.args[i + 1])
@@ -478,17 +476,6 @@ def __android_trace_event_bytecode_rewriter(ctx, cmd):
                 f, _, _ = f.partition(":")
                 outputs.append(ctx.fs.canonpath(f))
             continue
-        if arg == "--script":
-            script = cmd.args[i + 1]
-            continue
-
-    # Find runtime jars for trace_event_adder
-    if script == "bin/helper/trace_event_adder":
-        trace_event_adder_json = json.decode(
-            str(ctx.fs.read(ctx.fs.canonpath("gen/build/android/bytecode/trace_event_adder.build_config.json"))),
-        )
-        for path in trace_event_adder_json.get("processed_classpath", []):
-            inputs.append(ctx.fs.canonpath(path))
 
     ctx.actions.fix(
         inputs = cmd.inputs + inputs,
@@ -622,12 +609,6 @@ def __android_write_build_config_handler(ctx, cmd):
         if arg == "--output":
             params_path = ctx.fs.canonpath(cmd.args[i + 1].replace(".build_config.json", ".params.json"))
             v = json.decode(str(ctx.fs.read(params_path)))
-            path = v.get("shared_libraries_runtime_deps_file")
-            if path:
-                inputs.append(ctx.fs.canonpath(path))
-            path = v.get("secondary_abi_shared_libraries_runtime_deps_file")
-            if path:
-                inputs.append(ctx.fs.canonpath(path))
             for k in ["deps_configs", "public_deps_configs", "processor_configs"]:
                 for path in v.get(k, []):
                     path = ctx.fs.canonpath(path)

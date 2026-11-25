@@ -217,7 +217,6 @@ std::string GetVariationsSessionCountryCode() {
              : std::string();
 }
 
-// Session country is only used when kGlicUseSessionCountryForFiltering is on.
 enum class CountryMatchStrategy {
   // Either the permanent or session country matches (feature gating).
   kAnyMatch,
@@ -231,21 +230,17 @@ bool IsCountryInList(
     std::string_view permanent_country_code,
     std::string_view session_country_code,
     CountryMatchStrategy strategy = CountryMatchStrategy::kAnyMatch) {
-  const bool use_session_country = base::FeatureList::IsEnabled(
-      features::kGlicUseSessionCountryForFiltering);
   if (strategy == CountryMatchStrategy::kSessionPrecedence) {
-    const std::string_view country =
-        use_session_country && !session_country_code.empty()
-            ? session_country_code
-            : permanent_country_code;
+    const std::string_view country = !session_country_code.empty()
+                                         ? session_country_code
+                                         : permanent_country_code;
     return std::ranges::any_of(country_list, [&](const std::string& c) {
       return base::EqualsCaseInsensitiveASCII(c, country);
     });
   }
   return std::ranges::any_of(country_list, [&](const std::string& c) {
     return base::EqualsCaseInsensitiveASCII(c, permanent_country_code) ||
-           (use_session_country &&
-            base::EqualsCaseInsensitiveASCII(c, session_country_code));
+           base::EqualsCaseInsensitiveASCII(c, session_country_code);
   });
 }
 
@@ -509,6 +504,21 @@ mojom::ProfileReadyState GetSanitizedProfileReadyState(int state_val) {
   return mojom::ProfileReadyState::kUnknownError;
 }
 
+// Decides to still show the entry point if the user has previously onboarded,
+// but is missing an overridable requirement (account capability or country).
+void MaybeAnchorForOverridableRequirements(
+    Profile* profile,
+    GlicEnabling::ProfileEnablement& result) {
+  const bool overridable_requirements_met =
+      result.primary_account_is_capable && result.allowed_by_country_filter;
+  if (!overridable_requirements_met &&
+      IsAnchorable(profile, result.fre_is_consented) &&
+      base::FeatureList::IsEnabled(
+          features::kGlicAnchorEntryPointForOnboardedUsers)) {
+    result.anchor_entrypoint_override_active = true;
+  }
+}
+
 void ApplyGeminiAccountEligibility(
     Profile* profile,
     std::optional<std::pair<std::string_view, std::string_view>>
@@ -573,16 +583,7 @@ void ApplyGeminiAccountEligibility(
             primary_account.GetAccountCapabilities());
       }
 
-      // Decide to still show the entry point if the user has previously
-      // onboarded, but is missing an overridable requirement.
-      bool overridable_requirements_met =
-          result.primary_account_is_capable && result.allowed_by_country_filter;
-      if (!overridable_requirements_met &&
-          IsAnchorable(profile, result.fre_is_consented) &&
-          base::FeatureList::IsEnabled(
-              features::kGlicAnchorEntryPointForOnboardedUsers)) {
-        result.anchor_entrypoint_override_active = true;
-      }
+      MaybeAnchorForOverridableRequirements(profile, result);
 
       result.live_allowed = GlicEnabling::CanUseAdultFeatures(
           primary_account.GetAccountCapabilities());
@@ -683,6 +684,10 @@ GlicEnabling::ProfileEnablement ComputeProfileEnablement(
   if (provider_spec.RequiresGeminiAccountEligibility()) {
     ApplyGeminiAccountEligibility(profile, country_override,
                                   account_info_override, result);
+  } else {
+    // These providers keep the default (capable) account state, so only the
+    // country filter can fail here.
+    MaybeAnchorForOverridableRequirements(profile, result);
   }
 
   result.live_allowed =
@@ -921,6 +926,18 @@ bool GlicGlobalEnabling::IsAndroidFormFactorAllowed(
   return form_factor == ui::DEVICE_FORM_FACTOR_PHONE ||
          form_factor == ui::DEVICE_FORM_FACTOR_FOLDABLE || is_foldable ||
          form_factor == ui::DEVICE_FORM_FACTOR_DESKTOP ||
+         (form_factor == ui::DEVICE_FORM_FACTOR_TABLET &&
+          base::FeatureList::IsEnabled(features::kGlicAndroidTablet));
+}
+
+// static
+bool GlicGlobalEnabling::IsAndroidSidePanelFormFactor(
+    ui::DeviceFormFactor form_factor,
+    bool is_foldable) {
+  if (is_foldable) {
+    return false;
+  }
+  return form_factor == ui::DEVICE_FORM_FACTOR_DESKTOP ||
          (form_factor == ui::DEVICE_FORM_FACTOR_TABLET &&
           base::FeatureList::IsEnabled(features::kGlicAndroidTablet));
 }
@@ -1198,7 +1215,8 @@ bool GlicEnabling::DidDismissForProfile(Profile* profile) {
 
 // static
 bool GlicEnabling::IsReadyForProfile(Profile* profile) {
-  return GetProfileReadyState(profile) == mojom::ProfileReadyState::kReady;
+  return profile &&
+         GetProfileReadyState(profile) == mojom::ProfileReadyState::kReady;
 }
 
 // static

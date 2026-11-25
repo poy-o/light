@@ -10,18 +10,32 @@
 
 #include "base/barrier_closure.h"
 #include "base/check.h"
+#include "base/check_op.h"
 #include "base/containers/flat_set.h"
 #include "base/feature_list.h"
+#include "base/files/file_path.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
+#include "base/location.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/metrics/histogram_functions.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/token.h"
+#include "base/types/expected.h"
 #include "build/branding_buildflags.h"
 #include "components/optimization_guide/core/model_execution/android/android_manifest.h"
+#include "components/optimization_guide/core/model_execution/manifest_provider.h"
 #include "components/optimization_guide/core/model_execution/on_device_features.h"
 #include "components/optimization_guide/core/model_execution/on_device_model_download_progress_manager.h"
 #include "components/optimization_guide/core/model_execution/on_device_model_feature_adapter.h"
 #include "components/optimization_guide/core/model_execution/on_device_prefs.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
+#include "components/optimization_guide/proto/manifest.pb.h"
 #include "components/optimization_guide/proto/model_quality_metadata.pb.h"
+#include "components/optimization_guide/proto/on_device_model_execution_config.pb.h"
 #include "components/optimization_guide/public/mojom/model_broker.mojom.h"
 #include "services/on_device_model/android/backend_model_impl_android.h"
 #include "services/on_device_model/android/downloader_params.mojom.h"
@@ -34,7 +48,7 @@ namespace optimization_guide {
 
 namespace {
 
-using BaseModelSpec = on_device_model::ModelDownloaderAndroid::BaseModelSpec;
+using AICoreModelSpec = on_device_model::AICoreModelSpec;
 using DownloadFailureReason =
     on_device_model::ModelDownloaderAndroid::DownloadFailureReason;
 using ModelStatus = on_device_model::ModelDownloaderAndroid::ModelStatus;
@@ -80,7 +94,7 @@ bool IsModelAllowed(PrefService* local_state) {
                  GenAILocalFoundationalModelEnterprisePolicySettings::kAllowed;
 }
 
-proto::OnDeviceModelVersions GetModelVersions(const BaseModelSpec& spec) {
+proto::OnDeviceModelVersions GetModelVersions(const AICoreModelSpec& spec) {
   proto::OnDeviceModelVersions versions;
   auto* on_device_model_version =
       versions.mutable_on_device_model_service_version();
@@ -147,7 +161,7 @@ class SolutionImpl : public ModelBrokerImpl::Solution {
  public:
   SolutionImpl(base::WeakPtr<ModelBrokerAndroid> parent,
                scoped_refptr<const OnDeviceModelFeatureAdapter> adapter,
-               const BaseModelSpec& spec,
+               const AICoreModelSpec& spec,
                base::Token manifest_id);
   ~SolutionImpl() override;
 
@@ -160,18 +174,22 @@ class SolutionImpl : public ModelBrokerImpl::Solution {
   void CreateSession(
       mojo::PendingReceiver<on_device_model::mojom::Session> pending,
       on_device_model::mojom::SessionParamsPtr params) override;
+  void CreateDecisionSession(
+      on_device_model::mojom::DecisionQueryPtr query,
+      mojo::PendingReceiver<on_device_model::mojom::DecisionSession> pending)
+      override;
   void ReportHealthyCompletion() override;
 
   base::WeakPtr<ModelBrokerAndroid> parent_;
   scoped_refptr<const OnDeviceModelFeatureAdapter> adapter_;
-  const BaseModelSpec spec_;
+  const AICoreModelSpec spec_;
   const base::Token manifest_id_;
 };
 
 SolutionImpl::SolutionImpl(
     base::WeakPtr<ModelBrokerAndroid> parent,
     scoped_refptr<const OnDeviceModelFeatureAdapter> adapter,
-    const BaseModelSpec& spec,
+    const AICoreModelSpec& spec,
     base::Token manifest_id)
     : parent_(std::move(parent)),
       adapter_(std::move(adapter)),
@@ -203,6 +221,12 @@ void SolutionImpl::CreateSession(
   }
 }
 
+void SolutionImpl::CreateDecisionSession(
+    on_device_model::mojom::DecisionQueryPtr query,
+    mojo::PendingReceiver<on_device_model::mojom::DecisionSession> pending) {
+  // Decision models are not supported on Android.
+}
+
 void SolutionImpl::ReportHealthyCompletion() {
   // TODO: crbug.com/441578339 - Implement (this could potentially do nothing).
 }
@@ -222,6 +246,10 @@ BASE_FEATURE(kAICorePrompt, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kAICoreScamDetection, base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 BASE_FEATURE(kAICoreTest, base::FEATURE_DISABLED_BY_DEFAULT);
+// TODO(crbug.com/584946010): Enable only after component configs are served
+// and validated.
+BASE_FEATURE(kAndroidModelConfigComponentLoading,
+             base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kRequirePersistentModeForScamDetection,
              base::FEATURE_DISABLED_BY_DEFAULT);
 }  // namespace features
@@ -259,7 +287,7 @@ class ModelBrokerAndroid::SolutionFactory final
   // Called when an AICore model was found (or not supported).
   void OnAICoreModelUpdated(
       AICoreFeature aicore_feature,
-      base::expected<BaseModelSpec, DownloadFailureReason> result);
+      base::expected<AICoreModelSpec, DownloadFailureReason> result);
 
   // Called when CheckStatus completes. Calls |barrier_done_callback| when
   // finished.
@@ -277,7 +305,7 @@ class ModelBrokerAndroid::SolutionFactory final
   // reason if the spec is not available.
   absl::flat_hash_map<
       AICoreFeature,
-      base::expected<BaseModelSpec, OnDeviceModelEligibilityReason>>
+      base::expected<AICoreModelSpec, OnDeviceModelEligibilityReason>>
       base_model_specs_;
 
   // Map from AICore feature to the downloader for the base model. The
@@ -359,7 +387,7 @@ void ModelBrokerAndroid::SolutionFactory::MaybeStartDownload(
 
 void ModelBrokerAndroid::SolutionFactory::OnAICoreModelUpdated(
     AICoreFeature aicore_feature,
-    base::expected<BaseModelSpec, DownloadFailureReason> result) {
+    base::expected<AICoreModelSpec, DownloadFailureReason> result) {
   // The download has completed, so the downloader can be removed.
   model_downloaders_.erase(aicore_feature);
   if (result.has_value()) {
@@ -520,7 +548,9 @@ void ModelBrokerAndroid::SolutionFactory::OnAICoreModelStatusChecked(
   std::move(barrier_done_callback).Run();
 }
 
-ModelBrokerAndroid::ModelBrokerAndroid(PrefService& local_state)
+ModelBrokerAndroid::ModelBrokerAndroid(
+    PrefService& local_state,
+    std::unique_ptr<ManifestProvider> manifest_provider)
     : local_state_(local_state),
       usage_tracker_(&local_state),
       impl_(usage_tracker_,
@@ -528,22 +558,69 @@ ModelBrokerAndroid::ModelBrokerAndroid(PrefService& local_state)
                                 base::Unretained(this)),
             base::BindRepeating(
                 &ModelBrokerAndroid::AddModelDownloadProgressObserver,
-                base::Unretained(this))) {
+                base::Unretained(this))),
+      manifest_provider_(std::move(manifest_provider)) {
+  CHECK(manifest_provider_);
   impl_.SetFeatureConfigs(AndroidManifest::GetFeatureRoutingConfigs());
+  if (features::IsOnDeviceExecutionEnabled() &&
+      base::FeatureList::IsEnabled(
+          features::kAndroidModelConfigComponentLoading)) {
+    // TODO(crbug.com/585244210): Use BrokerInit's task runner to support
+    // priority increases for manifest loading.
+    manifest_task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
+        {base::MayBlock(), base::TaskPriority::BEST_EFFORT});
+    manifest_ready_subscription_ = manifest_provider_->ListenForManifestReady(
+        base::BindRepeating(&ModelBrokerAndroid::OnManifestReady,
+                            weak_ptr_factory_.GetWeakPtr()));
+  }
 }
 ModelBrokerAndroid::~ModelBrokerAndroid() = default;
 
+// TODO(crbug.com/585296921): Move manifest loading, fallback selection, and
+// policy handling into an AndroidManifestMonitor.
+void ModelBrokerAndroid::OnManifestReady(base::FilePath directory) {
+  manifest_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE, base::BindOnce(&AndroidManifest::Load, std::move(directory)),
+      base::BindOnce(&ModelBrokerAndroid::OnComponentManifestLoaded,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+void ModelBrokerAndroid::OnComponentManifestLoaded(
+    base::expected<proto::SolutionConfig, AndroidManifest::LoadResult> config) {
+  if (!config) {
+    // kSuccess is a histogram result, not a valid error, so error() should
+    // never return kSuccess.
+    CHECK_NE(config.error(), AndroidManifest::LoadResult::kSuccess);
+  }
+
+  // Propagate load errors without constructing an adapter.
+  base::expected<AndroidManifest, AndroidManifest::LoadResult> manifest =
+      std::move(config).transform([](proto::SolutionConfig loaded_config) {
+        AndroidManifest::ConfigMap configs;
+        configs.emplace(mojom::OnDeviceFeature::kSummarize,
+                        base::MakeRefCounted<OnDeviceModelFeatureAdapter>(
+                            std::move(*loaded_config.mutable_feature())));
+        return AndroidManifest::CreateFromComponent(std::move(configs));
+      });
+
+  base::UmaHistogramEnumeration(
+      "OptimizationGuide.ModelExecution.AndroidManifestLoadResult",
+      manifest ? AndroidManifest::LoadResult::kSuccess : manifest.error());
+
+  OnManifestLoaded(std::move(manifest));
+}
+
 void ModelBrokerAndroid::OnManifestLoaded(
-    base::expected<AndroidManifest, AndroidManifest::ParseError> manifest) {
+    base::expected<AndroidManifest, AndroidManifest::LoadResult> manifest) {
   if (!manifest) {
-    // Ignore the manifest if it failed to parse.
-    // TODO(crbug.com/575550015): Handle manifest parse errors appropriately.
     return;
   }
 
   // Activating a different snapshot invalidates solutions whose snapshot IDs
   // no longer match. Store it even before first use, without initializing
   // AICore.
+  // TODO(crbug.com/585296918): Avoid invalidating solutions when manifest
+  // content is unchanged.
   manifest_ = std::move(*manifest);
   if (solution_factory_) {
     solution_factory_->UpdateSolutionProviders();
@@ -553,6 +630,20 @@ void ModelBrokerAndroid::OnManifestLoaded(
 bool ModelBrokerAndroid::IsManifestActive(
     const base::Token& manifest_id) const {
   return manifest_ && manifest_->id() == manifest_id;
+}
+
+void ModelBrokerAndroid::FlushManifestLoadsForTesting(
+    base::OnceClosure callback) {
+  if (!manifest_task_runner_) {
+    // Component loading is disabled, so there are no loads to wait for; run
+    // the callback immediately.
+    std::move(callback).Run();
+    return;
+  }
+  // The barrier runs after earlier loads, and its reply follows their replies
+  // on the broker sequence.
+  manifest_task_runner_->PostTaskAndReply(FROM_HERE, base::DoNothing(),
+                                          std::move(callback));
 }
 
 void ModelBrokerAndroid::BindModelBroker(

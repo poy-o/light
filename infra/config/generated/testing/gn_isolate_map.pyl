@@ -1040,6 +1040,12 @@
     "module_scheme": "mocha",
     "skip_usage_check": True,
   },
+  "devtools_script_tests": {
+    "label": "//:devtools_script_tests",
+    "type": "generated_script",
+    "module_scheme": "mocha",
+    "skip_usage_check": True,
+  },
   "devtools_unit_tests": {
     "label": "//:devtools_unit_tests",
     "type": "generated_script",
@@ -1497,6 +1503,11 @@
     "label": "//chrome:linux_symbols",
     "type": "additional_compile_target",
   },
+  "litert_conversation_e2e_tests": {
+    "label": "//components/optimization_guide/internal/testing:litert_conversation_e2e_tests",
+    "type": "generated_script",
+    "module_scheme": "flat",
+  },
   "litert_e2e_tests": {
     "label": "//components/optimization_guide/internal/testing:litert_e2e_tests",
     "type": "generated_script",
@@ -1705,6 +1716,7 @@
     "label": "//chrome/browser/media/router:openscreen_unittests",
     "type": "console_test_launcher",
     "module_scheme": "gtest",
+    "skip_usage_check": True,
   },
   "optimization_guide_gpu_unittests": {
     "label": "//components/optimization_guide/internal:optimization_guide_gpu_unittests",

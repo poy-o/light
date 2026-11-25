@@ -112,6 +112,7 @@ if (is_android) {
       "//chrome/browser/tabmodel:java",
       "//chrome/browser/tabwindow:java",
       "//chrome/browser/ui/android/hats/test:test_support_java",
+      "//chrome/browser/ui/android/layouts:java",
       "//components/autofill/android:autofill_java",
       "//components/autofill/android:payments_interfaces_java",
       "//components/messages/android/test:test_support_java",
@@ -131,6 +132,7 @@ if (is_android) {
       "//chrome/android/java/src/org/chromium/chrome/browser/app/tabwindow/TabWindowManagerNativeTestSupport.java",
       "android/test_support/src/org/chromium/chrome/test_support/DragStartWaiterBridge.java",
       "android/test_support/src/org/chromium/chrome/test_support/FamilyInfoFeedbackSourceTestBridge.java",
+      "android/test_support/src/org/chromium/chrome/test_support/LayoutTestBridge.java",
       "android/test_support/src/org/chromium/chrome/test_support/PaymentRequestTestBridge.java",
     ]
   }
@@ -142,6 +144,7 @@ if (is_android) {
       "//chrome/android/java/src/org/chromium/chrome/browser/app/tabwindow/TabWindowManagerNativeTestSupport.java",
       "android/javatests/src/org/chromium/chrome/test/util/OmniboxTestUtils.java",
       "android/test_support/src/org/chromium/chrome/test_support/FamilyInfoFeedbackSourceTestBridge.java",
+      "android/test_support/src/org/chromium/chrome/test_support/LayoutTestBridge.java",
     ]
   }
 
@@ -621,7 +624,10 @@ source_set("platform_browser_tests") {
   }
 
   if (safe_browsing_mode != 0) {
-    deps += [ "//chrome/browser/safe_browsing:platform_browser_tests" ]
+    deps += [
+      "//chrome/browser/safe_browsing:platform_browser_tests",
+      "//chrome/browser/ui/webui/reset_password:platform_browser_tests",
+    ]
   }
 
   if (enable_devtools_frontend) {
@@ -3200,10 +3206,10 @@ test("unit_tests") {
       "//chrome/browser/ui/webui/cr_components/composebox:unit_tests",
       "//chrome/browser/ui/webui/cr_components/customize_color_scheme_mode:unit_tests",
       "//chrome/browser/ui/webui/cr_components/searchbox:unit_tests",
-      "//chrome/browser/ui/webui/cr_components/theme_color_picker:unit_tests",
       "//chrome/browser/ui/webui/discards:unit_tests",
       "//chrome/browser/ui/webui/downloads:unit_tests",
       "//chrome/browser/ui/webui/drive_picker_host:unit_tests",
+      "//chrome/browser/ui/webui/omnibox_internals/aim_eligibility:unit_tests",
       "//chrome/browser/ui/webui/omnibox_popup:unit_tests",
       "//chrome/browser/ui/webui/searchbox:unit_tests",
       "//chrome/browser/ui/webui/segmentation_internals:unit_tests",
@@ -3229,6 +3235,7 @@ test("unit_tests") {
     deps += [
       "//chrome/browser/new_tab_page:unit_tests",
       "//chrome/browser/ui/webui/cr_components/most_visited:unit_tests",
+      "//chrome/browser/ui/webui/cr_components/theme_color_picker:unit_tests",
       "//chrome/browser/ui/webui/new_tab_page:unit_tests",
       "//chrome/browser/ui/webui/new_tab_page/action_chips:unit_tests",
       "//chrome/browser/ui/webui/searchbox:unit_tests",
@@ -3386,7 +3393,6 @@ test("unit_tests") {
       deps += [
         "//chrome/browser/chromeos/extensions/wm:unit_tests",
         "//chrome/common/apps/platform_apps:unit_tests",
-        "//chrome/common/chromeos/extensions:unit_tests",
       ]
     } else {
       deps += [ "//chrome/browser/extensions/api/messaging:unit_tests" ]
@@ -3738,6 +3744,7 @@ if (!is_android && !is_chromeos_device) {
       "//chrome/browser/ui/views/user_education:interactive_ui_tests",
       "//chrome/browser/ui/views/web_apps:interactive_ui_tests",
       "//chrome/browser/ui/web_applications:interactive_ui_tests",
+      "//chrome/browser/ui/webauthn:interactive_ui_tests",
       "//chrome/browser/ui/webui/access_code_cast:interactive_ui_tests",
       "//chrome/browser/ui/webui/downloads:interactive_ui_tests",
       "//chrome/browser/ui/webui/searchbox:interactive_ui_tests",
@@ -4362,6 +4369,7 @@ if (is_win) {
       "//base",
       "//base/test:test_support",
       "//chrome",
+      "//chrome/common/win:core_dlls",
       "//chrome/install_static:install_static_util",
       "//chrome/install_static/test:test_support",
       "//mojo:buildflags",

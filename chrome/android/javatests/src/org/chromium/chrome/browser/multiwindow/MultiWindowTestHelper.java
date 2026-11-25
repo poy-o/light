@@ -20,6 +20,7 @@ import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.transit.Outcome;
 import org.chromium.base.test.transit.Triggers;
 import org.chromium.base.test.transit.TripBuilder;
 import org.chromium.base.test.util.Criteria;
@@ -87,14 +88,12 @@ public class MultiWindowTestHelper {
 
         MultiWindowUtils.setOpenInOtherWindowIntentExtras(intent, activity, secondActivityClass);
         return (ChromeTabbedActivity2)
-                arriveInNewWindow(
-                                Triggers.runTo(
-                                        () -> {
-                                            MultiInstanceManager.onMultiInstanceModeStarted();
-                                            activity.startActivity(intent);
-                                        }),
-                                /* isIncognito= */ false,
-                                /* allowSubclasses= */ true)
+                Triggers.runTo(
+                                () -> {
+                                    MultiInstanceManager.onMultiInstanceModeStarted();
+                                    activity.startActivity(intent);
+                                })
+                        .reach(newWindow(/* isIncognito= */ false, /* allowSubclasses= */ true))
                         .getActivity();
     }
 
@@ -118,8 +117,7 @@ public class MultiWindowTestHelper {
      */
     public static ChromeTabbedActivity2 waitForSecondChromeTabbedActivity(boolean isIncognito) {
         return (ChromeTabbedActivity2)
-                arriveInNewWindow(Triggers.noopTo(), isIncognito, /* allowSubclasses= */ true)
-                        .getActivity();
+                newWindow(isIncognito, /* allowSubclasses= */ true).await().getActivity();
     }
 
     private static void waitUntilActivityResumed(final Activity activity) {
@@ -246,20 +244,17 @@ public class MultiWindowTestHelper {
      *     state is initialized.
      */
     public static CtaPageStation createNewChromeTabbedActivityWindow(Context context) {
-        Intent intent = createNewWindowIntent(context);
-        return arriveInNewWindow(
-                Triggers.runOnUiThreadTo(
-                        () -> ContextUtils.getApplicationContext().startActivity(intent)),
-                /* isIncognito= */ false,
-                /* allowSubclasses= */ false);
+        return Triggers.startActivityTo(createNewWindowIntent(context))
+                .reach(newWindow(/* isIncognito= */ false, /* allowSubclasses= */ false));
     }
 
     /**
      * Creates an Intent that opens a new ChromeTabbedActivity window (API 31 only).
      *
-     * <p>From an active Station, start it in a Trip's Trigger and arrive at the new window's
-     * Station in a new task, rather than calling {@link #createNewChromeTabbedActivity(Context)}
-     * inside a Trip's Trigger, which would run a second Transition into the same window.
+     * <p>From an active Station, start it with {@code startActivityTo()} and arrive at the new
+     * window's Station in a new task, rather than calling {@link
+     * #createNewChromeTabbedActivity(Context)} inside a Trip's Trigger, which would run a second
+     * Transition into the same window.
      */
     public static Intent createNewWindowIntent(Context context) {
         return MultiWindowUtils.createNewWindowIntent(
@@ -279,22 +274,19 @@ public class MultiWindowTestHelper {
      * were already open are told apart by their active Stations.
      *
      * <p>From an active Station, prefer transitioning to the new window's Station with {@code
-     * TripBuilder#inNewTask()}.
+     * BasePageStation.Builder#inNewWindow()}.
      *
      * @param trigger Runnable that initiates creation of the new window.
      * @return The newly created {@link ChromeTabbedActivity}.
      */
     public static ChromeTabbedActivity waitForNewChromeTabbedActivity(Runnable trigger) {
-        return arriveInNewWindow(
-                        Triggers.runOnUiThreadTo(trigger),
-                        /* isIncognito= */ false,
-                        /* allowSubclasses= */ false)
+        return Triggers.runOnUiThreadTo(trigger)
+                .reach(newWindow(/* isIncognito= */ false, /* allowSubclasses= */ false))
                 .getActivity();
     }
 
-    /** Enters a {@link CtaPageStation} in the window that {@code trip} opens, in a new task. */
-    private static CtaPageStation arriveInNewWindow(
-            TripBuilder trip, boolean isIncognito, boolean allowSubclasses) {
+    /** Outcome: a {@link CtaPageStation} is entered in a new window, in a new task. */
+    private static Outcome<CtaPageStation> newWindow(boolean isIncognito, boolean allowSubclasses) {
         CtaPageStation station =
                 CtaPageStation.newGenericBuilder()
                         .withEntryPoint()
@@ -303,6 +295,6 @@ public class MultiWindowTestHelper {
         if (allowSubclasses) {
             station.getActivityElement().allowSubclasses();
         }
-        return trip.inNewTask().arriveAt(station);
+        return Outcome.enter(station).inNewTask();
     }
 }

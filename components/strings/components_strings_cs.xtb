@@ -78,6 +78,7 @@
 <translation id="112840717907525620">Mezipaměť zásady je v pořádku</translation>
 <translation id="1131264053432022307">Obrázek, který jste zkopírovali</translation>
 <translation id="1132735979845538847"><ph name="ORIGIN" /> – Pokud chcete ukončit režim celé obrazovky, přejeďte shora dolů a klepněte na tlačítko Zpět</translation>
+<translation id="11370190534773372">Byly vyplněny údaje o kartě</translation>
 <translation id="1138458427267715730">Nechte si zaslat upozornění, když na kterémkoli webu klesne cena</translation>
 <translation id="1142713751288681188">Typ papíru</translation>
 <translation id="1142965388643537393">Cestovní informace</translation>
@@ -583,6 +584,7 @@ Jinak to vaše nastavení ochrany soukromí bude blokovat. Povolením umožníte
 <translation id="1988881251331415125">Pokud je adresa zadána správně, <ph name="BEGIN_LINK" />zkuste spustit Diagnostiku připojení<ph name="END_LINK" />.</translation>
 <translation id="1991370806334788445">Zkuste povolit soubory cookie třetích stran – budete při procházení méně chráněni, ale funkce webu budou s větší pravděpodobností fungovat správně.</translation>
 <translation id="1992331125980284532">JIS B3</translation>
+<translation id="1995173078718234136">Prohledávání obsahu...</translation>
 <translation id="1996557034791506430">Odebrat oprávnění?</translation>
 <translation id="1997484222658892567">Stránka <ph name="URL" /> chce trvale ukládat data v místním počítači</translation>
 <translation id="1997774360448418989">Papír (lehký)</translation>
@@ -666,7 +668,6 @@ Jinak to vaše nastavení ochrany soukromí bude blokovat. Povolením umožníte
 <translation id="2126374524350484896">Původ souboru PDF:</translation>
 <translation id="2127090458081644412">Heslo bylo uloženo do tohoto zařízení</translation>
 <translation id="2127747486437921899">Kurzíva</translation>
-<translation id="2129163794581571479">Využívá Gemini s Osobní inteligencí. Vaše žádosti, názvy stránek a adresy URL mohou být kontrolovány za účelem zdokonalování vylepšeného automatického vyplňování. <ph name="BEGIN_LINK" />Spravovat nastavení<ph name="END_LINK" /></translation>
 <translation id="2130448033692577677">Zadané šablony nelze použít, protože není nastavená zásada DnsOverHttpsMode.</translation>
 <translation id="2130699163006053678">A3x7</translation>
 <translation id="2131006834960167560">Spodní panel k zapnutí automatického vyplňování plateb je otevřený na celou výšku.</translation>
@@ -821,7 +822,7 @@ Jinak to vaše nastavení ochrany soukromí bude blokovat. Povolením umožníte
 <translation id="2356941001189392209">Omezený seznam navštívených adres URL stránek, na kterých dochází k událostem starších technologií</translation>
 <translation id="2357312461142072202">{NUM_TABS,plural, =1{Bude sdílena 1 karta}few{Budou sdíleny {NUM_TABS} karty}many{Bude sdíleno {NUM_TABS} karty}other{Bude sdíleno {NUM_TABS} karet}}</translation>
 <translation id="2357481397660644965">Vaše zařízení spravuje doména <ph name="DEVICE_MANAGER" /> a váš účet spravuje doména <ph name="ACCOUNT_MANAGER" />.</translation>
-<translation id="2358479643736965923">Na téhle kartě najdete odpověď ona vyhledávání od Google AI</translation>
+<translation id="2358479643736965923">Na téhle kartě najdete odpověď na vyhledávání od Google AI</translation>
 <translation id="2359629602545592467">Několik</translation>
 <translation id="2359808026110333948">Pokračovat</translation>
 <translation id="236000571258713023">Vozidla</translation>
@@ -1216,7 +1217,6 @@ Jinak to vaše nastavení ochrany soukromí bude blokovat. Povolením umožníte
 <translation id="3041584414879052436">Seznam poskytovatelů financování na splátky je zavřený.</translation>
 <translation id="3041612393474885105">Informace o certifikátu</translation>
 <translation id="3041835740069544003">Chrome teď díky chytřejšímu vyplňování formulářů dokáže rozpoznat a vyplnit ještě více formulářů. Aby to bylo možné, můžou se obsah stránek a adresy URL zpracovávat v soukromém prostoru v cloudu. Tuto funkci můžete spravovat v nastavení.</translation>
-<translation id="3047054686095898948">Uložte si své údaje do služby <ph name="IDS_AUTOFILL_GOOGLE_WALLET_TITLE_1" />, ať můžete ve službách Google pracovat rychleji, například rychleji vyplňovat formuláře. Své údaje můžete <ph name="BEGIN_LINK" />spravovat<ph name="END_LINK" /> ve službě <ph name="IDS_AUTOFILL_GOOGLE_WALLET_TITLE_2" /> pro účet <ph name="ACCOUNT" /></translation>
 <translation id="305162504811187366">Historie Vzdálené plochy Chrome, včetně časových razítek, hostitelů a ID relací klientů</translation>
 <translation id="3052868890529250114">K webům se obvykle připojujete zabezpečeně, ale tentokrát Chrome zabezpečené připojení použít nemohl. Je možné, že se nějaký útočník pokouší sledovat nebo upravovat vaše připojení k síti. <ph name="BEGIN_LEARN_MORE_LINK" />Další informace o tomto upozornění<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="3052964831964880138">U produktu <ph name="PRODUCT_NAME" /> klesla cena o <ph name="PRICE_DROP" /></translation>
@@ -1583,7 +1583,6 @@ Pokud chcete možnosti uhrazení na splátky skrýt, přejděte na <ph name="BEG
 <translation id="3655670868607891010">Pokud se vám tato stránka zobrazuje často, zkuste využít tyto <ph name="HELP_LINK" />.</translation>
 <translation id="3658742229777143148">Verze</translation>
 <translation id="3659521826520353662">Které weby definované administrátorem jsou navštěvovány a kdy: <ph name="ALLOWLISTED_WEBSITES" /></translation>
-<translation id="3663760610864720538">Využívá Gemini s Osobní inteligencí. <ph name="BEGIN_LINK" />Spravovat nastavení<ph name="END_LINK" /></translation>
 <translation id="3664479564786885722">Vyhledejte další možnosti nákupu v jiných obchodech, které tento produkt prodávají.</translation>
 <translation id="3664782872746246217">Klíčová slova:</translation>
 <translation id="3670030362669914947">Číslo</translation>
@@ -1862,7 +1861,6 @@ Pokud chcete možnosti uhrazení na splátky skrýt, přejděte na <ph name="BEG
 <translation id="4112140312785995938">Přetočit dozadu</translation>
 <translation id="4114007503059268298">Chcete tuto kartu uložit do svého účtu Google a do tohoto zařízení?</translation>
 <translation id="4114146879518089587">Pokračovat na web</translation>
-<translation id="4115378294792113321">Purpurová</translation>
 <translation id="4116701314593212016">JIS B7</translation>
 <translation id="4116798170070772848">RA2</translation>
 <translation id="4117700440116928470">Rozsah zásady není podporován.</translation>
@@ -3330,6 +3328,7 @@ Kontaktujte administrátora systému.</translation>
 <translation id="6520509611422418552"><ph name="MEMBER_FIRST_NAME" /> se připojil(a) ke skupině karet „<ph name="GROUP_NAME" />“</translation>
 <translation id="6521745193039995384">Neaktivní</translation>
 <translation id="6524830701589638230">Tlačítko správy nastavení přístupnosti, aktivací si v nastavení Chromu můžete přizpůsobit nástroje pro usnadnění přístupu</translation>
+<translation id="652643331002043144">Tenhle web se podobá jiným webům spojeným s phishingem, malwarem a podvody.</translation>
 <translation id="6529173248185917884">Sedmá role</translation>
 <translation id="6529602333819889595">&amp;Opakovat smazání</translation>
 <translation id="6532101170117367231">Uložit na Disk Google</translation>
@@ -3444,6 +3443,7 @@ Kontaktujte administrátora systému.</translation>
 <translation id="6727094998759448074">SRA4</translation>
 <translation id="672853333773293432">Přihlášení k účtu</translation>
 <translation id="6732087373923685049">fotoaparát</translation>
+<translation id="6736243959894955139">Adresa</translation>
 <translation id="6738516213925468394">Vaše data byla <ph name="TIME" /> zašifrována pomocí <ph name="BEGIN_LINK" />heslové fráze pro synchronizaci<ph name="END_LINK" />. Chcete-li zahájit synchronizaci, zadejte ji.</translation>
 <translation id="6740851646645036700">Dosáhli jste limitu pomoci s psaním. Zkuste to později.</translation>
 <translation id="674375294223700098">Neznámá chyba certifikátu serveru.</translation>
@@ -4542,6 +4542,7 @@ Další podrobnosti:
 <translation id="8577348305244205642">Virtuální karta není k dispozici</translation>
 <translation id="8579000896558714521">Přepsání klávesnice</translation>
 <translation id="8579561564816585231">Přihlášení pomocí služby Google, jako je Správce hesel</translation>
+<translation id="8580478010934016252">Přejít na platební metody</translation>
 <translation id="8581064022803799721">Tato stránka je uložena ve složce <ph name="LAST_BOOKMARKS_FOLDER" />.</translation>
 <translation id="858637041960032120">Přidat telefon
 </translation>

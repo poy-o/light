@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">Comparte contraseñas</translation>
 <translation id="1554043146674176775">Desactivar el Modo IA</translation>
 <translation id="1554477036522844996">Nueva ventana</translation>
+<translation id="1555014818414775661">Agregar imágenes</translation>
 <translation id="1557806604681757705">tu computadora</translation>
 <translation id="1558391695376153246">Cerrar pestañas incógnito</translation>
 <translation id="1560153516220021659">Botón secundario de la barra de herramientas contraído</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">Abre la <ph name="BEGIN_BOLD" />configuración de Safari<ph name="END_BOLD" /></translation>
 <translation id="3858860766373142691">Nombre</translation>
 <translation id="386224966259596343">Tendrás la oportunidad de guardar esta información en la Billetera la próxima vez que completes un formulario pertinente.</translation>
-<translation id="3868495844258915202">Mostrar URL completa</translation>
 <translation id="3870931306085184145">No hay contraseñas guardadas para <ph name="DOMAIN" /></translation>
 <translation id="3875783148670536197">Cómo hacerlo</translation>
 <translation id="3878657761594430423">Control de la hoja</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">Para recibir notificaciones de seguimiento de precios, activa las notificaciones en la configuración de iOS.</translation>
 <translation id="528857768909044842">Aquí se guardan los grupos de pestañas</translation>
 <translation id="5294624619177114121">Notificaciones móviles</translation>
-<translation id="5295239312320826323">¿Quieres quitar la cuenta <ph name="USER_EMAIL" />?</translation>
 <translation id="5300589172476337783">Mostrar</translation>
 <translation id="5311061401280561833">Acceso a la cámara y al micrófono permitido</translation>
 <translation id="5313967007315987356">Agregar sitio</translation>
@@ -2148,7 +2147,6 @@ Puedes reiniciar en cualquier momento.</translation>
 <translation id="7603852183842204213">Vent.emerg.bloq. (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">La sincronización no funciona</translation>
 <translation id="760667371114328991">Desactivar las notificaciones de la Verificación de seguridad</translation>
-<translation id="7612619742409846846">Accediste a Google como</translation>
 <translation id="7612849887607288481">Abrir el menú de prototipado de IA</translation>
 <translation id="7618220760967055820">Elige qué botón mostrar en la barra de herramientas</translation>
 <translation id="7620522820075868385">Cancelar</translation>

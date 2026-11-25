@@ -206,7 +206,7 @@ Regular profiles start at bucket 1. Incognito profiles count towards the origina
 </histogram>
 
 <histogram name="Settings.DefaultBrowserFromSource"
-    enum="IOSDefaultBrowserSettingsPageSource" expires_after="2027-03-21">
+    enum="IOSDefaultBrowserSettingsPageSource" expires_after="2027-05-23">
   <owner>gayane@google.com</owner>
   <owner>bling-mony-pod@google.com</owner>
   <summary>
@@ -270,30 +270,13 @@ Regular profiles start at bucket 1. Incognito profiles count towards the origina
 </histogram>
 
 <histogram name="Settings.Homepage.LocationType" enum="HomepageLocationType"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>bttk@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <owner>wenyufu@chromium.org</owner>
   <summary>
     The location type for the homepage if the homepage is enabled. Recorded on
     deferred startup iff the homepage is enabled. Android only.
-  </summary>
-</histogram>
-
-<histogram name="Settings.HomePageEngineType2" enum="OmniboxSearchEngineType"
-    expires_after="2024-04-30">
-  <owner>mpearson@chromium.org</owner>
-  <owner>csharp@chromium.org</owner>
-  <summary>
-    Tries to pretend the home page URL is a search URL, and records the search
-    engine type of that URL by comparing the TLD+1 of the home page URL with
-    those of the different known search engines. Recorded when a regular profile
-    is opened, if a home page URL has been set. Note that at least one profile
-    is opened on startup.
-
-    To be explicit: not logged when an Incognito profile is opened because that
-    inherits the settings from its parent profile. As such, it's not necessary
-    to log the Incognito profile's settings.
   </summary>
 </histogram>
 
@@ -400,7 +383,7 @@ Regular profiles start at bucket 1. Incognito profiles count towards the origina
 </histogram>
 
 <histogram name="Settings.PrivacyElementInteractions"
-    enum="SettingsPrivacyElementInteractions" expires_after="2027-03-21">
+    enum="SettingsPrivacyElementInteractions" expires_after="2027-05-23">
   <owner>harrisonsean@chromium.org</owner>
   <owner>msramek@chromium.org</owner>
   <owner>sauski@chromium.org</owner>
@@ -640,7 +623,7 @@ Regular profiles start at bucket 1. Incognito profiles count towards the origina
 
 <histogram
     name="Settings.SafetyHub.AbusiveNotificationPermissionRevocation.{NotificationRevocationSource}.{RevokedStatus}.PermissionChanged"
-    enum="ContentSetting" expires_after="2027-02-07">
+    enum="ContentSetting" expires_after="2027-05-23">
   <owner>skrakowi@chromium.org</owner>
   <owner>chrome-counter-abuse-alerts@google.com</owner>
   <summary>
@@ -900,7 +883,7 @@ Regular profiles start at bucket 1. Incognito profiles count towards the origina
 </histogram>
 
 <histogram name="Settings.SafetyHub.UnusedSitePermissionsModule.AutoRevoked2"
-    enum="ContentType" expires_after="2027-02-28">
+    enum="ContentType" expires_after="2027-05-23">
   <owner>sideyilmaz@chromium.org</owner>
   <owner>aisulu@google.com</owner>
   <owner>chrome-browser-privacy-team@google.com</owner>
@@ -1086,7 +1069,7 @@ Regular profiles start at bucket 1. Incognito profiles count towards the origina
 </histogram>
 
 <histogram name="Settings.SearchEngines.GoogleIconMismatches" enum="Boolean"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>alsan@chromium.org</owner>
   <owner>chrome-desktop-ui-waterloo@google.com</owner>
   <summary>

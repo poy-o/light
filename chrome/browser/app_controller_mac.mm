@@ -61,7 +61,6 @@
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_manager_observer.h"
@@ -171,9 +170,6 @@ GetPendingWebAuthRequests() {
   return g_pending_requests;
 }
 
-// Returns true if the profile requires signin before being used.
-bool IsProfileSignedOut(const base::FilePath& profile_path);
-
 // Starts a web authentication session request.
 void BeginHandlingWebAuthenticationSessionRequestWithProfile(
     ASWebAuthenticationSessionRequest* request,
@@ -281,7 +277,8 @@ void AttemptSessionRestore(Profile* profile) {
     return;
   }
   CHECK(!profile->IsGuestSession(), base::NotFatalUntil::M163);
-  CHECK(!IsProfileSignedOut(profile->GetPath()), base::NotFatalUntil::M163);
+  CHECK(!profiles::IsProfileLocked(profile->GetPath()),
+        base::NotFatalUntil::M163);
   SessionService* sessionService =
       SessionServiceFactory::GetForProfileForSessionRestore(profile);
   if (sessionService &&
@@ -319,14 +316,6 @@ void RecordLastRunAppBundlePath() {
       base::apple::NSToCFPtrCast(app_mode::kLastRunAppBundlePathPrefsKey),
       app_bundle_path_cfstring.get(),
       base::SysUTF8ToCFStringRef(base::apple::BaseBundleID()).get());
-}
-
-bool IsProfileSignedOut(const base::FilePath& profile_path) {
-  ProfileAttributesEntry* entry =
-      g_browser_process->profile_manager()
-          ->GetProfileAttributesStorage()
-          .GetProfileAttributesWithPath(profile_path);
-  return entry && entry->IsSigninRequired();
 }
 
 void ConfigureNSAppForKioskMode() {
@@ -1492,7 +1481,8 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
 
   // Display the active downloads, creating new browser windows if necessary.
   for (auto& profile : weakProfiles) {
-    if (!profile.get()) {
+    if (!profile.get() || GetBrowserWindowCreationStatusForProfile(*profile) !=
+                              BrowserWindowInterface::CreationStatus::kOk) {
       continue;
     }
 
@@ -1914,7 +1904,7 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
 
   // If the profile is locked or was off-the-record, open the profile picker.
   if (lastProfilePath == ProfileManager::GetGuestProfilePath() ||
-      IsProfileSignedOut(lastProfilePath)) {
+      profiles::IsProfileLocked(lastProfilePath)) {
     ProfilePicker::Show(ProfilePicker::Params::FromEntryPoint(
         ProfilePicker::EntryPoint::kProfileLocked));
     return NO;
@@ -2071,8 +2061,9 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
   if (profile->IsGuestSession() && !profiles::IsGuestModeEnabled())
     return nullptr;
 
-  if (IsProfileSignedOut(profile->GetPath()))
-    return nullptr;  // Profile is locked.
+  if (profiles::IsProfileLocked(profile->GetPath())) {
+    return nullptr;
+  }
 
   return ProfileManager::MaybeForceOffTheRecordMode(profile);
 }
@@ -2853,6 +2844,10 @@ void TabRestorer::RestoreByID(Profile* profile, SessionID session_id) {
 // static
 void TabRestorer::DoRestoreTab(Profile* profile, SessionID session_id) {
   CHECK(profile, base::NotFatalUntil::M163);
+  if (GetBrowserWindowCreationStatusForProfile(*profile) !=
+      BrowserWindowInterface::CreationStatus::kOk) {
+    return;
+  }
   auto* service = TabRestoreServiceFactory::GetForProfile(profile);
   if (!service)
     return;

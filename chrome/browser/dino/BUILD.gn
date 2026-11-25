@@ -3,21 +3,63 @@
 # found in the LICENSE file.
 
 source_set("dino") {
-  public = [ "dino_metrics.h" ]
-  sources = [ "dino_metrics.cc" ]
+  public = [
+    "dino_features.h",
+    "dino_metrics.h",
+  ]
+  sources = [
+    "dino_features.cc",
+    "dino_metrics.cc",
+  ]
   public_deps = [
     "//base",
     "//ui/base",
   ]
+
+  if (is_win || is_mac || is_linux) {
+    public += [
+      "dino_bookmark_metrics_service.h",
+      "dino_bookmark_metrics_service_factory.h",
+    ]
+    sources += [
+      "dino_bookmark_metrics_service.cc",
+      "dino_bookmark_metrics_service_factory.cc",
+    ]
+    public_deps += [
+      "//chrome/browser/profiles:profile",
+      "//components/keyed_service/core",
+    ]
+    deps = [
+      "//chrome/browser/bookmarks",
+      "//components/bookmarks/browser",
+      "//url",
+    ]
+  }
 }
 
 source_set("unit_tests") {
   testonly = true
-  sources = [ "dino_metrics_unittest.cc" ]
+  sources = [
+    "dino_features_unittest.cc",
+    "dino_metrics_unittest.cc",
+  ]
   deps = [
     ":dino",
     "//base/test:test_support",
     "//testing/gtest",
     "//ui/base",
   ]
+
+  if (is_win || is_mac || is_linux) {
+    sources += [ "dino_bookmark_metrics_service_unittest.cc" ]
+    deps += [
+      "//base",
+      "//chrome/browser/bookmarks",
+      "//chrome/test:test_support",
+      "//components/bookmarks/browser",
+      "//components/bookmarks/test",
+      "//content/test:test_support",
+      "//url",
+    ]
+  }
 }

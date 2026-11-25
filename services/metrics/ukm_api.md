@@ -1,32 +1,51 @@
 # URL-Keyed Metrics API
 
 This document describes how to write client code to collect UKM data. Before
-you add new metrics, you should file a proposal. See [go/ukm](http://go/ukm)
-for more information.
+you add new metrics, you should file a proposal (see Google-internal
+[go/ukm](http://go/ukm) for details; external contributors can ask a Googler
+reviewer to help sponsor the UKM privacy review).
 
-Last proofread and updated on 2025/12/18.
+Last proofread and updated on 2026/11/19.
 
 [TOC]
 
 ## Define Your Metrics in ukm.xml
 
 Any events and metrics you collect need to be defined in
-[//tools/metrics/ukm/ukm.xml](https://cs.chromium.org/chromium/src/tools/metrics/ukm/ukm.xml).
+[/tools/metrics/ukm/ukm.xml](/tools/metrics/ukm/ukm.xml).
+
+Before uploading changes to `ukm.xml`, run
+[/tools/metrics/ukm/pretty_print.py](/tools/metrics/ukm/pretty_print.py) (which
+alphabetizes events and metrics and removes `<obsolete>` nodes) and
+[/tools/metrics/ukm/validate_format.py](/tools/metrics/ukm/validate_format.py)
+to verify formatting and schema rules. Changes to `ukm.xml` require approval
+from [/tools/metrics/ukm/PRIVACY_OWNERS](/tools/metrics/ukm/PRIVACY_OWNERS);
+include a link to the approved UKM privacy review in your CL description.
 
 ### Required Details
 
-*   Metric `owner`: the email of someone who can answer questions about how this
-    metric is recorded, what it means, and how it should be used. This can
-    include multiple people and/or a team alias.
+*   Event `owner`: the `@chromium.org` or `@google.com` email address of someone
+    who can answer questions about how the event is recorded, what it means, and
+    how it should be used. List at least two owners, a primary individual owner
+    plus a secondary individual and/or team mailing list, so the event is not
+    orphaned if someone changes teams.
+*   Valid event and metric `name`s:
+    *   Event names must match `^[A-Za-z][A-Za-z0-9.]*$` (no underscores) and
+        must be case-insensitively unique across `ukm.xml`.
+    *   Metric names must match `^[A-Za-z][A-Za-z0-9_.]*$`, cannot be `Event` or
+        `Metadata` (case-insensitive), and if reused across multiple events must
+        use the exact same casing.
 *   A `summary` of the event about which you are recording details, including a
     description of when the event will be recorded.
 *   For each metric in the event: a `summary` of the data and what it means.
-*   The `enum` type if the metric is enumerated which ensures that every value
-    is accounted independently with no attempt to "bucket" the results. The enum
-    uses the
-    [//tools/metrics/histograms/enums.xml](https://cs.chromium.org/chromium/src/tools/metrics/histograms/enums.xml)
-    file for definitions. Note this is the same file for UMA histogram
-    definitions so these can ideally be reused.
+*   The `enum` type if the metric is enumerated or boolean, which ensures that
+    every value is accounted independently with no attempt to "bucket" the
+    results (for boolean metrics, use `enum="Boolean"` or a more descriptive
+    `Boolean*` enum). Enum definitions are shared with UMA histograms and live
+    in
+    [/tools/metrics/histograms/enums.xml](/tools/metrics/histograms/enums.xml)
+    or domain-specific
+    `//tools/metrics/histograms/metadata/<domain>/enums.xml` files.
 *   If the metric is numeric, then its unit should be described in the
     `summary`. For example, "seconds", "ms", "KiB". For metrics that denote time
     durations, the metric name should have a unit suffix, e.g.
@@ -34,11 +53,17 @@ Any events and metrics you collect need to be defined in
     bucketing scheme is used, you should explain that too so that it's clear to
     people reading query results. Precise measurements of user actions timing,
     e.g. in milliseconds, require bucketing to be applied, for instance using
-    [GetExponentialBucketMinForFineUserTiming](https://source.chromium.org/chromium/chromium/src/+/main:services/metrics/public/cpp/metrics_utils.h;l=22;drc=098756533733ea50b2dcb1c40d9a9e18d49febbe).
-*   If an event will only happen once per Navigation, it can be marked
-    `singular="true"` so that the generated proto definition defines the field
-    as "optional" instead of "repeated". If multiple such events are attempted,
-    it's undefined which one will be kept.
+    [GetExponentialBucketMinForFineUserTiming](/services/metrics/public/cpp/metrics_utils.h).
+*   If an event conceptually happens once per source, it can be marked
+    `singular="true"` so that the server-side generated protobuf defines the
+    field as singular (`optional`) instead of `repeated`. Note that
+    `singular="true"` only affects server-side log representation: multiple
+    client emissions for the same `SourceId` have distinct metric fields merged
+    into one event server-side, while duplicate emissions of the *same* metric
+    overwrite each other in unspecified order across reports. If you want the
+    client itself to buffer updates and record only the latest values once on
+    destruction (browser process only), use `ukm::SingularUkmEntry` (see
+    [Singular UKM Events](#singular-ukm-events)).
 
 ### Example
 
@@ -49,7 +74,7 @@ Any events and metrics you collect need to be defined in
   <summary>
     Recorded when a page teleports a goat.
   </summary>
-  <metric name="Duration">
+  <metric name="DurationSeconds">
     <summary>
       How long it took to teleport in seconds.
     </summary>
@@ -59,6 +84,11 @@ Any events and metrics you collect need to be defined in
       The type of goat that was teleported.
     </summary>
   </metric>
+  <metric name="TeleportSucceeded" enum="Boolean">
+    <summary>
+      Whether the goat teleportation succeeded.
+    </summary>
+  </metric>
 </event>
 ```
 
@@ -66,12 +96,12 @@ Any events and metrics you collect need to be defined in
 
 Aggregation of metrics is an optional setting for making them available in the
 [History](http://go/aggregated-ukm#history-table) table and consequently
-viewable on the [UKM dashboard](http://go/ukm-dash).
+viewable on the [UKM dashboard](http://go/ukm-dash) (both Google-internal).
 
 To have a metric aggregated, `<history>`, `<aggregation>` and `<statistics>`
 tags need to be added along with the type of statistic to be generated in the
 event definition
-[`tools/metrics/ukm/ukm.xml`](https://cs.chromium.org/chromium/src/tools/metrics/ukm/ukm.xml)
+[/tools/metrics/ukm/ukm.xml](/tools/metrics/ukm/ukm.xml)
 file in the Chromium codebase.
 
 Adding the `<aggregation>` tag does not change how the events and metrics are
@@ -79,12 +109,14 @@ stored unaggregated in reports and logs.
 
 However, it increases the workload for UKM data processing pipelines. The
 computation can be especially costly for frequently emitted events. Therefore,
-please only add aggregations when necessary. This tag can be added to an
-existing metric later or removed any time.
+please only add aggregations when necessary, and remove the `<aggregation>`
+block once active monitoring on the UKM dashboard or `UkmHistory` table is no
+longer needed. This tag can be added to an existing metric later or removed any
+time.
 
 ```xml
 <event name="Goat.Teleported">
-  <metric name="Duration">
+  <metric name="DurationSeconds">
     ...
     <aggregation>
       <history>
@@ -109,19 +141,25 @@ Supported statistic types are:
     below.)
 
 There can also be one or more `index` tags which define additional aggregation
-keys. These are a comma-separated list of keys that is appended to the
-[standard set](http://go/aggregated-ukm#history-table). These additional keys
-are optional but, if present, are always present together. In other words,
-"fields=profile.county,profile.form_factor" will cause all the standard
-aggregations plus each with *both* country *and* form_factor but **not** with
-all the standard aggregations (see above) plus only one of them. If individual
-and combined versions are desired, use multiple index tags.
+keys. Each `index` tag specifies a comma-separated list of fields that
+duplicates all 5 combinations in the
+[standard set](http://go/aggregated-ukm#history-table) (Google-internal) with those extra fields
+included (note that in `UkmHistory`'s `keys_list` column, all key names are
+sorted alphabetically rather than appended at the end, e.g.
+`profile.channel,profile.country,profile.platform`). These additional keys are
+optional when querying, but within a single `index` tag they are always grouped
+together. In other words, `fields="profile.country,profile.form_factor"`
+produces all the standard aggregations plus each standard aggregation with
+*both* `country` *and* `form_factor`, **not** with only one of them. If
+individual and combined versions are desired, use multiple `index` tags.
 
-Currently supported additional index fields are:
+Commonly used additional `profile.*` index fields are:
 
 *   `profile.country`
 *   `profile.form_factor`
 *   `profile.system_ram`
+*   `profile.is_dominant_version`
+*   `profile.is_latest_version`
 
 ### Enumeration Proportions
 
@@ -148,7 +186,7 @@ A proportion calculated over all sources would sum to 1.0:
 
 In contrast, `VirtualKeyboard.Open:TextInputType` emits multiple values per
 source, and can emit the same value multiple times per source. The sum of the
-proportions for `VirtualKeyboard.Open:TextInputType` will be greater that 1.0,
+proportions for `VirtualKeyboard.Open:TextInputType` will be greater than 1.0,
 and some proportions will be greater than 1.0. In the following example,
 `TextInputType` is emitted multiple times per source, and `TextInputType=4` is
 emitted more than once per source:
@@ -173,61 +211,55 @@ emitted.
 ### Obsolete Events
 If any events or metrics become obsolete or deprecated, simply delete their
 definitions from
-[`tools/metrics/ukm/ukm.xml`](https://cs.chromium.org/chromium/src/tools/metrics/ukm/ukm.xml).
+[/tools/metrics/ukm/ukm.xml](/tools/metrics/ukm/ukm.xml).
 Emissions of deleted events or metrics from old Chromium clients will be
 discarded by the server.
 
 Do not reuse a name from a deleted event or a name of a deleted metric within
 the same event. In case of doubt, you can check whether a name was previously
-used then deprecated in this [snapshot history](https://source.corp.google.com/search?q=f:ukm.xml&sq=package:piper%20file:%2F%2Fdepot%2Fgoogle3%20-file:google3%2Fexperimental).
+used and later deleted via `git log -S <Name> -p -- tools/metrics/ukm/ukm.xml`
+(or in this Google-internal
+[snapshot history](https://source.corp.google.com/search?q=f:ukm.xml&sq=package:piper%20file:%2F%2Fdepot%2Fgoogle3%20-file:google3%2Fexperimental)).
 
 ## Client API
 
 ### Get UkmRecorder Instance
 
-In order to record UKM events, your code needs a UkmRecorder object, defined by [//services/metrics/public/cpp/ukm_recorder.h](https://cs.chromium.org/chromium/src/services/metrics/public/cpp/ukm_recorder.h)
+In order to record UKM events, your code needs a `UkmRecorder` object, defined
+by [/services/metrics/public/cpp/ukm_recorder.h](/services/metrics/public/cpp/ukm_recorder.h).
 
 There are three main ways of getting a UkmRecorder instance.
 
 1) Use `ukm::UkmRecorder::Get()`. This currently only works from the Browser process.
 
-2) Use a service connector and get a UkmRecorder.
-
-```cpp
-std::unique_ptr<ukm::UkmRecorder> ukm_recorder =
-    ukm::UkmRecorder::Create(context()->connector());
-ukm::builders::MyEvent(source_id)
-    .SetMyMetric(metric_value)
-    .Record(ukm_recorder.get());
-```
-
-3) Within blink/renderer, use one of the following methods:
+2) Within blink/renderer, use one of the following methods:
 
 * `blink::Document::UkmRecorder()`
 * `blink::ExecutionContext::UkmRecorder()`
 * `blink::ResourceFetcher::UkmRecorder()`
 
-4) If you do not have access to any of the methods in 3), establish a remote
-connection to a UkmRecorderInterface and use a MojoUkmRecorder to get a
-UkmRecorder.
+3) If you do not have access to any of the methods in 2), establish a remote
+connection to a `UkmRecorderFactory` and use `MojoUkmRecorder::Create()` to get
+a `UkmRecorder`.
 
 ```cpp
-mojo::PendingRemote<ukm::mojom::UkmRecorderInterface> recorder;
+mojo::Remote<ukm::mojom::UkmRecorderFactory> factory;
 
 // This step depends on how the Metrics service is embedded in the application.
-BindUkmRecorderSomewhere(recorder.InitWithNewPipeAndPassReceiver());
+BindUkmRecorderFactorySomewhere(factory.BindNewPipeAndPassReceiver());
 
-ukm_recorder = std::make_unique<ukm::MojoUkmRecorder>(std::move(recorder));
+std::unique_ptr<ukm::MojoUkmRecorder> ukm_recorder =
+    ukm::MojoUkmRecorder::Create(*factory);
 ukm::builders::MyEvent(source_id)
     .SetMyMetric(metric_value)
     .Record(ukm_recorder.get());
 ```
 Depending on which directory you are getting the UkmRecorder from, you need the
-correct interface binder to replace the `BindUkmRecorderSomewhere()` part above.
-Some options are:
+correct interface binder to replace the `BindUkmRecorderFactorySomewhere()` part
+above. Some options are:
 
-* blink/renderer: `Platform::Current()->GetBrowserInterfaceBroker()->GetInterface()`
-* content/renderer: `content::RenderThread::Get()->BindHostReceiver()`
+* blink/renderer: `Platform::Current()->GetBrowserInterfaceBroker()->GetInterface(factory.BindNewPipeAndPassReceiver())`
+* content/renderer: `content::RenderThread::Get()->BindHostReceiver(factory.BindNewPipeAndPassReceiver())`
 
 Note: Establishing a new remote connection each time (i.e. per frame, etc.) has
 overhead, so try to avoid opening a new one each time.
@@ -239,15 +271,42 @@ UKM identifies navigations by their source ID and you'll need to associate an ID
 
 Prefer using `ukm::SourceId` if only the underlying int64 value is required to identify a source and is used in Mojo interface, and no type conversion needs to be performed. If additional source type information is needed, `ukm::SourceIdObj` can be used.
 
-The main method for getting an existing ID is by converting from the navigation ID:
+The main methods for getting an existing `ukm::SourceId` are:
 
-```cpp
-ukm::SourceId source_id = render_frame_host->GetPageUkmSourceId();
-ukm::SourceId source_id = ukm::ConvertToSourceId(
-    navigation_handle->GetNavigationId(), ukm::SourceIdType::NAVIGATION_ID);
-```
+*   **Browser process (`content/`)**:
+    ```cpp
+    // From a committed RenderFrameHost:
+    ukm::SourceId source_id = render_frame_host->GetPageUkmSourceId();
 
-Some events however occur in the background, and a navigation ID does not exist. In that case, you can use the `ukm::UkmBackgroundRecorderService` to check whether the event can be recorded. This is achieved by using the History Service to determine whether the event's origin is still present in the user profile.
+    // From an in-flight or committing NavigationHandle:
+    ukm::SourceId source_id = navigation_handle->GetNextPageUkmSourceId();
+    ```
+    Prefer `navigation_handle->GetNextPageUkmSourceId()` over manually calling
+    `ukm::ConvertToSourceId(navigation_handle->GetNavigationId(), ukm::SourceIdType::NAVIGATION_ID)`,
+    as `GetNextPageUkmSourceId()` handles subframe, same-document, and
+    back-forward cache navigations. Note that for prerender activations it
+    returns a different ID than the eventual `GetPageUkmSourceId()`; see
+    [/content/browser/preloading/prerender/README.md](/content/browser/preloading/prerender/README.md#ukm-source-ids).
+*   **Blink / renderer process**:
+    ```cpp
+    ukm::SourceId source_id = document->UkmSourceID();
+    // Or from an ExecutionContext:
+    ukm::SourceId source_id = execution_context->UkmSourceID();
+    ```
+*   **iOS (`web::WebState`)** (from
+    [/components/ukm/ios/ukm_url_recorder.h](/components/ukm/ios/ukm_url_recorder.h)):
+    ```cpp
+    ukm::SourceId source_id = ukm::GetSourceIdForWebStateDocument(web_state);
+    ```
+*   **Events not tied to a URL** (e.g. session- or report-level metrics):
+    ```cpp
+    ukm::SourceId source_id = ukm::NoURLSourceId();
+    ```
+
+Some events occur in the background where an active navigation or frame does not
+exist. In that case, you can use `ukm::UkmBackgroundRecorderService` to check
+whether the event can be recorded. This uses the History Service to determine
+whether the event's origin is still present in the user profile.
 
 ```cpp
 // Add the service as a dependency in your service's constructor.
@@ -270,15 +329,15 @@ void DidGetBackgroundSourceId(std::optional<ukm::SourceId> source_id) {
 }
 ```
 
-For the remaining cases you may need to temporarily create your own IDs and associate the URL with them. However we currently prefer that this method is not used, and if you need to set up the URL yourself, please email the OWNERS of components/ukm.
-Example:
-
-```cpp
-ukm::SourceId source_id = ukm::UkmRecorder::GetNewSourceID();
-ukm_recorder->UpdateSourceURL(source_id, main_frame_url);
-```
-
-You will also need to add your class as a friend of UkmRecorder in order to use this private API.
+For approved non-navigation URL sources (such as extensions, notifications,
+redirects, payment apps, or Federated Credential Management), `ukm::UkmRecorder`
+provides dedicated `SourceIdType`s and `base::PassKey`-guarded static helpers
+(e.g. `GetSourceIdForRedirectUrl()`, `GetSourceIdForExtensionUrl()`,
+`GetSourceIdForNotificationEvent()` in
+[/services/metrics/public/cpp/ukm_recorder.h](/services/metrics/public/cpp/ukm_recorder.h))
+instead of adding `friend` classes that call `UpdateSourceURL()` directly on
+`DEFAULT`-typed source IDs. New uses of custom URL-backed source IDs must be
+approved by the UKM owners and go through UKM privacy review.
 
 ### Create Events
 
@@ -290,14 +349,14 @@ Helper objects for recording your event are generated from the descriptions in u
 void OnGoatTeleported() {
   ...
   ukm::builders::Goat_Teleported(source_id)
-      .SetDuration(duration.InSeconds())
+      .SetDurationSeconds(duration.InSeconds())
       .SetGoatType(goat_type)
       .Record(ukm_recorder);
 }
 
 // You can also use the UKM builder as an interim data structure.
 void OnKangarooJumped() {
-  ukm::builder::Kangaroo_Jumped builder(source_id);
+  ukm::builders::Kangaroo_Jumped builder(source_id);
   builder.SetJumpHeight(3)
       .SetJumpLength(4);
 
@@ -308,15 +367,41 @@ void OnKangarooJumped() {
 }
 ```
 
-If the event name in the XML contains a period (`.`), it is replaced with an underscore (`_`) in the method name.
+Periods (`.`) in XML event or metric names are replaced with underscores (`_`)
+in both the generated C++ builder class name (e.g.
+`ukm::builders::Goat_Teleported`) and metric setter/constant names (e.g.
+`SetSubPart_MetricName()`, `kSubPart_MetricNameName`).
 
-To avoid having UKM report becoming unbounded in size, an upper limit is placed on the number of events recorded for each event type. Events that are recorded too frequently may be subject to downsampling on the Stable and Beta channels (see [go/ukm-downsampling](http://go/ukm-downsampling)). As a rule of thumb, it is recommended that most events be recorded at most once per 100 page loads on average to limit data volume. In addition, if an event type is observed to be spammy, is heavily downsampled, or to account for more than 10% of all recorded UKM events combined on any platform, you will be asked to reduce the event emission frequency.
+To avoid having a UKM report become unbounded in size, an upper limit is placed on the number of events recorded for each event type. Events that are recorded too frequently may be subject to downsampling on the Stable and Beta channels (see Google-internal [go/ukm-downsampling](http://go/ukm-downsampling)). As a rule of thumb, it is recommended that most events be recorded at most once per 100 page loads on average to limit data volume. In addition, if an event type is observed to be spammy, is heavily downsampled, or accounts for more than 10% of all recorded UKM events combined on any platform, you will be asked to reduce the event emission frequency.
 
-For data quality purposes, if you have the option to record an event from either the browser process or a renderer process, prefer the former. Because renderer processes are not trusted, events recorded in them are more complex to attribute to the corresponding browser-side navigations. Prior to Chrome version 149.0.7812.0, this was done using the `DocumentCreated` event. Starting from Chrome version 149.0.7812.0, sources representing blink Documents directly contain their parent navigation URLs in the `resolved_urls` field (and the `DocumentCreated` event is no longer sent to server or recorded in UKM logs). This allows direct, simplified attribution without the limitations and query performance overhead of the legacy `DocumentCreated` join method (see [go/ukm-readable-guide](http://go/ukm-readable-guide#processing-events-attached-to-blink-document-sources)).
+For data quality purposes, if you have the option to record an event from either the browser process or a renderer process, prefer the former. Because renderer processes are not trusted, events recorded in them are more complex to attribute to the corresponding browser-side navigations. Prior to Chrome version 149.0.7812.0, this was done using the `DocumentCreated` event. Starting from Chrome version 149.0.7812.0, sources representing blink Documents directly contain their parent navigation URLs in the `resolved_urls` field (and the `DocumentCreated` event is no longer sent to server or recorded in UKM logs). This allows direct, simplified attribution without the limitations and query performance overhead of the legacy `DocumentCreated` join method (see Google-internal [go/ukm-readable-guide](http://go/ukm-readable-guide#processing-events-attached-to-blink-document-sources)).
+
+### Recording from Java (Android)
+
+In Android browser-process Java code, use `org.chromium.components.ukm.UkmRecorder`
+([/components/ukm/android/java/src/org/chromium/components/ukm/UkmRecorder.java](/components/ukm/android/java/src/org/chromium/components/ukm/UkmRecorder.java))
+with a non-null, non-destroyed `WebContents` on the UI thread:
+
+```java
+import org.chromium.components.ukm.UkmRecorder;
+
+new UkmRecorder(webContents, "Goat.Teleported")
+    .addMetric("DurationSeconds", durationSeconds)
+    .addBooleanMetric("TeleportSucceeded")
+    .record();
+```
+
+`addBooleanMetric(name)` records a boolean metric with an implied value of `1`
+(`true`).
 
 ### Singular UKM Events
 
-The Singular UKM Entry provides a type safe API for updating metric fields of an event where only the latest metric values are recorded. The Singular UKM Entry must be used and destroyed on the same sequence it was created. Currently, only recording from the browser process is supported.
+Unlike `singular="true"` in `ukm.xml` (which only controls server-side protobuf
+cardinality), `ukm::SingularUkmEntry` provides a client-side type-safe API for
+updating metric fields of an event over time so that only the latest entry is
+recorded once when `entry` is destroyed. The `SingularUkmEntry` and its
+`EntryBuilder`s must be used and destroyed on the same sequence where it was
+created. Currently, only recording from the browser process is supported.
 
 Example:
 
@@ -325,31 +410,34 @@ Example:
 #include "services/metrics/public/cpp/ukm_builders.h"
 
 // Create the SingularUkmEntry for an event.
-std::unique_ptr<SingularUkmEntry<ukm::builders::MyEvent>> entry =
-  SingularUkmEntry<ukm::builders::MyEvent>::Create(source_id);
+std::unique_ptr<ukm::SingularUkmEntry<ukm::builders::MyEvent>> entry =
+    ukm::SingularUkmEntry<ukm::builders::MyEvent>::Create(source_id);
 
 {
   // Create a builder for the entry to set the metrics.
-  SingularUkmEntry<ukm::builders::MyEvent>::EntryBuilder builder = entry->Builder();
+  ukm::SingularUkmEntry<ukm::builders::MyEvent>::EntryBuilder builder =
+      entry->Builder();
   builder->SetMyMetric(metric_value);
   // When `builder` goes out of scope, the constructed entry will be saved with the SingularUkmEntry.
 }
 
 {
-  SingularUkmEntry<ukm::builders::MyEvent>::EntryBuilder builder = entry->Builder();
+  ukm::SingularUkmEntry<ukm::builders::MyEvent>::EntryBuilder builder =
+      entry->Builder();
   builder->SetMyMetric(metric_value2);
 }
 ```
 
 The arrow operator (`->`) on a builder is used to set the desired metrics of an event. Once the `builder` is destroyed the newly constructed event is saved as the latest event. The last event, with metric `metric_value2`, is recorded by the UkmRecorder when `entry` is destroyed.
 
-Additional documentation can be found [here](https://cs.chromium.org/chromium/src/components/ukm/singular_ukm_entry.h).
+Additional documentation can be found in
+[/components/ukm/singular_ukm_entry.h](/components/ukm/singular_ukm_entry.h).
 
 ## Local Testing
 
-Build Chromium and run it with flags `--force-enable-metrics-reporting --metrics-upload-interval=N`. The first flag overrides metrics collection to be ON. The second flag means that locally collected metrics will be populated in a UKM report and uploaded every `N` seconds; You may want some small `N` if you are interested in seeing this behavior.
+Build Chromium and run it with flags `--force-enable-metrics-reporting --metrics-upload-interval=N`. The first flag overrides metrics collection to be ON. The second flag means that locally collected metrics will be populated in a UKM report and uploaded every `N` seconds; you may want some small `N` if you are interested in seeing this behavior. Serialized UKM logs can be viewed on `chrome://metrics-internals`. Passing `--export-ukm-logs-to-file=/tmp/ukm.json` makes that page show all logs closed since browser startup and exports them as JSON on browser shutdown.
 
-Then in the browser, go to `chrome://settings/syncSetup` and toggle "Make searches and browsing better" to be ON. If you're unable to do this, you can pass the command line flag `--force-msbb-setting-on-for-ukm` instead.
+Then in the browser, go to `chrome://settings/syncSetup` and toggle "Make searches and browsing better" to be ON. If you're unable to do this, you can pass the command line flag `--force-msbb-setting-on-for-ukm` instead. Make sure **no Incognito windows are open**, as any open Incognito window pauses UKM recording across all browser windows.
 
 You should now be seeing "Metrics Collection is ENABLED. MSBB consent is ENABLED" at the top of the `chrome://ukm` debugging page:
 
@@ -361,17 +449,17 @@ Trigger your event locally, refresh `chrome://ukm`, then double-check that your 
 
 ### Enable Console Debugging Messages
 
-If you're encountering issues concerning UKM user consent, recording events, or uploading UKM reports, you can enable console debugging logs by passing the command line flag `--vmodule=*components/ukm*=n` where `n` is the logging level number between 1 and 3, with the convention:
+If you're encountering issues concerning UKM user consent, recording events, or uploading UKM reports, you can enable console debugging logs by passing the command line flag `--vmodule=*ukm*=n` (which covers both `components/ukm/` and dropped-entry logging in `services/metrics/`). Because UKM uses `DVLOG` rather than `VLOG`, your local build must have `DCHECK`s enabled (`is_debug = true` or `dcheck_always_on = true` in `args.gn`). Here `n` is the logging level between 1 and 3:
 
-1: Infrequent actions such as changes to user consent, or actions that typically occur once per reporting cycle, e.g. serialization of locally recorded event data into one report and uploading the report to the UKM server.\
-2: Frequent and recurrent actions within each reporting period, such as an event being recorded, or a new browser navigation has occurred.\
-3: Very frequent and possibly spammy actions or checks, such as events being dropped due to disabled recording.
+1. Infrequent actions such as changes to user consent, or actions that typically occur once per reporting cycle, e.g. serialization of locally recorded event data into one report and uploading the report to the UKM server.
+2. Frequent and recurrent actions within each reporting period, such as an event being recorded, or a new browser navigation has occurred.
+3. Very frequent and possibly spammy actions or checks, such as events being dropped due to disabled recording.
 
 Setting a level `n` enables logging messages at all levels <= `n`.
 
-In case of doubt, or if you need a starting point to debug why `chrome://ukm` isn't showing any data in a local build, you can start with:
+In case of doubt, or if you need a starting point to debug why `chrome://ukm` isn't showing any data in a local build (with `DCHECK`s enabled), you can start with:
 ```bash
-./out/Default/chrome --force-enable-metrics-reporting --metrics-upload-interval=300 --vmodule=*components/ukm*=3
+./out/Default/chrome --force-enable-metrics-reporting --metrics-upload-interval=300 --vmodule=*ukm*=3
 ```
 
 ### When are Use Counter UKM events recorded?
@@ -385,17 +473,49 @@ In the above screenshot, the value in the right column is the web feature id.
 
 ## Unit Testing
 
-You can pass your code a `TestUkmRecorder` (see [//components/ukm/test_ukm_recorder.h](https://cs.chromium.org/chromium/src/components/ukm/test_ukm_recorder.h)) and then use the methods it provides to test that your data records correctly.
+For code that records via `ukm::UkmRecorder::Get()` in the browser process,
+instantiate a `ukm::TestAutoSetUkmRecorder` (from
+[/components/ukm/test_ukm_recorder.h](/components/ukm/test_ukm_recorder.h)),
+which automatically registers itself as the global `UkmRecorder` for its
+lifetime. If your code instead accepts an explicit `ukm::UkmRecorder*`, you can
+pass a `ukm::TestUkmRecorder` directly. Use the generated `kEntryName` and
+`k<Metric>Name` constants from `ukm_builders.h` to verify recorded entries:
+
+```cpp
+#include "components/ukm/test_ukm_recorder.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
+
+ukm::TestAutoSetUkmRecorder test_ukm_recorder;
+
+// Trigger the code under test...
+TeleportGoat();
+
+auto entries = test_ukm_recorder.GetEntriesByName(
+    ukm::builders::Goat_Teleported::kEntryName);
+ASSERT_EQ(entries.size(), 1u);
+test_ukm_recorder.ExpectEntrySourceHasUrl(entries[0],
+                                          GURL("https://example.com/"));
+test_ukm_recorder.ExpectEntryMetric(
+    entries[0], ukm::builders::Goat_Teleported::kDurationSecondsName, 5);
+```
 
 ## Adding UKMs in Every Report
 
-Certain information may be useful to be included on every uploaded UKM report. This may be applicable if your information is always "available" in some sense, as opposed to triggered/computed at a particular instance, which is the default. In this case, the best way to proceed is to set up a [MetricsProvider](https://source.chromium.org/chromium/src/components/metrics/metrics_provider.h). The new Provider should implement the `ProvideCurrentSessionUKMData()` method. Record a UKM Event within that implementation, and it will be recorded exactly once per UKM report, immediately before the information is uploaded.
+Certain information may be useful to be included on every uploaded UKM report. This may be applicable if your information is always "available" in some sense, as opposed to triggered/computed at a particular instance, which is the default. In this case, the best way to proceed is to set up a [MetricsProvider](/components/metrics/metrics_provider.h). The new Provider should implement the `ProvideCurrentSessionUKMData()` method and record the UKM event using `ukm::NoURLSourceId()` and `ukm::UkmRecorder::Get()`; it will be recorded once per UKM report immediately before the report is serialized for upload:
+
+```cpp
+void MyMetricsProvider::ProvideCurrentSessionUKMData() {
+  ukm::builders::MySessionEvent(ukm::NoURLSourceId())
+      .SetMyMetric(ComputeCurrentValue())
+      .Record(ukm::UkmRecorder::Get());
+}
+```
 
 ## Recording Information about Subframes URLs via Categorization
 
 The UKM infrastructure primarily supports recording metrics tied with navigation URLs as that is the basis of the consent model. As there is desire for information related to URLs loaded within a page itself (i.e. subframe URLs), here we describe an approach for how to record this via categorization.
 
-We are able to emit information related to subframe URLs within an UKM event as long as we don't capture the exact URL, but instead emit some categorical label, such as 'ad', or 'uses WebFramework1'. It may be possible for specific sites to be added as a category but this requires privacy review. In general, we prefer to avoid being specific about a site and suggest more general categorization instead.
+We are able to emit information related to subframe URLs within a UKM event as long as we don't capture the exact URL, but instead emit some categorical label, such as 'ad', or 'uses WebFramework1'. It may be possible for specific sites to be added as a category but this requires privacy review. In general, we prefer to avoid being specific about a site and suggest more general categorization instead.
 
 The full metrics will not be keyed off the subframe URL. Rather, the subframe URL data will be tied with the main frame URL, and it will be emitted as a custom metric. It is possible to emit these events multiple times if there are several subframe URLs with the properties we want to observe on the same page.
 
@@ -420,7 +540,8 @@ The full metrics will not be keyed off the subframe URL. Rather, the subframe UR
 </event>
 ```
 
-And in the UKM enums.xml:
+And in `enums.xml` (either `//tools/metrics/histograms/enums.xml` or a
+domain-specific `//tools/metrics/histograms/metadata/<domain>/enums.xml`):
 
 ```xml
 <enum name="WebFrameworkName">

@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">የይለፍ ቃላትን ያጋሩ</translation>
 <translation id="1554043146674176775">የሰው ሠራሽ አስተውሎት ሁነታን አጥፋ</translation>
 <translation id="1554477036522844996">አዲስ መስኮት</translation>
+<translation id="1555014818414775661">ምስሎችን አክል</translation>
 <translation id="1557806604681757705">የእርስዎ ኮምፒውተር</translation>
 <translation id="1558391695376153246">ማንነት የማያሳውቁ ትሮችን ዝጋ</translation>
 <translation id="1560153516220021659">የተሰበሰበ ሁለተኛ የመሣሪያ አሞሌ አዝራር</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832"><ph name="BEGIN_BOLD" />የSafari ቅንብሮች<ph name="END_BOLD" /> የሚለውን ይክፈቱ</translation>
 <translation id="3858860766373142691">ስም</translation>
 <translation id="386224966259596343">አግባብነት ያለው ቅጽ በሚሞሉበት በሚቀጥለው ጊዜ ይህን መረጃ ወደ Wallet የማስቀመጥ ዕድል ይኖርዎታል።</translation>
-<translation id="3868495844258915202">ሙሉውን ዩአርኤል አሳይ</translation>
 <translation id="3870931306085184145">ምንም የተቀመጡ የ<ph name="DOMAIN" /> የይለፍ ቃላት የሉም</translation>
 <translation id="3875783148670536197">እንዴት እንደሆነ አሳየኝ</translation>
 <translation id="3878657761594430423">ሉህ ያዢ</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">የዋጋ ክትትል ማሳወቂያዎችን ለማግኘት በእርስዎ iOS ቅንብሮች ውስጥ ማሳወቂያዎችን ያብሩ።</translation>
 <translation id="528857768909044842">የትር ቡድኖች እዚህ ይቀመጣሉ</translation>
 <translation id="5294624619177114121">የሞባይል ማሳወቂያዎች</translation>
-<translation id="5295239312320826323">የ<ph name="USER_EMAIL" /> መለያ ይወገድ?</translation>
 <translation id="5300589172476337783">አሳይ</translation>
 <translation id="5311061401280561833">የካሜራ እና የማይክሮፎን መዳረሻ ተፈቅዷል</translation>
 <translation id="5313967007315987356">ጣቢያ አክል</translation>
@@ -1788,6 +1787,7 @@ Handoff እንዲሁም በSettings ውስጥ ባለው የGeneral ክፍል ላ
 <translation id="6504541289630702018">የዴስክቶፕ ትር ቡድኖችዎን በቀላሉ ይድረሱ</translation>
 <translation id="6505334220040167806">የትር ቡድኑን ሰብስብ።</translation>
 <translation id="6506996418997555004">«<ph name="GROUP_NAME" />» የትር ቡድንን ያጋሩ</translation>
+<translation id="650770261448122895">በሌንስ የሚያዩትን ይፈልጉ</translation>
 <translation id="6507973708545996744">የንባብ ዝርዝርዎን በሁሉም መሣሪያዎችዎ ላይ ለማግኘት በመለያ ይግቡ።</translation>
 <translation id="6518133107902771759">አረጋግጥ</translation>
 <translation id="6523575793810663688">እንዴት እንደሆነ አሳየኝ</translation>
@@ -2147,7 +2147,6 @@ Handoff እንዲሁም በSettings ውስጥ ባለው የGeneral ክፍል ላ
 <translation id="7603852183842204213">ብቅ-ባዮች ታግደዋል (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">ስምረት እየሠራ አይደለም</translation>
 <translation id="760667371114328991">ለደህንነት ፍተሻ ማሳወቂያዎችን አጥፋ</translation>
-<translation id="7612619742409846846">እንደሚከተለው ሆነው ወደ Google ይግቡ፦</translation>
 <translation id="7612849887607288481">የሰው ሠራሽ አስተውሎት ፕሮቶታይፕ መስራት ምናሌን ክፈት</translation>
 <translation id="7618220760967055820">በመሣሪያ አሞሌው ውስጥ ምን አዝራር እንደሚያሳይ ይምረጡ</translation>
 <translation id="7620522820075868385">ይቅር</translation>
@@ -2430,6 +2429,7 @@ Handoff እንዲሁም በSettings ውስጥ ባለው የGeneral ክፍል ላ
 <translation id="8439758443371991593">ወደ የንባብ ዝርዝር አክልን ደብቅ</translation>
 <translation id="8443986842926457191">ዩአርኤል ከ2048 ቁምፊዎች በላይ ነው</translation>
 <translation id="8449869326050867919">የይለፍ ቃል ተጋርቷል</translation>
+<translation id="8473367210869452063">ከዚህ ጣቢያ ጋር መስተጋብር ለመፍጠር የአሁኑን ተግባር ያቁሙ ወይም Gemini ሥራውን እስኪጨርስ ይጠብቁ</translation>
 <translation id="8473815223723723001">ምስልን በGemini አርትዕ</translation>
 <translation id="8473863474539038330">አድራሻዎች እና ተጨማሪ</translation>
 <translation id="8474378002946546633">ማሳወቂያዎችን ፍቀድ</translation>

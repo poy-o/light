@@ -136,15 +136,6 @@ bool IsPageActionMenuAuthFlowEnabled() {
          base::FeatureList::IsEnabled(kPageActionMenuAuthFlow);
 }
 
-BASE_FEATURE(kProactiveSuggestionsFramework, base::FEATURE_ENABLED_BY_DEFAULT);
-
-bool IsProactiveSuggestionsFrameworkEnabled() {
-  if (!IsPageActionMenuEnabled()) {
-    return false;
-  }
-  return base::FeatureList::IsEnabled(kProactiveSuggestionsFramework);
-}
-
 BASE_FEATURE(kAskGeminiChipIgnoreCriteria, base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsAskGeminiChipIgnoreCriteriaEnabled() {
@@ -358,6 +349,8 @@ bool IsGeminiEligibilityAblationEnabled() {
 
 BASE_FEATURE(kGeminiLive, base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kEnableGeminiLiveInBottomSheet, base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE_PARAM(bool,
                    kGeminiLiveSkipIntro,
                    &kGeminiLive,
@@ -372,6 +365,12 @@ BASE_FEATURE_PARAM(bool,
 
 bool IsGeminiLiveEnabled() {
   if (!IsPageActionMenuEnabled()) {
+    return false;
+  }
+  // Disable live for users with IOSGeminiBottomSheetMigration unless
+  // explicitly enabled.
+  if (IsIOSGeminiBottomSheetMigrationEnabled() &&
+      !base::FeatureList::IsEnabled(kEnableGeminiLiveInBottomSheet)) {
     return false;
   }
   return base::FeatureList::IsEnabled(kGeminiLive);
@@ -581,6 +580,8 @@ bool IsActorOriginGatingEnabled() {
 
 const char kActorOriginGatingExplicitParam[] = "gate_explicit_navigation";
 const char kActorOriginGatingImplicitParam[] = "gate_implicit_navigation";
+const char kActorOriginGatingPromptUserForNavigationToNewOriginsParam[] =
+    "prompt_user_for_navigation_to_new_origins";
 
 BASE_FEATURE_PARAM(bool,
                    kActorOriginGatingExplicitFeatureParam,
@@ -594,6 +595,12 @@ BASE_FEATURE_PARAM(bool,
                    kActorOriginGatingImplicitParam,
                    true);  // Default to true when kActorOriginGating is enabled
 
+BASE_FEATURE_PARAM(bool,
+                   kActorOriginGatingPromptUserForNavigationToNewOrigins,
+                   &kActorOriginGating,
+                   kActorOriginGatingPromptUserForNavigationToNewOriginsParam,
+                   false);
+
 bool IsActorOriginGatingForExplicitNavigationEnabled() {
   return IsActorOriginGatingEnabled() &&
          kActorOriginGatingExplicitFeatureParam.Get();
@@ -602,6 +609,11 @@ bool IsActorOriginGatingForExplicitNavigationEnabled() {
 bool IsActorOriginGatingForImplicitNavigationEnabled() {
   return IsActorOriginGatingEnabled() &&
          kActorOriginGatingImplicitFeatureParam.Get();
+}
+
+bool ShouldPromptUserForActorNavigationToNewOrigins() {
+  return IsActorOriginGatingEnabled() &&
+         kActorOriginGatingPromptUserForNavigationToNewOrigins.Get();
 }
 
 BASE_FEATURE(kActorBackgroundedSceneRenderingMode,
@@ -1097,4 +1109,10 @@ BASE_FEATURE(kGeminiNativeHeader, base::FEATURE_DISABLED_BY_DEFAULT);
 bool IsGeminiNativeHeaderEnabled() {
   return IsIOSGeminiBottomSheetMigrationEnabled() &&
          base::FeatureList::IsEnabled(kGeminiNativeHeader);
+}
+
+BASE_FEATURE(kGeminiModelQualityClientID, base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool IsGeminiModelQualityClientIDEnabled() {
+  return base::FeatureList::IsEnabled(kGeminiModelQualityClientID);
 }

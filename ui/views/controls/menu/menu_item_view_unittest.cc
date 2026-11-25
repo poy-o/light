@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/auto_reset.h"
 #include "base/memory/raw_ptr.h"
@@ -106,6 +107,48 @@ TEST_F(MenuItemViewUnitTest, AppendMenuItemSeparator) {
   EXPECT_EQ(submenu->GetMenuItems().size(), 2u);
   EXPECT_EQ(submenu->GetMenuItems()[0], item1);
   EXPECT_EQ(submenu->GetMenuItems()[1], item2);
+}
+
+TEST_F(MenuItemViewUnitTest, HighlightRanges) {
+  views::TestMenuItemView root_menu;
+  MenuItemView* item = root_menu.AppendMenuItem(1, u"New Tab");
+  EXPECT_TRUE(item->highlight_ranges().empty());
+
+  ViewTestApi(item).ClearNeedsPaint();
+  item->SetHighlightRanges({gfx::Range(0, 3)});
+  EXPECT_EQ(item->highlight_ranges(), std::vector({gfx::Range(0, 3)}));
+  EXPECT_TRUE(ViewTestApi(item).needs_paint());
+
+  // Invalid, empty, reversed, and out-of-bounds ranges are filtered out before
+  // checking whether the effective ranges changed.
+  ViewTestApi(item).ClearNeedsPaint();
+  item->SetHighlightRanges({gfx::Range::InvalidRange(), gfx::Range(0, 3),
+                            gfx::Range(3, 0), gfx::Range(2, 2),
+                            gfx::Range(4, 8), gfx::Range(7, 10)});
+  EXPECT_EQ(item->highlight_ranges(), std::vector({gfx::Range(0, 3)}));
+  EXPECT_FALSE(ViewTestApi(item).needs_paint());
+
+  // Passing only out-of-bounds ranges clears active highlights.
+  ViewTestApi(item).ClearNeedsPaint();
+  item->SetHighlightRanges({gfx::Range(4, 8), gfx::Range(7, 10)});
+  EXPECT_TRUE(item->highlight_ranges().empty());
+  EXPECT_TRUE(ViewTestApi(item).needs_paint());
+
+  // Calling SetTitle with the same title preserves highlight_ranges, while a
+  // different title clears them.
+  item->SetHighlightRanges({gfx::Range(0, 3), gfx::Range(5, 7)});
+  item->SetTitle(u"New Tab");
+  EXPECT_EQ(item->highlight_ranges(),
+            std::vector({gfx::Range(0, 3), gfx::Range(5, 7)}));
+  item->SetTitle(u"Close Tab");
+  EXPECT_TRUE(item->highlight_ranges().empty());
+
+  // Clearing active ranges with `{}` schedules a paint.
+  item->SetHighlightRanges({gfx::Range(0, 5)});
+  ViewTestApi(item).ClearNeedsPaint();
+  item->SetHighlightRanges({});
+  EXPECT_TRUE(item->highlight_ranges().empty());
+  EXPECT_TRUE(ViewTestApi(item).needs_paint());
 }
 
 namespace {
@@ -1117,9 +1160,10 @@ TEST_F(MenuItemViewPaintUnitTest, DontSchedulePaintFromOnPaint) {
   EXPECT_FALSE(ViewTestApi(submenu_arrow_image_view).needs_paint());
 }
 
-TEST_F(MenuItemViewPaintUnitTest, HighlightRangePaintCoverage) {
+TEST_F(MenuItemViewPaintUnitTest, HighlightRangesPaintCoverage) {
   MenuItemView* item = menu_item_view()->AppendMenuItem(1, u"New Tab");
-  EXPECT_FALSE(item->highlight_range().IsValid());
+  // Add a wider sibling so bolding doesn't elide the second word in `item`.
+  menu_item_view()->AppendMenuItem(2, u"New Tab Wider Sibling");
 
   menu_runner()->RunMenuAt(widget(), nullptr, gfx::Rect(),
                            MenuAnchorPosition::kTopLeft,
@@ -1133,35 +1177,21 @@ TEST_F(MenuItemViewPaintUnitTest, HighlightRangePaintCoverage) {
 
   const SkBitmap unhighlighted = paint();
 
-  ViewTestApi(item).ClearNeedsPaint();
-  item->SetHighlightRange(gfx::Range(0, 3));
-  EXPECT_EQ(item->highlight_range(), gfx::Range(0, 3));
-  EXPECT_TRUE(ViewTestApi(item).needs_paint());
-  const SkBitmap highlighted = paint();
-  EXPECT_FALSE(gfx::BitmapsAreEqual(unhighlighted, highlighted));
+  item->SetHighlightRanges({gfx::Range(0, 3)});
+  const SkBitmap single_highlighted = paint();
+  EXPECT_FALSE(gfx::BitmapsAreEqual(unhighlighted, single_highlighted));
 
-  ViewTestApi(item).ClearNeedsPaint();
-  item->SetHighlightRange(gfx::Range(0, 3));
-  EXPECT_FALSE(ViewTestApi(item).needs_paint());
+  // Multiple disjoint ranges bold each range regardless of order.
+  item->SetHighlightRanges({gfx::Range(0, 3), gfx::Range(5, 7)});
+  const SkBitmap multi_highlighted = paint();
+  EXPECT_FALSE(gfx::BitmapsAreEqual(unhighlighted, multi_highlighted));
+  EXPECT_FALSE(gfx::BitmapsAreEqual(single_highlighted, multi_highlighted));
 
-  item->SetHighlightRange(gfx::Range());
-  EXPECT_FALSE(item->highlight_range().IsValid());
+  item->SetHighlightRanges({gfx::Range(5, 7), gfx::Range(0, 3)});
+  EXPECT_TRUE(gfx::BitmapsAreEqual(multi_highlighted, paint()));
+
+  item->SetHighlightRanges({});
   EXPECT_TRUE(gfx::BitmapsAreEqual(unhighlighted, paint()));
-
-  item->SetHighlightRange(gfx::Range(3, 0));
-  EXPECT_FALSE(item->highlight_range().IsValid());
-  EXPECT_TRUE(gfx::BitmapsAreEqual(unhighlighted, paint()));
-
-  item->SetHighlightRange(gfx::Range(0, 100));
-  EXPECT_TRUE(gfx::BitmapsAreEqual(unhighlighted, paint()));
-
-  // Calling SetTitle with the same title preserves highlight_range, while a
-  // different title resets it.
-  item->SetHighlightRange(gfx::Range(0, 3));
-  item->SetTitle(u"New Tab");
-  EXPECT_EQ(item->highlight_range(), gfx::Range(0, 3));
-  item->SetTitle(u"Close Tab");
-  EXPECT_FALSE(item->highlight_range().IsValid());
 }
 
 // Tests that the selection highlight doesn't cover the background's padding,
@@ -1201,6 +1231,25 @@ TEST_F(MenuItemViewPaintUnitTest, HighlightSkipsBackgroundPadding) {
   // corner pixel is outside the curve, and a pixel just inside is highlighted.
   EXPECT_FALSE(is_highlighted(0, kPadding));
   EXPECT_TRUE(is_highlighted(2, kPadding));
+}
+
+// Tests that a drag image of a menu item has the menu background, as nothing
+// else paints one behind it. Without it, the text alone may be unreadable over
+// the content below the drag (e.g. light text in dark mode over a light page).
+TEST_F(MenuItemViewPaintUnitTest, PaintForDragPaintsMenuBackground) {
+  MenuItemView* item = menu_item_view()->AppendMenuItem(1, u"Item");
+
+  menu_runner()->RunMenuAt(widget(), nullptr, gfx::Rect(),
+                           MenuAnchorPosition::kTopLeft,
+                           ui::mojom::MenuSourceType::kKeyboard);
+
+  const SkColor background =
+      item->GetColorProvider()->GetColor(ui::kColorMenuBackground);
+  ASSERT_EQ(SkColorGetA(background), SK_AlphaOPAQUE);
+
+  gfx::Canvas canvas(item->size(), 1.f, /*is_opaque=*/false);
+  TestMenuItemView::PaintForDragForTesting(item, &canvas);
+  EXPECT_EQ(background, canvas.GetBitmap().getColor(0, 0));
 }
 
 TEST_F(MenuItemViewPaintUnitTest, SelectionIconColors) {
@@ -1255,6 +1304,119 @@ TEST_F(MenuItemViewPaintUnitTest, SelectionIconColors) {
                                                  ->GetImageModel()
                                                  .GetVectorIcon()
                                                  .color());
+}
+
+TEST_F(MenuItemViewPaintUnitTest,
+       SetIconAppliesDisabledAndSelectedColorWhileShowing) {
+  MenuItemView* disabled_item =
+      menu_item_view()->AppendMenuItem(1, u"disabled");
+  disabled_item->SetEnabled(false);
+
+  MenuItemView* selected_item =
+      menu_item_view()->AppendMenuItem(2, u"selected");
+
+  menu_runner()->RunMenuAt(widget(), nullptr, gfx::Rect(),
+                           MenuAnchorPosition::kTopLeft,
+                           ui::mojom::MenuSourceType::kMouse);
+  selected_item->SetForcedVisualSelection(true);
+
+  const ui::ColorProvider* color_provider = disabled_item->GetColorProvider();
+  const SkColor disabled_color =
+      color_provider->GetColor(ui::kColorMenuIconDisabled);
+  const SkColor selected_color = color_utils::DeriveDefaultIconColor(
+      color_provider->GetColor(ui::kColorMenuItemForegroundSelected));
+  const SkColor normal_color = color_provider->GetColor(ui::kColorMenuIcon);
+  ASSERT_NE(disabled_color, normal_color);
+  ASSERT_NE(selected_color, normal_color);
+
+  const ui::ImageModel icon = ui::ImageModel::FromVectorIcon(
+      features::IsRoundedIconsEnabled() ? kCheckSmallIcon
+                                        : views::kMenuCheckOldIcon,
+      ui::kColorMenuIcon);
+  disabled_item->SetIcon(icon);
+  selected_item->SetIcon(icon);
+
+  ASSERT_TRUE(disabled_item->icon_view());
+  EXPECT_EQ(disabled_item->icon_view()
+                ->GetImageModel()
+                .GetVectorIcon()
+                .color()
+                .ResolveToSkColor(color_provider),
+            disabled_color);
+  ASSERT_TRUE(selected_item->icon_view());
+  EXPECT_EQ(selected_item->icon_view()
+                ->GetImageModel()
+                .GetVectorIcon()
+                .color()
+                .ResolveToSkColor(color_provider),
+            selected_color);
+}
+
+TEST_F(MenuItemViewPaintUnitTest,
+       SetEnabledUpdatesIconAndSubmenuArrowColorsWhileShowing) {
+  MenuItemView* icon_item = menu_item_view()->AppendMenuItem(1, u"icon item");
+  icon_item->SetIcon(ui::ImageModel::FromVectorIcon(
+      features::IsRoundedIconsEnabled() ? kCheckSmallIcon
+                                        : views::kMenuCheckOldIcon,
+      ui::kColorMenuIcon));
+  MenuItemView* submenu_item =
+      menu_item_view()->AppendSubMenu(2, u"submenu item");
+
+  menu_runner()->RunMenuAt(widget(), nullptr, gfx::Rect(),
+                           MenuAnchorPosition::kTopLeft,
+                           ui::mojom::MenuSourceType::kMouse);
+
+  const ui::ColorProvider* color_provider = icon_item->GetColorProvider();
+  const SkColor enabled_icon_color =
+      color_provider->GetColor(ui::kColorMenuIcon);
+  const SkColor disabled_icon_color =
+      color_provider->GetColor(ui::kColorMenuIconDisabled);
+  const SkColor enabled_arrow_color = color_utils::DeriveDefaultIconColor(
+      color_provider->GetColor(ui::kColorMenuItemForeground));
+  const SkColor disabled_arrow_color = color_utils::DeriveDefaultIconColor(
+      color_provider->GetColor(ui::kColorMenuItemForegroundDisabled));
+  ASSERT_NE(enabled_icon_color, disabled_icon_color);
+  ASSERT_NE(enabled_arrow_color, disabled_arrow_color);
+
+  ImageView* submenu_arrow =
+      TestMenuItemView::submenu_arrow_image_view(submenu_item);
+  ASSERT_TRUE(submenu_arrow);
+  EXPECT_EQ(icon_item->icon_view()
+                ->GetImageModel()
+                .GetVectorIcon()
+                .color()
+                .ResolveToSkColor(color_provider),
+            enabled_icon_color);
+  EXPECT_EQ(
+      submenu_arrow->GetImageModel().GetVectorIcon().color().ResolveToSkColor(
+          color_provider),
+      enabled_arrow_color);
+
+  icon_item->SetEnabled(false);
+  submenu_item->SetEnabled(false);
+  EXPECT_EQ(icon_item->icon_view()
+                ->GetImageModel()
+                .GetVectorIcon()
+                .color()
+                .ResolveToSkColor(color_provider),
+            disabled_icon_color);
+  EXPECT_EQ(
+      submenu_arrow->GetImageModel().GetVectorIcon().color().ResolveToSkColor(
+          color_provider),
+      disabled_arrow_color);
+
+  icon_item->SetEnabled(true);
+  submenu_item->SetEnabled(true);
+  EXPECT_EQ(icon_item->icon_view()
+                ->GetImageModel()
+                .GetVectorIcon()
+                .color()
+                .ResolveToSkColor(color_provider),
+            enabled_icon_color);
+  EXPECT_EQ(
+      submenu_arrow->GetImageModel().GetVectorIcon().color().ResolveToSkColor(
+          color_provider),
+      enabled_arrow_color);
 }
 
 // Tests to ensure that selection based state is not updated if a menu item or

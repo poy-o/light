@@ -355,7 +355,13 @@ class BubbleDialogDelegate::AnchorWidgetObserver : public WidgetObserver,
   void OnWidgetThemeChanged(Widget* widget) override {
     // TODO(dfried): Consider merging BubbleWidget with ThemeCopyingWidget
     // instead of observing the theme here.
-    owner_->GetWidget()->ThemeChanged();
+    //
+    // `bubble_widget` can be null or closed because the anchor widget is
+    // observed before the bubble's widget is created and after it closes.
+    Widget* const bubble_widget = owner_->GetWidget();
+    if (bubble_widget && !bubble_widget->IsClosed()) {
+      bubble_widget->ThemeChanged();
+    }
   }
 
 #if !BUILDFLAG(IS_MAC)
@@ -816,11 +822,11 @@ void BubbleDialogDelegate::SetResolvedHighlightedElement(
 }
 
 void BubbleDialogDelegate::SetBackgroundColor(ui::ColorVariant color) {
-  if (color_ == color) {
+  if (background_color_ == color) {
     return;
   }
 
-  color_ = color;
+  background_color_ = color;
   if (GetWidget()) {
     UpdateFrameColor();
   }
@@ -1075,8 +1081,15 @@ gfx::Rect BubbleDialogDelegate::GetBubbleBounds() {
   gfx::Rect anchor_rect = GetAnchorRect();
   bool has_anchor = GetAnchorView() || anchor_rect != gfx::Rect();
 
+  // Even on platforms where `PlatformStyle::kAdjustBubbleIfOffscreen` is false
+  // (Linux), a bubble hosted inside another widget's root window (e.g. X11) is
+  // clipped to that window and should adjust unless explicitly disabled.
+  const bool adjust_hosted_bubble =
+      !adjust_if_offscreen_explicitly_set_ &&
+      GetBubbleFrameView()->GetHostedRootWindowBounds().has_value();
   bool adjust_to_fix_available_bounds =
-      adjust_if_offscreen_ && !anchor_minimized && has_anchor;
+      (adjust_if_offscreen_ || adjust_hosted_bubble) && !anchor_minimized &&
+      has_anchor;
 
   return GetBubbleFrameView()->GetUpdatedWindowBounds(
       anchor_rect, arrow(), GetWidget()->client_view()->GetPreferredSize({}),

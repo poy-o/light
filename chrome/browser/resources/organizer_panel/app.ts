@@ -52,6 +52,7 @@ export class OrganizerPanelAppElement extends CrLitElement {
       shortcut_: {type: String},
       sectionDelegates_: {type: Array},
       searchQuery_: {type: String},
+      showEscHint_: {type: Boolean},
       inTrayView: {
         type: Boolean,
         reflect: true,
@@ -65,6 +66,11 @@ export class OrganizerPanelAppElement extends CrLitElement {
   protected accessor sectionDelegates_:
       Array<OrganizerListSectionDelegate<unknown>> =
           this.getSectionDelegates_();
+
+  // VoiceOver ignores aria-description on the dialog host when focus jumps to
+  // the search input, so attach the Escape hint to the input until it blurs and
+  // reset it when the panel hides.
+  protected accessor showEscHint_: boolean = true;
 
   private browserProxy_: BrowserProxy = browserProxyFactory.getInstance();
   private inTrayViewChangedListenerId_: number|null = null;
@@ -97,8 +103,11 @@ export class OrganizerPanelAppElement extends CrLitElement {
   };
   private onWindowFocused_: () => void = () => {
     // Autofocus only works when the window is initially shown; for subsequent
-    // focus events, focus the search field.
-    this.$.searchField.showAndFocus();
+    // focus events, focus the search field unless an element inside the panel
+    // already received focus (e.g. reverse tab traversal from native Views).
+    if (!this.shadowRoot.activeElement) {
+      this.$.searchField.getSearchInput().focus();
+    }
   };
   private onContextMenu_: (e: MouseEvent) => void = (e: MouseEvent) => {
     e.preventDefault();
@@ -110,7 +119,11 @@ export class OrganizerPanelAppElement extends CrLitElement {
       this.$.searchField.setValue('');
       this.searchQuery_ = '';
       this.hasRecordedSearch_ = false;
+      this.showEscHint_ = true;
       this.$.list.scrollTop = 0;
+      if (this.shadowRoot.activeElement instanceof HTMLElement) {
+        this.shadowRoot.activeElement.blur();
+      }
     } else if (document.visibilityState === 'visible' && this.hasBeenHidden_) {
       this.hasBeenHidden_ = false;
       this.notifyShowUiWhenReady_(() => this.$.list.reloadSections());
@@ -206,6 +219,12 @@ export class OrganizerPanelAppElement extends CrLitElement {
 
   protected onSearchFieldClick_() {
     this.$.searchField.getSearchInput().focus();
+  }
+
+  protected onSearchFieldFocusout_() {
+    if (document.visibilityState !== 'hidden') {
+      this.showEscHint_ = false;
+    }
   }
 }
 

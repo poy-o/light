@@ -54,6 +54,7 @@ Vissa funktioner kanske inte är tillgängliga och ändringar i inställningarna
 <translation id="1572572333538561328">Öppna AI-läget i Sök igen</translation>
 <translation id="1574377791422810894">Säkerhetsverktyg i Chromium</translation>
 <translation id="1594928384848033697">Chromium vill radera din data i Lösenordshantering. Skriv ditt Windows-lösenord om du vill tillåta detta.</translation>
+<translation id="1599690375407103815">När inställningen är inaktiverad tar Chromium bort AI-modeller på enheten och laddar inte ned dem igen. Vissa webbplatser och Chromium-funktioner kanske inte fungerar.</translation>
 <translation id="1607715478322902680">{COUNT,plural, =0{Administratören meddelar att du måste starta om Chromium så att en uppdatering tillämpas}=1{Administratören meddelar att du måste starta om Chromium så att en uppdatering tillämpas. Inkognitofönstret öppnas inte igen.}other{Administratören meddelar att du måste starta om Chromium så att en uppdatering tillämpas. De # inkognitofönstren öppnas inte igen.}}</translation>
 <translation id="1625909126243026060">Granska viktiga integritets- och säkerhetskontroller i Chromium</translation>
 <translation id="1640672724030957280">Hämtar ...</translation>
@@ -68,6 +69,7 @@ Vissa funktioner kanske inte är tillgängliga och ändringar i inställningarna
 <translation id="1745121272106313518">Chromium startas om om <ph name="REMAINING_TIME" /></translation>
 <translation id="1749104137266986751">När HTTPS inte är tillgängligt använder Chromium en osäker anslutning utan att varna dig</translation>
 <translation id="1774152462503052664">Låt Chromium köras i bakgrunden</translation>
+<translation id="1792680680989393197">Du kan ta bort dem när som helst. Chromium kan ladda ned dem igen automatiskt när en webbplats eller funktion behöver dem.</translation>
 <translation id="1793486931176048546">Klicka på <ph name="BEGIN_BOLD" />Ja<ph name="END_BOLD" /> i Windows-aviseringen för att fästa Chromium i aktivitetsfältet för snabb åtkomst.</translation>
 <translation id="1808667845054772817">Installera om Chromium</translation>
 <translation id="1820835682567584003">Chromium försöker att <ph name="AUTHENTICATION_PURPOSE" /></translation>
@@ -125,7 +127,6 @@ Vissa funktioner kanske inte är tillgängliga och ändringar i inställningarna
 <translation id="2287771843518581140">{NUM_TABS,plural, =1{Chromium rekommenderar att du pausar fliken som saktar ned webbläsaren}other{Chromium rekommenderar att du pausar flikarna som saktar ned webbläsaren}}</translation>
 <translation id="2307973900865360088">Behåll i dockan</translation>
 <translation id="2313870531055795960">Kontrollera webbadresser mot en lista över osäkra webbplatser i Chromium. Om du utsätts för försök att kapa ditt lösenord på en webbplats eller om du laddar ned en skadlig fil kan webbadresserna skickas från Chromium till Säker webbsökning tillsammans med delar av sidinnehållet.</translation>
-<translation id="2350411688004301551">Byt till Gemini Enterprise</translation>
 <translation id="2356070529366658676">Fråga</translation>
 <translation id="2359808026110333948">Fortsätt</translation>
 <translation id="2361918034042471035">Tillägget <ph name="EXTENSION_NAME" /> vill att du ska logga in i Chromium</translation>
@@ -149,6 +150,7 @@ Vissa funktioner kanske inte är tillgängliga och ändringar i inställningarna
 <translation id="2572494885440352020">Hjälp för Chromium</translation>
 <translation id="2575822587468774919">Välj vad du vill söka efter med bildsökning</translation>
 <translation id="2576118232315942160">Logga in i Chromium om du vill få tillgång till dina lösenord med mera på alla dina enheter</translation>
+<translation id="2587622539943955767">Skanna QR-koden med telefonen för att ladda ned Chromium och logga in på ditt Google-konto.</translation>
 <translation id="2587885422541096572">för att söka med Chromium.</translation>
 <translation id="2592940277904433508">Fortsätt att använda Chromium</translation>
 <translation id="259935314519650377">Det gick inte att cachelagra det nedladdade installationsprogrammet. Fel: <ph name="UNPACK_CACHING_ERROR_CODE" />.</translation>
@@ -174,7 +176,6 @@ Vissa funktioner kanske inte är tillgängliga och ändringar i inställningarna
 <translation id="2846251086934905009">Installationsfel: Installationsprogrammet slutfördes inte. Installationen har avbrutits.</translation>
 <translation id="2850691299438350830">Skyddar dig i Chromium och kan användas för förbättrad säkerhet i andra Google-appar där du är inloggad.</translation>
 <translation id="2885378588091291677">Aktivitetshanteraren</translation>
-<translation id="2898830646167954300">Byt tillbaka till din ohanterade Gemini-assistent</translation>
 <translation id="2910007522516064972">Om &amp;Chromium</translation>
 <translation id="2915996080311180594">Starta om senare</translation>
 <translation id="2933336679234709858">Din data krypteras med lösenfrasen. Ange den om du vill använda och spara Chromium-data i ditt Google-konto.</translation>
@@ -253,6 +254,7 @@ Vissa funktioner kanske inte är tillgängliga och ändringar i inställningarna
 <translation id="3751920144677881410">Med knappen Sök i sidopanelen i verktygsfältet kan du öppna Sök i sidopanelen för att ställa frågor medan du surfar</translation>
 <translation id="3788675262216168505">Hantera Chromium-profiler</translation>
 <translation id="3790262771324122253">Läs mer om varför vissa nedladdningar blockeras i Chromium</translation>
+<translation id="3793196697433239004">Använder enhetens lagringsutrymme. Chromium tar bort AI-modeller som inte används efter 45 dagar eller när lagringsutrymmet är lågt.</translation>
 <translation id="379589255253486813">Chromium meddelar dig om något behöver granskas</translation>
 <translation id="3802055581630249637">Sidor som du troligen kommer att besöka läses in i förväg i Chromium så att de läses in snabbare när du besöker dem</translation>
 <translation id="3810973564298564668">Hantera</translation>
@@ -334,6 +336,7 @@ Vissa funktioner kanske inte är tillgängliga och ändringar i inställningarna
 <translation id="4621240073146040695">Nästan klart! Slutför uppdateringen genom att starta om Chromium.</translation>
 <translation id="4625064703209785397">Detta gör webbplatser snabbare med Chromiums V8-motor men Chromium blir något mindre motståndskraftigt mot attacker</translation>
 <translation id="4626321472657185181">Öppna sökning med Chromium</translation>
+<translation id="4639628733881319833">Dela en skärmbild av innehåll utanför Chromium, som andra appar eller filer</translation>
 <translation id="4654639495249754755">Chromium-profil</translation>
 <translation id="4665829708273112819">Varning! Chromium kan inte förhindra att tillägg registrerar din webbhistorik. Om du vill inaktivera det här tillägget i inkognitoläge avmarkerar du det här alternativet.</translation>
 <translation id="4673151026126227699">Om du även delar Chromium-användningsrapporter ingår webbadresserna du besöker i dessa rapporter</translation>
@@ -360,7 +363,6 @@ Vissa funktioner kanske inte är tillgängliga och ändringar i inställningarna
 <translation id="4950660488495335294">Du kan hålla dina saker i Chromium åtskilda med hjälp av Chromium-profiler. Skapa profiler för vänner och familjemedlemmar eller dela upp jobb och nöje.</translation>
 <translation id="4992938037305302429">Ditt konto i Chromium</translation>
 <translation id="5123973130450702873">Chromium behöver behörighet för handspårning</translation>
-<translation id="5139546603444206048">Du kan byta till Gemini-assistenten som ursprungligen var kopplad till ditt Google-konto och som inte hanteras av <ph name="DOMAIN" />. Svaren kommer inte längre att baseras på filer eller tjänster som hanteras av <ph name="DOMAIN" /> och din chatthistorik överförs inte. Den kanske inte är lämplig att använda i arbetet. Om du vill byta måste du starta om Chromium.</translation>
 <translation id="5141988424377517949">Du har inte besökt webbplatsen på sistone. Chromium har tagit bort <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> och <ph name="PERMISSION_3" />.</translation>
 <translation id="5171868502429358653">Logga in i Chromium</translation>
 <translation id="5174969993834422967">Du brukar blockera aviseringar. Klicka på aviseringsikonen uppe till höger om platsfältet om du vill tillåta aviseringar från webbplatsen.</translation>
@@ -392,6 +394,7 @@ Vissa funktioner kanske inte är tillgängliga och ändringar i inställningarna
 <translation id="5405650547142096840">Ta bort från Chromium</translation>
 <translation id="5424544524441439284">Minskar prestandan men gör Chromium mer motståndskraftig mot attacker</translation>
 <translation id="5427571867875391349">Använd Chromium som standardwebbläsare</translation>
+<translation id="5435079900593041559">Visa Sök med Chromium i aktivitetsfältet i Windows och aktivera kortkommandot</translation>
 <translation id="5438241569118040789"><ph name="PAGE_TITLE" /> – Chromium Beta</translation>
 <translation id="5460618461609401056">{NUM_TABS,plural, =1{Chromium rekommenderar att du pausar fliken som saktar ned webbläsaren}other{Chromium rekommenderar att du pausar flikarna som saktar ned webbläsaren}}</translation>
 <translation id="5473971139929175403">Chromium kanske inte fungerar ordentligt eftersom det inte längre stöds på den här Linux-distributionen</translation>
@@ -418,6 +421,7 @@ Om sidan inte fungerar som förväntat kan du testa att tillåta optimering.</tr
 <translation id="5690427481109656848">Google LLC</translation>
 <translation id="5698481217667032250">Visa Chromium på det här språket</translation>
 <translation id="569897634095159764">Det går inte att ansluta till internet. Proxyservern kräver autentisering.</translation>
+<translation id="5755377560105094542">Webbplatser och Chromium kan använda AI som körs direkt på enheten för funktioner som sammanfattningar, korrekturläsning, textning med mera. Detta sker separat från Gemini i Chromium. <ph name="BEGIN_LINK" />Läs mer om AI på enheten<ph name="END_LINK" /></translation>
 <translation id="5762954990778294910">Med knappen Sökpanel i verktygsfältet kan du öppna sökpanelen igen för att ställa frågor medan du surfar</translation>
 <translation id="5768371961535086509">Chromium frigör minne från inaktiva flikar. Detta förser aktiva flikar och andra appar med mer av datorns resurser, vilket gör att Chromium fortsätter att fungera snabbt. De inaktiva flikarna aktiveras automatiskt när du återvänder till dem. <ph name="BEGIN_LINK" />Läs mer om minnessparläget<ph name="END_LINK" /></translation>
 <translation id="5775198138441669627">Om du har glömt lösenfrasen eller vill ändra den här inställningen kan du <ph name="SETTINGS_LINK" /> Chromium-datan i kontot</translation>
@@ -474,6 +478,7 @@ Om sidan inte fungerar som förväntat kan du testa att tillåta optimering.</tr
 <translation id="6245734527075554892">Kontrollera webbadresser mot en lista över osäkra webbplatser i Chromium</translation>
 <translation id="6248213926982192922">Använd Chromium som standardwebbläsare</translation>
 <translation id="6248988683584659830">Sök i inställningar</translation>
+<translation id="6251986571402453005">Chromium laddar ned och uppdaterar dessa AI-modeller automatiskt</translation>
 <translation id="6268381023930128611">Vill du logga ut från Chromium?</translation>
 <translation id="6270547683008298381">Extra resurser används för dessa flikar. Du kan förbättra prestandan genom att låta Chromium inaktivera dem.</translation>
 <translation id="6281746429495226318">Anpassa din Chromium-profil</translation>
@@ -714,7 +719,6 @@ Chromium kan inte återställa dina inställningar.</translation>
 <translation id="8447525028100794994">Läs mer om att söka med bildsökning i Chromium</translation>
 <translation id="8453117565092476964">Arkivet för installationsfilen är skadat eller ogiltigt. Ladda ned Chromium igen.</translation>
 <translation id="8471947159125090285">Verifiera din identitet för att använda och spara Chromium-data i ditt Google-konto</translation>
-<translation id="8473541503127475913">Starta om Chromium för att byta</translation>
 <translation id="8482493977473846331">Visar meddelanden om att logga in i Chromium</translation>
 <translation id="8493179195440786826">Den här versionen av Chromium är inaktuell</translation>
 <translation id="850264194101621529">Tack för att du valde Chromium som standardwebbläsare!</translation>
@@ -748,7 +752,6 @@ Chromium kan inte återställa dina inställningar.</translation>
 <translation id="8906384069222226849">För Chromium krävs Windows 10 version 1809 eller senare.</translation>
 <translation id="8907580949721785412">Skriv ditt lösenord i Windows om du vill tillåta att lösenord visas i Chromium.</translation>
 <translation id="8910309838319708610">Klart! Nu kan du enkelt ställa frågor medan du surfar med AI-läget i Sök</translation>
-<translation id="8915682436012075700">Den här hanterade webbläsaren kan använda en Gemini-assistent som har konfigurerats för arbete av <ph name="DOMAIN" />. Den kan hitta information och ge svar som baseras på organisationens filer och godkända tjänster. Vi rekommenderar inte att du använder den med en personlig profil. Chatthistoriken överförs inte. Om du vill byta måste du starta om Chromium.</translation>
 <translation id="8932992523185907506">Chromium är inte längre din standardwebbläsare. Vill du använda Chromium som standardwebbläsare?</translation>
 <translation id="8941642502866065432">Det gick inte att uppdatera Chromium</translation>
 <translation id="8944232836376404813">Den här åtgärden kommer att
@@ -766,6 +769,7 @@ Chromium kan inte återställa dina inställningar.</translation>
 <translation id="8981886272598860786">för att söka med Chromium eller anpassa i <ph name="BEGIN_LINK" />Inställningar<ph name="END_LINK" /></translation>
 <translation id="8988036198400390003">Hantera Chromium-profiler</translation>
 <translation id="8993855408334954620">Använd tangentbordet för att navigera mellan Gemini i Chromium och den öppna fliken.</translation>
+<translation id="9002987346523307190">Chromium tar bort AI-modeller från den här enheten. Vissa webbplatser och Chromium-funktioner kanske inte fungerar.</translation>
 <translation id="9018218886431812662">Installationen har slutförts</translation>
 <translation id="9022552996538154597">Logga in i Chromium</translation>
 <translation id="9035791714111278917">Visa Sök med Chromium i menyraden på Mac och aktivera kortkommandot</translation>

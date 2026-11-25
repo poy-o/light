@@ -537,9 +537,6 @@ NET_EXPORT BASE_DECLARE_FEATURE(kForceThirdPartyCookieBlocking);
 // Enables Early Hints on HTTP/1.1.
 NET_EXPORT BASE_DECLARE_FEATURE(kEnableEarlyHintsOnHttp11);
 
-// Enables draft-07 version of WebTransport over HTTP/3.
-NET_EXPORT BASE_DECLARE_FEATURE(kEnableWebTransportDraft07);
-
 // Enables a smarter throttling strategy based in the server's IP.
 NET_EXPORT BASE_DECLARE_FEATURE(kWebTransportFineGrainedThrottling);
 
@@ -632,6 +629,14 @@ NET_EXPORT BASE_DECLARE_FEATURE(kDeviceBoundSessionsIncludeAudienceClaim);
 // deleted, and proactive refreshes do not start.
 // TODO(crbug.com/509885112): Remove once this has shipped to stable.
 NET_EXPORT BASE_DECLARE_FEATURE(kDeviceBoundSessionsDrainDeferredOnAllCanceled);
+
+// Controls whether a DBSC refresh without a cached challenge sends its
+// unsigned request while the session binding key is still being restored,
+// instead of waiting for the restore to finish first. Has no effect if
+// `kDeviceBoundSessionsRequireSameSiteRefresh` is disabled.
+// TODO(crbug.com/562888709): Remove this flag and the refresh path it replaces
+// once the experiment has concluded.
+NET_EXPORT BASE_DECLARE_FEATURE(kDeviceBoundSessionsConcurrentKeyRestore);
 
 // Enables more checks when creating a SpdySession for proxy. These checks are
 // already applied to non-proxy SpdySession creations.
@@ -1237,6 +1242,13 @@ NET_EXPORT BASE_DECLARE_FEATURE(kValidateNegotiateCnameAllowlist);
 // with TCP (0ms main-job delay) and disables 0-RTT until a QUIC handshake
 // succeeds on the current network.
 NET_EXPORT BASE_DECLARE_FEATURE(kAssumeQuicBrokenUntilVerifiedOnCurrentNetwork);
+
+// If enabled, certificate parsing accepts serial numbers that are not valid DER
+// INTEGERs (e.g. empty or non-minimally encoded). This is disabled by default
+// and is available as an emergency restore switch.
+// TODO(crbug.com/533048005): Remove this flag once rejecting invalid serial
+// numbers has safely shipped to stable.
+NET_EXPORT BASE_DECLARE_FEATURE(kAllowInvalidCertificateSerialNumbers);
 
 }  // namespace net::features
 

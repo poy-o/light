@@ -254,13 +254,6 @@ BASE_FEATURE(kEnableFullscreenToAnyScreenAndroid,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
-// Controls whether Chrome Apps are supported. See https://crbug.com/40186761.
-// If the feature is disabled, Chrome Apps continue to work. If enabled, Chrome
-// Apps will not launch and will be marked in the UI as deprecated.
-BASE_FEATURE(kChromeAppsDeprecation, base::FEATURE_ENABLED_BY_DEFAULT);
-#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
-
 #if BUILDFLAG(IS_CHROMEOS)
 
 BASE_FEATURE(kForcedAppRelaunchOnPlaceholderUpdate,
@@ -422,7 +415,7 @@ BASE_FEATURE(kGlicActorObservationDelayExcludeAdFrameLoading,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Controls whether typing happens incrementally.
-BASE_FEATURE(kGlicActorIncrementalTyping, base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kGlicActorIncrementalTyping, base::FEATURE_DISABLED_BY_DEFAULT);
 
 const base::FeatureParam<base::TimeDelta> kGlicActorKeyDownDuration{
     &kGlicActorIncrementalTyping,
@@ -528,8 +521,6 @@ const base::FeatureParam<base::TimeDelta> kGlicActorMoveBeforeClickDelay{
 // Controls country and locale filtering for Glic.
 // See chrome/browser/glic/public/glic_enabling.cc for more details.
 BASE_FEATURE(kGlicCountryFiltering, base::FEATURE_ENABLED_BY_DEFAULT);
-BASE_FEATURE(kGlicUseSessionCountryForFiltering,
-             base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kGlicLocaleFiltering, base::FEATURE_ENABLED_BY_DEFAULT);
 // Controls country filtering for Glic for users who cannot use adult features
 // (e.g. minors). When disabled, such users are blocked in all countries.
@@ -1738,6 +1729,15 @@ const base::FeatureParam<base::TimeDelta> kSCTLogMaxIngestionRandomDelay{
     base::Hours(1),
 };
 
+#if BUILDFLAG(ENABLE_SEPARATE_RENDERER_BINARY) && \
+    (BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX))
+// When enabled, renderer processes load chrome_renderer.dll (on Windows) or
+// launch the separate chrome_renderer executable (on Linux, which currently
+// requires --no-zygote; see crbug.com/552312254) instead of the main browser
+// binary.
+BASE_FEATURE(kSeparateRendererBinary, base::FEATURE_ENABLED_BY_DEFAULT);
+#endif
+
 // When enabled, an extension service worker's render process is given
 // foreground priority while the worker is STARTING. Extension service workers
 // are often started headlessly (e.g. to register webRequest listeners) with no
@@ -1800,10 +1800,10 @@ BASE_FEATURE(kProcessPerSiteForDSE,
 );
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
-// Uses native resolution for system proxy baselines on Windows and macOS.
-// Linux builds with D-Bus support use the XDG portal resolver directly.
-// TODO(crbug.com/40111093): Restrict Linux native resolution to system proxy
-// configurations as well.
+// Uses native resolution for system proxy baselines on Windows, macOS, and
+// Linux (on Linux builds with D-Bus support, via the XDG ProxyResolver portal;
+// Flatpak sandboxes enable the portal resolver by default via
+// kPortalProxyResolverWhenSandboxed).
 BASE_FEATURE(kSystemProxyResolver, base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
@@ -2088,6 +2088,11 @@ BASE_FEATURE(kWebUILocationBar, base::FEATURE_DISABLED_BY_DEFAULT);
 // When this is enabled, all the checks for enabled individual WebUI toolbar
 // controls in chrome/browser/ui/ui_features.h will return true.
 BASE_FEATURE(kWebUIToolbar, base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables build-time bundled V8 code caching for the WebUI New Tab Page.
+// Requires `kWebUIBundledCodeCache`.
+BASE_FEATURE(kWebUIBundledCodeCacheForNewTabPage,
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // The following feature params control the crash recovery behavior of the Web
 // UI reload button. If the renderer crashes, we will try to recover it by

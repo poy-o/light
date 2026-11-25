@@ -7,13 +7,16 @@
 #include <memory>
 #include <utility>
 
+#include "base/check.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
@@ -46,11 +49,13 @@ class GCMDriverDesktop::IOWorker : public GCMClient::Observer {
 
   // Overridden from GCMClient::Observer:
   // Called on IO thread.
-  void OnRegisterFinished(scoped_refptr<RegistrationInfo> registration_info,
-                          const std::string& registration_id,
-                          GCMClient::Result result) override;
-  void OnUnregisterFinished(scoped_refptr<RegistrationInfo> registration_info,
-                            GCMClient::Result result) override;
+  void OnRegisterFinished(
+      scoped_refptr<GCMRegistrationInfo> gcm_registration_info,
+      const std::string& registration_id,
+      GCMClient::Result result) override;
+  void OnUnregisterFinished(
+      scoped_refptr<GCMRegistrationInfo> gcm_registration_info,
+      GCMClient::Result result) override;
   void OnSendFinished(const std::string& app_id,
                       const std::string& message_id,
                       GCMClient::Result result) override;
@@ -108,6 +113,7 @@ class GCMDriverDesktop::IOWorker : public GCMClient::Observer {
 
   void RecordDecryptionFailure(const std::string& app_id,
                                fcm::FcmDecryptionResult result);
+  void WaitForInitialConnectionReady(base::OnceClosure callback);
 
   // For testing purpose. Can be called from UI thread. Use with care.
   GCMClient* gcm_client_for_testing() const { return gcm_client_.get(); }
@@ -173,55 +179,28 @@ void GCMDriverDesktop::IOWorker::Initialize(
 }
 
 void GCMDriverDesktop::IOWorker::OnRegisterFinished(
-    scoped_refptr<RegistrationInfo> registration_info,
+    scoped_refptr<GCMRegistrationInfo> gcm_registration_info,
     const std::string& registration_id,
     GCMClient::Result result) {
   DCHECK(io_thread_->RunsTasksInCurrentSequence());
+  CHECK(gcm_registration_info);
 
-  const GCMRegistrationInfo* gcm_registration_info =
-      GCMRegistrationInfo::FromRegistrationInfo(registration_info.get());
-  if (gcm_registration_info) {
-    ui_thread_->PostTask(
-        FROM_HERE,
-        base::BindOnce(&GCMDriverDesktop::RegisterFinished, service_,
-                       gcm_registration_info->app_id, registration_id, result));
-  }
-
-  const InstanceIDTokenInfo* instance_id_token_info =
-      InstanceIDTokenInfo::FromRegistrationInfo(registration_info.get());
-  if (instance_id_token_info) {
-    ui_thread_->PostTask(
-        FROM_HERE,
-        base::BindOnce(&GCMDriverDesktop::GetTokenFinished, service_,
-                       instance_id_token_info->app_id,
-                       instance_id_token_info->authorized_entity,
-                       instance_id_token_info->scope, registration_id, result));
-  }
+  ui_thread_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&GCMDriverDesktop::RegisterFinished, service_,
+                     gcm_registration_info->app_id, registration_id, result));
 }
 
 void GCMDriverDesktop::IOWorker::OnUnregisterFinished(
-    scoped_refptr<RegistrationInfo> registration_info,
+    scoped_refptr<GCMRegistrationInfo> gcm_registration_info,
     GCMClient::Result result) {
   DCHECK(io_thread_->RunsTasksInCurrentSequence());
+  CHECK(gcm_registration_info);
 
-  const GCMRegistrationInfo* gcm_registration_info =
-      GCMRegistrationInfo::FromRegistrationInfo(registration_info.get());
-  if (gcm_registration_info) {
-    ui_thread_->PostTask(
-        FROM_HERE,
-        base::BindOnce(&GCMDriverDesktop::RemoveEncryptionInfoAfterUnregister,
-                       service_, gcm_registration_info->app_id, result));
-  }
-
-  const InstanceIDTokenInfo* instance_id_token_info =
-      InstanceIDTokenInfo::FromRegistrationInfo(registration_info.get());
-  if (instance_id_token_info) {
-    ui_thread_->PostTask(
-        FROM_HERE, base::BindOnce(&GCMDriverDesktop::DeleteTokenFinished,
-                                  service_, instance_id_token_info->app_id,
-                                  instance_id_token_info->authorized_entity,
-                                  instance_id_token_info->scope, result));
-  }
+  ui_thread_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&GCMDriverDesktop::RemoveEncryptionInfoAfterUnregister,
+                     service_, gcm_registration_info->app_id, result));
 }
 
 void GCMDriverDesktop::IOWorker::OnSendFinished(const std::string& app_id,
@@ -424,18 +403,30 @@ void GCMDriverDesktop::IOWorker::GetToken(const std::string& app_id,
   instance_id_token_info->authorized_entity = authorized_entity;
   instance_id_token_info->scope = scope;
   instance_id_token_info->time_to_live = time_to_live;
-  gcm_client_->Register(std::move(instance_id_token_info));
+  gcm_client_->GetToken(
+      std::move(instance_id_token_info),
+      base::BindPostTask(
+          ui_thread_,
+          base::BindOnce(&GCMDriverDesktop::GetTokenFinished, service_, app_id,
+                         authorized_entity, scope)));
 }
 
 void GCMDriverDesktop::IOWorker::DeleteToken(
     const std::string& app_id,
     const std::string& authorized_entity,
     const std::string& scope) {
+  DCHECK(io_thread_->RunsTasksInCurrentSequence());
+
   auto instance_id_token_info = base::MakeRefCounted<InstanceIDTokenInfo>();
   instance_id_token_info->app_id = app_id;
   instance_id_token_info->authorized_entity = authorized_entity;
   instance_id_token_info->scope = scope;
-  gcm_client_->Unregister(std::move(instance_id_token_info));
+  gcm_client_->DeleteToken(
+      std::move(instance_id_token_info),
+      base::BindPostTask(
+          ui_thread_,
+          base::BindOnce(&GCMDriverDesktop::DeleteTokenFinished, service_,
+                         app_id, authorized_entity, scope)));
 }
 
 void GCMDriverDesktop::IOWorker::RecordDecryptionFailure(
@@ -443,6 +434,12 @@ void GCMDriverDesktop::IOWorker::RecordDecryptionFailure(
     fcm::FcmDecryptionResult result) {
   DCHECK(io_thread_->RunsTasksInCurrentSequence());
   gcm_client_->RecordDecryptionFailure(app_id, result);
+}
+
+void GCMDriverDesktop::IOWorker::WaitForInitialConnectionReady(
+    base::OnceClosure callback) {
+  DCHECK(io_thread_->RunsTasksInCurrentSequence());
+  gcm_client_->WaitForInitialConnectionReady(std::move(callback));
 }
 
 GCMDriverDesktop::GCMDriverDesktop(
@@ -564,6 +561,47 @@ void GCMDriverDesktop::RemoveAppHandler(const std::string& app_id) {
     DVLOG(1) << "Removed last app handler, calling GCMDriverDesktop::Stop now.";
     Stop();
   }
+}
+
+void GCMDriverDesktop::WaitForInitialConnectionReady(
+    base::OnceClosure callback) {
+  DCHECK(ui_thread_->RunsTasksInCurrentSequence());
+  CHECK(callback);
+
+  GCMClient::Result result = EnsureStarted(GCMClient::IMMEDIATE_START);
+  if (result != GCMClient::SUCCESS) {
+    return;
+  }
+
+  if (!delayed_task_controller_->CanRunTaskWithoutDelay()) {
+    delayed_task_controller_->AddTask(
+        base::BindOnce(&GCMDriverDesktop::DoWaitForInitialConnectionReady,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+    return;
+  }
+
+  DoWaitForInitialConnectionReady(std::move(callback));
+}
+
+void GCMDriverDesktop::DoWaitForInitialConnectionReady(
+    base::OnceClosure callback) {
+  DCHECK(ui_thread_->RunsTasksInCurrentSequence());
+  io_thread_->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &GCMDriverDesktop::IOWorker::WaitForInitialConnectionReady,
+          base::Unretained(io_worker_.get()),
+          base::BindPostTask(
+              ui_thread_,
+              base::BindOnce(&GCMDriverDesktop::OnInitialConnectionReady,
+                             weak_ptr_factory_.GetWeakPtr(),
+                             std::move(callback)))));
+}
+
+void GCMDriverDesktop::OnInitialConnectionReady(base::OnceClosure callback) {
+  DCHECK(ui_thread_->RunsTasksInCurrentSequence());
+  CHECK(gcm_started_);
+  std::move(callback).Run();
 }
 
 void GCMDriverDesktop::Stop() {
@@ -1096,6 +1134,9 @@ void GCMDriverDesktop::GCMClientReady() {
 }
 
 void GCMDriverDesktop::OnStoreReset() {
+  // TODO(crbug.com/589587357): Re-gate `delayed_task_controller_` until store
+  // reload and initial checkin reach `GCMClientReady()` again.
+  //
   // Defensive copy in case OnStoreReset calls Add/RemoveAppHandler.
   std::vector<GCMAppHandler*> app_handler_values;
   for (const auto& key_value : app_handlers()) {

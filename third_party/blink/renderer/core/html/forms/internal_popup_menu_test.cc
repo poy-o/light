@@ -27,6 +27,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
+#include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/exported/web_page_popup_impl.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
@@ -1148,18 +1149,12 @@ TEST_F(InternalPopupMenuTest, DisconnectDuringPopupInitialization) {
   test::RunPendingTasks();
 }
 
-// Regression test for crbug.com/586391223: a forced opener layout during popup
-// creation can run script (via slot recalc moving an iframe with a previewed
-// temporal input into a <canvas> subtree) that spins a nested run loop and
-// delivers the browser's PopupWidgetHost disconnect.
+// Regression test for crbug.com/586391223 and crbug.com/574469802: a forced
+// opener layout during popup creation must not run script during slot
+// assignment recalc when moving an iframe with a previewed temporal input into
+// a <canvas> subtree. Clearing the suggested value (which rebuilds fields and
+// fires blur) is deferred to the document lifecycle before paint.
 TEST_F(InternalPopupMenuTest, DisconnectDuringPopupConstruction) {
-#if DCHECK_IS_ON()
-  // Reaching this path trips a separate, pre-existing DCHECK:
-  // SlotAssignment::RecalcAssignment() holds a FlatTreeTraversalForbiddenScope
-  // while DateTimeEditElement::GetLayout() focuses a rebuilt sub-field.
-  // See crbug.com/574469802.
-  GTEST_SKIP() << "Blocked by a pre-existing DCHECK in Element::Focus()";
-#else
   if (!RuntimeEnabledFeatures::PagePopupEnabled()) {
     return;
   }
@@ -1227,12 +1222,18 @@ TEST_F(InternalPopupMenuTest, DisconnectDuringPopupConstruction) {
       mojom::blink::UserActivationNotificationType::kTest);
   month->showPicker(ASSERT_NO_EXCEPTION);
 
+  // Slot assignment recalc during forced layout defers clearing the suggested
+  // value, so blur must not fire synchronously during popup construction.
+  EXPECT_EQ(0, blur_listener->BlurCount());
+  EXPECT_FALSE(month->SuggestedValue().IsNull());
+
+  top_document.View()->UpdateAllLifecyclePhasesForTest();
   EXPECT_EQ(1, blur_listener->BlurCount());
+  EXPECT_TRUE(month->SuggestedValue().IsNull());
 
   test::RunPendingTasks();
   EXPECT_FALSE(month->IsPickerVisible());
   EXPECT_FALSE(web_view->GetPagePopup());
-#endif
 }
 
 namespace {
@@ -1494,6 +1495,73 @@ TEST_F(InternalPopupMenuTest, OpenPopupReentrantlyDuringInitialization) {
     test::RunPendingTasks();
     EXPECT_EQ(nullptr, web_view->GetPagePopup());
   }
+}
+
+// The mousedown that opens a <select> popup suspends caret blinking, and the
+// matching mouseup may go to the popup widget instead of the page. Closing the
+// popup must resume caret blinking.
+// See crbug.com/40899717.
+TEST_F(InternalPopupMenuTest, ClosingPopupResumesCaretBlinking) {
+  if (!RuntimeEnabledFeatures::PagePopupEnabled()) {
+    return;
+  }
+
+  frame_test_helpers::WebViewHelper web_view_helper;
+  WebViewImpl* web_view = web_view_helper.Initialize();
+  if (web_view->GetChromeClient().UseExternalPopupMenus()) {
+    // <select> doesn't use a WebPagePopupImpl on this platform.
+    return;
+  }
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(800, 600));
+
+  WebURL base_url = url_test_helpers::ToKURL("http://example.com/");
+  frame_test_helpers::LoadHTMLString(web_view->MainFrameImpl(), R"HTML(
+    <!DOCTYPE html>
+    <style>
+      body { margin: 0; }
+      select {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100px;
+        height: 50px;
+      }
+    </style>
+    <select id="select">
+      <option>1</option>
+      <option>2</option>
+    </select>
+  )HTML",
+                                     base_url);
+
+  Document& document =
+      *web_view->MainFrameImpl()->GetDocument().Unwrap<Document>();
+  document.View()->UpdateAllLifecyclePhasesForTest();
+
+  auto* select =
+      To<HTMLSelectElement>(document.getElementById(AtomicString("select")));
+  ASSERT_TRUE(select);
+
+  WebMouseEvent mouse_event(WebInputEvent::Type::kMouseDown,
+                            WebInputEvent::kNoModifiers,
+                            WebInputEvent::GetStaticTimeStampForTests());
+  mouse_event.button = WebMouseEvent::Button::kLeft;
+  mouse_event.SetPositionInWidget(10, 10);
+  mouse_event.SetPositionInScreen(10, 10);
+  mouse_event.click_count = 1;
+  web_view->MainFrameWidget()->HandleInputEvent(
+      WebCoalescedInputEvent(mouse_event, {}));
+
+  ASSERT_TRUE(select->PopupIsVisible());
+  EXPECT_TRUE(document.GetFrame()->Selection().IsCaretBlinkingSuspended());
+
+  WebPagePopupImpl* popup = web_view->GetPagePopup();
+  ASSERT_TRUE(popup);
+  popup->DidShowPopup();
+  popup->ClosePopup();
+
+  EXPECT_FALSE(select->PopupIsVisible());
+  EXPECT_FALSE(document.GetFrame()->Selection().IsCaretBlinkingSuspended());
 }
 
 #endif  // !BUILDFLAG(IS_ANDROID)

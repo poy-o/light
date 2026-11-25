@@ -2,16 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://webui-toolbar.top-chrome/lazy_load.js';
+import 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
 
 import {isMac} from 'chrome://resources/js/platform.js';
 import {DragEventSource} from 'chrome://resources/mojo/ui/base/dragdrop/mojom/drag_drop_types.mojom-webui.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 import {hasStyle, microtasksFinished} from 'chrome://webui-test/test_util.js';
-import {PointerProxyImpl} from 'chrome://webui-toolbar.top-chrome/lazy_load.js';
-import type {IconFromTableElement, LocationIconElement, PointerProxy} from 'chrome://webui-toolbar.top-chrome/lazy_load.js';
-import {BrowserProxyImpl, IconTable, IconType, LhsChipIdentifier, SecurityChipRole} from 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
+import {BrowserProxyImpl, IconTable, IconType, LhsChipIdentifier, PointerProxyImpl, SecurityChipRole} from 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
+import type {IconFromTableElement, LocationIconElement, PointerProxy} from 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
 
 import {TestToolbarUiHandler} from './test_toolbar_browser_proxy.js';
 
@@ -133,9 +132,10 @@ suite('LocationIconTest', function() {
     assertTrue(locationIcon.hasAttribute('is-text-dangerous'));
     assertTrue(locationIcon.hasAttribute('is-dangerous'));
 
-    const innerButton = locationIcon.$.button.$.button;
-    assertTrue(hasStyle(innerButton, 'background-color', 'rgb(0, 0, 255)'));
-    assertTrue(hasStyle(innerButton, 'color', 'rgb(0, 255, 0)'));
+    const chip = locationIcon.$.button;
+    assertTrue(
+        hasStyle(chip.$.background, 'background-color', 'rgb(0, 0, 255)'));
+    assertTrue(hasStyle(chip.$.button, 'color', 'rgb(0, 255, 0)'));
   });
 
   test('Dangerous level, Not secure text', async function() {
@@ -794,9 +794,9 @@ suite('LocationIconTest', function() {
           };
           await microtasksFinished();
         };
-        const innerButton = locationIcon.$.button.$.button;
+        const visualTarget = locationIcon.$.button.$.background;
         const getPulseStyle = () =>
-            window.getComputedStyle(innerButton, '::before');
+            window.getComputedStyle(visualTarget, '::before');
 
         locationIcon.hasHelpBubble = true;
         const pressedGradient = (color: string) => `linear-gradient(${color})`;
@@ -816,7 +816,7 @@ suite('LocationIconTest', function() {
         // highlighted).
         locationIcon.$.button.toggleAttribute('is-menu-open', true);
         assertEquals(
-            '0', window.getComputedStyle(innerButton, '::after').opacity);
+            '0', window.getComputedStyle(visualTarget, '::after').opacity);
         locationIcon.$.button.toggleAttribute('is-menu-open', false);
 
         await setState(/*isClickable=*/ true, /*isTextDangerous=*/ true);

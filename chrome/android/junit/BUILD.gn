@@ -142,7 +142,6 @@ if (is_android) {
       "//chrome/browser/glic/android:menu_java",
       "//chrome/browser/gsa:java",
       "//chrome/browser/history:java",
-      "//chrome/browser/history:java_resources",
       "//chrome/browser/history_clusters:java",
       "//chrome/browser/hub:factory_java",
       "//chrome/browser/hub:java",
@@ -164,6 +163,8 @@ if (is_android) {
       "//chrome/browser/page_load_metrics:java",
       "//chrome/browser/paint_preview/android:java",
       "//chrome/browser/partnercustomizations:java",
+      "//chrome/browser/password_manager/android:android_backend_java_enums",
+      "//chrome/browser/password_manager/android:backend_interface_java",
       "//chrome/browser/password_manager/android:java",
       "//chrome/browser/password_manager/android:settings_interface_java",
       "//chrome/browser/password_manager/android:test_support_java",
@@ -438,8 +439,6 @@ if (is_android) {
   # down.
   robolectric_library("chrome_junit_tests_org.chromium.chrome.browser") {
     sources = [
-      "//chrome/android/java/src/org/chromium/chrome/browser/bottombar/BottomBarAppMenuUpdateBadgeControllerUnitTest.java",
-      "//chrome/android/java/src/org/chromium/chrome/browser/bottombar/BottomBarContainerCoordinatorUnitTest.java",
       "src/org/chromium/chrome/browser/BrowserExitReasonTrackerUnitTest.java",
       "src/org/chromium/chrome/browser/ChromeActionModeHandlerUnitTest.java",
       "src/org/chromium/chrome/browser/ChromeActivityUnitTest.java",
@@ -724,6 +723,7 @@ if (is_android) {
       "//chrome/browser/glic/android:jni_headers_java",
       "//chrome/browser/task_manager/android:factory_java",
       "//chrome/browser/task_manager/android:java",
+      "//chrome/browser/ui/browser_window/public/android:browser_window_interface_java",
       "//chrome/browser/ui/vertical_tabs:java",
     ]
   }
@@ -936,12 +936,9 @@ if (is_android) {
   robolectric_library(
       "chrome_junit_tests_org.chromium.chrome.browser.history") {
     sources = [
-      "src/org/chromium/chrome/browser/history/AppSpecificHistoryIphControllerUnitTest.java",
       "src/org/chromium/chrome/browser/history/HistoryAdapterAccessibilityTest.java",
       "src/org/chromium/chrome/browser/history/HistoryAdapterTest.java",
       "src/org/chromium/chrome/browser/history/HistoryContentManagerUnitTest.java",
-      "src/org/chromium/chrome/browser/history/HistoryDesktopNavigationMediatorUnitTest.java",
-      "src/org/chromium/chrome/browser/history/HistoryFilterChipUnitTest.java",
       "src/org/chromium/chrome/browser/history/HistoryItemViewUnitTest.java",
       "src/org/chromium/chrome/browser/history/HistoryManagerUtilsUnitTest.java",
       "src/org/chromium/chrome/browser/history/HistoryPaneUnitTest.java",
@@ -1131,17 +1128,6 @@ if (is_android) {
       "//chrome/browser/commerce/price_tracking/android/javatests/src/org/chromium/chrome/browser/price_tracking/PriceDropNotifierUnitTest.java",
       "//chrome/browser/commerce/price_tracking/android/javatests/src/org/chromium/chrome/browser/price_tracking/PriceTrackingButtonControllerUnitTest.java",
       "//chrome/browser/commerce/price_tracking/android/javatests/src/org/chromium/chrome/browser/price_tracking/PriceTrackingNotificationBridgeUnitTest.java",
-    ]
-
-    deps = [ ":chrome_junit_tests_helper" ]
-  }
-
-  robolectric_library(
-      "chrome_junit_tests_org.chromium.chrome.browser.search_engines") {
-    sources = [
-      "src/org/chromium/chrome/browser/search_engines/SearchEngineChoiceMetricsTest.java",
-      "src/org/chromium/chrome/browser/search_engines/SearchEngineChoiceNotificationTest.java",
-      "src/org/chromium/chrome/browser/search_engines/settings/SearchEngineAdapterTest.java",
     ]
 
     deps = [ ":chrome_junit_tests_helper" ]
@@ -1600,7 +1586,6 @@ if (is_android) {
     sources = [
       "//chrome/android/java/src/org/chromium/chrome/browser/toolbar/ToolbarManagerUnitTest.java",
       "src/org/chromium/chrome/browser/toolbar/AppThemeColorProviderUnitTest.java",
-      "src/org/chromium/chrome/browser/toolbar/LocationBarModelUnitTest.java",
       "src/org/chromium/chrome/browser/toolbar/ToolbarIphControllerUnitTest.java",
       "src/org/chromium/chrome/browser/toolbar/ToolbarTabControllerImplTest.java",
       "src/org/chromium/chrome/browser/toolbar/adaptive/OptionalNewTabButtonControllerActivityTest.java",
@@ -1611,7 +1596,6 @@ if (is_android) {
       "//chrome/browser/context_sharing/tab_bottom_sheet/android:java",
       "//chrome/browser/context_sharing/tab_bottom_sheet/public/android:java",
       "//chrome/browser/subscription_eligibility:java",
-      "//chrome/browser/ui/android/pdf:pdf_utils_java",
       "//chrome/browser/ui/android/toolbar:adaptive_features_java",
       "//chrome/browser/ui/android/toolbar:optional_button_java",
     ]

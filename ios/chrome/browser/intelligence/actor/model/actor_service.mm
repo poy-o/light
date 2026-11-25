@@ -252,7 +252,7 @@ void ActorService::SetNavigationConfirmationCallback(
 void ActorService::InterruptTask(
     ActorTaskId task_id,
     InterruptRequest request,
-    ActorTaskResultCallback<InterruptTaskResult> callback) {
+    InterventionResultCallback<InterruptTaskResult> callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   EnqueueCommand(&ActorService::DoInterruptTask, task_id, std::move(request),
                  std::move(callback));
@@ -455,14 +455,14 @@ void ActorService::StartTabObservation(ActorTaskId task_id,
 void ActorService::DoInterruptTask(
     ActorTaskId task_id,
     InterruptRequest request,
-    ActorTaskResultCallback<InterruptTaskResult> callback) {
+    InterventionResultCallback<InterruptTaskResult> callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   ActorTask* task = FindActiveTask(task_id);
   if (!task) {
-    PostReply(
-        base::BindOnce(std::move(callback),
-                       ActorTaskResult<InterruptTaskResult>(
-                           base::unexpected(ActorTaskError::kTaskWentAway))));
+    PostReply(base::BindOnce(
+        std::move(callback),
+        InterventionResult<InterruptTaskResult>(
+            base::unexpected(InterventionError::kTaskWentAway))));
     return;
   }
   task->Interrupt(
@@ -472,48 +472,48 @@ void ActorService::DoInterruptTask(
 
 void ActorService::OnInterruptCompleted(
     ActorTaskId task_id,
-    ActorTaskResultCallback<InterruptTaskResult> callback,
-    ActorTaskResult<InterruptResponse> result) {
+    InterventionResultCallback<InterruptTaskResult> callback,
+    InterventionResult<InterruptReply> result) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // `ActorTask` already posted `result`, so reply without `PostReply()`.
+  // Check the task first so a stop beats a posted answer or delegate error.
+  ActorTask* task = FindActiveTask(task_id);
+  if (!task) {
+    std::move(callback).Run(base::unexpected(InterventionError::kTaskWentAway));
+    return;
+  }
   if (!result.has_value()) {
     std::move(callback).Run(base::unexpected(result.error()));
     return;
   }
-  // The task may have stopped since the user answered.
-  ActorTask* task = FindActiveTask(task_id);
-  if (!task) {
-    std::move(callback).Run(base::unexpected(ActorTaskError::kTaskWentAway));
-    return;
-  }
   web::WebState* web_state = GetFirstLiveControlledWebState(*task);
   if (!web_state) {
-    std::move(callback).Run(
-        InterruptTaskResult(result.value(), /*observation=*/nullptr));
+    std::move(callback).Run(InterruptTaskResult(std::move(result).value(),
+                                                /*observation=*/nullptr));
     return;
   }
   StartTabObservation(
       task_id, web_state,
       base::BindOnce(&ActorService::OnInterruptObservationComplete, weak_this_,
-                     task_id, web_state->GetUniqueIdentifier(), result.value(),
-                     std::move(callback)));
+                     task_id, web_state->GetUniqueIdentifier(),
+                     std::move(result).value(), std::move(callback)));
 }
 
 void ActorService::OnInterruptObservationComplete(
     ActorTaskId task_id,
     web::WebStateID web_state_id,
-    InterruptResponse response,
-    ActorTaskResultCallback<InterruptTaskResult> callback,
+    InterruptReply reply,
+    InterventionResultCallback<InterruptTaskResult> callback,
     PageContextWrapperCallbackResponse page_context_response) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!FindActiveTask(task_id)) {
-    std::move(callback).Run(base::unexpected(ActorTaskError::kTaskWentAway));
+    std::move(callback).Run(base::unexpected(InterventionError::kTaskWentAway));
     return;
   }
   std::move(callback).Run(InterruptTaskResult(
-      response, std::make_unique<TabObservationResponse>(
-                    web_state_id, std::move(page_context_response),
-                    /*web_state_exists=*/true)));
+      std::move(reply), std::make_unique<TabObservationResponse>(
+                            web_state_id, std::move(page_context_response),
+                            /*web_state_exists=*/true)));
 }
 
 void ActorService::DoPauseTask(ActorTaskId task_id) {

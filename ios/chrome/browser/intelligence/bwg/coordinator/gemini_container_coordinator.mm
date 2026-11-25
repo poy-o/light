@@ -22,11 +22,15 @@
 #import "ios/chrome/browser/intelligence/actor/coordinator/actuation_worklog_coordinator.h"
 #import "ios/chrome/browser/intelligence/actor/model/actor_service.h"
 #import "ios/chrome/browser/intelligence/actor/model/actor_service_factory.h"
+#import "ios/chrome/browser/intelligence/bwg/coordinator/gemini_confirmation_card_view_provider.h"
 #import "ios/chrome/browser/intelligence/bwg/coordinator/gemini_container_mediator.h"
 #import "ios/chrome/browser/intelligence/bwg/coordinator/gemini_container_mediator_delegate.h"
+#import "ios/chrome/browser/intelligence/bwg/coordinator/gemini_container_snackbar_manager.h"
+#import "ios/chrome/browser/intelligence/bwg/coordinator/gemini_inline_worklog_view_provider.h"
 #import "ios/chrome/browser/intelligence/bwg/coordinator/gemini_web_modal_coordinator.h"
 #import "ios/chrome/browser/intelligence/bwg/metrics/gemini_session_metrics_manager.h"
 #import "ios/chrome/browser/intelligence/bwg/model/gemini_browser_agent.h"
+#import "ios/chrome/browser/intelligence/bwg/model/gemini_custom_ui_handler.h"
 #import "ios/chrome/browser/intelligence/bwg/model/gemini_gateway_manager.h"
 #import "ios/chrome/browser/intelligence/bwg/model/gemini_page_state_change_handler.h"
 #import "ios/chrome/browser/intelligence/bwg/model/gemini_session_handler.h"
@@ -59,12 +63,18 @@
   __weak id<AssistantContainerCommands> _containerHandler;
   // Mediator for the Gemini container.
   GeminiContainerMediator* _mediator;
+  // Manager for Chrome-presented snackbars in the container flow.
+  GeminiContainerSnackbarManager* _snackbarManager;
   // Manager for tracking and recording Gemini session metrics.
   GeminiSessionMetricsManager* _sessionMetricsManager;
   // The zero-state suggestions view controller.
   GeminiZeroStateViewController* _geminiZeroStateViewController;
   // Child coordinator managing the actuation worklog.
   ActuationWorklogCoordinator* _actuationWorklogCoordinator;
+  // Renders the worklog of agent tasks inside Gemini responses.
+  GeminiInlineWorklogViewProvider* _inlineWorklogViewProvider;
+  // Renders the start-task confirmation cards inside Gemini responses.
+  GeminiConfirmationCardViewProvider* _confirmationCardViewProvider;
   // Child coordinator presenting a URL in a web modal over the container.
   GeminiWebModalCoordinator* _webModalCoordinator;
   // Cancelable callback for starting the container once other windows dismiss
@@ -135,10 +145,23 @@
                            kAssistantContainerMinimizedDetentHeight];
     [_actuationWorklogCoordinator stop];
     _actuationWorklogCoordinator = nil;
+    // Nil if stopped before `-startContainer`. Removing a nil provider crashes.
+    if (_inlineWorklogViewProvider) {
+      [_mediator.gatewayManager.customUIHandler
+          removeViewProvider:_inlineWorklogViewProvider];
+      _inlineWorklogViewProvider = nil;
+    }
+    if (_confirmationCardViewProvider) {
+      [_mediator.gatewayManager.customUIHandler
+          removeViewProvider:_confirmationCardViewProvider];
+      _confirmationCardViewProvider = nil;
+    }
   }
   [self dismissWebModal];
   [_mediator disconnect];
   _mediator = nil;
+  [_snackbarManager disconnect];
+  _snackbarManager = nil;
   _sessionMetricsManager = nil;
   _viewController = nil;
   _containerHandler = nil;
@@ -203,20 +226,25 @@
 
   GeminiBrowserAgent* geminiBrowserAgent =
       GeminiBrowserAgent::FromBrowser(self.browser);
+  AuthenticationService* authService =
+      AuthenticationServiceFactory::GetForProfile(self.profile);
+  _snackbarManager =
+      [[GeminiContainerSnackbarManager alloc] initWithBrowser:self.browser
+                                        authenticationService:authService];
   // TODO(crbug.com/535579970): After bottom sheet migration, the startup state
   // can be added to the init params.
   // TODO(crbug.com/571295640): Don't pass the browser instance to mediator.
   _mediator = [[GeminiContainerMediator alloc]
             initWithBrowser:self.browser
                actorService:actorService
-      authenticationService:AuthenticationServiceFactory::GetForProfile(
-                                self.browser->GetProfile())
+      authenticationService:authService
                eventHandler:geminiBrowserAgent
           sharedTabsManager:geminiBrowserAgent
                                 ? geminiBrowserAgent->GetSharedTabsManager()
                                 : nullptr
       sessionMetricsManager:_sessionMetricsManager];
   _mediator.delegate = self;
+  _mediator.snackbarManager = _snackbarManager;
   // TODO(crbug.com/537730178): Delegate the permission prompt request up to
   // a delegate protocol implemented by GeminiContainerCoordinator, which will
   // present the UIAlertController using its own baseViewController.
@@ -235,6 +263,15 @@
                            browser:self.browser];
     [_actuationWorklogCoordinator start];
     worklogViewController = _actuationWorklogCoordinator.viewController;
+    // The SDK decides whether Chrome renders a block when the block is first
+    // shown, so the provider must be in place before the first response.
+    _inlineWorklogViewProvider = [[GeminiInlineWorklogViewProvider alloc] init];
+    [_mediator.gatewayManager.customUIHandler
+        addViewProvider:_inlineWorklogViewProvider];
+    _confirmationCardViewProvider =
+        [[GeminiConfirmationCardViewProvider alloc] init];
+    [_mediator.gatewayManager.customUIHandler
+        addViewProvider:_confirmationCardViewProvider];
   }
 
   _viewController = [[GeminiContainerViewController alloc]
@@ -286,6 +323,7 @@
       HandlerForProtocol(dispatcher, SnackbarCommands);
   _mediator.gatewayManager.sessionHandler.snackbarHandler = snackbarHandler;
   _mediator.snackbarHandler = snackbarHandler;
+  _snackbarManager.snackbarHandler = snackbarHandler;
 }
 
 // Dismisses Gemini from all other windows and executes `completion`.

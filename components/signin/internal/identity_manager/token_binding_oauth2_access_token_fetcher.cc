@@ -12,6 +12,7 @@
 #include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
 #include "components/signin/public/base/hybrid_encryption_key.h"
 #include "components/signin/public/base/session_binding_utils.h"
 #include "google_apis/gaia/gaia_constants.h"
@@ -32,6 +33,7 @@ TokenBindingOAuth2AccessTokenFetcher::~TokenBindingOAuth2AccessTokenFetcher() =
 void TokenBindingOAuth2AccessTokenFetcher::SetBindingKeyAssertion(
     std::optional<HybridEncryptionKey> ephemeral_key,
     std::string assertion) {
+  challenge_signing_latency_ = challenge_signing_timer_.Elapsed();
   if (assertion.empty()) {
     // Even if the assertion failed, we want to make a server request because
     // the server doesn't verify assertions during dark launch.
@@ -66,6 +68,16 @@ void TokenBindingOAuth2AccessTokenFetcher::Start(
 
 void TokenBindingOAuth2AccessTokenFetcher::CancelRequest() {
   fetcher_->CancelRequest();
+}
+
+std::optional<base::TimeDelta>
+TokenBindingOAuth2AccessTokenFetcher::GetNetworkLatency() const {
+  return fetcher_->GetNetworkLatency();
+}
+
+std::optional<base::TimeDelta>
+TokenBindingOAuth2AccessTokenFetcher::GetChallengeSigningLatency() const {
+  return challenge_signing_latency_;
 }
 
 base::WeakPtr<TokenBindingOAuth2AccessTokenFetcher>

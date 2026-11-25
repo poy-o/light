@@ -189,7 +189,7 @@ public class TabListMediator implements TabListNotificationHandler {
          * This method gives the previous and target position of current reordering based on the
          * host view and current action.
          *
-         * @param view   The host view that triggers the accessibility action.
+         * @param view The host view that triggers the accessibility action.
          * @param action The id of the action.
          * @return {@link Pair} that contains previous and target position of this action.
          */
@@ -1483,7 +1483,8 @@ public class TabListMediator implements TabListNotificationHandler {
 
     /**
      * Update the grid layout span count and span size lookup base on orientation.
-     * @param manager     The {@link GridLayoutManager} used to update the span count.
+     *
+     * @param manager The {@link GridLayoutManager} used to update the span count.
      * @param screenWidthDp The screnWidth based on which we update the span count.
      * @return whether the span count changed.
      */
@@ -1561,7 +1562,9 @@ public class TabListMediator implements TabListNotificationHandler {
                                 if (groupId != null && tabModel != null) {
                                     groupTitle =
                                             TabGroupTitleUtils.getDisplayableTitle(
-                                                    context, tabModel, groupId);
+                                                    context,
+                                                    tabModel,
+                                                    TabGroupId.fromOptionalToken(groupId));
                                 }
                             }
                             if (groupTitle == null) {
@@ -2343,7 +2346,8 @@ public class TabListMediator implements TabListNotificationHandler {
             assumeNonNull(tabGroupId);
             TabModel tabModel = getCurrentTabModelChecked();
             if (useDefault) {
-                return TabGroupTitleUtils.getDisplayableTitle(mActivity, tabModel, tabGroupId);
+                return TabGroupTitleUtils.getDisplayableTitle(
+                        mActivity, tabModel, TabGroupId.fromOptionalToken(tabGroupId));
             } else {
                 return tabModel.getTabGroupTitle(TabGroupId.fromRawToken(tabGroupId));
             }
@@ -2638,7 +2642,9 @@ public class TabListMediator implements TabListNotificationHandler {
         if (!TabUiFeatureUtilities.isAndroidTabUiRefactorEnabled()) {
             TabModel tabModel = mCurrentTabModelSupplier.get();
             if (tabModel == null) return TabModel.INVALID_TAB_INDEX;
-            int tabId = TabGroupUtils.getFirstTabIdInGroup(tabModel, tabGroupId);
+            int tabId =
+                    TabGroupUtils.getFirstTabIdInGroup(
+                            tabModel, TabGroupId.fromOptionalToken(tabGroupId));
             if (tabId == Tab.INVALID_TAB_ID) return TabModel.INVALID_TAB_INDEX;
             return getIndexForTabIdWithRelatedTabs(tabId);
         }
@@ -3287,12 +3293,15 @@ public class TabListMediator implements TabListNotificationHandler {
         TabModel tabModel = getCurrentTabModelChecked();
         if (!tabModel.containsTabGroup(TabGroupId.fromOptionalToken(tabGroupId))) return;
 
-        EitherGroupId eitherId = EitherGroupId.createLocalId(new LocalTabGroupId(tabGroupId));
+        EitherGroupId eitherId =
+                EitherGroupId.createLocalId(
+                        new LocalTabGroupId(TabGroupId.fromRawToken(tabGroupId)));
 
         if (menuId == R.id.close_tab_group || menuId == R.id.delete_tab_group) {
             int tabId =
                     TabUiFeatureUtilities.isAndroidTabUiRefactorEnabled()
-                            ? TabGroupUtils.getFirstTabIdInGroup(tabModel, tabGroupId)
+                            ? TabGroupUtils.getFirstTabIdInGroup(
+                                    tabModel, TabGroupId.fromOptionalToken(tabGroupId))
                             : tabModel.getGroupLastShownTabId(
                                     TabGroupId.fromOptionalToken(tabGroupId));
             if (tabId == Tab.INVALID_TAB_ID) return;
@@ -3445,7 +3454,8 @@ public class TabListMediator implements TabListNotificationHandler {
                             colorId);
             String colorDesc = res.getString(colorDescRes);
             String descriptionTitle =
-                    TabGroupTitleUtils.getDisplayableTitle(context, tabModel, tabGroupId);
+                    TabGroupTitleUtils.getDisplayableTitle(
+                            context, tabModel, TabGroupId.fromOptionalToken(tabGroupId));
             if (!TabUiUtils.isDataSharingFunctionalityEnabled() || !hasCollaboration(tabGroupId)) {
                 return res.getString(
                         R.string
@@ -3793,7 +3803,10 @@ public class TabListMediator implements TabListNotificationHandler {
         }
 
         updateTabGroupColorViewProvider(
-                EitherGroupId.createLocalId(new LocalTabGroupId(tabGroupId)), model, colorId);
+                EitherGroupId.createLocalId(
+                        new LocalTabGroupId(TabGroupId.fromRawToken(tabGroupId))),
+                model,
+                colorId);
     }
 
     void updateTabGroupColorViewProvider(
@@ -3837,7 +3850,9 @@ public class TabListMediator implements TabListNotificationHandler {
      * @param newColor The new color of the tab group.
      */
     void updateColorForChildTabs(Token tabGroupId, @TabGroupColorId int newColor) {
-        EitherGroupId eitherGroupId = EitherGroupId.createLocalId(new LocalTabGroupId(tabGroupId));
+        EitherGroupId eitherGroupId =
+                EitherGroupId.createLocalId(
+                        new LocalTabGroupId(TabGroupId.fromRawToken(tabGroupId)));
         boolean foundGroup = false;
         for (int i = 0; i < mModelList.size(); i++) {
             PropertyModel childModel = mModelList.get(i).model;

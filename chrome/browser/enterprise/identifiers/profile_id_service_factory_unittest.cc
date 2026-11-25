@@ -10,19 +10,18 @@
 #include "base/scoped_observation.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/uuid.h"
 #include "build/build_config.h"
 #include "chrome/browser/enterprise/identifiers/profile_id_delegate_impl.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
+#include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_manager_observer.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/enterprise/browser/identifiers/identifiers_prefs.h"
 #include "components/enterprise/browser/identifiers/profile_id_service.h"
-#include "components/enterprise/isolated_mode/isolated_mode_features.h"
-#include "components/enterprise/isolated_mode/prefs.h"
+#include "components/enterprise/isolated_mode/scoped_isolated_mode_override_for_testing.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -119,7 +118,8 @@ class ProfileIdServiceFactoryTest : public testing::Test,
     base::RunLoop run_loop;
 
     ProfileManager::CreateMultiProfileAsync(
-        base::UTF8ToUTF16(new_profile_name), /*icon_index=*/0,
+        base::UTF8ToUTF16(new_profile_name),
+        /*icon_index=*/profiles::GetPlaceholderAvatarIndex(),
         /*is_hidden=*/false,
         base::BindLambdaForTesting([&new_profile, &run_loop](Profile* profile) {
           ASSERT_TRUE(profile);
@@ -200,15 +200,10 @@ TEST_F(ProfileIdServiceFactoryTest, GetProfileId_Incognito_Profile) {
 // Tests that the isolated mode profile is redirected to the original profile
 // and has the same profile ID as the original profile.
 TEST_F(ProfileIdServiceFactoryTest, GetProfileId_IsolatedMode_Profile) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      enterprise_isolated_mode::kEnableEnterpriseIsolatedMode);
+  enterprise_isolated_mode::ScopedIsolatedModeOverrideForTesting
+      scoped_isolated_mode;
 
   Profile* isolated_parent_profile = CreateProfile("isolated-user");
-  isolated_parent_profile->GetPrefs()->SetInteger(
-      enterprise_isolated_mode::kEnterpriseIsolatedModeSettings,
-      static_cast<int>(
-          enterprise_isolated_mode::IsolatedModeSetting::kEnabled));
 
   Profile* isolated_profile =
       isolated_parent_profile->GetPrimaryOTRProfile(/*create_if_needed=*/true);

@@ -2389,6 +2389,7 @@ Called by update_net_error_codes.py.-->
   <int value="146" label="Inline cue menu"/>
   <int value="147" label="Suspicious site warning data"/>
   <int value="148" label="WebAuthn ambient sign-in data"/>
+  <int value="149" label="WebAuthn remoteClientDataJSON extension"/>
 </enum>
 
 <!-- LINT.ThenChange(//components/content_settings/core/common/content_settings_uma_constants.h:kContentSettingsTypeToHistogramValue) -->
@@ -3486,6 +3487,7 @@ shown properly on the user-facing crash UI.
   <int value="40" label="kD3D12CreateFenceFailed"/>
   <int value="41" label="kD3D12CreateCopyQueueFailed"/>
   <int value="42" label="kSharedImageResolveFailed"/>
+  <int value="43" label="kD3D12CopyQueueExecuteFailed"/>
 </enum>
 
 <!-- LINT.ThenChange(//media/base/encoder_status.h:Codes) -->
@@ -4184,13 +4186,6 @@ shown properly on the user-facing crash UI.
   <int value="7" label="Usage or syntax error"/>
   <int value="8" label="Fsck canceled by user request"/>
   <int value="9" label="Shared library error"/>
-</enum>
-
-<enum name="FullscreenLockState">
-  <int value="0" label="Unlocked"/>
-  <int value="1" label="Keyboard locked"/>
-  <int value="2" label="Pointer locked"/>
-  <int value="3" label="Keyboard and pointer locked"/>
 </enum>
 
 <enum name="FullscreenVideoPictureInPictureEntered">
@@ -8214,6 +8209,7 @@ from previous Chrome versions.
   <int value="-2011908446"
       label="PasswordsAccountStorageRevisedOptInFlow:disabled"/>
   <int value="-2011833930" label="DynamicSafeAreaInsetsSupportedByCC:enabled"/>
+  <int value="-2011728298" label="WaylandTextScaleTextOnly:enabled"/>
   <int value="-2011532551" label="SignedExchangeSubresourcePrefetch:disabled"/>
   <int value="-2011428140" label="RelatedSearchesAlternateUx:disabled"/>
   <int value="-2011079494" label="Vp9kSVCHWDecoding:enabled"/>
@@ -9658,6 +9654,7 @@ from previous Chrome versions.
   <int value="-1581724231" label="ModalPermissionPrompts:enabled"/>
   <int value="-1581536170"
       label="TabSwitcherGroupSuggestionsTestModeAndroid:disabled"/>
+  <int value="-1581484975" label="EnableBulkDataEntryAndroid:disabled"/>
   <int value="-1581226384" label="ThreeDotMenuBackButton:disabled"/>
   <int value="-1580378359" label="AndroidBookmarkBarDragDrop:enabled"/>
   <int value="-1580376019" label="ShowAllDialogsWithViewsToolkit:enabled"/>
@@ -10244,6 +10241,7 @@ from previous Chrome versions.
   <int value="-1414531531" label="NtpModulesRedesignedLayout:disabled"/>
   <int value="-1414399047" label="BlockCrossPartitionBlobUrlFetching:enabled"/>
   <int value="-1414207639" label="RequestDesktopSiteDefaultsLogging:enabled"/>
+  <int value="-1413639156" label="DynamicAimFulfillmentAndroidOmnibox:enabled"/>
   <int value="-1413102021" label="DisableInstanceLimit:disabled"/>
   <int value="-1413083800" label="EnableSwipeToSwitchPane:enabled"/>
   <int value="-1412920508"
@@ -10334,6 +10332,7 @@ from previous Chrome versions.
   <int value="-1389948505" label="InitialNavigationEntry:disabled"/>
   <int value="-1389941688"
       label="SupervisedUserEmitLogRecordSeparately:disabled"/>
+  <int value="-1388986339" label="DisableAddAccountWhenRestricted:disabled"/>
   <int value="-1388956102" label="OmniboxTouchDownTriggerForPrefetch:disabled"/>
   <int value="-1388933740" label="CastStreamingHardwareHevc:enabled"/>
   <int value="-1388835077" label="PdfBrotliDecode:disabled"/>
@@ -12253,6 +12252,7 @@ from previous Chrome versions.
   <int value="-821635312" label="EyeDropper:enabled"/>
   <int value="-821547066" label="AnimateSuggestionsListAppearance:disabled"/>
   <int value="-821236443" label="ComposeTextSelection:disabled"/>
+  <int value="-820776953" label="EdgeToEdgeTopPageColorSampling:disabled"/>
   <int value="-820676825" label="MessagesPreinstall:enabled"/>
   <int value="-820041355" label="enable-transition-compositing"/>
   <int value="-819896562" label="RouteMatching:enabled"/>
@@ -13549,6 +13549,7 @@ from previous Chrome versions.
   <int value="-439778992" label="VisualGuidedSetterDocking:enabled"/>
   <int value="-439728770" label="VidsAppExistingConsumerPreinstall:disabled"/>
   <int value="-439110184" label="AndroidWebAppLaunchHandler:disabled"/>
+  <int value="-438799997" label="EnableAccountMenu:enabled"/>
   <int value="-438529902" label="CaptivePortalErrorPage:enabled"/>
   <int value="-438495497" label="enable-unsafe-swiftshader"/>
   <int value="-438379844" label="SwapSideVolumeButtonsForOrientation:enabled"/>
@@ -14975,6 +14976,7 @@ from previous Chrome versions.
   <int value="-16732224"
       label="AutofillParseVcnCardOnFileStandaloneCvcFields:enabled"/>
   <int value="-16413037" label="ReduceUserAgent:enabled"/>
+  <int value="-16334993" label="EdgeToEdgeTopPageColorSampling:enabled"/>
   <int value="-16086999" label="TrimOnFreeze:enabled"/>
   <int value="-15879016"
       label="OmniboxUIExperimentUnboldSuggestionText:disabled"/>
@@ -15819,6 +15821,7 @@ from previous Chrome versions.
   <int value="241510943" label="TabStripMouseCloseResizeDelay:enabled"/>
   <int value="242181887" label="NotificationOneTapUnsubscribe:disabled"/>
   <int value="244040049" label="DrawImmediatelyWhenInteractive:disabled"/>
+  <int value="244088305" label="WaylandTextScaleTextOnly:disabled"/>
   <int value="244208319"
       label="AutofillEnableMerchantDomainInUnmaskCardRequest:disabled"/>
   <int value="244697230" label="enable-theme-color-in-tabbed-mode"/>
@@ -16764,6 +16767,7 @@ from previous Chrome versions.
   <int value="518908322" label="UseAndroidStagingSmds:enabled"/>
   <int value="519140642" label="SendWebUIJavaScriptErrorReports:enabled"/>
   <int value="519623921" label="SafeModeForCachedFlags:enabled"/>
+  <int value="519892253" label="AutofillFixVcnStrikeDatabaseFallback:enabled"/>
   <int value="520482092" label="AccessibilityManifestV3ChromeVox:enabled"/>
   <int value="520607007" label="AndroidWindowControlsOverlay:enabled"/>
   <int value="520738365" label="OmniboxPedalsBatch2NonEnglish:enabled"/>
@@ -17823,6 +17827,7 @@ from previous Chrome versions.
   <int value="825582537" label="ContextualCueingV2MultiSource:enabled"/>
   <int value="826644834" label="NtpRealboxCr23ConsistentRowHeight:disabled"/>
   <int value="826748470" label="NtpCalendarModule:enabled"/>
+  <int value="827352781" label="AutofillFixVcnStrikeDatabaseFallback:disabled"/>
   <int value="828092263" label="TemporaryUnexpireFlagsM78:enabled"/>
   <int value="828267476" label="AutofillEnableNewAmexNetworkArt:disabled"/>
   <int value="828678083" label="DynamicTopChrome:disabled"/>
@@ -17938,6 +17943,7 @@ from previous Chrome versions.
   <int value="859872800" label="FullscreenAlwaysShowTrafficLights:enabled"/>
   <int value="859913799" label="EnableDesksTrackpadSwipeImprovements:disabled"/>
   <int value="860336036" label="ChromeModernDesign:enabled"/>
+  <int value="861174778" label="DisableAddAccountWhenRestricted:enabled"/>
   <int value="861351290" label="FontManagerEarlyInit:enabled"/>
   <int value="861596248" label="BrowserLaunchMetadataReporting:enabled"/>
   <int value="861968979" label="EnableEncryptedAV1:enabled"/>
@@ -19799,6 +19805,7 @@ from previous Chrome versions.
   <int value="1410697724" label="mediadrm-enable-non-compositing"/>
   <int value="1410846840"
       label="PrefetchMainResourceNetworkIsolationKey:disabled"/>
+  <int value="1411669911" label="EnableBulkDataEntryAndroid:enabled"/>
   <int value="1411679884"
       label="AutofillLocalCardMigrationUsesStrikeSystemV2:enabled"/>
   <int value="1411915938" label="AccessibilitySequentialFocus:disabled"/>
@@ -20325,6 +20332,7 @@ from previous Chrome versions.
   <int value="1568919717"
       label="AutofillEnableWalletReminderNoticePublicPass:disabled"/>
   <int value="1569327162" label="ButterOnDesktopFollowup:enabled"/>
+  <int value="1569478955" label="EnableAccountMenu:disabled"/>
   <int value="1570051274" label="ProductSpecifications:disabled"/>
   <int value="1570067571"
       label="AutofillEnablePaymentSettingsCardPromoAndScanCard:disabled"/>
@@ -22023,6 +22031,7 @@ from previous Chrome versions.
   <int value="2073113207" label="SensorContentSetting:disabled"/>
   <int value="2073207038" label="PrivacyGuideAiSettings:enabled"/>
   <int value="2073762173" label="ToolbarPhoneCleanup:disabled"/>
+  <int value="2073904853" label="DynamicAimFulfillmentAndroidOmnibox:disabled"/>
   <int value="2074475824" label="tab-link-drag-drop:enabled"/>
   <int value="2075207488" label="AutomaticPasswordGeneration:disabled"/>
   <int value="2075686131" label="AndroidExtendedKeyboardShortcuts:enabled"/>
@@ -22739,7 +22748,7 @@ from previous Chrome versions.
   <int value="14" label="KillSwitch on (NotAllowedError)"/>
   <int value="15" label="Permission denied by System (NotAllowedError)"/>
   <int value="16" label="Device in use (NotReadableError)"/>
-  <int value="18" label="Start timeout (AbortError)"/>
+  <int value="18" label="Video source start timeout (AbortError)"/>
   <int value="19" label="Permission denied by user (NotAllowedError)"/>
   <int value="20" label="Audio device socket error (NotReadableError)"/>
   <int value="21" label="No Transient activation (InvalidStateError)"/>
@@ -24484,6 +24493,8 @@ Called by update_net_error_codes.py.-->
   <int value="44" label="PERMISSION_LOCAL_NETWORK"/>
   <int value="45" label="PERMISSION_LOOPBACK_NETWORK"/>
   <int value="46" label="PERMISSION_GEOLOCATION_APPROXIMATE"/>
+  <int value="47"
+      label="PERMISSION_PUBLIC_KEY_CREDENTIALS_REMOTE_CLIENT_DATA_JSON"/>
 </enum>
 
 <!-- LINT.ThenChange(//third_party/blink/public/common/permissions/permission_utils.h:PermissionType) -->
@@ -24785,26 +24796,6 @@ Called by update_net_error_codes.py.-->
 <enum name="PowerMLFinalResult">
   <int value="0" label="Reactivation">User reactivated after dim.</int>
   <int value="1" label="Off">System was suspended after dim.</int>
-</enum>
-
-<enum name="PowerMLPreviousEventLoggingResult">
-  <int value="0" label="Success">Previous event was logged successfully.</int>
-  <int value="1" label="Error">Previous event was not logged successfully.</int>
-  <int value="2" label="ErrorModelPredictionMissing">
-    Previous event was not logged successfully because model was enabled but
-    there was no prediction for the previous event.
-  </int>
-  <int value="3" label="ErrorModelDisabled">
-    Previous event was not logged successfully because model was disabled.
-  </int>
-  <int value="4" label="ErrorMultiplePreviousEvents">
-    Previous event was not logged successfully because of multiple previous
-    events.
-  </int>
-  <int value="5" label="ErrorIdleStartMissing">
-    Previous event was not logged successfully because previous idle event had
-    no event start time.
-  </int>
 </enum>
 
 <enum name="PowerMLSmartDimComponentLoadComponentEvent">
@@ -26698,12 +26689,17 @@ Called by update_net_error_codes.py.-->
              loaded."/>
 </enum>
 
+<!-- LINT.IfChange(ServiceWorkerRouterSourceType) -->
+
 <enum name="ServiceWorkerRouterSourceType">
   <int value="0" label="kNetwork"/>
   <int value="1" label="kRace"/>
   <int value="2" label="kFetchEvent"/>
   <int value="3" label="kCache"/>
+  <int value="4" label="kRaceNetworkAndCache"/>
 </enum>
+
+<!-- LINT.ThenChange(//services/network/public/mojom/service_worker_router_info.mojom:ServiceWorkerRouterSourceType) -->
 
 <!-- LINT.IfChange(ServiceWorkerStaticRouterCORPCheckResult) -->
 
@@ -26793,26 +26789,6 @@ Called by update_net_error_codes.py.-->
   <int value="2" label="(obsolete) WEB_CONTEXT_MENU"/>
   <int value="3" label="APP_MENU_SHARING_HUB"/>
 </enum>
-
-<!-- LINT.IfChange(SharingClickToCallEntryPoint) -->
-
-<enum name="SharingClickToCallEntryPoint">
-  <int value="0" label="Left click on a phone link"/>
-  <int value="1" label="Right click on a phone link"/>
-  <int value="2" label="Right click on a phone number selection"/>
-</enum>
-
-<!-- LINT.ThenChange(//chrome/browser/sharing/click_to_call/click_to_call_metrics.h:SharingClickToCallEntryPoint) -->
-
-<!-- LINT.IfChange(SharingClickToCallSelection) -->
-
-<enum name="SharingClickToCallSelection">
-  <int value="0" label="None"/>
-  <int value="1" label="Device"/>
-  <int value="2" label="App"/>
-</enum>
-
-<!-- LINT.ThenChange(//chrome/browser/sharing/click_to_call/click_to_call_metrics.h:SharingClickToCallSelection) -->
 
 <enum name="SharingContentTypeAndroid">
   <int value="0" label="Unknown"/>

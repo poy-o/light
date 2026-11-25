@@ -2474,6 +2474,19 @@ Als je het beleid niet toepast, wordt de functie voor contentcodering met <ph na
 <translation id="2521581787935130926">De snelkoppeling voor apps tonen op de bookmarkbalk</translation>
 <translation id="2522304491589804974">Toelatingslijst voor installatie van extensies configureren</translation>
 <translation id="2523511232831599126">Snelkoppelingen voor toegankelijkheid op het inlogscherm aanzetten</translation>
+<translation id="2524400223625951315">Hiermee bepaal je het gedrag voor afgedwongen geïnstalleerde extensies in de geïsoleerde modus.
+
+Dit is van toepassing op extensies die zijn ingesteld via <ph name="EXTENSION_INSTALL_FORCELIST_POLICY_NAME" /> of waarbij <ph name="INSTALLATION_MODE_FIELD" /> is ingesteld op <ph name="FORCE_INSTALLED_VALUE" /> in <ph name="EXTENSION_SETTINGS_POLICY_NAME" />. Extensies die zijn ingesteld met <ph name="INSTALLATION_MODE_FIELD" /> ingesteld op <ph name="NORMAL_INSTALLED_VALUE" />, worden beheerd door <ph name="ISOLATED_MODE_USER_INSTALLED_EXTENSIONS_SETTINGS_POLICY_NAME" />.
+
+Als je het beleid instelt op 0 (altijd aan) of niet instelt, staan afgedwongen geïnstalleerde extensies altijd aan in de geïsoleerde modus en kunnen ze niet worden uitgezet door de gebruiker.
+
+Als je dit beleid instelt op 1 (standaard aangezet), worden afgedwongen geïnstalleerde extensies standaard aangezet in de geïsoleerde modus en kunnen ze door de gebruiker worden uitgezet. De keuze van de gebruiker heeft voorrang zolang het beleid is ingesteld op 1. Buiten de geïsoleerde modus kan de gebruiker afgedwongen geïnstalleerde extensies nog steeds niet uitzetten.
+
+Extensies die <ph name="INCOGNITO_MANIFEST_KEY" /> instellen op <ph name="INCOGNITO_NOT_ALLOWED_VALUE" /> in hun manifest, kunnen niet worden uitgevoerd in de geïsoleerde modus, ongeacht dit beleid.
+
+Dit beleid wordt alleen van kracht als <ph name="ISOLATED_MODE_SETTINGS_POLICY_NAME" /> aanstaat.
+
+Dit beleid vereist een <ph name="CHROME_ENTERPRISE_PREMIUM_NAME" />-licentie om van kracht te worden.</translation>
 <translation id="252742292004421898">Direct Sockets API toestaan op deze sites</translation>
 <translation id="2528762900096510743">Service voor automatisch uitloggen aanzetten</translation>
 <translation id="2529880111512635313">De lijst met automatisch geïnstalleerde apps en extensies configureren</translation>
@@ -3936,6 +3949,7 @@ Dit is verwijderd in Chrome 145. We raden je aan in plaats daarvan de methode re
 
       Als dit beleid niet is ingesteld voor een site, is het beleid van <ph name="DEFAULT_LOCAL_FONTS_SETTING_POLICY_NAME" /> van toepassing op de site (als dit is ingesteld), anders worden de standaardinstellingen van de browser gevolgd en kunnen gebruikers per site kiezen of ze dit recht willen verlenen.</translation>
 <translation id="3435796032110614169">Verwijderen van afdrukgeschiedenis toestaan</translation>
+<translation id="3435849940943480491">Afgedwongen geïnstalleerde extensies staan altijd aan in de geïsoleerde modus en kunnen niet worden uitgezet</translation>
 <translation id="3436217793443508863">De tijdsduur zonder gebruikersinvoer waarna het scherm wordt vergrendeld als er op de batterij wordt gewerkt (in milliseconden)</translation>
 <translation id="3437391374720747482">Voorkeur geven aan sleuteluitwisselingsmethoden die voldoen aan de vereisten van CNSA 2.0</translation>
 <translation id="3437924696598384725">De gebruiker toestaan VPN-verbindingen te beheren</translation>
@@ -6271,6 +6285,7 @@ We raden je af videodecodering met hardwareversnelling uit te zetten. Dit leidt 
 <translation id="4927797103413916381">Als je <ph name="SAFE_BROWSING_ENABLED_POLICY_NAME" /> niet hebt uitgezet, voorkomt het aanzetten van <ph name="ABUSIVE_EXPERIENCE_INTERVENTION_ENFORCE_POLICY_NAME" /> of dit niet instellen dat sites met misleidende functionaliteit nieuwe vensters of tabbladen openen.
 
        Als je <ph name="SAFE_BROWSING_ENABLED_POLICY_NAME" /> of <ph name="ABUSIVE_EXPERIENCE_INTERVENTION_ENFORCE_POLICY_NAME" /> uitzet, kunnen sites met misleidende functionaliteit nieuwe vensters of tabbladen openen.</translation>
+<translation id="4928435626872799127">Het gedrag van afgedwongen geïnstalleerde extensies in de geïsoleerde modus beheren</translation>
 <translation id="4929721861648439998">Zet de toegankelijkheidsfunctie voor monogeluid op het inlogscherm aan.
 
           Met deze functie kun je de apparaatmodus snel veranderen van standaard stereogeluid naar monogeluid.
@@ -6399,6 +6414,13 @@ Als je het beleid instelt op een lege tekenreeks of niet instelt, is site-isolat
 
 Opmerking: Dit beleid is beëindigd. Gebruik in plaats daarvan <ph name="ISOLATE_ORIGINS_POLICY_NAME" /> (voor apparaten met hoge prestaties) of <ph name="ISOLATE_ORIGINS_SHORTLIST_POLICY_NAME" />. Dit beleid is alleen van toepassing op Chrome op <ph name="ANDROID_NAME" /> op apparaten met meer dan 1 GB RAM. Het wordt niet aanbevolen om specifieke procesisolatie in te stellen.</translation>
 <translation id="4991786313466977061">De zichtbaarheid van zakelijke badges beheren</translation>
+<translation id="4991886408515766724">Als je het beleid instelt, kun je een lijst met URL-patronen maken om op te geven welke sites gebruikers mogen vragen om toegang tot een USB-apparaat.
+
+      Als je het beleid niet instelt, is <ph name="DEFAULT_WEB_USB_GUARD_SETTING_POLICY_NAME" /> (indien ingesteld) van toepassing op alle sites. Zo niet, dan gelden de persoonlijke instellingen van gebruikers.
+
+      URL-patronen mogen geen conflict vormen met <ph name="WEB_USB_BLOCKED_FOR_URLS_POLICY_NAME" />. Geen van beide beleidsregels krijgt voorrang als een URL met beide overeenkomt.
+
+      Ga naar https://chromeenterprise.google/policies/url-patterns voor gedetailleerde informatie over geldige <ph name="URL_LABEL" />-patronen. <ph name="WILDCARD_VALUE" /> is geen geaccepteerde waarde voor dit beleid.</translation>
 <translation id="4995123966071996433">Poortdoorschakeling naar virtuele Linux-machines niet toestaan</translation>
 <translation id="4996068111491152684">De inloggegevens van <ph name="PRODUCT_OS_NAME" /> worden niet gebruikt voor netwerkverificatie.</translation>
 <translation id="4996086761250834365">Productanalyse van <ph name="PLUGIN_VM_NAME" /> toestaan</translation>
@@ -7880,15 +7902,6 @@ Dit beleid kan alleen worden ingesteld als cloudgebruikersbeleid.</translation>
 <translation id="5899751601113377553">Voorkomen dat gebruikers <ph name="LACROS_NAME" /> gebruiken</translation>
 <translation id="5900919753933009463">Netwerkconfiguratie rapporteren</translation>
 <translation id="5901427587865226597">Alleen dubbelzijdig afdrukken</translation>
-<translation id="5903484826174648217">Als je dit beleid toepast, vertrouwt Safe Browsing de domeinen die je aangeeft. De functie checkt deze niet op gevaarlijke bronnen zoals phishing, malware of ongewenste software. De service voor downloadbeveiliging van Safe Browsing checkt downloads die worden gehost op deze domeinen niet. De service voor wachtwoordbeveiliging checkt niet of wachtwoorden opnieuw worden gebruikt.
-
-Als je het beleid niet instelt, wordt de standaardbescherming van Safe Browsing toegepast op alle bronnen.
-
-Dit beleid ondersteunt geen reguliere expressies. Subdomeinen van een bepaald domein worden wel op de toelatingslijst gezet. Volledig gekwalificeerde domeinnamen (FQDN's) zijn niet vereist.
-
-In <ph name="MS_WIN_NAME" /> is dit beleid alleen beschikbaar voor instanties die zijn gekoppeld aan een <ph name="MS_AD_NAME" />-domein of aan <ph name="MS_AAD_NAME" />, of die zijn ingeschreven voor <ph name="CHROME_ENTERPRISE_CORE_NAME" />.
-
-In <ph name="MAC_OS_NAME" /> is dit beleid alleen beschikbaar voor instanties die via MDM worden beheerd, via een MCX aan een domein zijn gekoppeld of zijn ingeschreven voor <ph name="CHROME_ENTERPRISE_CORE_NAME" />.</translation>
 <translation id="5905114360004248993">Pop-ups toestaan op deze sites</translation>
 <translation id="5905473632148429217">Online OCSP/CRL-controles aanzetten</translation>
 <translation id="590591187943862671">Als je het beleid instelt, kun je een lijst met URL-patronen maken om op te geven welke sites gebruikers mogen vragen om hun leestoegang te geven tot bestanden en directory's in het bestandssysteem van het besturingssysteem van de host via de File System API.
@@ -9255,9 +9268,6 @@ Als je het beleid instelt op Onwaar of niet instelt, wordt het standaardgedrag g
 Als je het beleid niet instelt, wordt het gedrag bepaald door het beleid <ph name="GEN_AI_DEFAULT_SETTINGS_POLICY_NAME" />.
 
 Ga naar https://support.google.com/chrome/a?p=generative_ai_settings voor meer informatie over gegevensverwerking voor generatieve AI-functies.</translation>
-<translation id="6752711782954612641">Als <ph name="DEFAULT_SEARCH_PROVIDER_ENABLED_POLICY_NAME" /> is aangezet en je <ph name="DEFAULT_SEARCH_PROVIDER_SEARCH_URL_POST_PARAMS_POLICY_NAME" /> instelt, worden de parameters gespecificeerd als een URL wordt gezocht via POST. Deze bestaan uit door komma's gescheiden naam/waarde-paren. Als een waarde een templateparameter is (zoals <ph name="SEARCH_TERM_MARKER" />), wordt deze vervangen door de echte zoektermen.
-
-      Als je <ph name="DEFAULT_SEARCH_PROVIDER_SEARCH_URL_POST_PARAMS_POLICY_NAME" /> niet instelt, worden zoekopdrachten gestuurd met de GET-methode.</translation>
 <translation id="6757413365906304125">Dit beleid bepaalt het gedrag voor het opnieuw toewijzen van de PageUp-/PageDown-toetsen binnen de subpagina voor het opnieuw toewijzen van toetsen. Op de subpagina voor het opnieuw toewijzen van toetsen kunnen gebruikers toetsenbordtoetsen aanpassen. Als je dit beleid aanzet, kunnen gebruikers deze specifieke toewijzingen niet aanpassen. Als je het beleid niet instelt, zijn op zoekopdrachten gebaseerde sneltoetsen de standaardinstelling en kunnen gebruikers de sneltoetsen configureren.</translation>
 <translation id="6757613329154374267">Back-up en herstel is aangezet</translation>
 <translation id="6758659208493449452">Met dit beleid wordt bepaald of gebruikers die bij 'Geavanceerde beveiliging' zijn ingeschreven, extra beveiligingsmaatregelen ontvangen. Voor sommige van deze functies kunnen gegevens worden gedeeld met Google (gebruikers van 'Geavanceerde beveiliging' kunnen bijvoorbeeld hun downloads naar Google sturen om ze te scannen op malware). Als dit beleid is ingesteld op True of niet is ingesteld, ontvangen ingeschreven gebruikers extra beveiligingsmaatregelen. Als dit beleid is ingesteld op False, ontvangen gebruikers van 'Geavanceerde beveiliging' alleen de standaardfuncties voor consumenten.</translation>
@@ -9723,6 +9733,7 @@ In <ph name="MAC_OS_NAME" /> is dit beleid alleen beschikbaar voor instanties di
 <translation id="7054840304131108563">Toegankelijkheidsfuncties voor weergaveprogramma uitzetten</translation>
 <translation id="7055022222176591388">Verouderde <ph name="FLASH_PLUGIN_NAME" /> niet toestaan</translation>
 <translation id="7056040036973126753">Gegevens over domeinbetrouwbaarheid kunnen naar Google worden gestuurd, afhankelijk van het Chrome-beleid voor gebruikersstatistieken</translation>
+<translation id="7057522375529097624">Afgedwongen geïnstalleerde extensies staan standaard aan in de geïsoleerde modus en kunnen worden uitgezet</translation>
 <translation id="7062803946218028349">Toestaan dat Telefoonhub wordt aangezet</translation>
 <translation id="7063646777978847358">Met dit beleid wordt bepaald of achtergrondverzoeken van service workers worden beperkt. Dit beleid kan relevant zijn als een functie die bestanden op de achtergrond downloadt, wordt beïnvloed.
 
@@ -11749,9 +11760,6 @@ Als je dit beleid niet instelt, staat gezichtsbediening in eerste instantie uit,
 Als je dit beleid toepast, worden alle andere processen niet gepland op dezelfde CPU-kern wanneer het renderproces wordt uitgevoerd.
       Als je dit beleid niet toepast, kunnen alle andere processen worden gepland op dezelfde CPU-kern als er een renderproces op de kern wordt uitgevoerd.
       Als je dit beleid niet instelt, kunnen alle andere processen worden gepland op dezelfde CPU-kern als er een renderproces op de kern wordt uitgevoerd. Dit kan variëren afhankelijk van de release van <ph name="PRODUCT_NAME" />, actieve praktijktests en het platform.</translation>
-<translation id="8337114537412769126">Als <ph name="DEFAULT_SEARCH_PROVIDER_ENABLED_POLICY_NAME" /> is aangezet en je <ph name="DEFAULT_SEARCH_PROVIDER_SUGGEST_URL_POST_PARAMS_POLICY_NAME" /> instelt, worden de parameters gespecificeerd tijdens voorgestelde zoekopdrachten met POST. Deze bestaan uit door komma's gescheiden naam/waarde-paren. Als een waarde een templateparameter is (zoals <ph name="SEARCH_TERM_MARKER" />), wordt deze vervangen door de echte zoektermen.
-
-      Als je <ph name="DEFAULT_SEARCH_PROVIDER_SUGGEST_URL_POST_PARAMS_POLICY_NAME" /> niet instelt, worden voorgestelde zoekopdrachten gestuurd met de GET-methode.</translation>
 <translation id="8337200442224446773">Herschikking in willekeurige volgorde van socketgroep voor proxy's voorkomen</translation>
 <translation id="8337961007759352651">Scripts voor workers (web workers, service workers, enzovoort) vereisen een JavaScript MIME-type, zoals <ph name="MIMETYPE_TEXT_JAVASCRIPT" />. Workerscripts met verouderde MIME-typen, zoals <ph name="MIMETYPE_TEXT_ASCII" />, worden geweigerd.</translation>
 <translation id="8339089771335211509">WebRTC gebruikt alleen de interface die is verbonden met het openbare internet en maakt geen verbinding via IP-adressen die privé zijn.</translation>

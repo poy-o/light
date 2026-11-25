@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">ପାସୱାର୍ଡଗୁଡ଼ିକୁ ସେୟାର କରନ୍ତୁ</translation>
 <translation id="1554043146674176775">AI ମୋଡକୁ ବନ୍ଦ କରନ୍ତୁ</translation>
 <translation id="1554477036522844996">ନୂଆ ୱିଣ୍ଡୋ</translation>
+<translation id="1555014818414775661">ଇମେଜଗୁଡ଼ିକୁ ଯୋଗ କରନ୍ତୁ</translation>
 <translation id="1557806604681757705">ଆପଣଙ୍କ କମ୍ପ୍ୟୁଟର</translation>
 <translation id="1558391695376153246">ଇନକଗ୍ନିଟୋ ଟାବଗୁଡ଼ିକ ବନ୍ଦ କର</translation>
 <translation id="1560153516220021659">ସଙ୍କୁଚିତ ସେକେଣ୍ଡାରୀ ଟୁଲବାର ବଟନ</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832"><ph name="BEGIN_BOLD" />Safari ସେଟିଂସ<ph name="END_BOLD" /> ଖୋଲନ୍ତୁ</translation>
 <translation id="3858860766373142691">ନାମ</translation>
 <translation id="386224966259596343">ପରବର୍ତ୍ତୀ ଥର ଏକ ପ୍ରାସଙ୍ଗିକ ଫର୍ମକୁ ଆପଣ ପୂରଣ କରିବା ସମୟରେ ଏହି ସୂଚନାକୁ Walletରେ ସେଭ କରିବାର ଏକ ସୁଯୋଗ ପାଇବେ।</translation>
-<translation id="3868495844258915202">ସମ୍ପୂର୍ଣ୍ଣ URL ଦେଖାନ୍ତୁ</translation>
 <translation id="3870931306085184145"><ph name="DOMAIN" /> ପାଇଁ କୌଣସି ସେଭ୍‌ ହୋ‍ଇଥିବ ପାସ୍‌ୱର୍ଡ ନାହିଁ</translation>
 <translation id="3875783148670536197">କିପରି କରାଯାଏ ତାହା ମୋତେ ଦେଖାନ୍ତୁ</translation>
 <translation id="3878657761594430423">ସିଟ ଗ୍ରେବର</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">ମୂଲ୍ୟ ଟ୍ରାକିଂ ବିଜ୍ଞପ୍ତିଗୁଡ଼ିକ ପାଇବାକୁ ଆପଣଙ୍କ iOS ସେଟିଂସରେ ବିଜ୍ଞପ୍ତିଗୁଡ଼ିକୁ ଚାଲୁ କରନ୍ତୁ।</translation>
 <translation id="528857768909044842">ଏଠାରେ ଟାବ ଗ୍ରୁପଗୁଡ଼ିକୁ ସେଭ କରାଯାଇଛି</translation>
 <translation id="5294624619177114121">ମୋବାଇଲ ବିଜ୍ଞପ୍ତିଗୁଡ଼ିକ</translation>
-<translation id="5295239312320826323"><ph name="USER_EMAIL" /> ଆକାଉଣ୍ଟ କାଢ଼ି ଦେବେ?</translation>
 <translation id="5300589172476337783">ପ୍ରଦର୍ଶନ କରନ୍ତୁ</translation>
 <translation id="5311061401280561833">କେମେରା ଏବଂ ମାଇକ୍ରୋଫୋନ ଆକ୍ସେସ ପାଇଁ ଅନୁମତି ଦିଆଯାଇଛି</translation>
 <translation id="5313967007315987356">ସାଇଟ୍ ଯୋଗ କରନ୍ତୁ</translation>
@@ -1788,6 +1787,7 @@ Handoff, ନିଶ୍ଚିତ ରୂପେ ସେଟିଂସ୍‍ର ସା�
 <translation id="6504541289630702018">ଆପଣଙ୍କ ଡେସ୍କଟପ ଟାବ ଗ୍ରୁପଗୁଡ଼ିକୁ ସହଜରେ ଆକ୍ସେସ କରନ୍ତୁ</translation>
 <translation id="6505334220040167806">ଟାବ ଗ୍ରୁପକୁ ସଙ୍କୁଚିତ କରନ୍ତୁ।</translation>
 <translation id="6506996418997555004">"<ph name="GROUP_NAME" />" ଟାବ ଗ୍ରୁପକୁ ସେୟାର କରନ୍ତୁ</translation>
+<translation id="650770261448122895">ଆପଣ Lensରେ ଯାହା ଦେଖୁଛନ୍ତି ତାହା ସର୍ଚ୍ଚ କରନ୍ତୁ</translation>
 <translation id="6507973708545996744">ଆପଣଙ୍କ ସମସ୍ତ ଡିଭାଇସରେ ଆପଣଙ୍କ ପଢ଼ିବା ତାଲିକା ପାଇବାକୁ ସାଇନ ଇନ କରନ୍ତୁ।</translation>
 <translation id="6518133107902771759">ଯାଞ୍ଚ କରନ୍ତୁ</translation>
 <translation id="6523575793810663688">କିପରି କରାଯାଏ ତାହା ମୋତେ ଦେଖାନ୍ତୁ</translation>
@@ -2147,7 +2147,6 @@ Handoff, ନିଶ୍ଚିତ ରୂପେ ସେଟିଂସ୍‍ର ସା�
 <translation id="7603852183842204213">ପପ୍-ଅପ୍‌ଗୁଡିକ ବ୍ଲକ୍ କରାଯାଇଛି (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">ସିଙ୍କ୍‌ କାର୍ଯ୍ୟ କରୁନାହିଁ</translation>
 <translation id="760667371114328991">ସୁରକ୍ଷା ଯାଞ୍ଚ ପାଇଁ ବିଜ୍ଞପ୍ତିକୁ ବନ୍ଦ କରନ୍ତୁ</translation>
-<translation id="7612619742409846846">ଏପରି Googleରେ ସାଇନ୍ ଇନ୍ ହୋଇଛି</translation>
 <translation id="7612849887607288481">ଓପନ AI ପ୍ରୋଟୋଟାଇପିଂ ମେନୁ</translation>
 <translation id="7618220760967055820">ଟୁଲବାରରେ କେଉଁ ବଟନ ଦେଖାଯିବ ତାହା ବାଛନ୍ତୁ</translation>
 <translation id="7620522820075868385">ବାତିଲ କରନ୍ତୁ</translation>
@@ -2430,6 +2429,7 @@ Handoff, ନିଶ୍ଚିତ ରୂପେ ସେଟିଂସ୍‍ର ସା�
 <translation id="8439758443371991593">'ପଢ଼ିବା ତାଲିକାରେ ଯୋଗ କରନ୍ତୁ'କୁ ଲୁଚାନ୍ତୁ</translation>
 <translation id="8443986842926457191">URLରେ 2048ରୁ ଅଧିକ କେରେକ୍ଟର ଅଛି</translation>
 <translation id="8449869326050867919">ପାସୱାର୍ଡ ସେୟାର କରାଯାଇଛି</translation>
+<translation id="8473367210869452063">ଏହି ସାଇଟ ସହ ଇଣ୍ଟରାକ୍ଟ କରିବାକୁ ବର୍ତ୍ତମାନର ଟାସ୍କକୁ ବନ୍ଦ କରନ୍ତୁ କିମ୍ବା Gemini କାମ ସମ୍ପୂର୍ଣ୍ଣ କରିବା ପାଇଁ ଅପେକ୍ଷା କରନ୍ତୁ</translation>
 <translation id="8473815223723723001">Gemini ମାଧ୍ୟମରେ ଇମେଜକୁ ଏଡିଟ କରନ୍ତୁ</translation>
 <translation id="8473863474539038330">ଠିକଣାଗୁଡ଼ିକ ଏବଂ ଅଧିକ</translation>
 <translation id="8474378002946546633">ବିଜ୍ଞପ୍ତିଗୁଡ଼ିକୁ ଅନୁମତି ଦିଅନ୍ତୁ</translation>

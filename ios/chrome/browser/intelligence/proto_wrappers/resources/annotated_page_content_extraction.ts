@@ -12,6 +12,10 @@ import type {PageContent, PageContentAttributes, PageContentFormControlData, Pag
 // TODO(crbug.com/504261632): Report metrics from here down to the native
 // browser side so they can be uma-reported.
 
+// If a corresponding Blink APC change needs to be done as a follow-up, please
+// add a TODO and/or file a bug to track the work.
+// LINT.IfChange(ExtractAnnotatedPageContent)
+
 // Set of DOM Node IDs that are considered interactive (focused, selection
 // start/end). These nodes should be included in the APC tree even if they are
 // generic containers.
@@ -356,7 +360,6 @@ const TAG_EMBED = 'EMBED';
 const TAG_OBJECT = 'OBJECT';
 const TAG_DATALIST = 'DATALIST';
 const TAG_HEAD = 'HEAD';
-const TAG_CAPTION = 'CAPTION';
 
 // The ratio of element height to font size above which an inline element is
 // likely to be multi-line. The HEURISTIC_HEIGHT_RATIO accounts for
@@ -383,6 +386,7 @@ const TAG_A = 'A';
 const TAG_TABLE = 'TABLE';
 const TAG_THEAD = 'THEAD';
 const TAG_TFOOT = 'TFOOT';
+const TAG_CAPTION = 'CAPTION';
 const TAG_TR = 'TR';
 const TAG_TD = 'TD';
 const TAG_TH = 'TH';
@@ -400,7 +404,9 @@ const TAG_LI = 'LI';
 const TAG_DT = 'DT';
 const TAG_DD = 'DD';
 const TAG_FIGURE = 'FIGURE';
+const TAG_FIGCAPTION = 'FIGCAPTION';
 const TAG_LABEL = 'LABEL';
+const TAG_LEGEND = 'LEGEND';
 const TAG_AREA = 'AREA';
 
 // Tags with annotated role.
@@ -440,7 +446,6 @@ const TAGS_TO_REJECT = [
   TAG_OBJECT,
   TAG_DATALIST,
   TAG_HEAD,
-  TAG_CAPTION,
   TAG_DESC,
   TAG_TITLE,
   TAG_METADATA,
@@ -1441,7 +1446,6 @@ function createViewportGeometry(viewportBox: Rect): PageContentGeometry {
  * @param interactiveNodeIds The set of interactive node IDs.
  * @param interactionInfo The pre-calculated interaction info for the element.
  * @param annotatedRoles The annotated roles for the element.
- * @param labelForDOMNodeID The DOM node ID of the associated control.
  * @param styleCache The style cache to use for computing styles.
  * @return True if the element is a generic container, false otherwise.
  */
@@ -1449,13 +1453,7 @@ function isGenericContainer(
     element: HTMLElement, interactiveNodeIds: InteractiveNodeIds,
     interactionInfo: PageContentNodeInteractionInfo|undefined,
     annotatedRoles: PageContentAnnotatedRole[],
-    labelForDOMNodeID: number|undefined, styleCache?: StyleCache): boolean {
-  // If the element is a label with a valid associated node ID, it is
-  // considered a generic container.
-  if (labelForDOMNodeID !== undefined) {
-    return true;
-  }
-
+    styleCache?: StyleCache): boolean {
   // Check if the element is an interactive node.
   const nodeId = getNodeId(element);
   const tagName = getStandardTagName(element);
@@ -3127,7 +3125,6 @@ function getBasicContentForNonGenericElement(
         },
       };
     }
-
     default:
       return null;
   }
@@ -3336,11 +3333,27 @@ function getContentForElementNode(
     }
   }
 
+  // 3.5. Labels, legends, captions, and figcaptions (after custom table and
+  // ARIA form control checks so explicit roles/displays take precedence).
+  if (!contentNode) {
+    const tagName = getStandardTagName(domNode);
+    if (tagName === TAG_LABEL || tagName === TAG_LEGEND ||
+        tagName === TAG_CAPTION || tagName === TAG_FIGCAPTION) {
+      contentNode = {
+        childrenNodes: [],
+        contentAttributes: {
+          attributeType: PageContentAttributeType.LABEL,
+          isAdRelated: false,
+        },
+      };
+    }
+  }
+
   // 4. Fallback: Generic Container.
   if (!contentNode &&
       isGenericContainer(
           domNode, interactiveNodeIds, interactionInfo, annotatedRoles,
-          labelForDOMNodeID, styleCache)) {
+          styleCache)) {
     contentNode = {
       childrenNodes: [],
       contentAttributes: {
@@ -5151,3 +5164,4 @@ function walkTreeAndPopulate(
     }
   }
 }
+// LINT.ThenChange(//third_party/blink/renderer/modules/content_extraction/ai_page_content_agent.cc)

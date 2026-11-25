@@ -5,6 +5,8 @@
 #ifndef IOS_CHROME_BROWSER_INTELLIGENCE_ACTOR_MODEL_ACTOR_TASK_H_
 #define IOS_CHROME_BROWSER_INTELLIGENCE_ACTOR_MODEL_ACTOR_TASK_H_
 
+#import <Foundation/Foundation.h>
+
 #import <memory>
 #import <optional>
 #import <string>
@@ -153,13 +155,15 @@ class ActorTask : public web::WebStateObserver,
   void SetInterventionDelegate(id<ActorTaskInterventionDelegate> delegate);
 
   // Interrupts the task as described by `request` and prompts the user.
-  // `on_response` is posted at most once: with the user's answer once the task
-  // has resumed, `kRejected` if the task cannot take the interrupt, or
-  // `kTaskWentAway` if it stops first. The answer is `kUserPaused`, without
-  // prompting, if the user paused the task since the last reply; while the
-  // task is paused, it waits until the user resumes it.
+  // `on_response` is posted at most once with:
+  // - the user's answer once the task has resumed (`kUserPaused`, without
+  //   prompting, if the user paused the task since the last reply; waits until
+  //   resumed while paused),
+  // - `kTaskRejected` if the task cannot take the interrupt,
+  // - `kTaskWentAway` if it stops first, or
+  // - the intervention delegate's error once the task has resumed.
   void Interrupt(const InterruptRequest& request,
-                 ActorTaskResultCallback<InterruptResponse> on_response);
+                 InterventionResultCallback<InterruptReply> on_response);
 
   // Interrupts the task while a tool waits on the user, without prompting.
   void InterruptForTool(base::PassKey<ActorEngine> pass_key);
@@ -215,6 +219,13 @@ class ActorTask : public web::WebStateObserver,
       const url::Origin& navigation_origin,
       NavigationConfirmationDecisionCallback callback);
 
+  // Prompts the user via `intervention_delegate_` to confirm navigating to
+  // `navigation_origin`. Transitions the task from `kActing` to
+  // `kWaitingOnUser` while waiting for the user's response.
+  void RequestUserConfirmationForNavigation(
+      const url::Origin& navigation_origin,
+      UserConfirmationDialogDecisionCallback callback);
+
   // web::WebStateObserver overrides.
   void DidStopLoading(web::WebState* web_state) override;
   void WebStateDestroyed(web::WebState* web_state) override;
@@ -265,6 +276,10 @@ class ActorTask : public web::WebStateObserver,
   // and registers the safety timeout timer.
   void DeferActCompletion(std::vector<ActionResult> results);
 
+  // Starts the safety timeout timer for a deferred `Act()` waiting on page
+  // loads.
+  void StartPageLoadTimeout();
+
   // Transitions to `kReflecting` and replies to the pending `Act()` with
   // `results`.
   void FinishAct(std::vector<ActionResult> results);
@@ -304,25 +319,46 @@ class ActorTask : public web::WebStateObserver,
   // Returns whether the task is in a state that can be interrupted.
   bool CanBeInterrupted() const;
 
-  // Suspends ongoing actions and transitions to `kWaitingOnUser`.
+  // Suspends ongoing actions and any deferred page-load timer, and transitions
+  // to `kWaitingOnUser`.
   void EnterWaitingOnUser();
 
   // Transitions from `kWaitingOnUser` to `resumed_state` and resumes the
-  // engine. No-op if the task is not waiting on the user.
+  // engine (and any deferred page-load wait when returning to `kActing`).
+  // No-op if the task is not waiting on the user.
   void ExitWaitingOnUser(ActorTaskState resumed_state);
 
   // Handles `Interrupt()` for a `ConfirmationInterrupt`.
   void InterruptFor(const ConfirmationInterrupt& confirmation,
-                    ActorTaskResultCallback<InterruptResponse> on_response);
+                    InterventionResultCallback<InterruptReply> on_response);
 
   // Shows the `confirmation` prompt via the intervention delegate.
   void ShowInterruptConfirmation(const ConfirmationInterrupt& confirmation);
 
-  // Handles the user confirming.
-  void OnInterruptConfirmationResolved();
+  // Handles the user confirming, or the delegate failing with an error.
+  void OnInterruptConfirmationResolved(InterventionDelegateResult<void> result);
+
+  // Handles `Interrupt()` for a `ClarificationInterrupt`.
+  void InterruptFor(const ClarificationInterrupt& clarification,
+                    InterventionResultCallback<InterruptReply> on_response);
+
+  // Asks the `clarification` question via the intervention delegate.
+  void ShowInterruptClarification(const ClarificationInterrupt& clarification);
+
+  // Handles the user's answer, or the delegate failing with an error.
+  void OnInterruptClarificationResolved(
+      InterventionDelegateResult<NSString*> result);
+
+  // Replies to the pending interrupt with `result` and resumes the task.
+  void ResolveInterrupt(InterventionResult<InterruptReply> result);
 
   // Returns whether the task is in a state that can be paused.
   bool CanBePaused() const;
+
+  // Handles the user's decision on a navigation confirmation prompt, or the
+  // delegate failing with an error.
+  void OnNavigationUserConfirmationResolved(
+      InterventionDelegateResult<bool> result);
 
   // The task state.
   ActorTaskState state_ = ActorTaskState::kInit;
@@ -381,7 +417,7 @@ class ActorTask : public web::WebStateObserver,
   std::optional<PendingAct> pending_act_;
 
   // Reply of the pending `Interrupt()`, if any.
-  ActorTaskResultCallback<InterruptResponse> pending_interrupt_;
+  InterventionResultCallback<InterruptReply> pending_interrupt_;
 
   // Whether the user paused the task since the last reply. The next reply then
   // tells the caller the task was paused, as the pages may have changed.
@@ -412,6 +448,10 @@ class ActorTask : public web::WebStateObserver,
   // Callback for confirming out-of-turn cross-origin navigations via the
   // Origin Critic model.
   NavigationConfirmationCallback navigation_confirmation_callback_;
+
+  // Held while waiting on the user to confirm a cross-origin navigation.
+  UserConfirmationDialogDecisionCallback
+      pending_navigation_confirmation_callback_;
 
   // Weak pointer factory for callbacks scoped to the current operation (action
   // completion, page load, interrupt confirmation). Invalidated when the

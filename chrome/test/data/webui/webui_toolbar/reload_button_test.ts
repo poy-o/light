@@ -9,8 +9,7 @@ import {MenuSourceType} from 'chrome://resources/mojo/ui/base/mojom/menu_source_
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {MockTimer} from 'chrome://webui-test/mock_timer.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
-import {AnimationTracker} from 'chrome://webui-toolbar.top-chrome/lazy_load.js';
-import {BrowserProxyImpl, ContextMenuType, PressHandler} from 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
+import {AnimationTracker, BrowserProxyImpl, ContextMenuType, PressHandler} from 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
 import type {BrowserProxy, ReloadButtonElement} from 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
 
 import {TestToolbarUiHandler} from './test_toolbar_browser_proxy.js';
@@ -95,12 +94,13 @@ suite('ReloadButtonTest', function() {
   });
 
   function dispatchPointerEvent(
-      type: 'pointerdown'|'pointermove'|'pointerup', yOffset: number = 0) {
+      type: 'pointerdown'|'pointermove'|'pointerup', yOffset: number = 0,
+      pointerType: string = 'mouse') {
     const button = reloadButton.shadowRoot.querySelector('cr-icon-button')!;
     const rect = button.getBoundingClientRect();
     button.dispatchEvent(new PointerEvent(type, {
       button: 0,
-      pointerType: 'mouse',
+      pointerType,
       clientX: rect.left + rect.width / 2,
       clientY: rect.top + rect.height / 2 + yOffset,
       bubbles: true,
@@ -375,6 +375,19 @@ suite('ReloadButtonTest', function() {
 
       assertEquals(0, toolbarUiHandler.getCallCount('showContextMenu'));
       assertEquals(1, browserControlsHandler.getCallCount('reloadFromClick'));
+    });
+
+    // Matching Views, a long touch press should do nothing when the menu
+    // can't be shown.
+    test('TouchLongPressDoesNothingWhenMenuNotAllowed', async function() {
+      await setCanShowMenu(false);
+
+      dispatchPointerEvent('pointerdown', 0, 'touch');
+      mockTimer.tick(LONG_PRESS_MS);
+      dispatchPointerEvent('pointerup', 0, 'touch');
+
+      assertEquals(0, toolbarUiHandler.getCallCount('showContextMenu'));
+      assertEquals(0, browserControlsHandler.getCallCount('reloadFromClick'));
     });
 
     // If loading starts after the button is pressed, but before the long press

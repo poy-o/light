@@ -5,6 +5,7 @@
 #include "chrome/browser/glic/selection/selection_overlay_controller.h"
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 #include "base/check_deref.h"
@@ -20,6 +21,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/actor/actor_keyed_service.h"
 #include "chrome/browser/download/download_prefs.h"
+#include "chrome/browser/glic/glic_pref_names.h"
 #include "chrome/browser/glic/glic_selection_observer.h"
 #include "chrome/browser/glic/glic_warming_checks.h"
 #include "chrome/browser/glic/host/context/glic_tab_data.h"
@@ -31,6 +33,7 @@
 #include "chrome/browser/glic/public/glic_keyed_service_factory.h"
 #include "chrome/browser/glic/public/glic_passkeys.h"
 #include "chrome/browser/glic/public/glic_side_panel_coordinator.h"
+#include "chrome/browser/glic/selection/gemini_prompt_endpoint.h"
 #include "chrome/browser/glic/selection/quick_answers_tool.h"
 #include "chrome/browser/glic/selection/selection_overlay_untrusted_ui.h"
 #include "chrome/browser/glic/selection/selection_suggestion.h"
@@ -61,11 +64,13 @@
 #include "components/optimization_guide/core/feature_registry/feature_keys.h"
 #include "components/optimization_guide/proto/features/smart_selection_suggestions.pb.h"
 #include "components/page_content_annotations/content/page_context_fetcher_options.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/tabs/public/tab_interface.h"
 #include "components/vector_icons/vector_icons.h"
 #include "components/viz/common/frame_sinks/copy_output_result.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -161,6 +166,50 @@ gfx::RectF GetRectForRegion(const SkBitmap& image, const gfx::RectF& region) {
   return gfx::RectF((region.x() - 0.5 * region.width()) * x_scale,
                     (region.y() - 0.5 * region.height()) * y_scale,
                     region.width() * x_scale, region.height() * y_scale);
+}
+
+std::optional<gfx::Rect> ConvertRectToPixels(const gfx::RectF& region,
+                                             const SkBitmap& screenshot) {
+  if (screenshot.empty()) {
+    return std::nullopt;
+  }
+  const gfx::RectF gfx_rect = GetRectForRegion(screenshot, region);
+  const SkRect rect_on_canvas = gfx::RectFToSkRect(gfx_rect);
+  if (rect_on_canvas.isEmpty() ||
+      !screenshot.bounds().contains(rect_on_canvas)) {
+    return std::nullopt;
+  }
+  return gfx::ToEnclosingRect(gfx_rect);
+}
+
+std::optional<std::vector<gfx::Point>> ConvertPolylineToPixels(
+    const std::vector<gfx::PointF>& polyline,
+    const SkBitmap& screenshot) {
+  if (polyline.empty() || screenshot.empty()) {
+    return std::nullopt;
+  }
+  const int width = screenshot.width();
+  const int height = screenshot.height();
+  std::vector<gfx::Point> line_points;
+  line_points.reserve(polyline.size());
+  for (const gfx::PointF& pt : polyline) {
+    if (!std::isfinite(pt.x()) || !std::isfinite(pt.y())) {
+      return std::nullopt;
+    }
+    const double scaled_x = std::round(static_cast<double>(pt.x()) * width);
+    const double scaled_y = std::round(static_cast<double>(pt.y()) * height);
+    if (scaled_x < 0.0 || scaled_x > width || scaled_y < 0.0 ||
+        scaled_y > height) {
+      return std::nullopt;
+    }
+    const int x = static_cast<int>(scaled_x);
+    const int y = static_cast<int>(scaled_y);
+    // Map width/height to width-1/height-1 to be valid pixel indices.
+    const int pixel_x = (x == width) ? x - 1 : x;
+    const int pixel_y = (y == height) ? y - 1 : y;
+    line_points.emplace_back(pixel_x, pixel_y);
+  }
+  return line_points;
 }
 
 constexpr int kSelectionPaddingDip = 5;
@@ -297,6 +346,8 @@ SelectionOverlayController::SelectionOverlayController(
     PrefService* pref_service)
     : OverlayBaseController(tab, pref_service),
       scoped_unowned_user_data_(tab->GetUnownedUserDataHost(), *this) {
+  prompt_endpoints_.push_back(std::make_unique<GeminiPromptEndpoint>(
+      InvokeWithAutoSubmitPasskeyProvider::GetPassKey()));
   tab_subscriptions_.push_back(tab_->RegisterWillDiscardContents(
       base::BindRepeating(&SelectionOverlayController::WillDiscardContents,
                           weak_factory_.GetWeakPtr())));
@@ -347,12 +398,15 @@ void SelectionOverlayController::WillDiscardContents(
     tabs::TabInterface* tab,
     content::WebContents* old_contents,
     content::WebContents* new_contents) {
+  CancelPendingEndpointRequests();
   CloseUI();
+  Observe(new_contents);
 }
 
 void SelectionOverlayController::WillDetach(
     tabs::TabInterface* tab,
     tabs::TabInterface::DetachReason reason) {
+  CancelPendingEndpointRequests();
   CloseUI();
 }
 
@@ -471,6 +525,19 @@ void SelectionOverlayController::AdoptSession(
   session_->owner = Session::Owner::kPanel;
   session_->handoff_to_panel_pending = false;
   BindCaptureRegionObserver(std::move(observer));
+  // Note: do not invalidate cached or in-flight region suggestions here.
+  // `SetPromptEndpoints()` only updates the available endpoint list and does
+  // not tell the overlay to drop or refetch displayed chips; clearing them here
+  // would drop in-flight requests and leave stale chip IDs that hit
+  // `ReportBadMessage` on click. `SuggestionService::RequestSuggestions()` does
+  // not currently vary results by endpoint.
+  // TODO(b/587425707): If suggestions become endpoint-dependent, have the
+  // overlay refetch on `SetPromptEndpoints()` before invalidating here.
+  session_->active_endpoint_id = ResolveInitialPromptEndpointId();
+  if (session_->page && session_->active_endpoint_id.has_value()) {
+    session_->page->SetPromptEndpoints(GetAvailablePromptEndpointInfos(),
+                                       *session_->active_endpoint_id);
+  }
   if (!session_->selected_regions.empty() && !HasOnlyTextSelection()) {
     SyncRegionsToPanel(/*should_focus_panel=*/false);
   }
@@ -621,6 +688,10 @@ void SelectionOverlayController::BindOverlay(
       &SelectionOverlayController::Reset, session_weak_factory_.GetWeakPtr()));
   session_->page.Bind(std::move(page));
   session_->page->SetInteractionOptions(session_->interaction_options.Clone());
+  if (session_->active_endpoint_id.has_value()) {
+    session_->page->SetPromptEndpoints(GetAvailablePromptEndpointInfos(),
+                                       *session_->active_endpoint_id);
+  }
 
   if (views::WebView* web_view = GetOverlayWebView()) {
     session_->overlay_web_view_focus_subscription =
@@ -724,9 +795,10 @@ void SelectionOverlayController::CaptureRegion(
                      mojom::CaptureRegionErrorReason::kUnknown);
     return;
   }
-  // When the small chip is enabled, pre-select the tab's current text
-  // selection.
-  if (base::FeatureList::IsEnabled(features::kGlicSelectionSmallChip)) {
+  // When the small chip or overlay prompt box is enabled, pre-select the tab's
+  // current text selection.
+  if (base::FeatureList::IsEnabled(features::kGlicSelectionSmallChip) ||
+      base::FeatureList::IsEnabled(features::kGlicSelectionOverlayPromptBox)) {
     if (auto* selection_observer = GlicSelectionObserver::From(tab)) {
       if (std::optional<gfx::Rect> bounds =
               selection_observer->GetCurrentSelectionBounds()) {
@@ -740,8 +812,8 @@ void SelectionOverlayController::CaptureRegion(
           // `selected_regions` to the overlay WebUI.
           // TODO(b:579078690): Clean this up once text and region selections
           // use one path.
-          // Same as the other small chip paths: the text selection is fixed
-          // and opens directly in the post-selection state.
+          // Same as the other text pre-selection paths: the text selection is
+          // fixed and opens directly in the post-selection state.
           selection_overlay_controller->session_->interaction_options =
               selection::InteractionOptions::New(
                   /*hide_handles=*/true, /*skip_intro_animation=*/true);
@@ -813,14 +885,17 @@ void SelectionOverlayController::ShowImpl(mojom::TabContextOptionsPtr options) {
     session_->show_requested_time = base::TimeTicks::Now();
   }
   session_->options = std::move(options);
+  session_->active_endpoint_id = ResolveInitialPromptEndpointId();
   if (IsSelectionOverlayPromptEnabled() && session_->entry_point.has_value()) {
     session_->metrics_logger.emplace(*session_->entry_point,
                                      tab_->GetContents()->GetContentsMimeType(),
                                      !session_->selected_regions.empty());
   }
-  if (GlicKeyedService* service = GlicKeyedService::Get(tab_->GetProfile());
-      service && !service->GetInstanceForTab(tab_)) {
-    service->TryPreload(GlicWarmingTrigger::kSelectionOverlay);
+  for (const auto& endpoint : prompt_endpoints_) {
+    if (IsEndpointAllowedForSession(endpoint->GetId()) &&
+        endpoint->IsAvailable(*tab_)) {
+      endpoint->Prepare(*tab_);
+    }
   }
   if (::selection::SuggestionService* const suggestion_service =
           ::selection::SuggestionService::From(tab_)) {
@@ -1226,6 +1301,28 @@ void SelectionOverlayController::NotifyPageNavigated() {
   CloseUI();
 }
 
+void SelectionOverlayController::PrimaryMainFrameRenderProcessGone(
+    base::TerminationStatus status) {
+  CancelPendingEndpointRequests();
+  OverlayBaseController::PrimaryMainFrameRenderProcessGone(status);
+}
+
+void SelectionOverlayController::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
+  // Cancel pending async endpoint submissions even when the overlay is `kOff`
+  // (`InvokeWithPrompt()` calls `Close()` before `endpoint->Submit()`, and
+  // `OverlayBaseController::DidFinishNavigation()` returns early when `kOff`).
+  // Only cancel on cross-document navigations (which also covers reloads);
+  // same-document URL changes (`pushState` / fragment updates) keep the
+  // document alive and should not tear down an in-flight submission.
+  if (navigation_handle->IsInPrimaryMainFrame() &&
+      navigation_handle->HasCommitted() &&
+      !navigation_handle->IsSameDocument()) {
+    CancelPendingEndpointRequests();
+  }
+  OverlayBaseController::DidFinishNavigation(navigation_handle);
+}
+
 void SelectionOverlayController::NotifyTabForegrounded() {}
 
 void SelectionOverlayController::NotifyTabWillEnterBackground() {
@@ -1346,15 +1443,48 @@ void SelectionOverlayController::SetLiveBlur(bool enabled) {
 }
 
 void SelectionOverlayController::InvokeFromSuggestion(
-    const std::string& prompt) {
-  InvokeWithPrompt(prompt);
+    std::string prompt,
+    ::selection::mojom::PromptEndpointId endpoint_id) {
+  InvokeWithPrompt(std::move(prompt), endpoint_id);
+}
+
+void SelectionOverlayController::SetActivePromptEndpoint(
+    ::selection::mojom::PromptEndpointId endpoint_id) {
+  // Endpoint availability can change asynchronously on the browser side while a
+  // `SetActivePromptEndpoint()` call from the WebUI is in flight (e.g., if the
+  // Gemini side panel adopts the session via `AdoptSession()`, the default
+  // search engine changes, or Glic enabling changes). Ignore unavailable
+  // endpoints instead of treating the race as a bad message.
+  if (!FindAvailablePromptEndpoint(endpoint_id)) {
+    return;
+  }
+  if (session_->active_endpoint_id == endpoint_id) {
+    return;
+  }
+  session_->active_endpoint_id = endpoint_id;
+  for (auto& [id, region_data] : session_->selected_regions) {
+    if (region_data.suggestions_requested) {
+      // Active prompt endpoint changed: invalidate cached or in-flight
+      // suggestions so stale results are discarded and the next
+      // `GetSuggestedActions()` issues a fresh query for the new endpoint.
+      region_data.suggestions.clear();
+      region_data.suggestions_requested = false;
+      region_data.suggestions_complete = false;
+      region_data.generation++;
+    }
+  }
 }
 
 void SelectionOverlayController::SubmitPrompt(const std::string& prompt) {
   if (!base::FeatureList::IsEnabled(features::kGlicSelectionOverlayPromptBox)) {
     return;
   }
-  if (!GlicKeyedService::Get(tab_->GetProfile())) {
+  if (!session_->active_endpoint_id.has_value()) {
+    return;
+  }
+  ::selection::PromptEndpoint* endpoint =
+      FindAvailablePromptEndpoint(*session_->active_endpoint_id);
+  if (!endpoint) {
     return;
   }
   if (!IsPageContextReady()) {
@@ -1363,10 +1493,172 @@ void SelectionOverlayController::SubmitPrompt(const std::string& prompt) {
         "Prompt submitted before the page context.");
     return;
   }
-  if (session_->metrics_logger) {
-    session_->metrics_logger->RecordPromptSubmitted();
+  // Panel-owned sessions are pinned to Gemini, so only persist the last-used
+  // endpoint for direct sessions where the user can choose.
+  if (session_->owner == Session::Owner::kDirect) {
+    pref_service_->SetInteger(prefs::kGlicSelectionOverlayLastEndpoint,
+                              static_cast<int>(*session_->active_endpoint_id));
   }
-  InvokeWithPrompt(prompt);
+  if (session_->metrics_logger) {
+    session_->metrics_logger->RecordPromptSubmitted(endpoint->GetId());
+  }
+  InvokeWithPrompt(prompt, endpoint->GetId());
+}
+
+void SelectionOverlayController::RegisterPromptEndpoint(
+    std::unique_ptr<::selection::PromptEndpoint> endpoint) {
+  CHECK(endpoint);
+  prompt_endpoints_.push_back(std::move(endpoint));
+}
+
+void SelectionOverlayController::SetPromptEndpointsForTesting(
+    std::vector<std::unique_ptr<::selection::PromptEndpoint>> endpoints) {
+  prompt_endpoints_ = std::move(endpoints);
+}
+
+bool SelectionOverlayController::ShouldCloseOnSubmit(
+    ::selection::mojom::PromptEndpointId endpoint_id) const {
+  // Only a Glic-owned session keeps the overlay open when submitting back to
+  // Gemini; direct sessions and submissions to another endpoint (which replace
+  // the Glic side panel) always close the overlay.
+  return session_->owner != Session::Owner::kPanel ||
+         endpoint_id != ::selection::mojom::PromptEndpointId::kGemini;
+}
+
+bool SelectionOverlayController::IsEndpointAllowedForSession(
+    ::selection::mojom::PromptEndpointId endpoint_id) const {
+  // Panel-owned sessions (initiated from or adopted by the open Gemini side
+  // panel) stream regions directly to Gemini and stay pinned to `kGemini`.
+  return session_->owner != Session::Owner::kPanel ||
+         endpoint_id == ::selection::mojom::PromptEndpointId::kGemini;
+}
+
+::selection::PromptEndpoint*
+SelectionOverlayController::FindAvailablePromptEndpoint(
+    ::selection::mojom::PromptEndpointId endpoint_id) {
+  if (!IsEndpointAllowedForSession(endpoint_id)) {
+    return nullptr;
+  }
+  for (const auto& endpoint : prompt_endpoints_) {
+    if (endpoint->GetId() == endpoint_id && endpoint->IsAvailable(*tab_)) {
+      return endpoint.get();
+    }
+  }
+  return nullptr;
+}
+
+std::optional<::selection::mojom::PromptEndpointId>
+SelectionOverlayController::ResolveInitialPromptEndpointId() {
+  const auto last_used = static_cast<::selection::mojom::PromptEndpointId>(
+      pref_service_->GetInteger(prefs::kGlicSelectionOverlayLastEndpoint));
+  if (::selection::mojom::IsKnownEnumValue(last_used) &&
+      FindAvailablePromptEndpoint(last_used)) {
+    return last_used;
+  }
+  if (FindAvailablePromptEndpoint(
+          ::selection::mojom::PromptEndpointId::kGemini)) {
+    return ::selection::mojom::PromptEndpointId::kGemini;
+  }
+  for (const auto& endpoint : prompt_endpoints_) {
+    if (IsEndpointAllowedForSession(endpoint->GetId()) &&
+        endpoint->IsAvailable(*tab_)) {
+      return endpoint->GetId();
+    }
+  }
+  return std::nullopt;
+}
+
+std::vector<selection::PromptEndpointInfoPtr>
+SelectionOverlayController::GetAvailablePromptEndpointInfos() const {
+  std::vector<selection::PromptEndpointInfoPtr> infos;
+  for (const auto& endpoint : prompt_endpoints_) {
+    if (IsEndpointAllowedForSession(endpoint->GetId()) &&
+        endpoint->IsAvailable(*tab_)) {
+      infos.push_back(selection::PromptEndpointInfo::New(
+          endpoint->GetId(), base::UTF16ToUTF8(endpoint->GetDisplayName()),
+          base::UTF16ToUTF8(endpoint->GetPlaceholder())));
+    }
+  }
+  return infos;
+}
+
+::selection::PageContext SelectionOverlayController::BuildPageContext(
+    bool include_submission_data) const {
+  ::selection::PageContext page_context;
+  page_context.screenshot = session_->redacted_screenshot;
+  if (!session_->tab_context) {
+    return page_context;
+  }
+  if (const auto& annotated_page_data =
+          session_->tab_context->annotated_page_data) {
+    if (annotated_page_data->annotated_page_content.has_value()) {
+      if (auto apc =
+              annotated_page_data->annotated_page_content
+                  ->As<optimization_guide::proto::AnnotatedPageContent>()) {
+        page_context.apc = std::move(*apc);
+      }
+    }
+    page_context.metadata = annotated_page_data->metadata.Clone();
+  }
+  if (!include_submission_data) {
+    return page_context;
+  }
+  if (const auto& viewport_screenshot =
+          session_->tab_context->viewport_screenshot;
+      viewport_screenshot && !viewport_screenshot->data.empty() &&
+      viewport_screenshot->width_pixels > 0 &&
+      viewport_screenshot->height_pixels > 0) {
+    ::selection::PageContext::EncodedScreenshot encoded;
+    encoded.data = viewport_screenshot->data;
+    encoded.mime_type = viewport_screenshot->mime_type;
+    encoded.size = gfx::Size(viewport_screenshot->width_pixels,
+                             viewport_screenshot->height_pixels);
+    page_context.encoded_screenshot = std::move(encoded);
+  }
+  if (session_->tab_context->pdf_document_data) {
+    ::selection::PageContext::PdfDocumentData pdf;
+    pdf.origin = session_->tab_context->pdf_document_data->origin;
+    pdf.bytes = session_->tab_context->pdf_document_data->pdf_data;
+    pdf.size_limit_exceeded =
+        session_->tab_context->pdf_document_data->pdf_size_limit_exceeded;
+    page_context.pdf_data = std::move(pdf);
+  }
+  return page_context;
+}
+
+::selection::AreaOfInterest SelectionOverlayController::BuildAreaOfInterest(
+    const SelectedRegionData* region_data,
+    bool include_region_bounds) const {
+  ::selection::AreaOfInterest aoi;
+  if (!region_data) {
+    return aoi;
+  }
+  aoi.selected_text = region_data->selected_text;
+  aoi.text_surrounding_selection = region_data->text_surrounding_selection;
+  aoi.is_text_selection = region_data->is_text_selection;
+  if (!include_region_bounds || session_->redacted_screenshot.empty()) {
+    return aoi;
+  }
+  const auto& shape = region_data->region->shape;
+  if (shape->is_rect()) {
+    if (std::optional<gfx::Rect> rect = ConvertRectToPixels(
+            shape->get_rect(), session_->redacted_screenshot)) {
+      aoi.bounds = *rect;
+    }
+  } else if (shape->is_polyline()) {
+    if (std::optional<std::vector<gfx::Point>> line_points =
+            ConvertPolylineToPixels(shape->get_polyline(),
+                                    session_->redacted_screenshot)) {
+      aoi.bounds = std::move(*line_points);
+    }
+  }
+  return aoi;
+}
+
+void SelectionOverlayController::CancelPendingEndpointRequests() {
+  for (const auto& endpoint : prompt_endpoints_) {
+    endpoint->CancelPendingRequests();
+  }
 }
 
 bool SelectionOverlayController::HasOnlyTextSelection() const {
@@ -1401,35 +1693,64 @@ void SelectionOverlayController::SendPageContextReceivedIfReady() {
   }
 }
 
-void SelectionOverlayController::InvokeWithPrompt(const std::string& prompt) {
-  GlicKeyedService* service = GlicKeyedService::Get(tab_->GetProfile());
-  if (!service) {
+void SelectionOverlayController::InvokeWithPrompt(
+    std::string prompt,
+    ::selection::mojom::PromptEndpointId endpoint_id) {
+  ::selection::PromptEndpoint* endpoint =
+      FindAvailablePromptEndpoint(endpoint_id);
+  if (!endpoint) {
     return;
   }
-  CapturedRegions regions;
-  if (ShouldSendRegionsWithPrompt() && IsPageContextReady()) {
-    regions = GetCapturedRegions();
+  const SelectedRegionData* active_region = nullptr;
+  if (session_->active_region_id.has_value()) {
+    active_region = base::FindOrNull(session_->selected_regions,
+                                     *session_->active_region_id);
   }
-  GlicInvokeOptions options(glic::Target(*tab_),
-                            mojom::InvocationSource::kTextSelectionWidget);
-  if (!regions.empty()) {
-    options.additional_context = AdditionalTabContext(
-        CreateRegionSelectionContext(*tab_, session_->tab_context.Clone(),
-                                     std::move(regions)),
-        content::GlobalRenderFrameHostId(), PolicyCheck::kNone);
+  if (!active_region && !session_->selected_regions.empty()) {
+    active_region = &session_->selected_regions.begin()->second;
   }
+  if (endpoint_id == ::selection::mojom::PromptEndpointId::kGemini &&
+      active_region && active_region->is_text_selection) {
+    for (const auto& [id, data] : session_->selected_regions) {
+      if (!data.is_text_selection) {
+        active_region = &data;
+        break;
+      }
+    }
+  }
+  // Overlay-specific policy: Glic receives regions directly when the panel
+  // owns the session, or omits them when
+  // `kGlicSelectionOverlaySendRegionWithPrompt` is disabled or only text is
+  // selected (`GlicSelectionObserver` handles text). Other endpoints (e.g.
+  // Google Search) always receive the active region bounds so pre-selected
+  // text bounding boxes can be cropped visually.
+  const bool include_region_bounds =
+      IsPageContextReady() &&
+      (endpoint_id != ::selection::mojom::PromptEndpointId::kGemini ||
+       ShouldSendRegionsWithPrompt());
+  // Skip deserializing/copying page context data (APC, metadata, screenshot,
+  // PDF bytes) when submitting to Gemini without region bounds, since
+  // `GeminiPromptEndpoint::Submit()` discards `PageContext` when there are no
+  // captured regions to attach.
+  ::selection::PageContext page_context;
+  if (endpoint_id != ::selection::mojom::PromptEndpointId::kGemini ||
+      include_region_bounds) {
+    page_context = BuildPageContext(/*include_submission_data=*/true);
+  }
+  ::selection::PageContextWithSelection context(
+      std::move(page_context),
+      BuildAreaOfInterest(active_region, include_region_bounds));
+  const bool should_close = ShouldCloseOnSubmit(endpoint->GetId());
   base::WeakPtr<SelectionOverlayController> weak_this =
       weak_factory_.GetWeakPtr();
-  if (!prompt.empty()) {
-    options.prompts.push_back(prompt);
-    service->InvokeWithAutoSubmit(
-        InvokeWithAutoSubmitPasskeyProvider::GetPassKey(), std::move(options));
-  } else {
-    service->Invoke(std::move(options));
-  }
-  if (weak_this && state() != State::kOff &&
-      session_->owner == Session::Owner::kDirect) {
+  if (should_close && state() != State::kOff) {
+    // Close the overlay before invoking the endpoint so opening a non-Glic
+    // destination side panel (e.g. Google Search) does not trigger
+    // `OverlayBaseController::OnSidePanelDidOpen()` as an unexpected close.
     Close();
+  }
+  if (weak_this) {
+    endpoint->Submit(*tab_, std::move(prompt), std::move(context));
   }
 }
 
@@ -1559,33 +1880,10 @@ void SelectionOverlayController::RequestNewSuggestions(
   uint64_t generation = ++region_data.generation;
   base::UnguessableToken region_id = region_data.region->id;
 
-  ::selection::AreaOfInterest aoi;
-  aoi.screenshot = session_->redacted_screenshot;
-  aoi.selected_text = region_data.selected_text;
-  aoi.text_surrounding_selection = region_data.text_surrounding_selection;
-  const auto& region = region_data.region;
-  if (region->shape->is_rect()) {
-    gfx::RectF gfx_rect = GetRectForRegion(session_->redacted_screenshot,
-                                           region->shape->get_rect());
-    aoi.bounds = gfx::ToEnclosingRect(gfx_rect);
-  } else if (region->shape->is_polyline()) {
-    aoi.bounds = base::ToVector(
-        region->shape->get_polyline(), [&](const gfx::PointF& pt) {
-          return gfx::Point(
-              static_cast<int>(pt.x() * session_->redacted_screenshot.width()),
-              static_cast<int>(pt.y() *
-                               session_->redacted_screenshot.height()));
-        });
-  }
-  if (session_->tab_context && session_->tab_context->annotated_page_data &&
-      session_->tab_context->annotated_page_data->annotated_page_content
-          .has_value()) {
-    if (auto apc =
-            session_->tab_context->annotated_page_data->annotated_page_content
-                ->As<optimization_guide::proto::AnnotatedPageContent>()) {
-      aoi.apc = std::move(*apc);
-    }
-  }
+  ::selection::PageContext page_context =
+      BuildPageContext(/*include_submission_data=*/false);
+  ::selection::AreaOfInterest aoi =
+      BuildAreaOfInterest(&region_data, /*include_region_bounds=*/true);
 
   if (base::FeatureList::IsEnabled(kStaticSelectionSuggestions)) {
     std::vector<std::unique_ptr<::selection::Suggestion>> static_suggestions;
@@ -1610,7 +1908,9 @@ void SelectionOverlayController::RequestNewSuggestions(
   }
 
   suggestion_service->RequestSuggestions(
-      std::move(aoi),
+      ::selection::PageContextWithSelection(std::move(page_context),
+                                            std::move(aoi)),
+      session_->active_endpoint_id,
       base::BindOnce(&SelectionOverlayController::OnSuggestionsReceived,
                      session_weak_factory_.GetWeakPtr(), region_id, generation,
                      /*complete=*/true));
@@ -1696,8 +1996,7 @@ void SelectionOverlayController::ExecuteSuggestedAction(
     return;
   }
 
-  auto tag = matched_suggestion->GetAction()->which();
-
+  const auto tag = matched_suggestion->GetAction()->which();
   switch (tag) {
     case ::selection::mojom::Action::Tag::kHandoff:
       // kHandoff should not have a channel since the surface is going away.
@@ -1706,19 +2005,7 @@ void SelectionOverlayController::ExecuteSuggestedAction(
             "Channel supplied for a handoff action.");
         return;
       }
-      if (session_->metrics_logger) {
-        session_->metrics_logger->RecordSuggestionAccepted(*matched_suggestion);
-      }
-      {
-        base::WeakPtr<SelectionOverlayController> weak_this =
-            weak_factory_.GetWeakPtr();
-        matched_suggestion->Execute(mojo::GenericPendingAssociatedReceiver());
-        if (weak_this && state() != State::kOff &&
-            session_->owner == Session::Owner::kDirect) {
-          Close();
-        }
-      }
-      return;
+      break;
     case ::selection::mojom::Action::Tag::kInlineFulfillment:
       // Fulfillment must have a channel.
       if (!channel) {
@@ -1731,9 +2018,32 @@ void SelectionOverlayController::ExecuteSuggestedAction(
             "Channel interface does not match.");
         return;
       }
-      if (session_->metrics_logger) {
-        session_->metrics_logger->RecordSuggestionAccepted(*matched_suggestion);
+      break;
+  }
+
+  if (session_->metrics_logger) {
+    session_->metrics_logger->RecordSuggestionAccepted(*matched_suggestion);
+  }
+  // Panel-owned sessions are pinned to Gemini, so only persist the last-used
+  // endpoint for direct sessions where the user can choose.
+  if (session_->owner == Session::Owner::kDirect &&
+      session_->active_endpoint_id.has_value()) {
+    pref_service_->SetInteger(prefs::kGlicSelectionOverlayLastEndpoint,
+                              static_cast<int>(*session_->active_endpoint_id));
+  }
+
+  switch (tag) {
+    case ::selection::mojom::Action::Tag::kHandoff: {
+      base::WeakPtr<SelectionOverlayController> weak_this =
+          weak_factory_.GetWeakPtr();
+      matched_suggestion->Execute(mojo::GenericPendingAssociatedReceiver());
+      if (weak_this && state() != State::kOff &&
+          session_->owner == Session::Owner::kDirect) {
+        Close();
       }
+      return;
+    }
+    case ::selection::mojom::Action::Tag::kInlineFulfillment:
       matched_suggestion->Execute(std::move(channel));
       return;
   }
@@ -1823,14 +2133,10 @@ CapturedRegions SelectionOverlayController::GetCapturedRegions() const {
     }
     const auto& region = region_data.region;
     if (region->shape->is_rect()) {
-      gfx::RectF gfx_rect_on_canvas = GetRectForRegion(
-          session_->redacted_screenshot, region->shape->get_rect());
-      SkRect rect_on_canvas = gfx::RectFToSkRect(gfx_rect_on_canvas);
-      if (!rect_on_canvas.isEmpty() &&
-          session_->redacted_screenshot.bounds().contains(rect_on_canvas)) {
+      if (std::optional<gfx::Rect> rect = ConvertRectToPixels(
+              region->shape->get_rect(), session_->redacted_screenshot)) {
         captured_regions.emplace_back(
-            id, glic::mojom::CapturedRegion::NewRect(
-                    gfx::ToEnclosingRect(gfx_rect_on_canvas)));
+            id, glic::mojom::CapturedRegion::NewRect(*rect));
       } else {
         // TODO(b/485358530): Record proper histograms for the error case.
         LOG(ERROR) << "Invalid region selected "
@@ -1838,30 +2144,12 @@ CapturedRegions SelectionOverlayController::GetCapturedRegions() const {
       }
     } else if (region->shape->is_polyline()) {
       if (base::FeatureList::IsEnabled(features::kGlicRegionSelectionLine)) {
-        std::vector<gfx::Point> line_points;
-        bool all_points_valid = true;
-        for (const auto& point : region->shape->get_polyline()) {
-          int x = std::round(point.x() * session_->redacted_screenshot.width());
-          int y =
-              std::round(point.y() * session_->redacted_screenshot.height());
-
-          if (x >= 0 && x <= session_->redacted_screenshot.width() && y >= 0 &&
-              y <= session_->redacted_screenshot.height()) {
-            // Map width/height to width-1/height-1 to be valid pixel indices.
-            int pixel_x =
-                (x == session_->redacted_screenshot.width()) ? x - 1 : x;
-            int pixel_y =
-                (y == session_->redacted_screenshot.height()) ? y - 1 : y;
-            line_points.emplace_back(pixel_x, pixel_y);
-          } else {
-            all_points_valid = false;
-            break;
-          }
-        }
-        if (all_points_valid && !line_points.empty()) {
+        if (std::optional<std::vector<gfx::Point>> line_points =
+                ConvertPolylineToPixels(region->shape->get_polyline(),
+                                        session_->redacted_screenshot)) {
           captured_regions.emplace_back(
-              id,
-              glic::mojom::CapturedRegion::NewPolyline(std::move(line_points)));
+              id, glic::mojom::CapturedRegion::NewPolyline(
+                      std::move(*line_points)));
         } else {
           LOG(ERROR) << "Invalid polyline selected";
         }

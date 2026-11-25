@@ -48,9 +48,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "components/autofill/core/browser/at_memory/at_memory_enablement_util.h"
-#include "components/autofill/core/browser/at_memory/at_memory_manager.h"
-#include "components/autofill/core/browser/at_memory/at_memory_search_state.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_trigger_source.h"
 #include "components/autofill/core/browser/autofill_type.h"
@@ -125,7 +122,6 @@
 #include "components/autofill/core/browser/studies/autofill_ablation_study.h"
 #include "components/autofill/core/browser/studies/autofill_experiments.h"
 #include "components/autofill/core/browser/suggestions/addresses/address_suggestion_generator.h"
-#include "components/autofill/core/browser/suggestions/at_memory/at_memory_nudge_generator.h"
 #include "components/autofill/core/browser/suggestions/autocomplete_suggestion_generator.h"
 #include "components/autofill/core/browser/suggestions/autofill_ai/autofill_ai_suggestion_generator.h"
 #include "components/autofill/core/browser/suggestions/compose/compose_suggestion_generator.h"
@@ -532,25 +528,6 @@ bool IsTriggerSourceOnlyRelevantForCompose(
   NOTREACHED();
 }
 
-// Returns true if regular Autofill suggestions must not be generated for
-// `field` because it is a <textarea> on Android. With
-// `kAutofillAtMemorySupportTextAreaOnAndroid`, textareas behave like
-// contenteditables: the keyboard accessory only offers the AtMemory entry
-// point, so no address, payment or single-field suggestions are generated for
-// them. AtMemory-triggered suggestions are unaffected.
-bool ShouldSuppressSuggestionsForTextArea(
-    const FormFieldData& field,
-    AutofillSuggestionTriggerSource trigger_source) {
-#if BUILDFLAG(IS_ANDROID)
-  return field.form_control_type() == FormControlType::kTextArea &&
-         !IsAtMemoryTriggerSource(trigger_source) &&
-         base::FeatureList::IsEnabled(
-             features::kAutofillAtMemorySupportTextAreaOnAndroid);
-#else
-  return false;
-#endif
-}
-
 // Returns `true` if this suggestion trigger source should replace the currently
 // showing suggestions. `true` for everything but IPH-like nudges to start using
 // a product (Compose, AtMemory).
@@ -635,7 +612,7 @@ FillingProductSet GetFillingProductsToSuggest(
     case kAtMemoryKeyboardShortcut:
       return {FillingProduct::kAtMemory};
     case kAtMemoryInactivityNudge:
-      return {FillingProduct::kNone};
+      return {};
     case kGmailOneTimePasswordAvailable:
       return {FillingProduct::kOneTimePassword};
   }
@@ -926,7 +903,6 @@ FilterSuggestionsByPrioritization(
 // still launches asynchronous generators (`kAutocomplete`, `kOneTimePassword`)
 // before synchronous `kAddress` and `kCreditCard` generation.
 constexpr auto kLegacySuggestionGeneratorOrder = std::to_array<FillingProduct>({
-    FillingProduct::kNone,
     FillingProduct::kAutofillAi,
     FillingProduct::kIban,
     FillingProduct::kMerchantPromoCode,
@@ -958,7 +934,6 @@ constexpr auto kSuggestionGeneratorLaunchOrder = std::to_array<FillingProduct>({
     FillingProduct::kIban,
     FillingProduct::kPasskey,
     FillingProduct::kPassword,
-    FillingProduct::kNone,
 });
 
 static_assert(FillingProductSet(kLegacySuggestionGeneratorOrder) ==
@@ -981,7 +956,8 @@ std::unique_ptr<OtpManager> CreateOtpManager(
 
 BrowserAutofillManager::MetricsState::MetricsState(
     BrowserAutofillManager* owner)
-    : address_form_event_logger(owner),
+    : owner(CHECK_DEREF(owner)),
+      address_form_event_logger(owner),
       credit_card_form_event_logger(owner),
       loyalty_card_form_event_logger(owner),
       otp_form_event_logger(owner) {}
@@ -991,6 +967,19 @@ BrowserAutofillManager::MetricsState::~MetricsState() {
     base::UmaHistogramBoolean("Autofill.WebOTP.OneTimeCode.FromAutocomplete",
                               has_observed_one_time_code_field);
   }
+#if !BUILDFLAG(IS_IOS)
+  const bool used_web_otp = owner->DocumentUsedWebOtp();
+  // It's possible that a frame without any form uses WebOTP. E.g., a server
+  // may send the verification code to a phone number that was collected
+  // beforehand and uses the WebOTP API for authentication purpose without user
+  // manually entering the code.
+  if (has_parsed_forms || used_web_otp) {
+    AutofillMetrics::LogWebOtpPhoneCollection(
+        owner->client().GetUkmRecorder(), owner->driver().GetPageUkmSourceId(),
+        has_observed_phone_number_field, has_observed_one_time_code_field,
+        used_web_otp);
+  }
+#endif
   credit_card_form_event_logger.OnDestroyed();
   address_form_event_logger.OnDestroyed();
   loyalty_card_form_event_logger.OnDestroyed();
@@ -1012,9 +1001,6 @@ BrowserAutofillManager::~BrowserAutofillManager() {
     ProcessFieldLogEventsInForm(form_structure);
   });
   client().GetSingleFieldFillRouter().CancelPendingQueries();
-
-  // This is bad: It calls a virtual function of BAM's owning AutofillDriver.
-  ReportAutofillWebOtpMetrics();
 }
 
 base::WeakPtr<AutofillManager> BrowserAutofillManager::GetWeakPtr() {
@@ -1410,45 +1396,7 @@ void BrowserAutofillManager::OnAskForValuesToFillImpl(
     return;
   }
 
-  if (IsAtMemoryTriggerSource(trigger_source)) {
-    const GURL& main_frame_url = client().GetLastCommittedPrimaryMainFrameURL();
-    const GURL& field_url = field.origin().GetURL();
-    std::string debug_reason;
-    if (!MayPerformAtMemoryAction(AtMemoryAction::kTriggerSearchUI, client(),
-                                  main_frame_url, std::nullopt,
-                                  &debug_reason)) {
-      LogAtMemorySuppression(AtMemoryAction::kTriggerSearchUI, log_manager(),
-                             debug_reason);
-      return;
-    }
-    if (!MayPerformAtMemoryAction(AtMemoryAction::kTriggerSearchUI, client(),
-                                  field_url, std::nullopt, &debug_reason)) {
-      LogAtMemorySuppression(AtMemoryAction::kTriggerSearchUI, log_manager(),
-                             debug_reason);
-      return;
-    }
-  }
-
   external_delegate_->OnQuery(form, field, caret_bounds, trigger_source);
-
-  // Textareas on Android only offer the AtMemory entry point in the keyboard
-  // accessory, so no Autofill suggestions are generated for them.
-  if (ShouldSuppressSuggestionsForTextArea(field, trigger_source)) {
-    external_delegate_->OnSuggestionsReturned(field, /*input_suggestions=*/{},
-                                              /*prefilled_query=*/{});
-    return;
-  }
-
-  if (AtMemoryManager* amm = client().GetAtMemoryManager();
-      amm && IsAtMemoryTriggerSource(trigger_source)) {
-    AtMemorySearchState state = amm->GetStateForField(
-        field.global_id(), field.origin(), trigger_source);
-
-    // Show suggestions with a search bar to start the flow.
-    external_delegate_->OnSuggestionsReturned(
-        field, std::move(state.suggestions), std::move(state.filter));
-    return;
-  }
 
   // TODO(crbug.com/409962888): Cleanup once the new logic is launched.
   if (!base::FeatureList::IsEnabled(
@@ -2543,12 +2491,6 @@ void BrowserAutofillManager::DidShowSuggestions(
   auto [form_structure, autofill_field] =
       FindMutableFormAndField(form_id, field_id);
 
-  if (AtMemoryManager* amm = client().GetAtMemoryManager()) {
-    amm->OnPopupShown(*this, form_id, field_id, trigger_source, metadata,
-                      update_suggestions_callback,
-                      driver().GetPageUkmSourceId());
-  }
-
   const DenseSet<SuggestionType> shown_suggestion_types(suggestions,
                                                         &Suggestion::type);
 
@@ -3573,15 +3515,6 @@ std::vector<Suggestion> BrowserAutofillManager::GetAvailableSuggestions(
     const AutofillField& autofill_field,
     AutofillSuggestionTriggerSource trigger_source,
     const std::vector<one_time_tokens::OneTimeToken>& one_time_tokens) {
-  // TODO(crbug.com/489659527): This currently overrides Autofill suggestions if
-  // suggestions were presented to the user after typing started. Fix that.
-  if (trigger_source ==
-      AutofillSuggestionTriggerSource::kAtMemoryInactivityNudge) {
-    // TODO(crbug.com/489659527): Localize the string.
-    return {Suggestion(u"Try searching in Chrome Memory",
-                       SuggestionType::kAtMemoryInactivityNudge)};
-  }
-
   std::vector<Suggestion> suggestions;
   switch (GetPreferredSuggestionFillingProduct(autofill_field.Type())) {
     case FillingProduct::kAddress:
@@ -3666,43 +3599,6 @@ BrowserAutofillManager::GetEventFormLogger(const AutofillField& field) {
   NOTREACHED();
 }
 
-void BrowserAutofillManager::ReportAutofillWebOtpMetrics() {
-#if !BUILDFLAG(IS_IOS)
-  const bool used_web_otp = driver().DocumentUsedWebOtp();
-
-  // It's possible that a frame without any form uses WebOTP. e.g. a server may
-  // send the verification code to a phone number that was collected beforehand
-  // and uses the WebOTP API for authentication purpose without user manually
-  // entering the code.
-  if (!metrics_->has_parsed_forms && !used_web_otp) {
-    return;
-  }
-
-  constexpr uint32_t kOtcUsed = 1 << 0;
-  constexpr uint32_t kWebOtpUsed = 1 << 1;
-  constexpr uint32_t kPhoneCollected = 1 << 2;
-  constexpr uint32_t kMaxValue = kOtcUsed | kWebOtpUsed | kPhoneCollected;
-
-  uint32_t phone_collection_metric_state = 0;
-  if (metrics_->has_observed_phone_number_field) {
-    phone_collection_metric_state |= kPhoneCollected;
-  }
-  if (metrics_->has_observed_one_time_code_field) {
-    phone_collection_metric_state |= kOtcUsed;
-  }
-  if (used_web_otp) {
-    phone_collection_metric_state |= kWebOtpUsed;
-  }
-
-  AutofillMetrics::LogWebOTPPhoneCollectionMetricStateUkm(
-      client().GetUkmRecorder(), driver().GetPageUkmSourceId(),
-      phone_collection_metric_state);
-
-  base::UmaHistogramExactLinear("Autofill.WebOTP.PhonePlusWebOTPPlusOTC",
-                                phone_collection_metric_state, kMaxValue + 1);
-#endif
-}
-
 void BrowserAutofillManager::ProcessFieldLogEventsInForm(
     const FormStructure& form_structure) {
   // ShouldUploadUkm reduces the UKM load by ignoring e.g. search boxes at best
@@ -3761,12 +3657,6 @@ void BrowserAutofillManager::InitializeSuggestionGenerators(
   std::vector<std::pair<FillingProduct, std::unique_ptr<SuggestionGenerator>>>
       generators;
   generators.reserve(relevant_filling_products.size());
-
-  if (trigger_source ==
-      AutofillSuggestionTriggerSource::kAtMemoryInactivityNudge) {
-    generators.emplace_back(FillingProduct::kNone,
-                            std::make_unique<AtMemoryNudgeGenerator>());
-  }
 
   if (relevant_filling_products.contains(FillingProduct::kAutofillAi)) {
     generators.emplace_back(FillingProduct::kAutofillAi,

@@ -24,7 +24,7 @@ try_.defaults.set(
     execution_timeout = try_constants.DEFAULT_EXECUTION_TIMEOUT,
     experiments = {
         "chromium_tests.resultdb_module": 100,
-        "luci.buildbucket.run_in_turboci.grpc_client": 50,
+        "luci.buildbucket.run_in_turboci.grpc_client": 100,
         "luci.buildbucket.run_in_turboci": 100,
     },
     service_account = try_constants.DEFAULT_SERVICE_ACCOUNT,
@@ -99,6 +99,7 @@ _rebaseline_builder(
     targets = targets.bundle(
         targets = [
             "chromium_linux_blink_rel_isolated_scripts",
+            "chromium_websocket_h3_isolated_scripts",
         ],
         mixins = [
             "linux-jammy",
@@ -274,6 +275,7 @@ _rebaseline_builder(
     targets = targets.bundle(
         targets = [
             "chromium_blink_isolated_scripts",
+            "chromium_websocket_h3_isolated_scripts",
         ],
         mixins = [
             targets.mixin(
@@ -318,6 +320,7 @@ _mac_rebaseline_builder(
     targets = targets.bundle(
         targets = [
             "chromium_blink_isolated_scripts",
+            "chromium_websocket_h3_isolated_scripts",
         ],
         mixins = [
             "mac_13_x64",

@@ -4536,7 +4536,7 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
           base::BindRepeating(
               [](BrowserWindowInterface* bwi, actions::ActionItem* item,
                  actions::ActionInvocationContext context) {
-                chrome::ShowSettingsSubPage(bwi, chrome::kManageProfileSubPage);
+                chrome::ShowManageProfile(bwi);
               },
               bwi),
           kActionCustomizeChrome, IDS_CUSTOMIZE_CHROME, IDS_CUSTOMIZE_CHROME,
@@ -4682,6 +4682,7 @@ void BrowserActions::InitializeToolbarAndMiscActions() {
               features::IsRoundedIconsEnabled()
                   ? vector_icons::kInfoIcon
                   : vector_icons::kInfoRefreshOldIcon))
+          .AddSynonyms(GetSynonymsForAction(IDS_ACTION_SYNONYMS_ABOUT))
           .Build());
 
   root_action_item_->AddChild(

@@ -10,6 +10,7 @@
 #include <string>
 #include <string_view>
 
+#include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
@@ -33,8 +34,10 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "pdf/buildflags.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_action_handler_registry.h"
+#include "ui/accessibility/ax_tree.h"
 #include "ui/accessibility/ax_updates_and_events.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -96,7 +99,8 @@ enum class ReadAnythingRendererRequestResult {
   kAllowed = 0,
   kNotObservedTree = 1,
   kDisallowedActionOnPageType = 2,
-  kMaxValue = kDisallowedActionOnPageType,
+  kDisallowedActionOnNode = 3,
+  kMaxValue = kDisallowedActionOnNode,
 };
 
 // LINT.ThenChange(/tools/metrics/histograms/metadata/accessibility/enums.xml:ReadAnythingRendererRequestResult)
@@ -297,6 +301,11 @@ class ReadAnythingUntrustedPageHandler :
 
   void RecordListenToThisPagePlaybackMetricForTesting(bool successful_playback);
 
+  bool IsAllowedLinkNodeForTesting(const ui::AXTreeID& tree_id,
+                                   ui::AXNodeID node_id) const {
+    return IsAllowedLinkNode(tree_id, node_id);
+  }
+
  protected:
   void OnImageDataDownloaded(const ui::AXTreeID& target_tree_id,
                              ui::AXNodeID,
@@ -305,6 +314,11 @@ class ReadAnythingUntrustedPageHandler :
                              const GURL& image_url,
                              const std::vector<SkBitmap>& bitmaps,
                              const std::vector<gfx::Size>& sizes);
+#if BUILDFLAG(ENABLE_PDF)
+  void OnPdfImageDataReceived(const ui::AXTreeID& target_tree_id,
+                              ui::AXNodeID node_id,
+                              const SkBitmap& bitmap);
+#endif  // BUILDFLAG(ENABLE_PDF)
 
  private:
 #if !BUILDFLAG(IS_CHROMEOS)
@@ -355,13 +369,21 @@ class ReadAnythingUntrustedPageHandler :
   bool AreActionsAllowedInTree(const ui::AXTreeID& tree_id) const;
 
   // Returns whether a renderer request (e.g. a link click or image download)
-  // targeting `tree_id` may be acted on, i.e. the tree is observed and actions
-  // are allowed in it. Records the result to `histogram_name`. `request_name`
-  // describes the request in logs.
+  // targeting `tree_id` may be acted on, i.e. the tree is observed, actions
+  // are allowed in it, and if `link_node_id` is set, it is a known clickable
+  // link node. Records the result to `histogram_name`. `request_name` describes
+  // the request in logs.
   bool CheckAndRecordRendererRequestAllowed(
       const ui::AXTreeID& tree_id,
       std::string_view histogram_name,
-      std::string_view request_name) const;
+      std::string_view request_name,
+      std::optional<ui::AXNodeID> link_node_id = std::nullopt) const;
+
+  // Applies `details` to the copy of its tree in `observed_trees_`, so
+  // OnLinkClicked() only clicks nodes that are currently links.
+  void UpdateObservedTree(const ui::AXUpdatesAndEvents& details);
+  bool IsAllowedLinkNode(const ui::AXTreeID& tree_id,
+                         ui::AXNodeID node_id) const;
 
   // ui::AXActionHandlerObserver:
   void TreeRemoved(ui::AXTreeID ax_tree_id) override;
@@ -557,6 +579,11 @@ class ReadAnythingUntrustedPageHandler :
   // only removals of those trees, because AXActionHandlerRegistry reports tree
   // removals for every tree in the browser.
   base::flat_set<ui::AXTreeID> forwarded_tree_ids_;
+
+  // Copies of forwarded accessibility trees, used to check that link clicks
+  // target a current link node. A tree is dropped when it is removed or an
+  // update fails to apply.
+  base::flat_map<ui::AXTreeID, std::unique_ptr<ui::AXTree>> observed_trees_;
 
   // Subscription for tab discard events.
   base::CallbackListSubscription tab_discard_subscription_;

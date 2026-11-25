@@ -12,7 +12,7 @@ import type {AppElement, NtpSearchboxElement, PageRemote} from 'chrome://new-tab
 import {BrowserPromoType, NtpBackgroundImageSource, ntpPromoProxyFactory, PageHandlerRemote, ShowNtpPromosResult} from 'chrome://new-tab-page/new_tab_page.js';
 import {ComposeboxFile} from 'chrome://resources/cr_components/composebox/common.js';
 import {PageHandlerRemote as ComposeboxPageHandlerRemote} from 'chrome://resources/cr_components/composebox/composebox.mojom-webui.js';
-import {ContextUploadStatus, ModelMode, ToolMode} from 'chrome://resources/cr_components/composebox/composebox_query.mojom-webui.js';
+import {ContextUploadStatus, InputType, ModelMode, ToolMode} from 'chrome://resources/cr_components/composebox/composebox_query.mojom-webui.js';
 import {WindowProxy as ComposeboxWindowProxy} from 'chrome://resources/cr_components/composebox/window_proxy.js';
 import type {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import type {CrToastElement} from 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
@@ -2100,10 +2100,18 @@ suite('NewTabPageAppTest', () => {
           loadTimeData.overrideValues({
             ntpRealboxNextEnabled: true,
             contextManagementInComposeboxEnabled: true,
-            contextualMenuUsePecApi: false,
+            contextualMenuUsePecApi: true,
             energyEffectEnabled,
             energyEffectVariant,
             energyEffectAnimationEnabled,
+          });
+        });
+
+        // The "+" entrypoint renders only when the input state allows an input.
+        setup(() => {
+          searchboxHandler.setPromiseResolveFor('getInputState', {
+            state: new MockInputState(
+                {allowedInputTypes: [InputType.kBrowserTab]}),
           });
         });
 
@@ -3460,7 +3468,15 @@ suite('NewTabPageAppTest', () => {
       assertStyle($$(app, '#searchbox')!, 'visibility', 'hidden');
     });
 
-    test('Contextual entrypoint IPH', () => {
+    test('Contextual entrypoint IPH waits for the "+"', async () => {
+      // setup()'s input state allows no inputs, so the "+" isn't rendered.
+      assertFalse(app.canShowHelpBubble(CONTEXTUAL_ENTRYPOINT_ELEMENT_ID));
+
+      searchboxHandler.setPromiseResolveFor('getInputState', {
+        state: new MockInputState({allowedTools: [ToolMode.kDeepSearch]}),
+      });
+      await recreateApp();
+
       assertTrue(app.canShowHelpBubble(CONTEXTUAL_ENTRYPOINT_ELEMENT_ID));
     });
 
@@ -3678,6 +3694,121 @@ suite('NewTabPageAppTest', () => {
             await openComposebox();
             assertPageBlocked(true);
           });
+
+      suite('LeaveAimMode', () => {
+        let originalDynamicAimFulfillment: boolean;
+
+        suiteSetup(() => {
+          originalDynamicAimFulfillment =
+              loadTimeData.valueExists('dynamicAimFulfillmentEnabled') &&
+              loadTimeData.getBoolean('dynamicAimFulfillmentEnabled');
+          loadTimeData.overrideValues({dynamicAimFulfillmentEnabled: true});
+        });
+
+        suiteTeardown(() => {
+          loadTimeData.overrideValues(
+              {dynamicAimFulfillmentEnabled: originalDynamicAimFulfillment});
+        });
+
+        async function openInMode(
+            text: string, willFulfillInAim: boolean,
+            activeTool: ToolMode =
+                ToolMode.kUnspecified): Promise<NtpComposeboxElement> {
+          const composebox = await openComposebox(text);
+          composebox.onInputStateChanged(new MockInputState({
+            activeTool,
+            activeModel: willFulfillInAim ? ModelMode.kGeminiPro :
+                                            ModelMode.kUnspecified,
+            willFulfillInAim,
+          }));
+          await microtasksFinished();
+          searchboxHandler.resetResolver('setActiveModelMode');
+          searchboxHandler.resetResolver('setActiveToolMode');
+          searchboxHandler.resetResolver('clearFiles');
+          return composebox;
+        }
+
+        test('empty composebox leaves AI Mode', async () => {
+          const composebox = await openInMode('', /*willFulfillInAim=*/ true);
+
+          await clickOutside();
+
+          assertPageBlocked(false);
+          assertEquals(composebox, getComposebox());
+          assertDeepEquals(
+              [[ModelMode.kUnspecified, false]],
+              searchboxHandler.getArgs('setActiveModelMode'));
+          assertDeepEquals(
+              [[ToolMode.kUnspecified, false]],
+              searchboxHandler.getArgs('setActiveToolMode'));
+          assertEquals(0, searchboxHandler.getCallCount('clearFiles'));
+        });
+
+        test('composebox with input stays in AI Mode', async () => {
+          const composebox =
+              await openInMode('draft', /*willFulfillInAim=*/ true);
+
+          await clickOutside();
+
+          assertEquals('draft', composebox.input);
+          assertEquals(0, searchboxHandler.getCallCount('setActiveModelMode'));
+        });
+
+        test('composebox with a tool stays in AI Mode', async () => {
+          await openInMode(
+              '', /*willFulfillInAim=*/ true, ToolMode.kDeepSearch);
+
+          await clickOutside();
+
+          assertEquals(0, searchboxHandler.getCallCount('setActiveModelMode'));
+          assertEquals(0, searchboxHandler.getCallCount('setActiveToolMode'));
+        });
+
+        test('composebox with an attachment stays in AI Mode', async () => {
+          const composebox = await openInMode('', /*willFulfillInAim=*/ true);
+          const file = ComposeboxFile.createFromFile(
+              'test-uuid', {name: 'test.pdf', type: 'application/pdf'},
+              ContextUploadStatus.kUploadSuccessful);
+          composebox.attachedContext = new Map([[file.uuid, file]]);
+          await microtasksFinished();
+
+          await clickOutside();
+
+          assertEquals(0, searchboxHandler.getCallCount('setActiveModelMode'));
+          assertEquals(0, searchboxHandler.getCallCount('clearFiles'));
+        });
+
+        test('empty composebox in SRP mode is left as is', async () => {
+          await openInMode('', /*willFulfillInAim=*/ false);
+
+          await clickOutside();
+
+          assertEquals(0, searchboxHandler.getCallCount('setActiveModelMode'));
+          assertEquals(0, searchboxHandler.getCallCount('setActiveToolMode'));
+        });
+
+        test('empty composebox stays in AI Mode while submitting', async () => {
+          // Submitting empties the composebox, but the submitted query may
+          // still need the model.
+          const composebox = await openInMode('', /*willFulfillInAim=*/ true);
+          composebox.submitting = true;
+
+          await clickOutside();
+
+          assertEquals(0, searchboxHandler.getCallCount('setActiveModelMode'));
+          assertEquals(0, searchboxHandler.getCallCount('setActiveToolMode'));
+        });
+
+        test('model is kept without dynamic AIM fulfillment', async () => {
+          const composebox = await openInMode('', /*willFulfillInAim=*/ true);
+          composebox.dynamicAimFulfillmentEnabled = false;
+
+          await clickOutside();
+
+          assertEquals(0, searchboxHandler.getCallCount('setActiveModelMode'));
+          assertEquals(0, searchboxHandler.getCallCount('setActiveToolMode'));
+        });
+      });
     });
   });
 
@@ -4530,6 +4661,7 @@ suite('NewTabPageAppTest', () => {
           app.shadowRoot.querySelector<NtpComposeboxElement>('#composebox');
       assertTrue(!!composebox);
       assertTrue(!!composebox.state);
+      assertEquals(true, composebox.state.enterAimMode);
 
       let focusCalled = false;
       composebox.focusInput = () => {
@@ -4540,6 +4672,7 @@ suite('NewTabPageAppTest', () => {
       await microtasksFinished();
 
       assertTrue(focusCalled);
+      assertEquals(true, composebox.state.enterAimMode);
     });
 
     test(

@@ -27,7 +27,7 @@
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
 #include "chrome/test/base/mixin_based_in_process_browser_test.h"
 #include "components/account_id/account_id.h"
-#include "components/enterprise/isolated_mode/isolated_mode_features.h"
+#include "components/enterprise/isolated_mode/scoped_isolated_mode_override_for_testing.h"
 #include "components/feedback/redaction_tool/pii_types.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/test/browser_task_environment.h"
@@ -146,7 +146,7 @@ IN_PROC_BROWSER_TEST_F(SigninDataCollectorBrowserTestAsh, CollectSigninStatus) {
 
 IN_PROC_BROWSER_TEST_F(SigninDataCollectorBrowserTestAsh, FailInIncognitoMode) {
   // Create incognito browser for testing.
-  BrowserWindowInterface* incognito_browser = CreateBrowserWindow(
+  BrowserWindowInterface* incognito_browser = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(browser()->GetProfile()->GetPrimaryOTRProfile(
                                     /*create_if_needed=*/true),
                                 /*from_user_gesture=*/true));
@@ -187,19 +187,15 @@ IN_PROC_BROWSER_TEST_F(SigninDataCollectorBrowserTestAsh, FailInIncognitoMode) {
 
 class SigninDataCollectorIsolatedModeBrowserTestAsh
     : public SigninDataCollectorBrowserTestAsh {
- public:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    SigninDataCollectorBrowserTestAsh::SetUpCommandLine(command_line);
-    command_line->AppendSwitch(
-        enterprise_isolated_mode::switches::
-            kForceEnterpriseIsolatedModeReplacesIncognito);
-  }
+ private:
+  enterprise_isolated_mode::ScopedIsolatedModeOverrideForTesting
+      scoped_isolated_mode_;
 };
 
 IN_PROC_BROWSER_TEST_F(SigninDataCollectorIsolatedModeBrowserTestAsh,
                        FailInIsolatedMode) {
   // Create isolated mode browser for testing.
-  BrowserWindowInterface* isolated_browser = CreateBrowserWindow(
+  BrowserWindowInterface* isolated_browser = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(browser()->GetProfile()->GetPrimaryOTRProfile(
                                     /*create_if_needed=*/true),
                                 /*from_user_gesture=*/true));

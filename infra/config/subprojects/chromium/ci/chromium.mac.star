@@ -289,6 +289,9 @@ ci.builder(
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
+        # Also enables the check on mac-rel, which mirrors this builder.
+        # "ci/GPU Mac arm64 Builder" sets the same value for mirroring.
+        gn_check_generated = True,
     ),
     gn_args = gn_args.config(
         configs = [
@@ -564,6 +567,7 @@ ci.thin_tester(
         targets = [
             "chromium_mac_gtests",
             "chromium_mac_rel_isolated_scripts",
+            "chromium_websocket_h3_isolated_scripts",
         ],
         mixins = [
             "mac_26_vm_optional",
@@ -583,6 +587,9 @@ ci.thin_tester(
                 mixins = [
                     targets.mixin(
                         enable_rts_filtering = True,
+                        swarming = targets.swarming(
+                            shards = 3,
+                        ),
                     ),
                     "mac_26_arm64",
                 ],
@@ -675,6 +682,14 @@ ci.thin_tester(
             ),
             "updater_tests": targets.mixin(
                 enable_rts_filtering = True,
+            ),
+            "websocket_h3_content_shell_wpt_tests": targets.per_test_modification(
+                mixins = "mac_26_arm64",
+                remove_mixins = "mac_26_vm_optional",
+            ),
+            "websocket_h3_headless_shell_wpt_tests": targets.per_test_modification(
+                mixins = "mac_26_arm64",
+                remove_mixins = "mac_26_vm_optional",
             ),
         },
     ),

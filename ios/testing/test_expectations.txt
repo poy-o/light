@@ -500,6 +500,7 @@ crbug.com/40807242 [ iPad ] RecentTabsTestCase/testContextMenuOpenInNewWindow [ 
 crbug.com/456803766 [ iPad Device iOS18 ] SafeModeTestCase/testPostCrashNTP [ Pass Failure ]
 crbug.com/333519732 SearchEngineTestCase/testUserActionWhenExpandingSnippetChevron [ Pass Failure ]
 crbug.com/484191734 ActivityServiceControllerTestCase/testOpenActivityServiceControllerAndOpenExtension [ Pass Failure ]
+crbug.com/455768805 TipsNotificationsTestCase/testTriggerNotifications [ Pass Failure ]
 crbug.com/379849501 VariationsSafeModeEndToEndTestCase/testVariationsSafeModeEndToEnd [ Pass Failure ]
 
 # Gardening surpression 2026-07-09
@@ -719,10 +720,6 @@ crbug.com/441761691 [ iOS27 Simulator ] ContextMenuTestCase/testOpenLinkInNewWin
 crbug.com/441761691 [ iOS27 Simulator ] ContextMenuTestCase/testOpenIncognitoLinkInNewWindow [ Skip ]
 
 # Gardening suppression 2026-11-09
-# The following tests crash the app. Skip is used until the fix is merged to handle crashes gracefully.
-crbug.com/583785828 GeminiFirstRunTestCase/testAcceptPromoAndConsent [ Skip ]
-crbug.com/583785828 GeminiFirstRunTestCase/testLightweightConvenienceFREAcceptConsent [ Skip ]
-crbug.com/583785828 GeminiFirstRunTestCase/testVisualRichFREAcceptConsent [ Skip ]
 crbug.com/583813595 [ iPhone ] PolicyTestCase/testEnterpriseBubbleInEnhancedSafeBrowsingPage [ Pass Failure ]
 
 # Gardening suppression 2026-11-11
@@ -765,3 +762,14 @@ crbug.com/588393258 PasswordManagerSearchTestCase/testPasswordsDeletionNavigatio
 crbug.com/584364590 GeminiAppSwitchingTestCase/testAppSwitchingAISummarizationFloatyNotInvoked [ Pass Failure ]
 crbug.com/571459477 [ iPhone Simulator ] ReadingListTestCase/testDeleteEntries [ Pass Failure ]
 crbug.com/588447001 [ iOS26 iOS27 iPad Simulator ] SharedTabGroupsTestCase/testCloseLastTabInIncognito [ Pass Failure ]
+
+# CQ flakiness quarantine 2026-11-22
+crbug.com/587893044 [ Simulator ] ContextMenuTestCase/testSaveInvalidImageShowsErrorAlert [ Pass Failure ]
+
+# Gardening suppression 2026-11-23
+crbug.com/589704479 [ Simulator ] OtpInputDialogEgtest [ Pass Failure ]
+
+# CQ flakiness quarantine 2026-11-23
+crbug.com/587566569 [ Simulator ] BookmarksFolderChooserAccountTestCase/testEditFunctionalityOnSingleFolderAccount [ Pass Failure ]
+crbug.com/588485339 [ Simulator ] BookmarksEntriesTestCase/testContextMenuForMultipleURLOpenAllInIncognito [ Pass Failure ]
+crbug.com/578730189 [ iOS26 iOS27 iPad Simulator ] ManageAccountsTableTestCase/testAddAccount [ Pass Failure ]

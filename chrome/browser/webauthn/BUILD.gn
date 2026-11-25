@@ -83,6 +83,7 @@ source_set("webauthn") {
       "//chrome/common:version_header",
       "//components/keyed_service/core",
       "//components/os_crypt/common",
+      "//components/signin/public/identity_manager",
       "//components/sync/protocol",
       "//components/trusted_vault",
       "//components/webauthn/core/browser",
@@ -184,6 +185,7 @@ source_set("impl") {
       "//chrome/app:generated_resources",
       "//chrome/app/vector_icons",
       "//chrome/browser/affiliations",
+      "//chrome/browser/device_reauth",
       "//chrome/browser/net",
       "//chrome/browser/profiles",
       "//chrome/browser/signin",
@@ -286,6 +288,7 @@ source_set("chrome_web_authentication_delegate") {
     "//chrome/browser/profiles:profile",
     "//chrome/common:constants",
     "//components/prefs",
+    "//components/webauthn:features",
     "//device/fido",
   ]
 
@@ -294,21 +297,37 @@ source_set("chrome_web_authentication_delegate") {
   }
 
   if (!is_android) {
-    public += [ "chrome_web_authentication_delegate.h" ]
-    sources += [ "chrome_web_authentication_delegate.cc" ]
+    # TODO(crbug.com/506062130): Build the remoteClientDataJSON permission
+    # context on Android once the content setting is registered there.
+    public += [
+      "chrome_web_authentication_delegate.h",
+      "remote_client_data_json_permission_context.h",
+    ]
+    sources += [
+      "chrome_web_authentication_delegate.cc",
+      "remote_client_data_json_permission_context.cc",
+    ]
 
     deps += [
       ":unexportable_key_utils",
       "//chrome/browser/signin",
       "//chrome/browser/sync",
       "//chrome/browser/ui/passwords",
+      "//components/content_settings/core/browser",
+      "//components/content_settings/core/common",
       "//components/device_event_log",
+      "//components/permissions",
       "//components/webauthn/core/browser",
       "//components/webauthn/core/browser:signal_api_utils",
+      "//services/network/public/mojom:mojom_permissions_policy",
+      "//url",
     ]
 
     if (is_chromeos) {
-      deps += [ "//chromeos/components/webauthn" ]
+      deps += [
+        "//chromeos/components/kiosk",
+        "//chromeos/components/webauthn",
+      ]
     }
   }
 
@@ -391,6 +410,8 @@ if (!is_android) {
       "fake_security_domain_service.h",
       "mock_enclave_manager.cc",
       "mock_enclave_manager.h",
+      "mock_gpm_pin_service.cc",
+      "mock_gpm_pin_service.h",
       "mock_local_credential_management.cc",
       "mock_local_credential_management.h",
       "test_util.cc",
@@ -453,11 +474,14 @@ source_set("unit_tests") {
     "//chrome/browser/profiles:profile",
     "//chrome/test:test_support",
     "//chrome/test/base:chrome_render_view_host_test_harness",
+    "//components/account_id",
     "//components/cbor",
     "//components/password_manager/core/browser",
     "//components/password_manager/core/browser:test_support",
     "//components/sync:test_support",
     "//components/sync/protocol",
+    "//components/user_manager:common",
+    "//components/webauthn:features",
     "//components/webauthn/content/browser",
     "//components/webauthn/core/browser",
     "//components/webauthn/core/browser:passkey_model",
@@ -482,11 +506,13 @@ source_set("unit_tests") {
       "enclave_manager_unittest.cc",
       "gpm/gpm_browser_authenticator_controller_unittest.cc",
       "gpm/gpm_browser_authenticator_unittest.cc",
+      "gpm/local_change_pin_controller_impl_unittest.cc",
       "gpm/local_gpm_passkeys_util_unittest.cc",
       "gpm_pin_service_unittest.cc",
       "passkey_unlock_error_strings_unittest.cc",
       "passkey_unlock_manager_unittest.cc",
       "password_credential_ui_controller_unittest.cc",
+      "remote_client_data_json_permission_context_unittest.cc",
       "ui_readiness_barrier_unittest.cc",
     ]
 
@@ -494,12 +520,17 @@ source_set("unit_tests") {
       ":local_credential_management",
       ":test_support",
       ":unexportable_key_utils",
+      "//chrome/browser/permissions",
       "//chrome/browser/signin",
       "//chrome/browser/signin:test_support",
       "//chrome/browser/sync",
       "//chrome/browser/sync:factories",
       "//chrome/browser/ui/autofill",
       "//chrome/browser/ui/passwords",
+      "//components/content_settings/core/browser",
+      "//components/content_settings/core/common",
+      "//components/device_reauth:test_support",
+      "//components/permissions",
       "//components/signin/public/identity_manager",
       "//components/signin/public/identity_manager:test_support",
       "//components/tabs:public",
@@ -511,6 +542,9 @@ source_set("unit_tests") {
       "//device/fido:mocks",
       "//google_apis",
       "//net",
+      "//services/network/public/cpp",
+      "//services/network/public/mojom:mojom_permissions_policy",
+      "//third_party/blink/public/common",
     ]
 
     if (is_mac) {
@@ -532,6 +566,7 @@ source_set("unit_tests") {
       ":unexportable_key_utils",
       "//chromeos/ash/components/osauth/impl",
       "//chromeos/ash/components/osauth/public",
+      "//chromeos/ash/components/policy/device_local_account",
     ]
   }
 

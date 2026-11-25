@@ -24,11 +24,12 @@
 #import "components/trusted_vault/trusted_vault_server_constants.h"
 #import "components/webauthn/ios/ios_passkey_client_commands.h"
 #import "ios/chrome/browser/app_store_rating/model/features.h"
+#import "ios/chrome/browser/authentication/account_switching_promo/model/account_switching_promo_scene_agent.h"
 #import "ios/chrome/browser/authentication/signin/non_modal_promo/coordinator/non_modal_signin_promo_coordinator.h"
 #import "ios/chrome/browser/authentication/trusted_vault_reauthentication/coordinator/trusted_vault_reauthentication_coordinator.h"
 #import "ios/chrome/browser/authentication/trusted_vault_reauthentication/coordinator/trusted_vault_reauthentication_coordinator_delegate.h"
 #import "ios/chrome/browser/authentication/ui_bundled/enterprise/enterprise_prompt/enterprise_prompt_coordinator.h"
-#import "ios/chrome/browser/authentication/ui_bundled/signin/signin_utils.h"
+#import "ios/chrome/browser/authentication/ui_bundled/signin/signin_constants.h"
 #import "ios/chrome/browser/autofill/authentication/coordinator/card_unmask_authentication_coordinator.h"
 #import "ios/chrome/browser/autofill/autofill_ai/coordinator/ambient_autofill_notice_coordinator.h"
 #import "ios/chrome/browser/autofill/autofill_ai/coordinator/autofill_ai_private_inference_notice_coordinator.h"
@@ -67,6 +68,7 @@
 #import "ios/chrome/browser/enterprise/enterprise_dialog/coordinator/enterprise_dialog_coordinator.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/file_upload_panel/coordinator/file_upload_panel_coordinator.h"
+#import "ios/chrome/browser/fullscreen/public/fullscreen_metrics.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_controller.h"
 #import "ios/chrome/browser/google_one/coordinator/google_one_coordinator.h"
 #import "ios/chrome/browser/intelligence/actor/coordinator/actor_overlay_coordinator.h"
@@ -177,6 +179,7 @@
 #import "ios/chrome/browser/sharing/ui_bundled/sharing_params.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/model/system_identity.h"
 #import "ios/chrome/browser/store_kit/model/store_kit_coordinator.h"
 #import "ios/chrome/browser/store_kit/model/store_kit_coordinator_delegate.h"
 #import "ios/chrome/browser/supervised_user/coordinator/parent_access_coordinator.h"
@@ -546,6 +549,20 @@ const char kContextPanelDismissedHistogram[] =
   _tabPickerCoordinator = nil;
 }
 
+// Shows or updates the actor overlay coordinator with `scrimVisible`.
+- (void)showActorOverlayWithScrimVisible:(BOOL)scrimVisible {
+  if (!_actorOverlayCoordinator) {
+    _actorOverlayCoordinator = [[ActorOverlayCoordinator alloc]
+        initWithBaseViewController:_baseViewController
+                           browser:_browser];
+    _actorOverlayCoordinator.scrimVisible = scrimVisible;
+    [_actorOverlayCoordinator start];
+    return;
+  }
+  // Updating `scrimVisible` in place avoids restarting the glow view.
+  _actorOverlayCoordinator.scrimVisible = scrimVisible;
+}
+
 // Stops the Trusted Vault reauthentication coordinator and runs its pending
 // completion, if any.
 - (void)stopTrustedVaultReauthentication {
@@ -590,6 +607,15 @@ const char kContextPanelDismissedHistogram[] =
   [_storeKitCoordinator stop];
   _storeKitCoordinator.delegate = nil;
   _storeKitCoordinator = nil;
+}
+
+// Starts `coordinator` if it is still the active Picture-in-Picture
+// coordinator.
+- (void)startPictureInPictureCoordinatorIfCurrent:
+    (PictureInPictureCoordinator*)coordinator {
+  if (coordinator && _pictureInPictureCoordinator == coordinator) {
+    [_pictureInPictureCoordinator start];
+  }
 }
 
 // Handles cleanup and metric logging when the Contextual Panel Entrypoint IPH
@@ -806,25 +832,21 @@ const char kContextPanelDismissedHistogram[] =
 
 #pragma mark - ActorOverlayCommands
 
-- (void)showActorOverlayForWebState:(web::WebState*)webState
-                          showScrim:(BOOL)showScrim {
-  if (!_actorOverlayCoordinator) {
-    _actorOverlayCoordinator = [[ActorOverlayCoordinator alloc]
-        initWithBaseViewController:_baseViewController
-                           browser:_browser
-                          webState:webState];
-    _actorOverlayCoordinator.scrimVisible = showScrim;
-    [_actorOverlayCoordinator start];
-    return;
-  }
-  // `ActorOverlayCoordinator` does not retain `webState` (crbug.com/548051839),
-  // so updating `scrimVisible` in place avoids restarting the glow view.
-  _actorOverlayCoordinator.scrimVisible = showScrim;
+- (void)showActorOverlayWithScrim {
+  [self showActorOverlayWithScrimVisible:YES];
+}
+
+- (void)showActorOverlayWithoutScrim {
+  [self showActorOverlayWithScrimVisible:NO];
 }
 
 - (void)hideActorOverlay {
   [_actorOverlayCoordinator stop];
   _actorOverlayCoordinator = nil;
+}
+
+- (void)showActorInteractionLimitedSnackbar {
+  [_actorOverlayCoordinator showInteractionLimitedSnackbar];
 }
 
 #pragma mark - AddContactsCommands
@@ -1819,7 +1841,7 @@ const char kContextPanelDismissedHistogram[] =
   }
   _nonModalSignInPromoCoordinator = [[NonModalSignInPromoCoordinator alloc]
       initWithBaseViewController:_baseViewController
-                         browser:signin::GetRegularBrowser(_browser)
+                         browser:_browser
                        promoType:promoType];
   _nonModalSignInPromoCoordinator.delegate = self;
   [_nonModalSignInPromoCoordinator start];
@@ -1980,14 +2002,25 @@ const char kContextPanelDismissedHistogram[] =
 - (void)showPictureInPictureWithConfig:(PictureInPictureConfiguration*)config {
   CHECK(!_browser->GetProfile()->IsOffTheRecord());
 
-  [_pictureInPictureCoordinator stop];
+  [self dismissPictureInPicture];
 
   UIViewController* baseViewController = [self activeBaseViewController];
+  if (!baseViewController) {
+    return;
+  }
   _pictureInPictureCoordinator = [[PictureInPictureCoordinator alloc]
       initWithConfiguration:config
          baseViewController:baseViewController
                     browser:_browser];
-  [_pictureInPictureCoordinator start];
+  __weak __typeof(self) weakSelf = self;
+  __weak PictureInPictureCoordinator* weakPictureInPictureCoordinator =
+      _pictureInPictureCoordinator;
+  ExecuteWhenTransitionsComplete(
+      ^{
+        [weakSelf startPictureInPictureCoordinatorIfCurrent:
+                      weakPictureInPictureCoordinator];
+      },
+      baseViewController);
 }
 
 - (void)dismissPictureInPicture {
@@ -2183,6 +2216,27 @@ const char kContextPanelDismissedHistogram[] =
           SigninCoordinatorResultOrIdentity result) {
         [weakPromosManagerCoordinator promoWasDismissed];
       }];
+}
+
+- (void)showAccountSwitchingPromo {
+  id<SystemIdentity> targetIdentity =
+      [AccountSwitchingPromoSceneAgent agentFromScene:_browser->GetSceneState()]
+          .targetIdentity;
+  if (!targetIdentity) {
+    [_promosManagerCoordinator promoWasDismissed];
+    return;
+  }
+
+  __weak __typeof(_promosManagerCoordinator) weakPromosManagerCoordinator =
+      _promosManagerCoordinator;
+  [HandlerForProtocol(self.dispatcher, SceneSignInCommands)
+      showAccountSwitchingPromoWithIdentity:targetIdentity
+                                 completion:^(
+                                     SigninCoordinator* coordinator,
+                                     SigninCoordinatorResultOrIdentity result) {
+                                   [weakPromosManagerCoordinator
+                                       promoWasDismissed];
+                                 }];
 }
 
 - (void)showHomeBackgroundCustomizationPromo {

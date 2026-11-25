@@ -45,10 +45,6 @@ class WebWorkerFetchContext;
 enum class DetachReason;
 }  // namespace blink
 
-namespace gfx {
-class Rect;
-}  // namespace gfx
-
 namespace network {
 struct URLLoaderCompletionStatus;
 }  // namespace network
@@ -72,9 +68,6 @@ class CONTENT_EXPORT RenderFrameObserver {
   // always null-check each call to render_frame() because the RenderFrame can
   // go away at any time.
   virtual void OnDestruct() = 0;
-
-  // Called when a load is explicitly stopped by the user or browser.
-  virtual void OnStop() {}
 
   // Navigation callbacks.
   //
@@ -120,7 +113,6 @@ class CONTENT_EXPORT RenderFrameObserver {
   virtual void DidCommitProvisionalLoad(ui::PageTransition transition) {}
   virtual void DidFailProvisionalLoad() {}
   virtual void DidFinishLoad() {}
-  virtual void DidFinishLoadForPrinting() {}
   virtual void DidDispatchDOMContentLoadedEvent() {}
   virtual void DidHandleOnloadEvents() {}
   virtual void DidCreateScriptContext(v8::Local<v8::Context> context,
@@ -164,9 +156,6 @@ class CONTENT_EXPORT RenderFrameObserver {
   // The interestingness of layouts is explained in WebMeaningfulLayout.h.
   virtual void DidMeaningfulLayout(blink::WebMeaningfulLayout layout_type) {}
 
-  // Notification when the First Scroll Delay becomes available.
-  virtual void DidObserveFirstScrollDelay(base::TimeDelta first_scroll_delay) {}
-
   // Notification when the renderer a response started, completed or canceled.
   // Complete or Cancel is guaranteed to be called for a response that started.
   // |request_id| uniquely identifies the request within this render frame.
@@ -185,20 +174,6 @@ class CONTENT_EXPORT RenderFrameObserver {
       const network::URLLoaderCompletionStatus& status) {}
   virtual void DidCancelResponse(int request_id) {}
 
-  // Reports that a resource was loaded from the blink memory cache.
-  // |request_id| uniquely identifies this resource within this render frame.
-  // |from_archive| indicates if the resource originated from a MHTML archive.
-  //
-  // TODO(crbug.com/404425954): `DidLoadResourceFromMemoryCache()` is going to
-  // be deprecated. Use `SetLoadFromMemoryCacheCallback()` in `RenderFrame`
-  // instead.
-  virtual void DidLoadResourceFromMemoryCache(
-      const GURL& response_url,
-      int request_id,
-      base::ByteSize encoded_body_length,
-      const std::string& mime_type,
-      bool from_archive) {}
-
   // Notification when the renderer observes data used during the page load.
   // This is used for page load metrics. |received_data_length| is the received
   // network bytes. |resource_id| uniquely identifies the resource within this
@@ -213,24 +188,8 @@ class CONTENT_EXPORT RenderFrameObserver {
   // Called when accessibility is enabled or disabled.
   virtual void AccessibilityModeChanged(const ui::AXMode& mode) {}
 
-  // Called when script in the page calls window.print().
-  virtual void ScriptedPrint(bool user_initiated) {}
-
   // Called when a worker fetch context will be created.
   virtual void WillCreateWorkerFetchContext(blink::WebWorkerFetchContext*) {}
-
-  // Called when the main frame's document rectangle changed, e.g. resizing a
-  // tab causes the document width to change, or loading additional content
-  // causes the document height to increase. Only invoked on the outermost main
-  // frame.
-  virtual void OnMainFrameRectangleChanged(const gfx::Rect& main_frame_rect) {}
-
-  // Called when the main frame's viewport rectangle (the viewport dimensions
-  // and the scroll position) changed, e.g. the user scrolled the main frame or
-  // the viewport dimensions themselves changed. Only invoked on the outermost
-  // main frame.
-  virtual void OnMainFrameViewportRectangleChanged(
-      const gfx::Rect& main_frame_viewport_rect) {}
 
   // Overlay-popup-ad violates The Better Ads Standards
   // (https://www.betterads.org/standards/). This method will be called when an

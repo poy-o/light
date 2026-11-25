@@ -78,6 +78,7 @@
 <translation id="112840717907525620">नीति कैश मेमोरी ठीक है</translation>
 <translation id="1131264053432022307">आपकी कॉपी की हुई इमेज</translation>
 <translation id="1132735979845538847"><ph name="ORIGIN" /> – फ़ुल स्क्रीन से बाहर निकलने के लिए, विंडो को स्क्रीन के सबसे ऊपरी हिस्से से खींचकर नीचे की ओर छोड़ें और 'वापस जाएं' बटन पर टैप करें</translation>
+<translation id="11370190534773372">कार्ड की जानकारी भरी गई</translation>
 <translation id="1138458427267715730">पूरे वेब पर मौजूद किसी भी साइट पर, कीमत में गिरावट होने पर सूचना पाएं</translation>
 <translation id="1142713751288681188">पेपर टाइप</translation>
 <translation id="1142965388643537393">यात्रा की जानकारी</translation>
@@ -584,6 +585,7 @@
 <translation id="1988881251331415125">अगर स्पेलिंग सही है, तो <ph name="BEGIN_LINK" />कनेक्टिविटी डायग्नोस्टिक्स टूल चलाकर देखें<ph name="END_LINK" />.</translation>
 <translation id="1991370806334788445">तीसरे पक्ष की कुकी को अनुमति देकर देखें. इससे ब्राउज़िंग की सुरक्षा में कमी आती है, लेकिन साइट की सुविधाएं उम्मीद के मुताबिक काम कर सकती हैं.</translation>
 <translation id="1992331125980284532">JIS B3</translation>
+<translation id="1995173078718234136">सामग्री स्‍कैन कर रहा है...</translation>
 <translation id="1996557034791506430">क्या आपको अनुमति वापस लेनी है?</translation>
 <translation id="1997484222658892567"><ph name="URL" /> आपके स्थानीय कंप्यूटर पर हमेशा के लिए बड़ी मात्रा में डेटा संग्रहित करना चाहता है</translation>
 <translation id="1997774360448418989">पेपर (लाइटवेट)</translation>
@@ -667,7 +669,6 @@
 <translation id="2126374524350484896">पीडीएफ़ प्रोड्यूसर:</translation>
 <translation id="2127090458081644412">इस डिवाइस में पासवर्ड सेव किया गया</translation>
 <translation id="2127747486437921899">इटैलिक</translation>
-<translation id="2129163794581571479">यह सुविधा, Gemini के पर्सनल इंटेलिजेंस की मदद से काम करती है. बेहतर ऑटोफ़िल की सुविधा को और बेहतर बनाने के लिए, आपके अनुरोधों, पेज के टाइटल, और यूआरएल की समीक्षा की जा सकती है. <ph name="BEGIN_LINK" />सेटिंग मैनेज करें<ph name="END_LINK" /></translation>
 <translation id="2130448033692577677">आपकी ओर से तय किए गए टेम्प्लेट, DnsOverHttpsMode नीति के सेट न हाेने की वजह से लागू नहीं हो सकते.</translation>
 <translation id="2130699163006053678">A3x7</translation>
 <translation id="2131006834960167560">'पेमेंट की जानकारी ऑटोमैटिक तरीके से भरने की सुविधा चालू करें' बॉटम शीट पूरी स्क्रीन पर खुली है.</translation>
@@ -1217,7 +1218,6 @@
 <translation id="3041584414879052436">'अभी खरीदें, बाद में पेमेंट करें' सुविधा देने वाली कंपनियों की सूची बंद है.</translation>
 <translation id="3041612393474885105">सर्टिफ़िकेट की जानकारी</translation>
 <translation id="3041835740069544003">अब Chrome, ऑनलाइन फ़ॉर्म अपने-आप भरने की बेहतर सुविधा का इस्तेमाल करके, ज़्यादा फ़ॉर्म का पता लगा सकता है और उन्हें अपने-आप भर सकता है. इसके लिए, पेज पर मौजूद जानकारी और यूआरएल को क्लाउड में एक प्राइवेट स्पेस में प्रोसेस किया जा सकता है. इसे सेटिंग में जाकर मैनेज करें.</translation>
-<translation id="3047054686095898948">अपनी जानकारी <ph name="IDS_AUTOFILL_GOOGLE_WALLET_TITLE_1" /> में सेव करें और Google के सभी प्रॉडक्ट पर, फ़ॉर्म भरने जैसे काम तेज़ी से करें. <ph name="ACCOUNT" /> के लिए, <ph name="IDS_AUTOFILL_GOOGLE_WALLET_TITLE_2" /> में जाकर <ph name="BEGIN_LINK" />अपनी जानकारी मैनेज<ph name="END_LINK" /> की जा सकती है</translation>
 <translation id="305162504811187366">Chrome रिमोट डेस्कटॉप का इतिहास, जिसमें टाइमस्टैंप, होस्ट, और क्लाइंट सेशन आईडी शामिल हैं</translation>
 <translation id="3052868890529250114">Chrome आम तौर पर आपको साइटों से सुरक्षित तरीके से कनेक्ट करता है, लेकिन इस बार इसे साइट पर सुरक्षित कनेक्शन नहीं मिला. ऐसा हो सकता है कि कोई हमलावर चोरी-छिपे आपके इंटरनेट पर नज़र रख रहा हो या उसमें बदलाव करने की कोशिश कर रहा हो. <ph name="BEGIN_LEARN_MORE_LINK" />इस चेतावनी के बारे में ज़्यादा जानें<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="3052964831964880138"><ph name="PRODUCT_NAME" /> की कीमत <ph name="PRICE_DROP" /> कम हुई है</translation>
@@ -1587,7 +1587,6 @@
 <translation id="3655670868607891010">अगर आपको यह बार-बार दिखाई दे रहा हो, तो इन <ph name="HELP_LINK" /> को आज़माएं.</translation>
 <translation id="3658742229777143148">पुनरीक्षण</translation>
 <translation id="3659521826520353662">एडमिन की बनाई हुई कौनसी वेबसाइटें देखी गई हैं और कब: <ph name="ALLOWLISTED_WEBSITES" /></translation>
-<translation id="3663760610864720538">यह सुविधा, Gemini के पर्सनल इंटेलिजेंस की मदद से काम करती है. <ph name="BEGIN_LINK" />सेटिंग मैनेज करें<ph name="END_LINK" /></translation>
 <translation id="3664479564786885722">इस प्रॉडक्ट को बेचने वाले दूसरे स्टोर से खरीदारी के ज़्यादा विकल्प खोजें.</translation>
 <translation id="3664782872746246217">कीवर्ड:</translation>
 <translation id="3670030362669914947">कार्ड नंबर</translation>
@@ -1866,7 +1865,6 @@
 <translation id="4112140312785995938">पीछे जाएं</translation>
 <translation id="4114007503059268298">क्या आपको इस कार्ड की जानकारी अपने Google खाते और इस डिवाइस में सेव करनी है?</translation>
 <translation id="4114146879518089587">साइट पर जाएं</translation>
-<translation id="4115378294792113321">मैजेंटा</translation>
 <translation id="4116701314593212016">JIS B7</translation>
 <translation id="4116798170070772848">RA2</translation>
 <translation id="4117700440116928470">नीति क्षेत्र समर्थित नहीं है.</translation>
@@ -3335,6 +3333,7 @@
 <translation id="6520509611422418552"><ph name="MEMBER_FIRST_NAME" />, अब "<ph name="GROUP_NAME" />" टैब ग्रुप का हिस्सा हैं</translation>
 <translation id="6521745193039995384">चालू नहीं</translation>
 <translation id="6524830701589638230">'सुलभता सेटिंग को मैनेज करें' बटन, Chrome की सेटिंग में सुलभता टूल को अपने हिसाब से बनाने के लिए इसे चालू करें</translation>
+<translation id="652643331002043144">यह साइट, फ़िशिंग, मैलवेयर, और धोखाधड़ी से जुड़ी अन्य साइटों से मिलती-जुलती है.</translation>
 <translation id="6529173248185917884">सातवां रोल</translation>
 <translation id="6529602333819889595">मिटाना &amp;फिर से करें</translation>
 <translation id="6532101170117367231">Google डिस्क में सेव करें</translation>
@@ -3449,6 +3448,7 @@
 <translation id="6727094998759448074">SRA4</translation>
 <translation id="672853333773293432">खाते से साइन इन किया गया</translation>
 <translation id="6732087373923685049">कैमरा</translation>
+<translation id="6736243959894955139">पता</translation>
 <translation id="6738516213925468394">आपका डेटा <ph name="TIME" /> को <ph name="BEGIN_LINK" />सिंक करने के लिए लंबा पासवर्ड बनाकर<ph name="END_LINK" /> सुरक्षित किया गया था. सिंक शुरू करने के लिए पासवर्ड डालें.</translation>
 <translation id="6740851646645036700">फ़िलहाल, लिखने में मदद पाने की तय सीमा पूरी हो गई है. बाद में कोशिश करें.</translation>
 <translation id="674375294223700098">अज्ञात सर्वर प्रमाणपत्र गड़बड़ी.</translation>
@@ -4548,6 +4548,7 @@
 <translation id="8577348305244205642">वर्चुअल कार्ड उपलब्ध नहीं है</translation>
 <translation id="8579000896558714521">कीबोर्ड के इनपुट में बदलाव</translation>
 <translation id="8579561564816585231">Password Manager जैसी Google की किसी सेवा का इस्तेमाल करके साइन इन किया गया</translation>
+<translation id="8580478010934016252">'पेमेंट का तरीका' पेज पर जाएं</translation>
 <translation id="8581064022803799721">यह पेज <ph name="LAST_BOOKMARKS_FOLDER" /> में सेव किया गया है.</translation>
 <translation id="858637041960032120">फ़ोन नंबर जोड़ें
 </translation>

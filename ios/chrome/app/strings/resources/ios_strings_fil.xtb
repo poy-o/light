@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">Mag-share ng mga password</translation>
 <translation id="1554043146674176775">I-off ang AI Mode</translation>
 <translation id="1554477036522844996">Bagong Window</translation>
+<translation id="1555014818414775661">Magdagdag ng mga larawan</translation>
 <translation id="1557806604681757705">iyong computer</translation>
 <translation id="1558391695376153246">Isara ang mga Incognito tab</translation>
 <translation id="1560153516220021659">Naka-collapse na pangalawang button ng toolbar</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">Buksan ang <ph name="BEGIN_BOLD" />Safari Settings<ph name="END_BOLD" /></translation>
 <translation id="3858860766373142691">Pangalan</translation>
 <translation id="386224966259596343">Magkakaroon ka ng pagkakataong i-save ang impormasyong ito sa Wallet sa susunod na pagkakataong magsagot ka ng nauugnay na form.</translation>
-<translation id="3868495844258915202">Ipakita ang buong URL</translation>
 <translation id="3870931306085184145">Walang naka-save na password para sa <ph name="DOMAIN" /></translation>
 <translation id="3875783148670536197">Ipakita sa Akin Kung Paano</translation>
 <translation id="3878657761594430423">Sheet grabber</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">Para makatanggap ng mga notification sa pagsubaybay sa presyo, i-on ang mga notification sa iyong Mga Setting ng iOS.</translation>
 <translation id="528857768909044842">Naka-save dito ang mga grupo ng tab</translation>
 <translation id="5294624619177114121">Mga notification sa mobile</translation>
-<translation id="5295239312320826323">Alisin ang account na <ph name="USER_EMAIL" />?</translation>
 <translation id="5300589172476337783">Ipakita</translation>
 <translation id="5311061401280561833">Pinapayagan ang access sa camera at mikropono</translation>
 <translation id="5313967007315987356">Magdagdag ng site</translation>
@@ -1788,6 +1787,7 @@ Dapat ding naka-enable ang handoff sa Pangkalahatang seksyon ng Mga Setting, at 
 <translation id="6504541289630702018">Madaling i-access ang iyong mga grupo ng tab sa desktop</translation>
 <translation id="6505334220040167806">I-collapse ang grupo ng tab.</translation>
 <translation id="6506996418997555004">I-share ang Grupo ng Tab na "<ph name="GROUP_NAME" />"</translation>
+<translation id="650770261448122895">Hanapin ang nakikita mo gamit ang Lens</translation>
 <translation id="6507973708545996744">Mag-sign in para makuha ang iyong listahan ng babasahin sa lahat ng device mo.</translation>
 <translation id="6518133107902771759">I-verify</translation>
 <translation id="6523575793810663688">Ipakita sa akin kung paano</translation>
@@ -2147,7 +2147,6 @@ Puwede kang mag-restart anumang oras.</translation>
 <translation id="7603852183842204213">Na-block na mga pop-up (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Hindi gumagana ang pag-sync</translation>
 <translation id="760667371114328991">I-off ang Mga Notification para sa Pag-check sa Kaligtasan</translation>
-<translation id="7612619742409846846">Naka-sign in sa Google bilang</translation>
 <translation id="7612849887607288481">Buksan ang Menu ng Pag-prototype ng AI</translation>
 <translation id="7618220760967055820">Piliin ang button na ipapakita sa toolbar</translation>
 <translation id="7620522820075868385">Kanselahin</translation>
@@ -2430,6 +2429,7 @@ Puwede kang mag-restart anumang oras.</translation>
 <translation id="8439758443371991593">I-hide ang Idagdag sa Listahan ng Babasahin</translation>
 <translation id="8443986842926457191">Mahigit 2048 character ang URL</translation>
 <translation id="8449869326050867919">Na-share ang password</translation>
+<translation id="8473367210869452063">Para makipag-interact sa site na ito, ihinto ang kasalukuyang gawain o hintaying matapos ang Gemini sa paggawa</translation>
 <translation id="8473815223723723001">I-edit ang Larawan gamit ang Gemini</translation>
 <translation id="8473863474539038330">Mga address at higit pa</translation>
 <translation id="8474378002946546633">Payagan ang mga notification</translation>

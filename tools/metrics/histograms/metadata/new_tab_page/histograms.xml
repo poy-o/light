@@ -116,6 +116,11 @@ chromium-metrics-reviews@google.com.
 
 <!-- LINT.ThenChange(//components/ntp_tiles/metrics.cc:NewTabPageProviders) -->
 
+<variants name="NtpRequestTimingStartup">
+  <variant name=".NonStartup" summary="after browser startup completed"/>
+  <variant name=".Startup" summary="during browser startup"/>
+</variants>
+
 <!-- LINT.IfChange(PlatformType) -->
 
 <variants name="PlatformType">
@@ -140,7 +145,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.ActionChips.AnyShown" enum="Boolean"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>shomizoe@google.com</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
   <summary>
@@ -153,7 +158,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.ActionChips.Click2" enum="ActionChipIconType"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>giannich@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
   <summary>Logged when any Action Chips was clicked by the user.</summary>
@@ -185,7 +190,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.ActionChips.RequestStatus"
-    enum="ActionChipsRequestStatus" expires_after="2027-03-21">
+    enum="ActionChipsRequestStatus" expires_after="2027-05-23">
   <owner>shomizoe@google.com</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
   <summary>
@@ -227,7 +232,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.ActionChips.SuggestionCount" units="count"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>shomizoe@google.com</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
   <summary>
@@ -339,19 +344,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="NewTabPage.BackgroundService.Images.Headers.RequestLatency"
-    units="ms" expires_after="2025-10-26">
-  <owner>pauladedeji@google.com</owner>
-  <owner>danpeng@google.com</owner>
-  <owner>chrome-desktop-ntp@google.com</owner>
-  <summary>
-    The time it takes to download an image's URL headers.
-
-    Logged every time Chrome encounters an error when verifying background
-    images.
-  </summary>
-</histogram>
-
 <histogram name="NewTabPage.BackgroundService.Images.Headers.StatusCode"
     units="HttpResponseCode" expires_after="2025-12-14">
   <owner>pauladedeji@google.com</owner>
@@ -395,7 +387,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="NewTabPage.Click" enum="NTPElement" expires_after="2027-03-21">
+<histogram name="NewTabPage.Click" enum="NTPElement" expires_after="2027-05-23">
   <owner>romanarora@chromium.org</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -470,14 +462,13 @@ chromium-metrics-reviews@google.com.
   <owner>clank-start@google.com</owner>
   <summary>
     Records an impression of each button shown on the composeplate on the New
-    Tab Page: the AI Mode button, the incognito button and, if shown, the
-    optional button (e.g. create image or add image). In the beside-MVT layout
-    of NTP Aurora V2, only the AI Mode button is recorded, since the AI Mode
-    card beside the Most Visited Tiles has no incognito or optional button. One
-    sample is logged each time the NTP impression (UserAction.Counts
-    MobileNTPShown) is logged while the composeplate is visible. Replaces
-    NewTabPage.FakeSearchBox.ComposeplateButton.Impression2. The histogram is
-    Android-only.
+    Tab Page: the AI Mode button and, if shown, the incognito, add image and
+    create image buttons. In the beside-MVT layout of NTP Aurora V2, only the AI
+    Mode button is recorded, since the AI Mode card beside the Most Visited
+    Tiles has no other button. One sample is logged each time the NTP impression
+    (UserAction.Counts MobileNTPShown) is logged while the composeplate is
+    visible. Replaces NewTabPage.FakeSearchBox.ComposeplateButton.Impression2.
+    The histogram is Android-only.
   </summary>
 </histogram>
 
@@ -841,7 +832,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.CustomizeChromePromoEligibility"
-    enum="NTPCustomizeChromePromoEligibility" expires_after="2027-03-21">
+    enum="NTPCustomizeChromePromoEligibility" expires_after="2027-05-23">
   <owner>kbajkiewicz@google.com</owner>
   <owner>rsult@google.com</owner>
   <owner>chrome-signin-desktop-team@google.com</owner>
@@ -900,7 +891,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.CustomizeShortcutAction"
-    enum="NTPCustomizeShortcutAction" expires_after="2027-03-21">
+    enum="NTPCustomizeShortcutAction" expires_after="2027-05-23">
   <owner>romanarora@chromium.org</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1650,7 +1641,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Modules.DataRequest" enum="NtpModules"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>romanarora@chromium.org</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -2120,7 +2111,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.MostVisited.ShowActionsToggleClicked"
-    enum="MostVisitedShowActions" expires_after="2027-03-17">
+    enum="MostVisitedShowActions" expires_after="2027-05-23">
   <owner>adamyao@google.com</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
   <summary>
@@ -2143,7 +2134,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.NavigationOrActivationToFirstContentfulPaint"
-    units="ms" expires_after="2027-03-21">
+    units="ms" expires_after="2027-05-23">
   <owner>robertlin@chromium.org</owner>
   <owner>chrome-prerendering@google.com</owner>
   <summary>
@@ -2171,7 +2162,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.NavigationOrActivationToLargestContentfulPaint"
-    units="ms" expires_after="2027-03-21">
+    units="ms" expires_after="2027-05-23">
   <owner>robertlin@chromium.org</owner>
   <owner>chrome-prerendering@google.com</owner>
   <summary>
@@ -2217,7 +2208,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.OpenedInNewTab" enum="TabLaunchType"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>eirage@chromium.org</owner>
   <owner>hanxi@chromium.org</owner>
   <summary>
@@ -2400,8 +2391,61 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="NewTabPage.RequestTiming.ActionChipsRetrievalStart{Startup}"
+    units="ms" expires_after="2027-05-10">
+  <owner>niharm@google.com</owner>
+  <owner>chrome-desktop-ntp@google.com</owner>
+  <summary>
+    Time from NTP navigation start until the NTP page first asks the browser for
+    action chips, for NTP loads that started {Startup}. Chips are requested when
+    the lazily rendered action chips element is attached, and times are measured
+    with the page's performance.now(), whose time origin is NTP navigation
+    start. Recorded by the NTP page at most once per NTP load, only on NTPs
+    where action chips are enabled. Compare with
+    NewTabPage.RequestTiming.ZeroSuggestPrefetchTrigger{Startup} to evaluate
+    serving action chips from the NTP zero-prefix suggest prefetch response.
+  </summary>
+  <token key="Startup" variants="NtpRequestTimingStartup"/>
+</histogram>
+
+<histogram
+    name="NewTabPage.RequestTiming.ZeroSuggestPrefetchTrigger{Direction}{Startup}"
+    units="ms" expires_after="2027-05-10">
+  <owner>niharm@google.com</owner>
+  <owner>chrome-desktop-ntp@google.com</owner>
+  <summary>
+    How much {Direction} than the first action chips request the NTP zero-prefix
+    suggest prefetch was triggered (approximated by the NTP document's load
+    event end), for NTP loads that started {Startup}. Recorded by the NTP page
+    at most once per NTP load, only on NTPs where action chips are enabled, once
+    both events have happened. Exactly one of the Lead and Lag histograms is
+    recorded for each such NTP load.
+  </summary>
+  <token key="Direction">
+    <variant name="Lag" summary="later"/>
+    <variant name="Lead" summary="earlier (or at the same time)"/>
+  </token>
+  <token key="Startup" variants="NtpRequestTimingStartup"/>
+</histogram>
+
+<histogram name="NewTabPage.RequestTiming.ZeroSuggestPrefetchTrigger{Startup}"
+    units="ms" expires_after="2027-05-10">
+  <owner>niharm@google.com</owner>
+  <owner>chrome-desktop-ntp@google.com</owner>
+  <summary>
+    Time from NTP navigation start until the NTP document's load event ends, for
+    NTP loads that started {Startup}. The browser triggers the NTP zero-prefix
+    suggest prefetch when the NTP's main frame finishes loading, so this
+    approximates when the prefetch is triggered. Measured with the page's
+    performance.now(), whose time origin is NTP navigation start. Recorded by
+    the NTP page at most once per NTP load, only on NTPs where action chips are
+    enabled.
+  </summary>
+  <token key="Startup" variants="NtpRequestTimingStartup"/>
+</histogram>
+
 <histogram name="NewTabPage.SuggestTiles.DeletedTileType"
-    enum="SuggestTileType" expires_after="2027-03-14">
+    enum="SuggestTileType" expires_after="2027-05-23">
   <owner>ender@google.com</owner>
   <owner>mahmadi@chromium.org</owner>
   <owner>chrome-omnibox-team@google.com</owner>
@@ -2867,7 +2911,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="NewTabPage.Width" units="pixels" expires_after="2027-03-21">
+<histogram name="NewTabPage.Width" units="pixels" expires_after="2027-05-23">
   <owner>romanarora@chromium.org</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -2880,7 +2924,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="{MostVisitedSurface}.MostVisited.IsExpandedOnLoad"
-    enum="Boolean" expires_after="2027-03-17">
+    enum="Boolean" expires_after="2027-05-23">
   <owner>adamyao@google.com</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
   <summary>
@@ -2992,7 +3036,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="{MostVisitedSurface}.SuggestionsImpression{NewTabPageProviders}"
-    enum="MostVisitedTileIndex" expires_after="2027-03-14">
+    enum="MostVisitedTileIndex" expires_after="2027-05-23">
   <owner>romanarora@chromium.org</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>

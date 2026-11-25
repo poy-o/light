@@ -165,7 +165,7 @@ if (!is_robolectric && enable_java_templates) {
   #     ]
   #   }
   template("java_cpp_template") {
-    action_with_pydeps(target_name) {
+    python_action(target_name) {
       forward_variables_from(invoker,
                              [
                                "data_deps",
@@ -176,7 +176,7 @@ if (!is_robolectric && enable_java_templates) {
                                "testonly",
                                "visibility",
                              ])
-      script = "//build/android/gyp/gcc_preprocess.py"
+      python_binary = "//build/android:gcc_preprocess"
       outputs = [ "$target_gen_dir/$target_name.srcjar" ]
 
       _include_dirs = [
@@ -221,7 +221,7 @@ if (!is_robolectric && enable_java_templates) {
   #     ]
   #   }
   template("java_cpp_enum") {
-    action_with_pydeps(target_name) {
+    python_action(target_name) {
       forward_variables_from(invoker,
                              TESTONLY_AND_VISIBILITY + [
                                    "sources",
@@ -230,7 +230,7 @@ if (!is_robolectric && enable_java_templates) {
 
       # The sources aren't compiled so don't check their dependencies.
       check_includes = false
-      script = "//build/android/gyp/java_cpp_enum.py"
+      python_binary = "//build/android:java_cpp_enum"
 
       _srcjar_path = "${target_gen_dir}/${target_name}.srcjar"
       _rebased_srcjar_path = rebase_path(_srcjar_path, root_build_dir)
@@ -290,12 +290,12 @@ if (!is_robolectric && enable_java_templates) {
   #   A FooSwitches.java file, defining a class named FooSwitches in the package
   #   my.java.package.
   template("java_cpp_strings") {
-    action_with_pydeps(target_name) {
+    python_action(target_name) {
       forward_variables_from(invoker, TESTONLY_AND_VISIBILITY + [ "sources" ])
 
       # The sources aren't compiled so don't check their dependencies.
       check_includes = false
-      script = "//build/android/gyp/java_cpp_strings.py"
+      python_binary = "//build/android:java_cpp_strings"
       outputs = [ "${target_gen_dir}/${target_name}.srcjar" ]
 
       args = [
@@ -366,7 +366,7 @@ if (!is_robolectric && enable_java_templates) {
   #   A FooFeatures.java file, defining a class named FooFeatures in the package
   #   my.java.package.
   template("java_cpp_features") {
-    action_with_pydeps(target_name) {
+    python_action(target_name) {
       forward_variables_from(invoker,
                              TESTONLY_AND_VISIBILITY + [
                                    "deps",
@@ -375,7 +375,7 @@ if (!is_robolectric && enable_java_templates) {
 
       # The sources aren't compiled so don't check their dependencies.
       check_includes = false
-      script = "//build/android/gyp/java_cpp_features.py"
+      python_binary = "//build/android:java_cpp_features"
       outputs = [ "${target_gen_dir}/${target_name}.srcjar" ]
 
       args = [
@@ -414,13 +414,13 @@ if (!is_robolectric && enable_java_templates) {
   #     output = "$target_gen_dir/AndroidManifest.xml"
   #   }
   template("jinja_template") {
-    action_with_pydeps(target_name) {
+    python_action(target_name) {
       forward_variables_from(invoker, TESTONLY_AND_VISIBILITY + [ "deps" ])
       inputs = [ invoker.input ]
       if (defined(invoker.includes)) {
         inputs += invoker.includes
       }
-      script = "//build/android/gyp/jinja_template.py"
+      python_binary = "//build/android:jinja_template"
 
       outputs = [ invoker.output ]
 
@@ -475,9 +475,9 @@ if (!is_robolectric && enable_java_templates) {
       assert(false, "Unsupported CPU family")
     }
 
-    action_with_pydeps(target_name) {
+    python_action(target_name) {
       forward_variables_from(invoker, TESTONLY_AND_VISIBILITY + [ "deps" ])
-      script = "//build/android/gyp/write_native_libraries_java.py"
+      python_binary = "//build/android:write_native_libraries_java"
       outputs = [ _native_libraries_file ]
       args = [
         "--output",
@@ -486,16 +486,12 @@ if (!is_robolectric && enable_java_templates) {
         _cpu_family,
       ]
       if (invoker.use_final_fields) {
-        # Write native_libraries_list_file via depfile rather than specifyin it
-        # as a dep in order allow R8 to run in parallel with native compilation.
         args += [ "--final" ]
         if (defined(invoker.native_libraries_list_file)) {
-          depfile = "$target_gen_dir/$target_name.d"
+          inputs = [ invoker.native_libraries_list_file ]
           args += [
             "--native-libraries-list",
             rebase_path(invoker.native_libraries_list_file, root_build_dir),
-            "--depfile",
-            rebase_path(depfile, root_build_dir),
           ]
         }
         if (defined(invoker.enable_chromium_linker) &&
@@ -574,9 +570,28 @@ if (!is_robolectric && enable_java_templates) {
       rtxt_path = _rtxt_out_path
     }
 
-    action_with_pydeps(target_name) {
+    python_action(target_name) {
       forward_variables_from(invoker, [ "visibility" ])
       public_deps = [ invoker.generating_target ]
+      deps = []
+      if (defined(invoker.deps)) {
+        foreach(_dep, invoker.deps) {
+          _dep_label = get_label_info(_dep, "label_no_toolchain")
+          if (filter_include([ _dep_label ], java_resource_patterns) != []) {
+            deps += [ _dep ]
+          } else if (filter_include([ _dep_label ], java_library_patterns) !=
+                     []) {
+            deps += [ "${_dep_label}__assetres" ]
+          }
+        }
+      }
+      metadata = {
+        # Consumed by generate_r_java() to collect this target's R.txt, depend
+        # on this action, and walk only its resource/library deps.
+        android_resources_rtxt = [ rebase_path(_rtxt_out_path, root_build_dir) ]
+        android_resources_rtxt_deps = [ ":$target_name" ]
+        android_resources_walk_keys = deps
+      }
       inputs = [
         android_sdk_tools_bundle_aapt2,
         invoker.generated_resources_zip,
@@ -585,7 +600,7 @@ if (!is_robolectric && enable_java_templates) {
         _rtxt_out_path,
         _compiled_resources_zip,
       ]
-      script = "//build/android/gyp/prepare_resources.py"
+      python_binary = "//build/android:prepare_resources"
       args = [
         "--aapt2-path",
         rebase_path(android_sdk_tools_bundle_aapt2, root_build_dir),
@@ -624,10 +639,10 @@ if (!is_robolectric && enable_java_templates) {
     _resources_zip = "$target_out_dir/${target_name}.resources.zip"
     _generating_target_name = "${target_name}__template"
 
-    action_with_pydeps(_generating_target_name) {
+    python_action(_generating_target_name) {
       forward_variables_from(invoker, TESTONLY_AND_VISIBILITY + [ "deps" ])
       inputs = invoker.resources
-      script = "//build/android/gyp/jinja_template.py"
+      python_binary = "//build/android:jinja_template"
 
       outputs = [ _resources_zip ]
 
@@ -675,13 +690,13 @@ if (!is_robolectric && enable_java_templates) {
   #     lib_name = "elements.so"
   #   }
   template("android_native_prebuilt") {
-    action_with_pydeps(target_name) {
+    python_action(target_name) {
       forward_variables_from(invoker,
                              [
                                "deps",
                                "testonly",
                              ])
-      script = "//build/android/gyp/process_native_prebuilt.py"
+      python_binary = "//build/android:process_native_prebuilt"
       _lib_path = "${invoker.base_dir}/$android_app_abi/${invoker.lib_name}"
       _stripped_output_path = "$root_out_dir/${invoker.lib_name}"
       _unstripped_output_path =
@@ -838,6 +853,19 @@ if (!is_robolectric && enable_java_templates) {
       }
     }
 
+    _assetres_deps = []
+    _non_java_deps = []
+    foreach(_dep, _deps) {
+      _dep_label = get_label_info(_dep, "label_no_toolchain")
+      if (filter_include([ _dep_label ], java_resource_patterns) != []) {
+        _assetres_deps += [ _dep ]
+      } else if (filter_include([ _dep_label ], java_library_patterns) != []) {
+        _assetres_deps += [ "${_dep_label}__assetres" ]
+      } else {
+        _non_java_deps += [ _dep ]
+      }
+    }
+
     _prepare_target_name = "${target_name}__prepare"
 
     prepare_resources(_prepare_target_name) {
@@ -849,7 +877,7 @@ if (!is_robolectric && enable_java_templates) {
 
       # Only depend on non-java targets that might generate input resource
       # files.
-      deps = filter_exclude(_deps, java_target_patterns)
+      deps = _non_java_deps
 
       res_sources_path = _res_sources_path
       sources = _resource_files
@@ -868,8 +896,6 @@ if (!is_robolectric && enable_java_templates) {
                                "public_deps",
                                "visibility",
                              ])
-      _lib_deps = filter_exclude(filter_include(_deps, java_library_patterns),
-                                 java_resource_patterns)
       if (defined(public_deps)) {
         # Since java library targets depend directly on sub-targets rather than
         # top-level targets, public_deps are not properly propagated, at least
@@ -881,17 +907,35 @@ if (!is_robolectric && enable_java_templates) {
       }
 
       # Depend on non-library deps and on __assetres subtargets of library deps
-      # so that downstream generate_r_java and compile_resources steps wait for
-      # transitive resource targets without making prepare_resources.py wait for
-      # them.
+      # so that downstream compile_resources steps wait for transitive resource
+      # targets without making prepare_resources.py wait for them.
       deps = [
                ":$_prepare_target_name",
                _android_sdk_dep,
-             ] + filter_exclude(_deps, _lib_deps)
-      foreach(_lib_dep, _lib_deps) {
-        # Expand //foo/java -> //foo/java:java
-        _lib_dep = get_label_info(_lib_dep, "label_no_toolchain")
-        deps += [ "${_lib_dep}__assetres" ]
+             ] + _assetres_deps + _non_java_deps
+
+      _manifest_deps = _non_java_deps
+      if (defined(public_deps)) {
+        _manifest_deps += public_deps
+      }
+      metadata = {
+        # Consumed by generate_r_java() to collect this target's R.txt, depend
+        # on its __prepare action, and walk only its resource/library deps.
+        android_resources_rtxt = [ rebase_path(_rtxt_out_path, root_build_dir) ]
+        android_resources_rtxt_deps = [ ":$_prepare_target_name" ]
+        android_resources_walk_keys = _assetres_deps
+
+        # Emit deps only if any mergeable manifest is generated (under
+        # root_build_dir).
+        if (_manifest_deps != [] &&
+            defined(invoker.mergeable_android_manifests) &&
+            filter_exclude(rebase_path(invoker.mergeable_android_manifests,
+                                       root_build_dir),
+                           [ "../*" ]) != []) {
+          # Consumed by merge_manifests() so it depends on targets generating
+          # mergeable_android_manifests.
+          mergeable_android_manifest_deps = _manifest_deps
+        }
       }
     }
   }
@@ -986,6 +1030,11 @@ if (!is_robolectric && enable_java_templates) {
     if (_all_sources != []) {
       action(target_name) {
         forward_variables_from(invoker, [ "deps" ])
+        metadata = {
+          # Consumed by generate_r_java() to stop its R.txt metadata walk from
+          # descending into asset deps.
+          android_resources_walk_keys = []
+        }
 
         script = "//build/android/gyp/validate_inputs.py"
         inputs = _all_sources
@@ -998,6 +1047,11 @@ if (!is_robolectric && enable_java_templates) {
     } else {
       group(target_name) {
         forward_variables_from(invoker, [ "deps" ])
+        metadata = {
+          # Consumed by generate_r_java() to stop its R.txt metadata walk from
+          # descending into asset deps.
+          android_resources_walk_keys = []
+        }
       }
     }
   }
@@ -1088,15 +1142,18 @@ if (!is_robolectric && enable_java_templates) {
       possible_config_deps = _invoker_deps
     }
 
-    _assetres_deps = filter_include(_invoker_deps, java_resource_patterns)
-    _invoker_deps_minus_assetres = filter_exclude(_invoker_deps, _assetres_deps)
-    _lib_deps =
-        filter_include(_invoker_deps_minus_assetres, java_library_patterns)
-    _other_deps = _invoker_deps_minus_assetres - _lib_deps
-
+    _assetres_deps = []
     _expanded_lib_deps = []
-    foreach(_lib_dep, _lib_deps) {
-      _expanded_lib_deps += [ get_label_info(_lib_dep, "label_no_toolchain") ]
+    _other_deps = []
+    foreach(_dep, _invoker_deps) {
+      _dep_label = get_label_info(_dep, "label_no_toolchain")
+      if (filter_include([ _dep_label ], java_resource_patterns) != []) {
+        _assetres_deps += [ _dep ]
+      } else if (filter_include([ _dep_label ], java_library_patterns) != []) {
+        _expanded_lib_deps += [ _dep_label ]
+      } else {
+        _other_deps += [ _dep ]
+      }
     }
     _group_names = [
       "assetres",
@@ -1109,16 +1166,46 @@ if (!is_robolectric && enable_java_templates) {
         "lint_partials",
       ]
     }
+
+    # Emit deps only if any mergeable manifest is generated (under
+    # root_build_dir).
+    _has_generated_manifest_deps =
+        _other_deps != [] && defined(invoker.mergeable_android_manifests) &&
+        filter_exclude(
+            rebase_path(invoker.mergeable_android_manifests, root_build_dir),
+            [ "../*" ]) != []
+    _main_target_name = target_name
+    _is_resource_group =
+        filter_include([ get_label_info(":$_main_target_name",
+                                        "label_no_toolchain") ],
+                       java_resource_patterns) != []
+
     foreach(_group_name, _group_names) {
-      group("${target_name}__$_group_name") {
+      group("${_main_target_name}__$_group_name") {
         deps = []
         foreach(_lib_dep, _expanded_lib_deps) {
           deps += [ "${_lib_dep}__${_group_name}" ]
         }
         if (_group_name == "assetres") {
+          if (_is_resource_group) {
+            visibility = []
+            visibility = [ ":$_main_target_name" ]
+          }
+          deps += _assetres_deps
+          metadata = {
+            # Consumed by generate_r_java(). Must precede `deps += _other_deps`
+            # so non-Java targets without walk barriers are not walked.
+            android_resources_walk_keys = deps
+            if (_has_generated_manifest_deps) {
+              # Consumed by merge_manifests() so it depends on targets
+              # generating mergeable_android_manifests.
+              mergeable_android_manifest_deps = _other_deps
+            }
+          }
+
           # _other_deps are necessary when generating
           # mergeable_android_manifests.
-          deps += _assetres_deps + _other_deps
+          deps += _other_deps
         } else if ((_group_name == "host" || _group_name == "header") &&
                    defined(invoker.jar_deps)) {
           deps += invoker.jar_deps
@@ -1130,12 +1217,26 @@ if (!is_robolectric && enable_java_templates) {
       forward_variables_from(invoker,
                              "*",
                              _build_config_vars + TESTONLY_AND_VISIBILITY)
-      if (is_cronet_for_aosp_build) {
+      if (_is_resource_group) {
+        if (!defined(deps)) {
+          deps = []
+        }
+        deps += [ ":${target_name}__assetres" ]
+      }
+      if (is_cronet_for_aosp_build || _is_resource_group) {
         metadata = {
-          java_library_deps = []
-          if (defined(invoker.deps)) {
-            foreach(dep, invoker.deps) {
-              java_library_deps += [ get_label_info(dep, "label_no_toolchain") ]
+          if (_is_resource_group) {
+            # Consumed by generate_r_java() when this resource-named
+            # java_group() is walked directly rather than via __assetres.
+            android_resources_walk_keys = [ ":${target_name}__assetres" ]
+          }
+          if (is_cronet_for_aosp_build) {
+            java_library_deps = []
+            if (defined(invoker.deps)) {
+              foreach(dep, invoker.deps) {
+                java_library_deps +=
+                    [ get_label_info(dep, "label_no_toolchain") ]
+              }
             }
           }
         }
@@ -1279,11 +1380,11 @@ if (!is_robolectric && enable_java_templates) {
         manifest_build_config = _manifest_build_config
         min_sdk_version = default_min_sdk_version
         target_sdk_version = default_target_sdk_version
-        deps = _non_java_deps + _java_assetres_deps +
-               [ ":$_build_config_target_name" ]
+        deps = [ ":$_build_config_target_name" ]
         if (defined(invoker.android_manifest_dep)) {
           deps += [ invoker.android_manifest_dep ]
         }
+        manifest_walk_deps = _java_assetres_deps
       }
 
       _resource_arsc_output = "${target_out_dir}/${target_name}.ap_"
@@ -1340,12 +1441,14 @@ if (!is_robolectric && enable_java_templates) {
               [ "${_dep_no_toolchain}__jni_registration($default_toolchain)" ]
         }
 
-        # Write shared library output files of all dependencies to a file. Those
-        # will be the shared libraries packaged into the APK.
         _shared_library_list_file = "$target_gen_dir/$target_name.native_libs"
+        _shared_library_list_target = "${target_name}__shared_library_list"
 
-        generated_file("${target_name}__shared_library_list") {
-          deps = invoker.shared_libraries
+        # Lists the transitive shared libraries loaded by this Robolectric
+        # binary for write_native_libraries_java(). Uses walk_deps rather than
+        # deps so targets needing only library names do not wait for linking.
+        generated_file(_shared_library_list_target) {
+          walk_deps = invoker.shared_libraries
           outputs = [ _shared_library_list_file ]
           data_keys = [ "shared_libraries" ]
           walk_keys = [ "shared_libraries_barrier" ]
@@ -1371,6 +1474,7 @@ if (!is_robolectric && enable_java_templates) {
         use_final_fields = true
         if (defined(_shared_library_list_file)) {
           native_libraries_list_file = _shared_library_list_file
+          deps = [ ":$_shared_library_list_target" ]
         }
       }
     }
@@ -1688,9 +1792,9 @@ if (!is_robolectric && enable_java_templates) {
 
     _rebased_build_config = rebase_path(_build_config, root_build_dir)
 
-    action_with_pydeps(_zip_target_name) {
+    python_action(_zip_target_name) {
       forward_variables_from(invoker, [ "data" ])
-      script = "//build/android/gyp/zip.py"
+      python_binary = "//build:zip"
       depfile = "$target_gen_dir/$target_name.d"
       deps = [ _build_config_dep ]
 
@@ -1858,7 +1962,6 @@ if (!is_robolectric && enable_java_templates) {
 
     _build_config = "$target_gen_dir/$target_name.build_config.json"
     _res_build_config = "$target_gen_dir/$target_name.res.build_config.json"
-    _rtxt_build_config = "$target_gen_dir/$target_name.rtxt.build_config.json"
     _build_config_target_name = "$target_name$build_config_target_suffix"
 
     write_build_config(_build_config_target_name) {
@@ -1878,9 +1981,8 @@ if (!is_robolectric && enable_java_templates) {
 
     _rebased_build_config = rebase_path(_build_config, root_build_dir)
     _rebased_res_build_config = rebase_path(_res_build_config, root_build_dir)
-    _rebased_rtxt_build_config = rebase_path(_rtxt_build_config, root_build_dir)
 
-    action_with_pydeps(target_name) {
+    python_action(target_name) {
       forward_variables_from(invoker,
                              [
                                "data",
@@ -1888,12 +1990,11 @@ if (!is_robolectric && enable_java_templates) {
                              ])
       depfile = "$target_gen_dir/$target_name.d"
       deps = _deps
-      script = "//build/android/gyp/dist_aar.py"
+      python_binary = "//build/android:dist_aar"
 
       inputs = [
         _build_config,
         _res_build_config,
-        _rtxt_build_config,
       ]
 
       # Although these will be listed as deps in the depfile, they must also
@@ -1912,7 +2013,7 @@ if (!is_robolectric && enable_java_templates) {
         rebase_path(invoker.output, root_build_dir),
         "--dependencies-res-zips=@FileArg($_rebased_res_build_config:dependency_zips)",
         "--dependencies-res-zips=@FileArg($_rebased_res_build_config:dependency_zip_overlays)",
-        "--r-text-files=@FileArg($_rebased_rtxt_build_config:dependency_rtxt_files)",
+        "--r-text-files=@FileArg($_rebased_res_build_config:dependency_rtxt_files)",
         "--proguard-configs=@FileArg($_rebased_build_config:proguard_all_configs)",
         "--jars=@FileArg($_rebased_build_config:dist_classpath)",
       ]
@@ -2021,9 +2122,8 @@ if (!is_robolectric && enable_java_templates) {
 
       if ((defined(force_java_location_rewrite) &&
            force_java_location_rewrite) || enable_java_location_rewrite) {
-        assert(!defined(invoker.bytecode_rewriter_target))
-        bytecode_rewriter_target =
-            "//build/android/location_rewriter:location_rewriter"
+        assert(!defined(invoker.bytecode_rewriter))
+        bytecode_rewriter = "location_rewriter"
       }
     }
   }
@@ -2120,10 +2220,10 @@ if (!is_robolectric && enable_java_templates) {
       _api_database_path = "$target_gen_dir/$target_name.api_database.ser"
       _r8_path = "//third_party/r8/cipd/lib/r8.jar"
 
-      action_with_pydeps(_api_database_target) {
+      python_action(_api_database_target) {
         forward_variables_from(invoker, [ "testonly" ])
         visibility = [ ":*" ]
-        script = "//build/android/gyp/generate_api_database.py"
+        python_binary = "//build/android:generate_api_database"
         inputs = java_paths_for_inputs + [
                    _r8_path,
                    invoker.jar_path,
@@ -2464,21 +2564,19 @@ if (!is_robolectric && enable_java_templates) {
     if (_shared_libraries_is_valid) {
       _native_libs_deps += invoker.shared_libraries
 
-      # Write shared library output files of all dependencies to a file. Those
-      # will be the shared libraries packaged into the APK.
       _shared_library_list_file =
           "$target_gen_dir/${_template_name}.native_libs"
 
+      # Lists the transitive shared libraries packaged into the APK for
+      # write_native_libraries_java() and write_build_config(). Uses walk_deps
+      # rather than deps so targets needing only library names do not wait for
+      # them to be linked.
       generated_file("${_template_name}__shared_library_list") {
-        deps = _native_libs_deps
+        walk_deps = _native_libs_deps
         outputs = [ _shared_library_list_file ]
         data_keys = [ "shared_libraries" ]
         walk_keys = [ "shared_libraries_barrier" ]
         rebase = root_build_dir
-      }
-    } else {
-      # Must exist for instrumentation_test_apk() to depend on.
-      group("${_template_name}__shared_library_list") {
       }
     }
 
@@ -2488,21 +2586,19 @@ if (!is_robolectric && enable_java_templates) {
         invoker.secondary_abi_shared_libraries != []) {
       _secondary_abi_native_libs_deps = invoker.secondary_abi_shared_libraries
 
-      # Write shared library output files of all dependencies to a file. Those
-      # will be the shared libraries packaged into the APK.
       _secondary_abi_shared_library_list_file =
           "$target_gen_dir/${_template_name}.secondary_abi_native_libs"
 
+      # Lists the secondary-ABI transitive shared libraries packaged into the
+      # APK for write_native_libraries_java() and write_build_config(). Uses
+      # walk_deps rather than deps so targets needing only library names do not
+      # wait for them to be linked.
       generated_file("${_template_name}__secondary_abi_shared_library_list") {
-        deps = _secondary_abi_native_libs_deps
+        walk_deps = _secondary_abi_native_libs_deps
         outputs = [ _secondary_abi_shared_library_list_file ]
         data_keys = [ "shared_libraries" ]
         walk_keys = [ "shared_libraries_barrier" ]
         rebase = root_build_dir
-      }
-    } else {
-      # Must exist for instrumentation_test_apk() to depend on.
-      group("${_template_name}__secondary_abi_shared_library_list") {
       }
     }
 
@@ -2562,12 +2658,11 @@ if (!is_robolectric && enable_java_templates) {
       # Bundletool will add extractNativeLibraries for us.
       inject_extract_native_libs = _has_native_libs && !_is_bundle_module
 
-      # Depend on android_resources() targets that use generated files
-      # in mergeable_android_manifests (such as android_aar_prebuilt).
-      deps = _java_assetres_deps + [ ":$_build_config_target" ]
+      deps = [ ":$_build_config_target" ]
       if (defined(invoker.android_manifest_dep)) {
         deps += [ invoker.android_manifest_dep ]
       }
+      manifest_walk_deps = _java_assetres_deps
     }
 
     _final_deps = [ ":$_java_target_name" ]
@@ -2717,6 +2812,7 @@ if (!is_robolectric && enable_java_templates) {
       write_native_libraries_java("${_template_name}__native_libraries") {
         if (defined(_shared_library_list_file)) {
           native_libraries_list_file = _shared_library_list_file
+          deps = [ ":${_template_name}__shared_library_list" ]
           if (android_64bit_target_cpu) {
             native_lib_64_bit = true
           } else {
@@ -2724,15 +2820,12 @@ if (!is_robolectric && enable_java_templates) {
           }
         } else if (defined(_secondary_abi_shared_library_list_file)) {
           native_libraries_list_file = _secondary_abi_shared_library_list_file
+          deps = [ ":${_template_name}__secondary_abi_shared_library_list" ]
           native_lib_32_bit = true
         }
 
         enable_chromium_linker = _use_chromium_linker
         use_final_fields = true
-
-        # Do not add a dep on the generated_file target in order to avoid having
-        # to build the native libraries before this target. The dependency is
-        # instead captured via a depfile.
       }
       _srcjar_deps += [ ":${_template_name}__native_libraries" ]
     }
@@ -2803,7 +2896,7 @@ if (!is_robolectric && enable_java_templates) {
                                "apk_under_test",
                                "asset_deps",
                                "base_module_target",
-                               "bytecode_rewriter_target",
+                               "bytecode_rewriter",
                                "chromium_code",
                                "deps",
                                "errorprone_args",
@@ -2875,15 +2968,16 @@ if (!is_robolectric && enable_java_templates) {
         }
       }
 
-      # Do not add a dep on the generated_file target in order to avoid having
-      # to build the native libraries before this target. The dependency is
-      # instead captured via a depfile.
       if (_native_libs_deps != []) {
         shared_libraries_runtime_deps_file = _shared_library_list_file
+        shared_libraries_runtime_deps_target =
+            ":${_template_name}__shared_library_list"
       }
       if (defined(_secondary_abi_shared_library_list_file)) {
         secondary_abi_shared_libraries_runtime_deps_file =
             _secondary_abi_shared_library_list_file
+        secondary_abi_shared_libraries_runtime_deps_target =
+            ":${_template_name}__secondary_abi_shared_library_list"
       }
 
       if (!defined(deps)) {
@@ -3146,9 +3240,9 @@ if (!is_robolectric && enable_java_templates) {
         (!defined(invoker.create_apk_script) || invoker.create_apk_script)) {
       _apk_operations_target_name = "${target_name}__apk_operations"
 
-      action_with_pydeps(_apk_operations_target_name) {
+      python_action(_apk_operations_target_name) {
         _generated_script = "$root_build_dir/bin/${invoker.target_name}"
-        script = "//build/android/gyp/create_apk_operations_script.py"
+        python_binary = "//build/android:create_apk_operations_script"
         outputs = [ _generated_script ]
         args = [
           "--script-output-path",
@@ -3195,7 +3289,11 @@ if (!is_robolectric && enable_java_templates) {
                                ])
         build_config = _build_config
         build_config_dep = ":$_build_config_target"
-        manifest = _android_manifest
+        manifest = invoker.android_manifest
+        if (defined(invoker.android_manifest_dep)) {
+          manifest_dep = invoker.android_manifest_dep
+        }
+        merged_manifest = _android_manifest
         reuse_library_analysis = _lint_reuse_library_analysis
 
         # This will use library subtargets under-the-hood
@@ -3301,7 +3399,7 @@ if (!is_robolectric && enable_java_templates) {
                                "assert_no_native_deps",
                                "asset_deps",
                                "bundles_supported",
-                               "bytecode_rewriter_target",
+                               "bytecode_rewriter",
                                "chromium_code",
                                "command_line_flags_file",
                                "create_apk_script",
@@ -3546,9 +3644,9 @@ if (!is_robolectric && enable_java_templates) {
       _install_artifacts_target_name = "${target_name}__install_artifacts"
     }
 
-    action_with_pydeps(_apk_operations_target_name) {
+    python_action(_apk_operations_target_name) {
       testonly = true
-      script = "//build/android/gyp/create_test_apk_wrapper_script.py"
+      python_binary = "//build/android:create_test_apk_wrapper_script"
       deps = []
       _generated_script = "$root_build_dir/bin/${invoker.target_name}"
       outputs = [ _generated_script ]
@@ -3678,24 +3776,12 @@ if (!is_robolectric && enable_java_templates) {
       if (defined(invoker.deps)) {
         deps += invoker.deps
       }
-      data_deps = [
-        # Ensure unstripped libraries are included in runtime deps so that
-        # symbolization can be done.
-        ":${target_name}__secondary_abi_shared_library_list",
-        ":${target_name}__shared_library_list",
-      ]
+      data_deps = []
       if (defined(invoker.data_deps)) {
         data_deps += invoker.data_deps
       }
       if (defined(invoker.apk_under_test)) {
         data_deps += [ invoker.apk_under_test ]
-
-        _under_test_label =
-            get_label_info(invoker.apk_under_test, "label_no_toolchain")
-        data_deps += [
-          "${_under_test_label}__secondary_abi_shared_library_list",
-          "${_under_test_label}__shared_library_list",
-        ]
       }
 
       if (defined(invoker.additional_apks)) {
@@ -3857,10 +3943,6 @@ if (!is_robolectric && enable_java_templates) {
         ]
       }
       shared_libraries = [ invoker.shared_library ]
-      deps += [
-        ":${target_name}__secondary_abi_shared_library_list",
-        ":${target_name}__shared_library_list",
-      ]
       if (_allow_cleartext_traffic) {
         deps += [ "//testing/android/native_test:cleartext_traffic_resources" ]
       }
@@ -3911,10 +3993,10 @@ if (!is_robolectric && enable_java_templates) {
                  ])
     }
 
-    action_with_pydeps(_aidl_target) {
+    python_action(_aidl_target) {
       forward_variables_from(invoker, TESTONLY_AND_VISIBILITY)
 
-      script = "//build/android/gyp/aidl.py"
+      python_binary = "//build/android:aidl"
       depfile = "$target_gen_dir/$target_name.d"
       sources = invoker.sources
 
@@ -3968,6 +4050,9 @@ if (!is_robolectric && enable_java_templates) {
           _rebased_import_paths += _rebased_import_path
         }
         args += [ "--includes=$_rebased_import_paths" ]
+      }
+      if (defined(invoker.version)) {
+        args += [ "--version=${invoker.version}" ]
       }
       args += rebase_path(sources, root_build_dir)
     }
@@ -4037,11 +4122,11 @@ if (!is_robolectric && enable_java_templates) {
 
     _template_name = target_name
 
-    action_with_pydeps("${_template_name}__protoc_java") {
+    python_action("${_template_name}__protoc_java") {
       # The suffix "__protoc_java.srcjar" is used by SuperSize to identify
       # protobuf symbols.
       _srcjar_path = "$target_gen_dir/$target_name.srcjar"
-      script = "//build/protoc_java.py"
+      python_binary = "//build:protoc_java"
 
       if (defined(invoker.deps)) {
         # Need to care only about targets that might generate .proto files.
@@ -4158,9 +4243,9 @@ if (!is_robolectric && enable_java_templates) {
     _flatc_out_dir = get_label_info(_flatc_dep, "root_out_dir")
     _flatc_bin = "$_flatc_out_dir/flatc"
 
-    action_with_pydeps("${_template_name}__flatc_java") {
+    python_action("${_template_name}__flatc_java") {
       _srcjar_path = "$target_gen_dir/$target_name.srcjar"
-      script = "//build/android/gyp/flatc_java.py"
+      python_binary = "//build/android:flatc_java"
 
       deps = [ _flatc_dep ]
       if (defined(invoker.deps)) {
@@ -4330,8 +4415,8 @@ if (!is_robolectric && enable_java_templates) {
               "abspath")
     }
 
-    action_with_pydeps(_unpack_target_name) {
-      script = "//build/android/gyp/aar.py"  # Unzips the AAR
+    python_action(_unpack_target_name) {
+      python_binary = "//build/android:aar"  # Unzips the AAR
       args = [
                "extract",
                "--output-dir",
@@ -4445,8 +4530,8 @@ if (!is_robolectric && enable_java_templates) {
     if (_scanned_files.has_classes_jar) {
       _java_library_vars = [
         "alternative_android_sdk_dep",
+        "bytecode_rewriter",
         "bytecode_rewriter_args",
-        "bytecode_rewriter_target",
         "enable_bytecode_checks",
         "jar_excluded_patterns",
         "jar_included_patterns",
@@ -4770,27 +4855,21 @@ if (!is_robolectric && enable_java_templates) {
 
     if (_proguard_enabled) {
       if (_add_view_trace_events) {
-        _trace_event_rewriter_target =
-            "//build/android/bytecode:trace_event_adder"
         _rewritten_jar_target_name = "${target_name}__trace_event_rewritten"
-        _rewriter_path = root_build_dir + "/bin/helper/trace_event_adder"
         _stamp = "${target_out_dir}/${target_name}.trace_event_rewrite.stamp"
 
-        action_with_pydeps(_rewritten_jar_target_name) {
-          script = "//build/android/gyp/trace_event_bytecode_rewriter.py"
-          inputs = java_paths_for_inputs + [
-                     _rewriter_path,
-                     _build_config,
-                   ]
+        python_action(_rewritten_jar_target_name) {
+          python_binary = "//build/android:trace_event_bytecode_rewriter"
+          inputs = bytecode_rewriter_inputs + [ _build_config ]
           outputs = [ _stamp ]
           depfile = "$target_gen_dir/$_rewritten_jar_target_name.d"
           args = [
+            "--jar-path",
+            rebase_path(bytecode_rewriter_jar_path, root_build_dir),
             "--stamp",
             rebase_path(_stamp, root_build_dir),
             "--depfile",
             rebase_path(depfile, root_build_dir),
-            "--script",
-            rebase_path(_rewriter_path, root_build_dir),
             "--classpath",
             "@FileArg($_rebased_build_config:sdk_jars)",
             "--input-jars",
@@ -4798,10 +4877,8 @@ if (!is_robolectric && enable_java_templates) {
             "--output-jars",
             "@FileArg($_rebased_build_config:trace_event_rewritten_classpath)",
           ]
-          deps = [
-                   _build_config_target,
-                   _trace_event_rewriter_target,
-                 ] + _module_java_targets
+          deps = [ _build_config_target ] + _module_java_targets +
+                 bytecode_rewriter_deps
         }
       }
 
@@ -4994,8 +5071,8 @@ if (!is_robolectric && enable_java_templates) {
 
     _bundle_target_name = "${_target_name}__bundle"
 
-    action_with_pydeps(_bundle_target_name) {
-      script = "//build/android/gyp/create_app_bundle.py"
+    python_action(_bundle_target_name) {
+      python_binary = "//build/android:create_app_bundle"
       inputs = _all_module_zip_paths + _all_module_spec_paths +
                _all_module_build_configs + [ _BUNDLETOOL_JAR_PATH ] +
                signflinger_inputs
@@ -5089,8 +5166,8 @@ if (!is_robolectric && enable_java_templates) {
     _bundle_wrapper_script_dir = "$root_build_dir/bin"
     _bundle_wrapper_script_path = "$_bundle_wrapper_script_dir/$_target_name"
 
-    action_with_pydeps("${_target_name}__wrapper_script") {
-      script = "//build/android/gyp/create_bundle_wrapper_script.py"
+    python_action("${_target_name}__wrapper_script") {
+      python_binary = "//build/android:create_bundle_wrapper_script"
       inputs = [ _base_module_build_config ]
       outputs = [ _bundle_wrapper_script_path ]
 
@@ -5172,8 +5249,8 @@ if (!is_robolectric && enable_java_templates) {
 
     _apks_path = "$root_build_dir/apks/$_bundle_name.apks"
 
-    action_with_pydeps("${_target_name}_apks") {
-      script = "//build/android/gyp/create_app_bundle_apks.py"
+    python_action("${_target_name}_apks") {
+      python_binary = "//build/android:create_app_bundle_apks"
       inputs = java_paths_for_inputs + [
                  _bundle_path,
                  _BUNDLETOOL_JAR_PATH,
@@ -5229,9 +5306,9 @@ if (!is_robolectric && enable_java_templates) {
   #     bundle_path = "$root_build_dir/apks/Bundle.aab"
   #   }
   template("create_app_bundle_minimal_apks") {
-    action_with_pydeps(target_name) {
+    python_action(target_name) {
       forward_variables_from(invoker, TESTONLY_AND_VISIBILITY + [ "deps" ])
-      script = "//build/android/gyp/create_app_bundle_apks.py"
+      python_binary = "//build/android:create_app_bundle_apks"
       _dir = get_path_info(invoker.bundle_path, "dir")
       _name = get_path_info(invoker.bundle_path, "name")
       _output_path = "$_dir/$_name.minimal.apks"
@@ -5283,8 +5360,8 @@ if (!is_robolectric && enable_java_templates) {
     _output_zip = "${root_out_dir}/resource_zips/${_rebased_output_zip_path}/" +
                   "${target_name}.zip"
 
-    action_with_pydeps(_generating_target_name) {
-      script = "//build/android/gyp/create_ui_locale_resources.py"
+    python_action(_generating_target_name) {
+      python_binary = "//build/android:create_ui_locale_resources"
       outputs = [ _output_zip ]
       args = [
         "--locale-list=${invoker.ui_locales}",

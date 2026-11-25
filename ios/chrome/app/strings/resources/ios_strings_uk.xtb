@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">Діліться паролями</translation>
 <translation id="1554043146674176775">Вимкнути режим ШІ</translation>
 <translation id="1554477036522844996">Нове вікно</translation>
+<translation id="1555014818414775661">Додати зображення</translation>
 <translation id="1557806604681757705">ваш комп’ютер</translation>
 <translation id="1558391695376153246">Закрити анонімні вкладки</translation>
 <translation id="1560153516220021659">Згорнута кнопка на додатковій панелі інструментів</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">Перейдіть у <ph name="BEGIN_BOLD" />налаштування Safari<ph name="END_BOLD" /></translation>
 <translation id="3858860766373142691">Назва</translation>
 <translation id="386224966259596343">Ви зможете зберегти цю інформацію в Гаманці наступного разу, коли заповнюватимете відповідну форму.</translation>
-<translation id="3868495844258915202">Показати повну URL-адресу</translation>
 <translation id="3870931306085184145">Немає збережених паролів для <ph name="DOMAIN" /></translation>
 <translation id="3875783148670536197">Докладніше</translation>
 <translation id="3878657761594430423">Маркер панелі</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">Щоб отримувати сповіщення про відстеження цін, увімкніть їх у налаштуваннях iOS.</translation>
 <translation id="528857768909044842">Тут зберігаються групи вкладок</translation>
 <translation id="5294624619177114121">Сповіщення на мобільному пристрої</translation>
-<translation id="5295239312320826323">Вилучити обліковий запис <ph name="USER_EMAIL" />?</translation>
 <translation id="5300589172476337783">Показати</translation>
 <translation id="5311061401280561833">Доступ до камери й мікрофона надано</translation>
 <translation id="5313967007315987356">Додати сайт</translation>
@@ -1788,6 +1787,7 @@
 <translation id="6504541289630702018">Легко відкривайте групи вкладок на робочому столі</translation>
 <translation id="6505334220040167806">Згорнути групу вкладок.</translation>
 <translation id="6506996418997555004">Надати доступ до групи вкладок "<ph name="GROUP_NAME" />"</translation>
+<translation id="650770261448122895">Знаходьте інформацію про речі навколо через Об’єктив</translation>
 <translation id="6507973708545996744">Увійдіть в обліковий запис, щоб мати доступ до списку читання на всіх своїх пристроях.</translation>
 <translation id="6518133107902771759">Підтвердити</translation>
 <translation id="6523575793810663688">Докладніше</translation>
@@ -2147,7 +2147,6 @@
 <translation id="7603852183842204213">Сплив.вікна блок. (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Синхронізація не працює</translation>
 <translation id="760667371114328991">Вимкнути сповіщення для перевірки безпеки</translation>
-<translation id="7612619742409846846">Ви ввійшли в обліковий запис Google як</translation>
 <translation id="7612849887607288481">Відкрити меню прототипів ШІ</translation>
 <translation id="7618220760967055820">Виберіть, яку кнопку показувати на панелі інструментів</translation>
 <translation id="7620522820075868385">Скасувати</translation>
@@ -2430,6 +2429,7 @@
 <translation id="8439758443371991593">Сховати опцію "Додати в список читання"</translation>
 <translation id="8443986842926457191">URL-адреса містить більше ніж 2048 символів</translation>
 <translation id="8449869326050867919">Пароль надіслано</translation>
+<translation id="8473367210869452063">Щоб взаємодіяти із цим сайтом, зупиніть поточне завдання або дочекайтеся, доки Gemini завершить роботу</translation>
 <translation id="8473815223723723001">Редагувати зображення за допомогою Gemini</translation>
 <translation id="8473863474539038330">Адреси й інше</translation>
 <translation id="8474378002946546633">Дозволити сповіщення</translation>

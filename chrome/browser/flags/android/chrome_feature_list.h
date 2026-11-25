@@ -81,7 +81,6 @@ BASE_DECLARE_FEATURE(kAndroidTabPersistentStoreActiveTabPrefs);
 BASE_DECLARE_FEATURE(kAndroidTabSkipSaveTabsKillswitch);
 BASE_DECLARE_FEATURE(kAndroidTabUiRefactor);
 BASE_DECLARE_FEATURE(kAndroidTabstripStartupCaptureBugFix);
-BASE_DECLARE_FEATURE(kAndroidThemeModule);
 BASE_DECLARE_FEATURE(kAndroidThemeResourceProvider);
 BASE_DECLARE_FEATURE(kAndroidToolbarCaptureOnDesktop);
 BASE_DECLARE_FEATURE(kAndroidToolbarScrollAblation);
@@ -203,6 +202,7 @@ BASE_DECLARE_FEATURE(kEdgeToEdgeExtraLogs);
 BASE_DECLARE_FEATURE(kEdgeToEdgeMonitorConfigurations);
 BASE_DECLARE_FEATURE(kEdgeToEdgeTablet);
 BASE_DECLARE_FEATURE(kEdgeToEdgeTopInset);
+BASE_DECLARE_FEATURE(kEdgeToEdgeTopPageColorSampling);
 BASE_DECLARE_FEATURE(kEdgeToEdgeUseBackupNavbarInsets);
 BASE_DECLARE_FEATURE(kEnableAndroidSidePanel);
 BASE_DECLARE_FEATURE(kEnableAndroidSidePanelDevFeature);
@@ -284,7 +284,10 @@ BASE_DECLARE_FEATURE(kQueuedCompositorWebContentsUpdates);
 BASE_DECLARE_FEATURE(kReadAloudAudioOverviews);
 BASE_DECLARE_FEATURE(kReadAloudIPHMenuButtonHighlightCCT);
 BASE_DECLARE_FEATURE(kReadAloudServerExperiments);
+BASE_DECLARE_FEATURE(kReaderModeBlurTransitionAnimation);
 BASE_DECLARE_FEATURE(kReaderModeCpaReentry);
+BASE_DECLARE_FEATURE(kReaderModeDelayBottomSheetPeek);
+BASE_DECLARE_FEATURE(kReaderModeToggleLinks);
 BASE_DECLARE_FEATURE(kReengagementNotification);
 BASE_DECLARE_FEATURE(kRemoveExtraHeadersOnCrossOriginRedirect);
 BASE_DECLARE_FEATURE(kRestoreTabGroupsOnFre);
@@ -389,7 +392,6 @@ BASE_DECLARE_FEATURE(kXplatSyncedSetupThemes);
 // FeatureParams exposed to Java through the k*ParamsExposedToJava arrays.
 // Alphabetical:
 // go/keep-sorted start
-BASE_DECLARE_FEATURE_PARAM(bool, kAndroidThemeModuleForceDependencies);
 BASE_DECLARE_FEATURE_PARAM(bool, kAndroidThemeResourceProviderForceLight);
 BASE_DECLARE_FEATURE_PARAM(bool, kNtpAuroraChangeButtonColor);
 BASE_DECLARE_FEATURE_PARAM(int, kNtpAuroraPaddingStyle);

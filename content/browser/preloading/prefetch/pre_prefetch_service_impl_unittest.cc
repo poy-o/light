@@ -179,29 +179,9 @@ TEST_F(PrePrefetchServiceImplTest, StartPrePrefetchRequestFromNonUIThread) {
       /*initial_should_append_variations_header_hint=*/false);
   ASSERT_NE(service, nullptr);
 
-  base::test::TestFuture<std::unique_ptr<PrePrefetchHandle>> handle_future;
-
   // Start PrePrefetch from non UI thread.
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock()},
-      base::BindOnce(
-          [](PrePrefetchService* service_ptr, const GURL& url) {
-            base::ScopedAllowBaseSyncPrimitivesForTesting allow_blocking;
-            return service_ptr->StartPrePrefetchRequest(
-                url, test::kPreloadingEmbedderHistogramSuffixForTesting,
-                /*javascript_enabled=*/true,
-                /*no_vary_search_hint=*/std::nullopt,
-                /*priority=*/content::PrefetchPriority::kHighest,
-                /*additional_headers=*/{},
-                /*request_status_listener=*/nullptr, base::TimeDelta(),
-                /*should_append_variations_header=*/false,
-                /*should_disable_block_until_head_timeout=*/false,
-                /*should_bypass_http_cache=*/false);
-          },
-          service.get(), prefetch_url),
-      handle_future.GetCallback());
-
-  std::unique_ptr<PrePrefetchHandle> handle = handle_future.Take();
+  std::unique_ptr<PrePrefetchHandle> handle =
+      PostStartPrePrefetchRequestAndWaitForTesting(*service, prefetch_url);
   EXPECT_NE(handle, nullptr);
 
   // Verify that the UI-thread pre-calculated prefetch headers are properly
@@ -231,32 +211,13 @@ TEST_F(PrePrefetchServiceImplTest,
       /*initial_should_append_variations_header_hint=*/false);
   ASSERT_NE(service, nullptr);
 
-  base::test::TestFuture<std::unique_ptr<PrePrefetchHandle>> handle_future;
-
   // Start PrePrefetch from the non UI thread, but with the origin different
   // from the hint's origin (`pre_prefetch_hint_url`'s origin vs
   // `pre_prefetch_actual_url`'s origin), meaning that the precalculated
   // headers won't match.
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock()},
-      base::BindOnce(
-          [](PrePrefetchService* service_ptr, const GURL& url) {
-            base::ScopedAllowBaseSyncPrimitivesForTesting allow_blocking;
-            return service_ptr->StartPrePrefetchRequest(
-                url, test::kPreloadingEmbedderHistogramSuffixForTesting,
-                /*javascript_enabled=*/true,
-                /*no_vary_search_hint=*/std::nullopt,
-                /*priority=*/content::PrefetchPriority::kHighest,
-                /*additional_headers=*/{},
-                /*request_status_listener=*/nullptr, base::TimeDelta(),
-                /*should_append_variations_header=*/false,
-                /*should_disable_block_until_head_timeout=*/false,
-                /*should_bypass_http_cache=*/false);
-          },
-          service.get(), pre_prefetch_actual_url),
-      handle_future.GetCallback());
-
-  std::unique_ptr<PrePrefetchHandle> handle = handle_future.Take();
+  std::unique_ptr<PrePrefetchHandle> handle =
+      PostStartPrePrefetchRequestAndWaitForTesting(*service,
+                                                   pre_prefetch_actual_url);
   EXPECT_EQ(handle, nullptr);
 
   histogram_tester().ExpectUniqueSample(
@@ -280,30 +241,10 @@ TEST_F(PrePrefetchServiceImplTest,
       /*initial_should_append_variations_header_hint=*/false);
   ASSERT_NE(service, nullptr);
 
-  base::test::TestFuture<std::unique_ptr<PrePrefetchHandle>> handle_future;
-
   // Start PrePrefetch for prefetch_url2, which is not in initial hints.
   // This should fail because headers are missing, but trigger calculation.
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock()},
-      base::BindOnce(
-          [](PrePrefetchService* service_ptr, const GURL& url) {
-            base::ScopedAllowBaseSyncPrimitivesForTesting allow_blocking;
-            return service_ptr->StartPrePrefetchRequest(
-                url, test::kPreloadingEmbedderHistogramSuffixForTesting,
-                /*javascript_enabled=*/true,
-                /*no_vary_search_hint=*/std::nullopt,
-                /*priority=*/content::PrefetchPriority::kHighest,
-                /*additional_headers=*/{},
-                /*request_status_listener=*/nullptr, base::TimeDelta(),
-                /*should_append_variations_header=*/false,
-                /*should_disable_block_until_head_timeout=*/false,
-                /*should_bypass_http_cache=*/false);
-          },
-          service.get(), prefetch_url2),
-      handle_future.GetCallback());
-
-  std::unique_ptr<PrePrefetchHandle> handle = handle_future.Take();
+  std::unique_ptr<PrePrefetchHandle> handle =
+      PostStartPrePrefetchRequestAndWaitForTesting(*service, prefetch_url2);
 
   // PrePrefetch fails for the current request.
   ASSERT_EQ(handle, nullptr);
@@ -314,27 +255,8 @@ TEST_F(PrePrefetchServiceImplTest,
 
   // Now try again for `prefetch_url2`. It should find the cached headers and
   // succeed.
-  base::test::TestFuture<std::unique_ptr<PrePrefetchHandle>> handle_future2;
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock()},
-      base::BindOnce(
-          [](PrePrefetchService* service_ptr, const GURL& url) {
-            base::ScopedAllowBaseSyncPrimitivesForTesting allow_blocking;
-            return service_ptr->StartPrePrefetchRequest(
-                url, test::kPreloadingEmbedderHistogramSuffixForTesting,
-                /*javascript_enabled=*/true,
-                /*no_vary_search_hint=*/std::nullopt,
-                /*priority=*/content::PrefetchPriority::kHighest,
-                /*additional_headers=*/{},
-                /*request_status_listener=*/nullptr, base::TimeDelta(),
-                /*should_append_variations_header=*/false,
-                /*should_disable_block_until_head_timeout=*/false,
-                /*should_bypass_http_cache=*/false);
-          },
-          service.get(), prefetch_url2),
-      handle_future2.GetCallback());
-
-  std::unique_ptr<PrePrefetchHandle> handle2 = handle_future2.Take();
+  std::unique_ptr<PrePrefetchHandle> handle2 =
+      PostStartPrePrefetchRequestAndWaitForTesting(*service, prefetch_url2);
   EXPECT_NE(handle2, nullptr);
 }
 
@@ -351,52 +273,16 @@ TEST_F(PrePrefetchServiceImplTest, DeduplicatesInFlightPreCalculationRequests) {
       /*initial_should_append_variations_header_hint=*/std::nullopt);
   ASSERT_NE(service, nullptr);
 
-  std::unique_ptr<PrePrefetchHandle> handle1;
-  std::unique_ptr<PrePrefetchHandle> handle2;
-
-  base::WaitableEvent event(base::WaitableEvent::ResetPolicy::MANUAL,
-                            base::WaitableEvent::InitialState::NOT_SIGNALED);
-
   // Start duplicated PrePrefetches for `prefetch_url`, which will trigger two
   // header pre-calculation refresh requests.
-  // Block the UI thread using `WaitableEvent` to prevent fast UI tasks from
-  // racing ahead before both requests complete submitting to the
+  // `PostStartPrePrefetchRequestAndWaitForTesting()` blocks the UI thread via
+  // `base::WaitableEvent` without running UI tasks, preventing UI tasks from
+  // racing ahead before both requests complete submitting to
   // `PrePrefetchServiceCore`.
-  base::ThreadPool::PostTask(
-      FROM_HERE, {base::MayBlock()},
-      base::BindOnce(
-          [](PrePrefetchService* service_ptr, const GURL& url,
-             std::unique_ptr<PrePrefetchHandle>* handle1_ptr,
-             std::unique_ptr<PrePrefetchHandle>* handle2_ptr,
-             base::WaitableEvent* event_ptr) {
-            base::ScopedAllowBaseSyncPrimitivesForTesting allow_blocking;
-            *handle1_ptr = service_ptr->StartPrePrefetchRequest(
-                url, test::kPreloadingEmbedderHistogramSuffixForTesting,
-                /*javascript_enabled=*/true,
-                /*no_vary_search_hint=*/std::nullopt,
-                /*priority=*/content::PrefetchPriority::kHighest,
-                /*additional_headers=*/{},
-                /*request_status_listener=*/nullptr, base::TimeDelta(),
-                /*should_append_variations_header=*/false,
-                /*should_disable_block_until_head_timeout=*/false,
-                /*should_bypass_http_cache=*/false);
-
-            *handle2_ptr = service_ptr->StartPrePrefetchRequest(
-                url, test::kPreloadingEmbedderHistogramSuffixForTesting,
-                /*javascript_enabled=*/true,
-                /*no_vary_search_hint=*/std::nullopt,
-                /*priority=*/content::PrefetchPriority::kHighest,
-                /*additional_headers=*/{},
-                /*request_status_listener=*/nullptr, base::TimeDelta(),
-                /*should_append_variations_header=*/false,
-                /*should_disable_block_until_head_timeout=*/false,
-                /*should_bypass_http_cache=*/false);
-
-            event_ptr->Signal();
-          },
-          service.get(), prefetch_url, &handle1, &handle2, &event));
-
-  event.Wait();
+  std::unique_ptr<PrePrefetchHandle> handle1 =
+      PostStartPrePrefetchRequestAndWaitForTesting(*service, prefetch_url);
+  std::unique_ptr<PrePrefetchHandle> handle2 =
+      PostStartPrePrefetchRequestAndWaitForTesting(*service, prefetch_url);
 
   EXPECT_EQ(handle1, nullptr);
   EXPECT_EQ(handle2, nullptr);
@@ -436,30 +322,10 @@ TEST_F(PrePrefetchServiceImplTest,
   // `SequencedTaskRunner`.
   RunUntilIdle();
 
-  base::test::TestFuture<std::unique_ptr<PrePrefetchHandle>> handle_future;
-
   // Start PrePrefetch from non UI thread, this will match the cache, but
   // the URLLoaderFactory is disconnected.
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock()},
-      base::BindOnce(
-          [](PrePrefetchService* service_ptr, const GURL& url) {
-            base::ScopedAllowBaseSyncPrimitivesForTesting allow_blocking;
-            return service_ptr->StartPrePrefetchRequest(
-                url, test::kPreloadingEmbedderHistogramSuffixForTesting,
-                /*javascript_enabled=*/true,
-                /*no_vary_search_hint=*/std::nullopt,
-                /*priority=*/content::PrefetchPriority::kHighest,
-                /*additional_headers=*/{},
-                /*request_status_listener=*/nullptr, base::TimeDelta(),
-                /*should_append_variations_header=*/false,
-                /*should_disable_block_until_head_timeout=*/false,
-                /*should_bypass_http_cache=*/false);
-          },
-          service.get(), prefetch_url),
-      handle_future.GetCallback());
-
-  std::unique_ptr<PrePrefetchHandle> handle = handle_future.Take();
+  std::unique_ptr<PrePrefetchHandle> handle =
+      PostStartPrePrefetchRequestAndWaitForTesting(*service, prefetch_url);
   // PrePrefetch fails.
   EXPECT_EQ(handle, nullptr);
 
@@ -508,29 +374,10 @@ TEST_F(PrePrefetchServiceImplTest,
   // `SequencedTaskRunner`.
   RunUntilIdle();
 
-  base::test::TestFuture<std::unique_ptr<PrePrefetchHandle>> handle_future;
-
   // Start PrePrefetch. It should succeed because the `URLLoaderFactory` refresh
   // is completed.
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock()},
-      base::BindOnce(
-          [](PrePrefetchService* service_ptr, const GURL& url) {
-            base::ScopedAllowBaseSyncPrimitivesForTesting allow_blocking;
-            return service_ptr->StartPrePrefetchRequest(
-                url, test::kPreloadingEmbedderHistogramSuffixForTesting,
-                /*javascript_enabled=*/true,
-                /*no_vary_search_hint=*/std::nullopt,
-                /*priority=*/content::PrefetchPriority::kHighest,
-                /*additional_headers=*/{},
-                /*request_status_listener=*/nullptr, base::TimeDelta(),
-                /*should_append_variations_header=*/false,
-                /*should_disable_block_until_head_timeout=*/false,
-                /*should_bypass_http_cache=*/false);
-          },
-          service.get(), prefetch_url),
-      handle_future.GetCallback());
-  std::unique_ptr<PrePrefetchHandle> handle = handle_future.Take();
+  std::unique_ptr<PrePrefetchHandle> handle =
+      PostStartPrePrefetchRequestAndWaitForTesting(*service, prefetch_url);
 
   // PrePrefetch succeeds.
   EXPECT_NE(handle, nullptr);
@@ -608,6 +455,77 @@ TEST_F(PrePrefetchServiceImplTest,
   histogram_tester().ExpectUniqueSample(
       "Preloading.Prefetch.PrePrefetch.StartResult",
       PrePrefetchStartResult::kStarted, 1);
+}
+
+// Test that shutting down a `BrowserContext` (via `NotifyWillBeDestroyed()` and
+// `ShutdownStoragePartitions()`, as in `~TestBrowserContext()`) while a
+// standalone `PrePrefetchService` and a pending UI-thread pre-calculated
+// headers task are active doesn't recreate `StoragePartitionImplMap` after
+// `ShutdownStoragePartitions()`.
+TEST_F(PrePrefetchServiceImplTest,
+       BrowserContextShutdownDoesNotRecreateStoragePartition) {
+  // Bind `PrePrefetchServiceCore` to the real `StoragePartition`'s
+  // `NetworkContext` so `ShutdownStoragePartitions()` disconnects the Mojo pipe
+  // and triggers `PostGetNewURLLoaderFactoryToUIThread()`.
+  SetTerminalPrefetchURLLoaderFactoryForTesting(nullptr);
+
+  const GURL prefetch_url("https://example.com/prefetch");
+  const GURL uncached_url("https://uncached.example.com/prefetch");
+  auto local_browser_context = std::make_unique<TestBrowserContext>();
+
+  std::unique_ptr<PrePrefetchService> standalone_service =
+      PrePrefetchService::Create(
+          local_browser_context.get(),
+          /*embedder_non_ui_thread_update_headers_callbacks=*/{},
+          url::Origin::Create(prefetch_url),
+          /*initial_javascript_enabled_hint=*/true,
+          /*initial_should_append_variations_header_hint=*/false);
+  ASSERT_NE(standalone_service, nullptr);
+
+  // Request `uncached_url` (not in the initial hints), which posts a task to
+  // the UI thread via
+  // `PrePrefetchServiceCore::PostPreCalculateHeadersToUIThread()`. Because
+  // `PostStartPrePrefetchRequestAndWaitForTesting()` blocks the UI thread via
+  // `base::WaitableEvent` without running UI-thread tasks, and nothing pumps
+  // the UI-thread task queue before `local_browser_context.reset()` below, that
+  // posted UI-thread task remains queued and is not executed until
+  // `~TestBrowserContext()`'s `RunAllTasksUntilIdle()` inside
+  // `local_browser_context.reset()`.
+  std::unique_ptr<PrePrefetchHandle> uncached_handle =
+      PostStartPrePrefetchRequestAndWaitForTesting(*standalone_service,
+                                                   uncached_url);
+  // Returns `nullptr` because the pre-calculated headers cache missed for
+  // `uncached_url` (`local_browser_context` has not started shutting down yet).
+  EXPECT_EQ(uncached_handle, nullptr);
+
+  // Queue a UI-thread task that runs during `~TestBrowserContext()`'s
+  // `RunAllTasksUntilIdle()` immediately after `NotifyWillBeDestroyed()` and
+  // `ShutdownStoragePartitions()`, while `BrowserContext`'s `WeakPtr` is still
+  // valid (before `~BrowserContext()`).
+  bool post_shutdown_check_ran = false;
+  GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
+      base::BindLambdaForTesting(
+          [&, weak_browser_context = local_browser_context->GetWeakPtr()]() {
+            ASSERT_TRUE(weak_browser_context);
+            EXPECT_TRUE(weak_browser_context->ShutdownStarted());
+            EXPECT_EQ(BrowserContextImpl::From(weak_browser_context.get())
+                          ->storage_partition_map(),
+                      nullptr);
+            post_shutdown_check_ran = true;
+          }));
+
+  // `~TestBrowserContext()` runs `NotifyWillBeDestroyed()`,
+  // `ShutdownStoragePartitions()`, and `RunAllTasksUntilIdle()` (draining
+  // `PostPreCalculateHeadersToUIThread()`,
+  // `PostGetNewURLLoaderFactoryToUIThread()`, and the check above), followed by
+  // `~BrowserContextImpl()`'s `DCHECK(!storage_partition_map_)`.
+  local_browser_context.reset();
+  EXPECT_TRUE(post_shutdown_check_ran);
+
+  RunUntilIdle();
+  standalone_service.reset();
+  RunUntilIdle();
 }
 
 }  // namespace content

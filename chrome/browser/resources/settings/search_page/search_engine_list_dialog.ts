@@ -87,18 +87,20 @@ export class SettingsSearchEngineListDialogElement extends
         notify: true,
       },
 
-      /**
-       * Whether the "More options" entry point is enabled via feature flag.
-       */
-      pickerWithMoreEnginesEnabled_: {type: Boolean},
+      settingsRefresh2026Enabled_: {type: Boolean},
     };
   }
 
   accessor searchEngines: SearchEngine[] = [];
   protected accessor selectedEngineId_: string = '';
   accessor saveGuestChoice: boolean|null = null;
-  protected accessor pickerWithMoreEnginesEnabled_: boolean =
+  /**
+   * Whether the "More options" entry point is enabled via feature flag.
+   */
+  protected readonly pickerWithMoreEnginesEnabled_: boolean =
       loadTimeData.getBoolean('pickerWithMoreEngines');
+  protected accessor settingsRefresh2026Enabled_: boolean =
+      loadTimeData.getString('settingsRefresh2026') !== '';
 
   private browserProxy_: SearchEnginesBrowserProxy =
       SearchEnginesBrowserProxyImpl.getInstance();

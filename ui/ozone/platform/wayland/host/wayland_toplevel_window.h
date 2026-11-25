@@ -59,10 +59,15 @@ class WaylandToplevelWindow : public WaylandWindow,
   // Notify that this window's active state may change.
   void UpdateActivationState();
 
+  WaylandBubble* active_bubble() const { return active_bubble_; }
+  void SetActiveBubble(WaylandBubble* bubble);
+  bool IsInBubbleAncestry(const WaylandWindow* window) const;
+
   // WaylandWindow overrides:
   void SetBoundsInDIP(const gfx::Rect& bounds_dip) override;
   void UpdateWindowScale(bool update_bounds) override;
   WaylandToplevelWindow* AsWaylandToplevelWindow() override;
+  const WaylandToplevelWindow* AsWaylandToplevelWindow() const override;
 
   // Configure related:
   void HandleToplevelConfigure(int32_t width,
@@ -160,6 +165,8 @@ class WaylandToplevelWindow : public WaylandWindow,
   void OnSessionDestroying() override;
 
  private:
+  enum class FullscreenState { kNone, kCompositor, kClient };
+
   // XdgToplevelSession instances are owned by toplevel windows, given their
   // close lifecycle, though ownership might be transferred to the associated
   // XdgSession, during removals, for example. To make this relationship more
@@ -210,6 +217,19 @@ class WaylandToplevelWindow : public WaylandWindow,
   // Sends set_fullscreen and a wl_display.sync to track when the compositor has
   // processed it.
   void SendSetFullscreen(int64_t fullscreen_display_id);
+  void SendUnsetFullscreen();
+
+  // Computes the platform window state for an xdg_toplevel configure and
+  // updates `fullscreen_state_`, `previously_maximized_` and
+  // `last_configured_window_state_`.
+  PlatformWindowState UpdateConfiguredWindowState(
+      int32_t width_dip,
+      int32_t height_dip,
+      const WindowStates& window_states);
+
+  // applied_state().window_state, except that compositor-initiated fullscreen
+  // mapped to kMaximized is kFullScreen.
+  PlatformWindowState GetRawAppliedWindowState() const;
 
   // wl_callback_listener callback for `fullscreen_sync_callback_`.
   static void OnFullscreenSyncDone(void* data,
@@ -279,9 +299,13 @@ class WaylandToplevelWindow : public WaylandWindow,
   bool previously_maximized_ = false;
 
   // The window state carried by the last xdg_toplevel configure, independent of
-  // states the client applied without waiting for the compositor.
+  // states the client applied without waiting for the compositor. Any
+  // xdg_toplevel fullscreen is kFullScreen here, even when it maps to
+  // kMaximized.
   PlatformWindowState last_configured_window_state_ =
       PlatformWindowState::kUnknown;
+
+  FullscreenState fullscreen_state_ = FullscreenState::kNone;
 
   bool pending_minimize_ = false;
 
@@ -310,6 +334,11 @@ class WaylandToplevelWindow : public WaylandWindow,
   bool is_active_ = false;
   bool is_xdg_active_ = false;
   bool is_suspended_ = false;
+
+  // Authoritative active subsurface bubble in this toplevel's window tree.
+  // Cleared when the toplevel loses OS activation.
+  raw_ptr<WaylandBubble> active_bubble_ = nullptr;
+  uint64_t bubble_activation_epoch_ = 0;
 
   // Id of the chromium app passed through
   // PlatformWindowInitProperties::wm_class_name. This is used by Wayland

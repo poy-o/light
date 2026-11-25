@@ -45,8 +45,7 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/search_test_utils.h"
 #include "components/crx_file/id_util.h"
-#include "components/enterprise/isolated_mode/isolated_mode_features.h"
-#include "components/enterprise/isolated_mode/prefs.h"
+#include "components/enterprise/isolated_mode/scoped_isolated_mode_override_for_testing.h"
 #include "components/image_fetcher/core/image_fetcher.h"
 #include "components/image_fetcher/core/image_fetcher_service.h"
 #include "components/image_fetcher/core/image_fetcher_types.h"
@@ -275,11 +274,11 @@ class SettingsOverriddenParamsProvidersUnitTest
   // in a run loop for icon resource fetching to complete.
   std::optional<ExtensionSettingsOverriddenDialog::Params>
   GetSearchOverriddenParamsSync() {
-    return GetSearchOverriddenParamsSync(profile());
+    return GetSearchOverriddenParamsSync(*profile());
   }
 
   std::optional<ExtensionSettingsOverriddenDialog::Params>
-  GetSearchOverriddenParamsSync(Profile* target_profile) {
+  GetSearchOverriddenParamsSync(Profile& target_profile) {
     std::optional<ExtensionSettingsOverriddenDialog::Params> result;
     base::RunLoop run_loop;
     settings_overridden_params::GetSearchOverriddenParamsThenRun(
@@ -860,21 +859,9 @@ class SearchOverriddenParamsProvidersOffTheRecordUnitTest
       public testing::WithParamInterface<std::tuple<bool, bool>> {
  protected:
   SearchOverriddenParamsProvidersOffTheRecordUnitTest() {
-    feature_list_.InitWithFeatureStates(
-        {{extensions_features::kSearchEngineExplicitChoiceDialog,
-          IsExplicitChoiceDialog()},
-         {enterprise_isolated_mode::kEnableEnterpriseIsolatedMode,
-          IsIsolatedMode()}});
-  }
-
-  void SetUp() override {
-    SettingsOverriddenParamsProvidersUnitTest::SetUp();
-    if (IsIsolatedMode()) {
-      profile()->GetPrefs()->SetInteger(
-          enterprise_isolated_mode::kEnterpriseIsolatedModeSettings,
-          static_cast<int>(
-              enterprise_isolated_mode::IsolatedModeSetting::kEnabled));
-    }
+    feature_list_.InitWithFeatureState(
+        extensions_features::kSearchEngineExplicitChoiceDialog,
+        IsExplicitChoiceDialog());
   }
 
   bool IsExplicitChoiceDialog() const { return std::get<0>(GetParam()); }
@@ -882,6 +869,8 @@ class SearchOverriddenParamsProvidersOffTheRecordUnitTest
 
  private:
   base::test::ScopedFeatureList feature_list_;
+  enterprise_isolated_mode::ScopedIsolatedModeOverrideForTesting
+      scoped_isolated_mode_{IsIsolatedMode()};
 };
 
 TEST_P(SearchOverriddenParamsProvidersOffTheRecordUnitTest,
@@ -911,7 +900,7 @@ TEST_P(SearchOverriddenParamsProvidersOffTheRecordUnitTest,
   // to the original profile in OTR profiles), so `secondary_extension` is
   // still used as the backup search provider in the OTR profile.
   std::optional<ExtensionSettingsOverriddenDialog::Params> params =
-      GetSearchOverriddenParamsSync(off_the_record_profile);
+      GetSearchOverriddenParamsSync(*off_the_record_profile);
   ASSERT_TRUE(params);
   EXPECT_EQ(primary_extension->id(), params->controlling_extension_id);
   if (IsExplicitChoiceDialog()) {

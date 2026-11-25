@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <utility>
 
@@ -25,6 +26,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ttc/app/public/audio_controller.h"
 #include "chrome/browser/ttc/core/features.h"
+#include "chrome/browser/ttc/core/output_volume_monitor.h"
 #include "chrome/browser/ttc/core/pointer_input_observer.h"
 #include "chrome/browser/ttc/core/pointer_tracker.h"
 #include "chrome/browser/ttc/core/session_end_condition_detector.h"
@@ -39,7 +41,7 @@
 #include "components/optimization_guide/proto/features/common_quality_data.pb.h"
 #include "components/ttc/app/public/conversation.h"
 #include "components/ttc/app/public/error_codes.h"
-#include "components/ttc/app/public/tab_context_info.h"
+#include "components/ttc/app/public/page_context_types.h"
 #include "content/public/browser/page.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
@@ -161,6 +163,19 @@ SessionControllerImpl::SessionControllerImpl(
       std::make_unique<SessionEndConditionDetector>(base::BindRepeating(
           &SessionControllerImpl::OnSessionEndConditionDetected,
           weak_ptr_factory_.GetWeakPtr()));
+
+  if (base::FeatureList::IsEnabled(kTtcSpeakerVolumeWarning)) {
+    // Unretained is safe: `this` owns the monitor, which only runs the
+    // callback while it's alive.
+    output_volume_monitor_ = OutputVolumeMonitor::Create(base::BindRepeating(
+        &SessionControllerImpl::OnOutputVolumeChanged, base::Unretained(this)));
+    if (output_volume_monitor_) {
+      if (std::optional<OutputVolumeState> state =
+              output_volume_monitor_->GetState()) {
+        OnOutputVolumeChanged(*state);
+      }
+    }
+  }
 }
 
 SessionControllerImpl::~SessionControllerImpl() {
@@ -421,6 +436,16 @@ Speaker SessionControllerImpl::GetSpeaker() const {
   return speaker_;
 }
 
+bool SessionControllerImpl::CanSaveDebugTrace() const {
+  return SessionJournalImpl::IsInMemoryJournalEnabled();
+}
+
+void SessionControllerImpl::SaveDebugTrace() {
+  service_->SaveDebugTrace(base::PassKey<SessionControllerImpl>(),
+                           GetVoiceFocusedWebContents(),
+                           GetBrowserWindowInterface(), journal_);
+}
+
 bool SessionControllerImpl::SetMicMuted(bool muted) {
   // Only a live session can be muted.
   if (session_lifecycle_ != SessionLifecycle::kLive ||
@@ -531,15 +556,15 @@ void SessionControllerImpl::OnPageContextFetched(
             : TabContextInfo(main_frame.GetLastCommittedURL(),
                              base::UTF16ToUTF8(contents->GetTitle()),
                              page.GetContentsMimeType());
-    conversation_->SendContextUpdate(tab, /*apc=*/{});
+    conversation_->SendContextUpdate(SharedPageContext(tab));
     return;
   }
   const optimization_guide::proto::AnnotatedPageContent& apc =
       result->annotated_page_content->data;
-  conversation_->SendContextUpdate(
+  conversation_->SendContextUpdate(SharedPageContext(
       TabContextInfo(GURL(apc.main_frame_data().url()),
                      apc.main_frame_data().title(), page.GetContentsMimeType()),
-      apc);
+      apc));
 }
 
 void SessionControllerImpl::OnInactivityTimeout() {
@@ -568,6 +593,18 @@ void SessionControllerImpl::OnSessionEndConditionDetected(
                        .Add("reason", SessionEndReasonToString(reason))
                        .Build());
   EndSessionAsync();
+}
+
+void SessionControllerImpl::OnOutputVolumeChanged(
+    const OutputVolumeState& state) {
+  actor::JournalDetailsBuilder details;
+  details.Add("muted", state.muted);
+  if (state.level) {
+    details.Add("level", *state.level);
+  }
+  GetJournal().Log("TtcSystemSpeakerVolume", std::move(details).Build());
+
+  output_volume_ = state;
 }
 
 }  // namespace ttc

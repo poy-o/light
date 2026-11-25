@@ -20,11 +20,15 @@
 #include "components/trusted_vault/trusted_vault_client.h"
 #include "components/trusted_vault/trusted_vault_server_constants.h"
 
+namespace trusted_vault {
+
+struct TrustedVaultKeyAndVersion;
+
 // JNI bridge for a Java implementation of the TrustedVaultClient interface,
 // used on Android.
 //
 // This class must be accessed from the UI thread.
-class TrustedVaultClientAndroid : public trusted_vault::TrustedVaultClient {
+class TrustedVaultClientAndroid : public TrustedVaultClient {
  public:
   // Callback that returns account information identified by |gaia_id| or an
   // empty CoreAccountInfo if the account is not found.
@@ -32,7 +36,7 @@ class TrustedVaultClientAndroid : public trusted_vault::TrustedVaultClient {
       base::RepeatingCallback<CoreAccountInfo(const GaiaId& gaia_id)>;
 
   TrustedVaultClientAndroid(
-      trusted_vault::SecurityDomainId security_domain_id,
+      SecurityDomainId security_domain_id,
       const GetAccountInfoByGaiaIdCallback& gaia_account_info_by_gaia_id_cb);
   ~TrustedVaultClientAndroid() override;
 
@@ -46,7 +50,7 @@ class TrustedVaultClientAndroid : public trusted_vault::TrustedVaultClient {
   void FetchKeysCompleted(JNIEnv* env,
                           int32_t request_id,
                           const std::string& gaia_id,
-                          const base::android::JavaRef<jobjectArray>& keys);
+                          const std::vector<TrustedVaultKeyAndVersion>& keys);
 
   // Called from Java to notify the completion of a MarkLocalKeysAsStale()
   // operation previously initiated from C++ and identified by |request_id|.
@@ -97,8 +101,7 @@ class TrustedVaultClientAndroid : public trusted_vault::TrustedVaultClient {
       const GaiaId& gaia_id,
       const std::vector<std::vector<uint8_t>>& keys,
       int last_key_version,
-      std::optional<trusted_vault::TrustedVaultUserActionTriggerForUMA> trigger)
-      override;
+      std::optional<TrustedVaultUserActionTriggerForUMA> trigger) override;
   void MarkLocalKeysAsStale(const CoreAccountInfo& account_info,
                             base::OnceCallback<void(bool)> cb) override;
   void GetIsRecoverabilityDegraded(const CoreAccountInfo& account_info,
@@ -119,13 +122,14 @@ class TrustedVaultClientAndroid : public trusted_vault::TrustedVaultClient {
   struct OngoingFetchKeys {
     OngoingFetchKeys(
         const CoreAccountInfo& account_info,
-        base::OnceCallback<void(const std::vector<std::vector<uint8_t>>&)>
+        base::OnceCallback<void(const std::vector<TrustedVaultKeyAndVersion>&)>
             callback);
     OngoingFetchKeys(OngoingFetchKeys&&);
     ~OngoingFetchKeys();
 
     const CoreAccountInfo account_info;
-    base::OnceCallback<void(const std::vector<std::vector<uint8_t>>&)> callback;
+    base::OnceCallback<void(const std::vector<TrustedVaultKeyAndVersion>&)>
+        callback;
   };
 
   // Struct representing an in-flight MarkLocalKeysAsStale() call invoked from
@@ -191,7 +195,7 @@ class TrustedVaultClientAndroid : public trusted_vault::TrustedVaultClient {
   RequestId RegisterNewOngoingRequest(OngoingRequest request);
   OngoingRequest GetAndUnregisterOngoingRequest(RequestId id);
 
-  const trusted_vault::SecurityDomainId security_domain_id_;
+  const SecurityDomainId security_domain_id_;
   const GetAccountInfoByGaiaIdCallback gaia_account_info_by_gaia_id_cb_;
 
   // Each in-flight request gets assigned an auto-increment ID and gets cached
@@ -201,5 +205,7 @@ class TrustedVaultClientAndroid : public trusted_vault::TrustedVaultClient {
 
   base::ObserverList<Observer> observer_list_;
 };
+
+}  // namespace trusted_vault
 
 #endif  // COMPONENTS_TRUSTED_VAULT_ANDROID_TRUSTED_VAULT_CLIENT_ANDROID_H_

@@ -56,7 +56,6 @@
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/browser_interface_broker.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/blocked_navigation_types.mojom-shared.h"
-#include "third_party/blink/public/mojom/frame/lifecycle.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/triggering_event_info.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom-shared.h"
 #include "third_party/blink/public/mojom/loader/same_document_navigation_type.mojom-shared.h"
@@ -137,14 +136,12 @@ class WebMediaStreamDeviceObserver;
 class WebNavigationControl;
 class WebPlugin;
 class WebPrescientNetworking;
-class WebRelatedAppsFetcher;
 class WebServiceWorkerProvider;
 class WebSocketHandshakeThrottle;
 class WebString;
 class WebURL;
 class URLLoader;
 class WebURLRequest;
-class WebURLResponse;
 class WebView;
 struct FramePolicy;
 struct ContextMenuData;
@@ -418,10 +415,6 @@ class BLINK_EXPORT WebLocalFrameClient {
   // The frame's document and all of its subresources succeeded to load.
   virtual void DidFinishLoad() {}
 
-  // The frame's document and all of its subresources succeeded to load for
-  // printing.
-  virtual void DidFinishLoadForPrinting() {}
-
   // The navigation resulted in no change to the documents within the page.
   // For example, the navigation may have just resulted in scrolling to a named
   // anchor or a PopState event may have been dispatched.
@@ -483,11 +476,6 @@ class BLINK_EXPORT WebLocalFrameClient {
   // at a time.
   virtual void AbortClientNavigation(bool for_new_navigation) {}
 
-  // InstalledApp API ----------------------------------------------------
-
-  // Used to access the embedder for the InstalledApp API.
-  virtual WebRelatedAppsFetcher* GetRelatedAppsFetcher() { return nullptr; }
-
   // Editing -------------------------------------------------------------
 
   // These methods allow the client to intercept editing operations.
@@ -511,19 +499,6 @@ class BLINK_EXPORT WebLocalFrameClient {
   // Called when a new element gets focused. |from_element| is the previously
   // focused element, |to_element| is the newly focused one. Either can be null.
   virtual void FocusedElementChanged(const WebElement& element) {}
-
-  // Called when the main frame's document rectangle changed, e.g. resizing a
-  // tab causes the document width to change, or loading additional content
-  // causes the document height to increase. Only invoked on the outermost main
-  // frame.
-  virtual void OnMainFrameRectangleChanged(const gfx::Rect& main_frame_rect) {}
-
-  // Called when the main frame's viewport rectangle (the viewport dimensions
-  // and the scroll position) changed, e.g. the user scrolled the main frame or
-  // the viewport dimensions themselves changed. Only invoked on the outermost
-  // main frame.
-  virtual void OnMainFrameViewportRectangleChanged(
-      const gfx::Rect& main_frame_viewport_rect) {}
 
   // Called when an overlay interstitial pop up ad is detected.
   virtual void OnOverlayPopupAdDetected() {}
@@ -551,20 +526,8 @@ class BLINK_EXPORT WebLocalFrameClient {
   // OverrideRequestUrl(). Other changes are allowed to the request.
   virtual void FinalizeRequest(WebURLRequest&) {}
 
-  // The specified request was satified from WebCore's memory cache.
-  virtual void DidLoadResourceFromMemoryCache(const WebURLRequest&,
-                                              const WebURLResponse&) {}
-
   // A PingLoader was created, and a request dispatched to a URL.
   virtual void DidDispatchPingLoader(const WebURL&) {}
-
-  // The first scroll delay, which measures the time between the user's first
-  // scrolling and the resultant display update, has been observed.
-  // The first scroll timestamp is when the first scroll event was created which
-  // is the hardware timestamp provided by the host OS.
-  virtual void DidObserveFirstScrollDelay(
-      base::TimeDelta first_scroll_delay,
-      base::TimeTicks first_scroll_timestamp) {}
 
   // Script notifications ------------------------------------------------
 
@@ -665,8 +628,6 @@ class BLINK_EXPORT WebLocalFrameClient {
 
   virtual std::unique_ptr<URLLoader> CreateURLLoaderForTesting();
 
-  virtual void OnStopLoading() {}
-
   // WebSocket -----------------------------------------------------------
   virtual std::unique_ptr<WebSocketHandshakeThrottle>
   CreateWebSocketHandshakeThrottle() {
@@ -728,16 +689,10 @@ class BLINK_EXPORT WebLocalFrameClient {
   // WebMeaningfulLayout for details.)
   virtual void DidMeaningfulLayout(WebMeaningfulLayout) {}
 
-  virtual void OnFrameVisibilityChanged(mojom::FrameVisibility render_status) {}
-
   // Returns the last commited URL used for UKM. This is slightly different
   // than the document's URL because it will contain a data URL if a base URL
   // was used for its load or if an unreachable URL was used.
   virtual WebURL LastCommittedUrlForUKM() { return WebURL(); }
-
-  // Called when script in the frame (and it subframes) wishes to be printed via
-  // a window.print() call.
-  virtual void ScriptedPrint() {}
 
   // This method is ONLY for web tests and is not supposed to be overridden in
   // classes other than web_frame_test_proxy. It's called from accessibility and

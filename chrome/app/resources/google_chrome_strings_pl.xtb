@@ -99,12 +99,14 @@
 <translation id="1896602904211344018">Pobierz aplikację Chrome</translation>
 <translation id="1919130412786645364">Zezwalaj na logowanie się w Chrome</translation>
 <translation id="1925069572871307609">Aby otrzymywać w przyszłości aktualizacje Google Chrome, musisz mieć system Windows 10 w wersji 1809 lub nowszej. Na tym komputerze jest zainstalowana starsza wersja systemu Windows 10.</translation>
+<translation id="1975400514743766362">Zabierz ze sobą funkcje bezpieczeństwa Google dzięki aplikacji Chrome na urządzeniu <ph name="DEVICE_TYPE" /></translation>
 <translation id="1979600810166324878">Zwiększ swoje bezpieczeństwo w dowolnym miejscu dzięki Ulepszonemu bezpiecznemu przeglądaniu w Chrome na iOS</translation>
 <translation id="2001586581944147178">Utrudnij osobom mającym dostęp do Twojego ruchu internetowego sprawdzanie, jakie strony odwiedzasz. Do wyszukiwania adresu IP witryny w systemie nazw domenowych (DNS) Chrome używa bezpiecznego połączenia.</translation>
 <translation id="2018879682492276940">Nie udało się zainstalować. Spróbuj ponownie.</translation>
 <translation id="2024959665595762054">Potwierdź swoją tożsamość, aby móc zapisywać dane z Chrome na koncie Google i ich używać</translation>
 <translation id="2034233344106846793">Chrome automatycznie przełącza niezabezpieczone połączenia na HTTPS, gdy jest to możliwe</translation>
 <translation id="2039417478970545937">Ustawienia.</translation>
+<translation id="2040220733769034247">Zeskanuj kod QR telefonem, aby pobrać Chrome i zalogować się na konto Google.</translation>
 <translation id="2044908892530830113">Pokaż wyszukiwarkę w Chrome na pasku menu Maca i włącz skrót klawiszowy</translation>
 <translation id="2050189601866423230">Możesz przypiąć Tryb AI w wyszukiwarce Google, aby zadawać pytania podczas przeglądania</translation>
 <translation id="2060311596979880693">Gotowe! Teraz możesz łatwo zadawać pytania podczas przeglądania za pomocą wyszukiwarki Google w Chrome</translation>
@@ -137,7 +139,6 @@
 <translation id="2307973900865360088">Zachowaj w Docku</translation>
 <translation id="2309047409763057870">To jest druga instalacja Google Chrome. Nie można ustawić jej jako przeglądarki domyślnej.</translation>
 <translation id="2345992953227471816">Przeglądarka Chrome wykryła w tych rozszerzeniach złośliwe oprogramowanie:</translation>
-<translation id="2350411688004301551">Przełącz się na Gemini Enterprise</translation>
 <translation id="2358140144860869442">Aby mieć dostęp do listy Do przeczytania oraz innych ustawień i danych na wszystkich swoich urządzeniach, zaloguj się w Chrome</translation>
 <translation id="2359808026110333948">Dalej</translation>
 <translation id="2403703063067034158">Błąd podczas uruchamiania: obecnie działa inna instancja konfiguracji. Spróbuj ponownie później.</translation>
@@ -195,7 +196,6 @@ Jeśli ta strona nie działa zgodnie z oczekiwaniami, spróbuj zezwolić na opt
 <translation id="2876628302275096482">Dowiedz się więcej o tym, <ph name="BEGIN_LINK" />jak Chrome dba o prywatność Twoich danych<ph name="END_LINK" />.</translation>
 <translation id="2885378588091291677">Menedżer zadań</translation>
 <translation id="2888126860611144412">Chrome – informacje</translation>
-<translation id="2898830646167954300">Przełącz się z powrotem na niezarządzanego asystenta Gemini</translation>
 <translation id="2915996080311180594">Uruchom ponownie później</translation>
 <translation id="2926952073016206995">Ta strona musi mieć w Chrome dostęp do aparatu</translation>
 <translation id="2945997411976714835">Błąd instalacji: nie udało się uruchomić procesu instalatora.</translation>
@@ -415,7 +415,6 @@ Jeśli ta strona nie działa zgodnie z oczekiwaniami, spróbuj zezwolić na opt
 <translation id="5271833978500241046">Używaj ich razem z innymi funkcjami Gemini w Chrome</translation>
 <translation id="5320351714793324716">Jeśli zezwolisz na pliki cookie, Chrome może ich używać podczas wstępnego wczytywania</translation>
 <translation id="5321325624576443340">Obiektyw Google jest niedostępny. Spróbuj ponownie później.</translation>
-<translation id="5336664042114176802">Możesz przełączyć się na asystenta Gemini, który był pierwotnie powiązany z Twoim kontem Google i którym nie zarządza <ph name="DOMAIN" />. Odpowiedzi nie będą już oparte na plikach ani usługach, którymi zarządza <ph name="DOMAIN" />, a historia czatów nie zostanie przeniesiona. Ten asystent może nie nadawać się do użytku służbowego. Aby się przełączyć, musisz ponownie uruchomić Chrome.</translation>
 <translation id="5346389065299425353">Pogłębiaj wyszukiwanie, dodając kilka kart, plików i narzędzi</translation>
 <translation id="5353252989841766347">Eksportowanie haseł z Chrome</translation>
 <translation id="5368118228313795342">Dodatkowy kod: <ph name="EXTRA_CODE" />.</translation>
@@ -532,7 +531,6 @@ Jeśli ta strona nie działa zgodnie z oczekiwaniami, spróbuj zezwolić na opt
 <translation id="6438015621983209660">Korzystaj z Ulepszonego bezpiecznego przeglądania także na telefonie dzięki Chrome</translation>
 <translation id="6442774133615368941">Kupuj, tłumacz i rozpoznawaj to, co widzisz, za pomocą aparatu w aplikacji Chrome na iOS</translation>
 <translation id="6446105560007692480">aby wyszukać za pomocą Chrome lub dostosować w <ph name="BEGIN_LINK" />Ustawieniach<ph name="END_LINK" /></translation>
-<translation id="6447943657065463998">Ta zarządzana przeglądarka może korzystać z asystenta Gemini skonfigurowanego do użytku służbowego przez: <ph name="DOMAIN" />. Może on znajdować informacje i udzielać odpowiedzi na podstawie plików organizacji i zatwierdzonych usług. Używanie go w profilu osobistym może nie być zalecane. Historia czatów nie zostanie przeniesiona. Aby się przełączyć, musisz ponownie uruchomić Chrome.</translation>
 <translation id="6448835208126432197">Aby zaznaczyć część ekranu w Gemini w Chrome, użyj skrótu klawiszowego.</translation>
 <translation id="6473905796280459355">Otwórz stronę Chrome – informacje</translation>
 <translation id="6481963882741794338">Połącz Chrome i inne usługi Google na potrzeby personalizacji oraz w innych celach</translation>
@@ -703,7 +701,6 @@ Jeśli ta strona nie działa zgodnie z oczekiwaniami, spróbuj zezwolić na opt
 <translation id="8064965390968184078">1. Kliknij <ph name="BUTTON_LABEL" /> poniżej
 2. Kliknij <ph name="BUTTON_2" /> w ustawieniach systemu Windows
 3. Kliknij <ph name="BUTTON_3" /> w powiadomieniu systemu Windows, aby przypiąć przeglądarkę Chrome do paska zadań i mieć do niej szybki dostęp</translation>
-<translation id="8066474819446975249">Uruchom ponownie Chrome, aby się przełączyć</translation>
 <translation id="8074398340364918139">Aby wyszukać konkretną funkcję lub rozszerzenie Chrome, wpisz skrót do danego elementu na pasku adresu i naciśnij wybrany klawisz</translation>
 <translation id="8077579734294125741">Inne profile Chrome</translation>
 <translation id="8086881907087796310">Instalacja się nie udała, ponieważ komputer nie spełnia minimalnych wymagań sprzętowych.</translation>

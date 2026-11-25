@@ -2,17 +2,43 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://webui-toolbar.top-chrome/lazy_load.js';
+import 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
 
 import {isMac} from 'chrome://resources/js/platform.js';
 import {MenuSourceType} from 'chrome://resources/mojo/ui/base/mojom/menu_source_type.mojom-webui.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {MockTimer} from 'chrome://webui-test/mock_timer.js';
+import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 import {microtasksFinished} from 'chrome://webui-test/test_util.js';
-import type {MediaButtonElement} from 'chrome://webui-toolbar.top-chrome/lazy_load.js';
-import {getClickSourceType, getContextMenuSourceType, HighlightTracker, PressHandler} from 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
+import {BrowserProxyImpl, ContextMenuType, getClickSourceType, getContextMenuSourceType, HighlightTracker, isMacContextClick, isPrimaryClick, PressHandler} from 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
+import type {MediaButtonElement, OverflowButtonElement, SplitTabsButtonElement} from 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
+
+import {TestToolbarBrowserProxy} from './test_toolbar_browser_proxy.js';
 
 suite('ToolbarButtonTest', function() {
+  test('IsMacContextClick', function() {
+    assertFalse(
+        isMacContextClick(new PointerEvent('pointerdown', {button: 0})));
+    assertFalse(isMacContextClick(
+        new PointerEvent('pointerdown', {button: 1, ctrlKey: true})));
+    assertFalse(isMacContextClick(
+        new PointerEvent('pointerdown', {button: 2, ctrlKey: true})));
+    assertEquals(
+        isMac,
+        isMacContextClick(
+            new PointerEvent('pointerdown', {button: 0, ctrlKey: true})));
+  });
+
+  test('IsPrimaryClick', function() {
+    assertTrue(isPrimaryClick(new PointerEvent('pointerdown', {button: 0})));
+    assertFalse(isPrimaryClick(new PointerEvent('pointerdown', {button: 1})));
+    assertFalse(isPrimaryClick(new PointerEvent('pointerdown', {button: 2})));
+    assertEquals(
+        !isMac,
+        isPrimaryClick(
+            new PointerEvent('pointerdown', {button: 0, ctrlKey: true})));
+  });
+
   test('GetClickSourceType', function() {
     // PointerEvent touch -> kTouch
     assertEquals(
@@ -46,6 +72,19 @@ suite('ToolbarButtonTest', function() {
         MenuSourceType.kMouse,
         getClickSourceType(new MouseEvent('click', {detail: 1})));
 
+    // Physical pointer events natively have detail == 0 -> kMouse
+    for (const type of ['pointerdown', 'pointerup', 'pointermove']) {
+      assertEquals(
+          MenuSourceType.kMouse,
+          getClickSourceType(
+              new PointerEvent(type, {pointerType: 'mouse', detail: 0})));
+    }
+
+    // Non-activation MouseEvent, detail == 0 -> kMouse
+    assertEquals(
+        MenuSourceType.kMouse,
+        getClickSourceType(new MouseEvent('mousemove', {detail: 0})));
+
     // KeyboardEvent -> kKeyboard
     assertEquals(
         MenuSourceType.kKeyboard,
@@ -65,17 +104,28 @@ suite('ToolbarButtonTest', function() {
         getContextMenuSourceType(
             new PointerEvent('contextmenu', {pointerType: 'pen'})));
 
-    // PointerEvent mouse, detail > 0 -> kMouse
+    // PointerEvent mouse right-click (Blink leaves detail == 0) -> kMouse
     assertEquals(
         MenuSourceType.kMouse,
         getContextMenuSourceType(new PointerEvent(
-            'contextmenu', {pointerType: 'mouse', detail: 1})));
+            'contextmenu', {pointerType: 'mouse', button: 2, detail: 0})));
 
-    // PointerEvent mouse, detail == 0 -> kKeyboard (Crucial test for fix)
+    // PointerEvent Mac Ctrl+LeftClick -> kMouse
+    assertEquals(
+        MenuSourceType.kMouse,
+        getContextMenuSourceType(new PointerEvent('contextmenu', {
+          pointerType: 'mouse',
+          button: 0,
+          ctrlKey: true,
+          detail: 0,
+        })));
+
+    // PointerEvent from keyboard (Menu key / Shift+F10), no button ->
+    // kKeyboard
     assertEquals(
         MenuSourceType.kKeyboard,
         getContextMenuSourceType(new PointerEvent(
-            'contextmenu', {pointerType: 'mouse', detail: 0})));
+            'contextmenu', {pointerType: 'mouse', button: -1, detail: 0})));
 
     // MouseEvent left button, detail == 0 -> kKeyboard
     assertEquals(
@@ -135,6 +185,13 @@ suite('ToolbarButtonTest', function() {
       assertFalse(clickSkipped(
           createHighlightedTracker(),
           new PointerEvent('pointerdown', {button: 2, pointerType: 'mouse'})));
+      assertEquals(
+          !isMac,
+          clickSkipped(
+              createHighlightedTracker(),
+              new PointerEvent(
+                  'pointerdown',
+                  {button: 0, ctrlKey: true, pointerType: 'mouse'})));
     });
 
     test('KeyboardNotSkipped', function() {
@@ -176,8 +233,10 @@ suite('ToolbarButtonTest', function() {
   const TARGET_SIZE = 100;
   const TARGET_MIDDLE = TARGET_SIZE / 2;
 
-  // Creates a mock HTMLElement with a predefined bounding client rect.
-  // This is used to test click coordinates and check if they are within bounds.
+  // Creates a mock HTMLElement with a predefined bounding client rect, and adds
+  // it to the document, since PressHandler ignores presses on disconnected
+  // elements. This is used to test click coordinates and check if they are
+  // within bounds.
   function createMockTarget(): HTMLElement {
     const target = document.createElement('div');
     target.getBoundingClientRect = () => {
@@ -193,6 +252,7 @@ suite('ToolbarButtonTest', function() {
         toJSON: () => {},
       };
     };
+    document.body.appendChild(target);
     return target;
   }
 
@@ -202,11 +262,12 @@ suite('ToolbarButtonTest', function() {
   function dispatchPointerEvent(
       handler: PressHandler, eventType: 'pointerdown'|'pointerup',
       target: HTMLElement, pointerId: number, ctrlKey: boolean = false,
-      clientY: number = TARGET_MIDDLE) {
+      clientY: number = TARGET_MIDDLE, pointerType: string = '') {
     const event = new PointerEvent(eventType, {
       bubbles: true,
       cancelable: true,
       pointerId,
+      pointerType,
       button: 0,
       ctrlKey,
       clientX: TARGET_MIDDLE,
@@ -238,7 +299,8 @@ suite('ToolbarButtonTest', function() {
         (_e) => {
           shortPressCount++;
         },
-        /*enableContextMenu=*/ true, () => canLongPress);
+        () => canLongPress);
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
     target = createMockTarget();
   });
 
@@ -368,18 +430,23 @@ suite('ToolbarButtonTest', function() {
 
     let mockTimer: MockTimer;
 
+    // Mocks pointer capture on `element`. Synthetic events have no active
+    // pointer to capture, so the real methods can't be used.
+    function mockPointerCapture(element: HTMLElement) {
+      let hasCapture = false;
+      element.setPointerCapture = (_id) => {
+        hasCapture = true;
+      };
+      element.releasePointerCapture = (_id) => {
+        hasCapture = false;
+      };
+      element.hasPointerCapture = (_id) => hasCapture;
+    }
+
     setup(() => {
       mockTimer = new MockTimer();
       mockTimer.install();
-
-      let hasCapture = false;
-      target.setPointerCapture = (_id) => {
-        hasCapture = true;
-      };
-      target.releasePointerCapture = (_id) => {
-        hasCapture = false;
-      };
-      target.hasPointerCapture = (_id) => hasCapture;
+      mockPointerCapture(target);
     });
 
     teardown(() => {
@@ -524,6 +591,67 @@ suite('ToolbarButtonTest', function() {
       assertEquals(0, longPressCount);
     });
 
+    // Matching Views, touch and pen presses that are held long enough to be
+    // long presses should never result in short presses, even if long presses
+    // aren't allowed.
+    for (const pointerType of ['touch', 'pen']) {
+      test(`TimerNotAllowed_${pointerType}`, function() {
+        canLongPress = false;
+        dispatchPointerEvent(
+            handler, 'pointerdown', target, 1, /*ctrlKey=*/ false,
+            TARGET_MIDDLE, pointerType);
+        mockTimer.tick(LONG_PRESS_MS);
+        dispatchPointerEvent(
+            handler, 'pointerup', target, 1, /*ctrlKey=*/ false, TARGET_MIDDLE,
+            pointerType);
+        assertEquals(0, shortPressCount);
+        assertEquals(0, longPressCount);
+
+        // Subsequent presses should work normally.
+        simulateClick();
+        assertEquals(1, shortPressCount);
+      });
+
+      test(`DragNotAllowed_${pointerType}`, function() {
+        canLongPress = false;
+        dispatchPointerEvent(
+            handler, 'pointerdown', target, 1, /*ctrlKey=*/ false,
+            TARGET_MIDDLE, pointerType);
+        dragDown();
+        dispatchPointerEvent(
+            handler, 'pointerup', target, 1, /*ctrlKey=*/ false, TARGET_MIDDLE,
+            pointerType);
+        assertEquals(0, shortPressCount);
+        assertEquals(0, longPressCount);
+      });
+
+      test(`TimerAllowed_${pointerType}`, function() {
+        dispatchPointerEvent(
+            handler, 'pointerdown', target, 1, /*ctrlKey=*/ false,
+            TARGET_MIDDLE, pointerType);
+        mockTimer.tick(LONG_PRESS_MS);
+        assertEquals(1, longPressCount);
+        dispatchPointerEvent(
+            handler, 'pointerup', target, 1, /*ctrlKey=*/ false, TARGET_MIDDLE,
+            pointerType);
+        assertEquals(0, shortPressCount);
+      });
+
+      // Short touch and pen presses should still work.
+      test(`ShortPress_${pointerType}`, function() {
+        canLongPress = false;
+        dispatchPointerEvent(
+            handler, 'pointerdown', target, 1, /*ctrlKey=*/ false,
+            TARGET_MIDDLE, pointerType);
+        mockTimer.tick(LONG_PRESS_MS - 1);
+        dispatchPointerEvent(
+            handler, 'pointerup', target, 1, /*ctrlKey=*/ false, TARGET_MIDDLE,
+            pointerType);
+        assertEquals(1, shortPressCount);
+        assertEquals(0, longPressCount);
+      });
+    }
+
     test('ContextmenuAllowed', function() {
       const contextMenuEvent = new PointerEvent('contextmenu', {
         bubbles: true,
@@ -549,6 +677,76 @@ suite('ToolbarButtonTest', function() {
       handler.onContextmenu(contextMenuEvent);
       // The native context menu should still be suppressed.
       assertTrue(contextMenuEvent.defaultPrevented);
+      assertEquals(0, longPressCount);
+    });
+
+    // Replaces `target` with a new element, as happens when a conditionally
+    // rendered button is hidden and then shown again.
+    function replaceTarget() {
+      target.remove();
+      target = createMockTarget();
+      mockPointerCapture(target);
+    }
+
+    // If the target is removed mid-press, the press ends without a pointerup
+    // or pointercancel event. The timer firing should not trigger a long
+    // press, and subsequent presses should work normally.
+    test('RemovedDuringPress', function() {
+      dispatchPointerEvent(handler, 'pointerdown', target, 1);
+      replaceTarget();
+      mockTimer.tick(LONG_PRESS_MS);
+      assertEquals(0, longPressCount);
+
+      simulateClick();
+      assertEquals(1, shortPressCount);
+      assertEquals(0, longPressCount);
+
+      dispatchPointerEvent(handler, 'pointerdown', target, 1);
+      mockTimer.tick(LONG_PRESS_MS);
+      assertEquals(1, shortPressCount);
+      assertEquals(1, longPressCount);
+    });
+
+    // Same as above, but the target is removed after the long press timer
+    // fires, when long presses aren't allowed, so the timer can't clear the
+    // stale press.
+    test('NotAllowedRemovedAfterTimer', function() {
+      canLongPress = false;
+      dispatchPointerEvent(handler, 'pointerdown', target, 1);
+      mockTimer.tick(LONG_PRESS_MS);
+      replaceTarget();
+
+      simulateClick();
+      assertEquals(1, shortPressCount);
+      assertEquals(0, longPressCount);
+    });
+
+    // If the target loses pointer capture mid-press, without being removed,
+    // neither dragging nor the timer should trigger a long press, and
+    // releasing the pointer should not trigger a short press.
+    test('CaptureLostDuringPress', function() {
+      dispatchPointerEvent(handler, 'pointerdown', target, 1);
+      target.releasePointerCapture(1);
+      dragDown();
+      mockTimer.tick(LONG_PRESS_MS);
+      dispatchPointerEvent(handler, 'pointerup', target, 1);
+      assertEquals(0, shortPressCount);
+      assertEquals(0, longPressCount);
+
+      simulateClick();
+      assertEquals(1, shortPressCount);
+      assertEquals(0, longPressCount);
+    });
+
+    // Presses by other pointers should be ignored while a press is active.
+    test('SecondaryPointerIgnored', function() {
+      dispatchPointerEvent(handler, 'pointerdown', target, 1);
+      dispatchPointerEvent(handler, 'pointerdown', target, 2);
+      dispatchPointerEvent(handler, 'pointerup', target, 2);
+      assertEquals(0, shortPressCount);
+
+      dispatchPointerEvent(handler, 'pointerup', target, 1);
+      assertEquals(1, shortPressCount);
       assertEquals(0, longPressCount);
     });
   });
@@ -616,5 +814,125 @@ suite('MediaButton', function() {
         el.remove();
       }
     }
+  });
+});
+
+suite('SplitTabsButton', function() {
+  let splitTabsButton: SplitTabsButtonElement;
+  let browserProxy: TestToolbarBrowserProxy;
+  let browserControlsHandler: TestBrowserProxy;
+
+  setup(async () => {
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    browserProxy = new TestToolbarBrowserProxy();
+    browserControlsHandler = new TestBrowserProxy(['splitActiveTab']);
+    browserProxy.browserControlsHandler = {
+      splitActiveTab: () =>
+          browserControlsHandler.methodCalled('splitActiveTab'),
+    };
+    BrowserProxyImpl.setInstance(browserProxy);
+
+    splitTabsButton = document.createElement('split-tabs-button');
+    splitTabsButton.state = {
+      ...splitTabsButton.state,
+      shouldBeShown: true,
+    };
+    document.body.appendChild(splitTabsButton);
+    await microtasksFinished();
+  });
+
+  test('CtrlLeftClickUnsplit', () => {
+    const button = splitTabsButton.shadowRoot.querySelector('cr-icon-button')!;
+    button.dispatchEvent(new PointerEvent('pointerdown', {
+      button: 0,
+      ctrlKey: true,
+      pointerType: 'mouse',
+      detail: 1,
+    }));
+
+    if (isMac) {
+      assertEquals(0, browserControlsHandler.getCallCount('splitActiveTab'));
+      button.dispatchEvent(new PointerEvent('contextmenu', {
+        button: 0,
+        ctrlKey: true,
+        pointerType: 'mouse',
+        detail: 1,
+      }));
+      assertEquals(
+          1, browserProxy.toolbarUIHandler.getCallCount('showContextMenu'));
+      assertEquals(
+          ContextMenuType.kSplitTabsContext,
+          browserProxy.toolbarUIHandler.getArgs('showContextMenu')[0][0]);
+    } else {
+      assertEquals(1, browserControlsHandler.getCallCount('splitActiveTab'));
+    }
+  });
+
+  test('CtrlLeftClickWhileSplit', async () => {
+    splitTabsButton.state = {
+      ...splitTabsButton.state,
+      isCurrentTabSplit: true,
+      shouldBeShown: true,
+    };
+    await microtasksFinished();
+
+    const button = splitTabsButton.shadowRoot.querySelector('cr-icon-button')!;
+    button.dispatchEvent(new PointerEvent('pointerdown', {
+      button: 0,
+      ctrlKey: true,
+      pointerType: 'mouse',
+      detail: 1,
+    }));
+
+    if (isMac) {
+      assertEquals(
+          0, browserProxy.toolbarUIHandler.getCallCount('showContextMenu'));
+      button.dispatchEvent(new PointerEvent('contextmenu', {
+        button: 0,
+        ctrlKey: true,
+        pointerType: 'mouse',
+        detail: 1,
+      }));
+      assertEquals(
+          1, browserProxy.toolbarUIHandler.getCallCount('showContextMenu'));
+      assertEquals(
+          ContextMenuType.kSplitTabsContext,
+          browserProxy.toolbarUIHandler.getArgs('showContextMenu')[0][0]);
+    } else {
+      assertEquals(
+          1, browserProxy.toolbarUIHandler.getCallCount('showContextMenu'));
+      assertEquals(
+          ContextMenuType.kSplitTabsAction,
+          browserProxy.toolbarUIHandler.getArgs('showContextMenu')[0][0]);
+    }
+  });
+});
+
+suite('OverflowButton', function() {
+  let overflowButton: OverflowButtonElement;
+  let browserProxy: TestToolbarBrowserProxy;
+
+  setup(async () => {
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    browserProxy = new TestToolbarBrowserProxy();
+    BrowserProxyImpl.setInstance(browserProxy);
+
+    overflowButton = document.createElement('overflow-button');
+    document.body.appendChild(overflowButton);
+    await microtasksFinished();
+  });
+
+  test('CtrlLeftClickOnDown', () => {
+    const button = overflowButton.shadowRoot.querySelector('cr-icon-button')!;
+    button.dispatchEvent(new PointerEvent('pointerdown', {
+      button: 0,
+      ctrlKey: true,
+      pointerType: 'mouse',
+      detail: 1,
+    }));
+
+    assertEquals(
+        isMac ? 0 : 1,
+        browserProxy.toolbarUIHandler.getCallCount('showOverflowMenu'));
   });
 });

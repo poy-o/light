@@ -662,6 +662,19 @@ void CorsURLLoader::FollowRedirect(
     request_.cors_exempt_headers.RemoveHeader(name);
   }
 
+  // A User-Agent removed on a redirect must not be sent again when this loader
+  // restarts the request below, or in a later preflight, which reads
+  // `content_user_agent`. A User-Agent set in the same call wins over the
+  // removal, as it does in `URLLoader`, and the preflight keeps using the
+  // browser-supplied User-Agent.
+  if (ContainsUserAgentHeaderName(headers_update_params.removed_headers) &&
+      !headers_update_params.modified_headers.HasHeader(
+          net::HttpRequestHeaders::kUserAgent) &&
+      !headers_update_params.modified_cors_exempt_headers.HasHeader(
+          net::HttpRequestHeaders::kUserAgent)) {
+    request_.content_user_agent.reset();
+  }
+
   request_.headers.MergeFrom(headers_update_params.modified_headers);
 
   if (!CorsURLLoaderFactory::IsValidCorsExemptHeaders(
@@ -989,6 +1002,14 @@ void CorsURLLoader::OnReceiveRedirect(const net::RedirectInfo& redirect_info,
     // handles these redirects safely. Service worker pass-through navigations
     // (renderer process with kNavigate mode) ARE censored because the
     // redirect URL is sent to the renderer via IPC.
+    //
+    // The Location header is intentionally left unchanged. This censoring is
+    // not meant to keep the redirect target secret from the renderer (HTTP(S)
+    // targets are not censored either); it only protects privileged callers
+    // from acting on an unsafe-scheme URL by accident. Service worker
+    // pass-through navigations also rely on the Location header: the browser
+    // computes the redirect target from it (see
+    // blink::ServiceWorkerLoaderHelpers::ComputeRedirectInfo()).
     net::RedirectInfo censored_redirect_info = redirect_info;
     const bool is_browser_navigation =
         request_.mode == mojom::RequestMode::kNavigate &&

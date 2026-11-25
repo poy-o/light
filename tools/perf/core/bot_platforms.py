@@ -1297,12 +1297,6 @@ PLATFORM_INFO = {
     'is_fyi': False,
     'pinpoint_only': True,
   },
-  'android-pixel-fold-perf': {
-    'description': 'Android U',
-    'num_shards': 8,
-    'platform_os': 'android',
-    'is_fyi': False,
-  },
   'android-pixel-tangor-perf': {
     'description': 'Android U',
     'num_shards': 8,
@@ -1322,18 +1316,6 @@ PLATFORM_INFO = {
     'is_fyi': False,
   },
   'android-pixel9-perf': {
-    'description': 'Android B',
-    'num_shards': 4,
-    'platform_os': 'android',
-    'is_fyi': False,
-  },
-  'android-pixel9-pro-perf': {
-    'description': 'Android B',
-    'num_shards': 4,
-    'platform_os': 'android',
-    'is_fyi': False,
-  },
-  'android-pixel9-pro-xl-perf': {
     'description': 'Android B',
     'num_shards': 4,
     'platform_os': 'android',
@@ -1374,6 +1356,12 @@ PLATFORM_INFO = {
     'description': 'Android B',
     'num_shards': 1,
     'platform_os': 'android',
+    'is_fyi': False,
+  },
+  'ios-iphone15pro-perf': {
+    'description': 'iPhone 15 Pro (iPhone16,1), iOS 26',
+    'num_shards': 1,
+    'platform_os': 'ios',
     'is_fyi': False,
   },
   'fuchsia-perf-nsn': {

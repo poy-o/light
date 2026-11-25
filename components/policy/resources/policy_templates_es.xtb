@@ -2362,6 +2362,13 @@ Esta política es una medida temporal para controlar la función y se eliminará
 <translation id="2467181864598429837">Comportamiento predeterminado del navegador</translation>
 <translation id="2467896267442150508">Intervalo de tiempo inferior o igual a una semana. Si la fecha de inicio es posterior a la fecha de finalización, el intervalo se ajustará.</translation>
 <translation id="2476249479201711962">Habilitar el acceso al menú contextual del proveedor de búsqueda predeterminado</translation>
+<translation id="247659494993692492">Si se define esta política, especificará qué servidores deberían tener permiso para la autenticación integrada. La autenticación integrada solo se activará cuando <ph name="PRODUCT_NAME" /> reciba una solicitud de autenticación de un proxy o un servidor que esté incluido en la lista de permitidos.
+
+      Si no se define esta política, <ph name="PRODUCT_NAME" /> intentará detectar si un servidor está en la intranet. Solo entonces responderá a las solicitudes de IWA. Si se detecta que un servidor está en Internet, <ph name="PRODUCT_NAME" /> ignorará las solicitudes de IWA que procedan de dicho servidor.
+
+      Nota: Si hay varios nombres de servidores, se deben separar con comas. Se permite el uso de caracteres comodín (<ph name="WILDCARD_VALUE" />).
+
+      En <ph name="LINUX_OS_NAME" />, <ph name="MAC_OS_NAME" /> y <ph name="PRODUCT_OS_NAME" />, la biblioteca GSSAPI/Kerberos del sistema puede canonicalizar el nombre de host de un servidor a otro host principal del servicio (por ejemplo, mediante búsquedas de CNAME de DNS o PTR de DNS inverso). La autenticación de negociación fallará a menos que esta política también permita ese host.</translation>
 <translation id="2478756867046106663">Permitir que los sitios con experiencias engañosas abran nuevas ventanas o pestañas</translation>
 <translation id="2479760962196319822">Esta política controla si los usuarios de <ph name="PRODUCT_OS_NAME" /> pueden almacenar datos de forma local o no.
       Si se asigna el valor False a esta política, se bloqueará el almacenamiento local en <ph name="PRODUCT_OS_NAME" /> y los usuarios no podrán almacenar ningún dato de forma local ni acceder a ningún directorio local.
@@ -4710,6 +4717,11 @@ Esta política se puede combinar con <ph name="POLICY_CLOUD_POLICY_OVERRIDES_PLA
 
       Nota: Esta política debe usarse junto a <ph name="REMOTE_ACCESS_HOST_TOKEN_VALIDATION_URL_POLICY_NAME" />.</translation>
 <translation id="3918339829588313389">Permitir que los usuarios definan un PIN poco seguro</translation>
+<translation id="3920151704940430728">Si se habilita esta política, se omitirá la consulta de CNAME. El nombre del servidor se usará tal como se haya introducido al generar el SPN de Kerberos.
+
+Si se inhabilita esta política o no se define, se hará una consulta de CNAME para determinar el nombre canónico del servidor al generar el SPN de Kerberos.
+
+Nota: En <ph name="LINUX_OS_NAME" />, <ph name="MAC_OS_NAME" /> y <ph name="PRODUCT_OS_NAME" />, si se habilita esta política, se omitirá la búsqueda de CNAME de <ph name="PRODUCT_NAME" />, pero la biblioteca GSSAPI/Kerberos del sistema puede seguir canonicalizando el host principal del servicio (por ejemplo, mediante la configuración de DNS de <ph name="KRB5_CONFIG" />). La autenticación de negociación fallará a menos que <ph name="AUTH_SERVER_ALLOWLIST_POLICY_NAME" /> permita ese host. Del mismo modo, la delegación se retendrá si <ph name="AUTH_NEGOTIATE_DELEGATE_ALLOWLIST_POLICY_NAME" /> no permite ese host.</translation>
 <translation id="392227823425989489">Todas las combinaciones de teclas del sistema se activarán siempre como se espera.</translation>
 <translation id="3924506460382372403">Inhabilitar los informes sobre el estado de los gráficos del dispositivo</translation>
 <translation id="3925377537407648234">Definir la resolución de pantalla y el factor de escala</translation>
@@ -6463,6 +6475,13 @@ Si se le asigna una cadena vacía o no se le asigna ningún valor, no se requeri
 
 Nota: Esta política está obsoleta. Usa <ph name="ISOLATE_ORIGINS_POLICY_NAME" /> (para dispositivos de alto rendimiento) o <ph name="ISOLATE_ORIGINS_SHORTLIST_POLICY_NAME" /> en su lugar. Esta política solo se aplica a Chrome en <ph name="ANDROID_NAME" /> si se utiliza en dispositivos con más de 1 GB de RAM, en los que no se recomienda configurar ningún aislamiento de procesos específico.</translation>
 <translation id="4991786313466977061">Controla la visibilidad de las insignias de empresa</translation>
+<translation id="4991886408515766724">Si asignas un valor a esta política, podrás establecer una lista de patrones de URL donde se especifique qué sitios pueden pedir a los usuarios que les permitan acceder a un dispositivo USB.
+
+      Si no se establece la política, <ph name="DEFAULT_WEB_USB_GUARD_SETTING_POLICY_NAME" /> se aplicará a todos los sitios, si se ha definido. Si no se ha definido, se aplicará la configuración personal del usuario.
+
+      Los patrones de URL no deben entrar en conflicto con <ph name="WEB_USB_BLOCKED_FOR_URLS_POLICY_NAME" />. Si una URL está incluida en ambas políticas, no tendrá preferencia ninguna política.
+
+      Para obtener información detallada sobre los patrones de <ph name="URL_LABEL" /> válidos, consulta https://chromeenterprise.google/policies/url-patterns. <ph name="WILDCARD_VALUE" /> no es un valor aceptado para esta política.</translation>
 <translation id="4995123966071996433">No permitir la redirección de puertos a máquinas virtuales de Linux</translation>
 <translation id="4996068111491152684">Las credenciales de inicio de sesión de <ph name="PRODUCT_OS_NAME" /> no se usarán para la autenticación de red.</translation>
 <translation id="4996086761250834365">Permitir análisis de producto de <ph name="PLUGIN_VM_NAME" /></translation>
@@ -6811,6 +6830,13 @@ Esta política admite la actualización dinámica.
 Esta política es una medida temporal y se eliminará en futuras versiones de <ph name="PRODUCT_NAME" />.</translation>
 <translation id="5212810195096589189">Especificar el permiso de la interfaz de línea de comandos para máquinas virtuales</translation>
 <translation id="5213038356678567351">Sitios web que nunca deben activar un cambio de navegador.</translation>
+<translation id="5213420013031914763">Si se habilita esta política, no se permitirá hacer capturas de pantalla mediante combinaciones de teclas ni APIs de extensión. Si se inhabilita esta política o no se define, se permitirán las capturas de pantalla.
+
+En las versiones 155 a 158 de <ph name="PRODUCT_NAME" />, si se habilita esta política, también se puede impedir que las extensiones adjunten el depurador mediante "chrome.debugger.attach()"; por ejemplo, cuando la política <ph name="CHROME_VARIATIONS_POLICY_NAME" /> inhabilita todas las variantes.
+
+Ten en cuenta que, en <ph name="MS_WIN_NAME" />, <ph name="MAC_OS_NAME" /> y <ph name="LINUX_OS_NAME" />, esta política no impedirá que se hagan capturas de pantalla mediante aplicaciones del sistema operativo o de terceros.
+
+En <ph name="IOS_NAME" />, si se habilita esta política, se ocultarán las ventanas de <ph name="PRODUCT_NAME" /> en las capturas y grabaciones de pantalla del sistema, y no se podrán hacer capturas de pantalla completa.</translation>
 <translation id="5216710229085956333">Habilitar cancelación de ruido de Krisp</translation>
 <translation id="5216815237712190041">Permite configurar en cada dispositivo la imagen de fondo de pantalla que se muestra en la pantalla de inicio de sesión si ningún usuario ha iniciado sesión en el dispositivo. La política se define especificando la URL desde la que el dispositivo ChromeOS puede descargar la imagen de fondo de pantalla y un hash criptográfico que se utiliza para verificar la integridad de la descarga. La imagen debe tener formato JPEG y un tamaño que no supere los 16 MB. Se debe poder acceder a la URL sin autenticación. La imagen de fondo de pantalla se descargará y almacenará en caché. Se volverá a descargar si se cambia la URL o el hash.
 
@@ -7953,15 +7979,6 @@ Esta política solo se puede establecer como política de usuarios basada en la 
 <translation id="5899751601113377553">Evitar que los usuarios utilicen <ph name="LACROS_NAME" /></translation>
 <translation id="5900919753933009463">Enviar información sobre la configuración de red</translation>
 <translation id="5901427587865226597">Solo impresión por las dos caras</translation>
-<translation id="5903484826174648217">Si se habilita esta política, Navegación segura confiará en los dominios que indiques. No comprobará si contienen recursos peligrosos, como phishing, malware o software no deseado. El servicio de protección de descargas de Navegación segura no comprobará las descargas alojadas en estos dominios. Su servicio de protección de contraseñas no comprobará si se reutilizan contraseñas.
-
-Si no se define la política, se aplicará la protección predeterminada de Navegación segura a todos los recursos.
-
-Esta política no admite expresiones regulares, pero los subdominios de un dominio determinado se añaden a la lista de permitidos. No es obligatorio indicar los nombres de dominios completos.
-
-En <ph name="MS_WIN_NAME" />, esta política solo está disponible en instancias que estén vinculadas a un dominio de <ph name="MS_AD_NAME" /> o a <ph name="MS_AAD_NAME" />, o que se hayan registrado en <ph name="CHROME_ENTERPRISE_CORE_NAME" />.
-
-En <ph name="MAC_OS_NAME" />, esta política solo está disponible en instancias que se gestionen mediante MDM, que estén vinculadas a un dominio a través de MCX o que se hayan registrado en <ph name="CHROME_ENTERPRISE_CORE_NAME" />.</translation>
 <translation id="5905114360004248993">Permitir ventanas emergentes en estos sitios</translation>
 <translation id="5905473632148429217">Habilita las comprobaciones de OCSP/CRL online</translation>
 <translation id="590591187943862671">Si se establece esta política, podrás definir una lista de patrones de URL donde se especifique qué sitios pueden pedir a los usuarios que les concedan acceso de lectura a archivos o directorios del sistema de archivos del sistema operativo del host a través de la API File System.
@@ -9365,9 +9382,6 @@ Si se asigna el valor 2, no se permite la función.
 Si no se define esta política, su comportamiento lo determinará la política <ph name="GEN_AI_DEFAULT_SETTINGS_POLICY_NAME" />.
 
 Para obtener más información sobre el tratamiento de datos en las funciones de IA generativa, consulta https://support.google.com/chrome/a?p=generative_ai_settings.</translation>
-<translation id="6752711782954612641">Si <ph name="DEFAULT_SEARCH_PROVIDER_ENABLED_POLICY_NAME" /> está activada y se asigna un valor a <ph name="DEFAULT_SEARCH_PROVIDER_SEARCH_URL_POST_PARAMS_POLICY_NAME" />, se especificarán los parámetros utilizados al buscar una URL con POST. Se compone de pares de nombre-valor separados por comas. Si un valor es un parámetro de plantilla, como <ph name="SEARCH_TERM_MARKER" />, se sustituirá por datos de términos de búsqueda reales.
-
-      Si no se asigna ningún valor a <ph name="DEFAULT_SEARCH_PROVIDER_SEARCH_URL_POST_PARAMS_POLICY_NAME" />, las solicitudes de búsqueda se enviarán mediante el método GET.</translation>
 <translation id="6757413365906304125">Esta política determina cómo funcionará la reasignación de las teclas Re Pág y Av Pág en la subpágina de reasignación de teclas. La subpágina de reasignación de teclas permite que los usuarios personalicen las teclas. Si se habilita, esta política impedirá que los usuarios personalicen estas reasignaciones específicas. Si no se define esta política, las combinaciones de teclas basadas en búsquedas serán las predeterminadas y los usuarios podrán configurarlas.</translation>
 <translation id="6757613329154374267">Copia de seguridad y restauración habilitada</translation>
 <translation id="6758659208493449452">Esta política controla si los usuarios registrados en el Programa de Protección Avanzada tienen acceso a funciones de protección adicionales. Puede que algunas de estas funciones requieran compartir datos con Google (por ejemplo, los usuarios de Protección Avanzada podrán enviar sus descargas a Google para que realice un análisis de malware). Si se asigna el valor "True" a esta política o no se le asigna ningún valor, los usuarios registrados tendrán acceso a funciones de protección adicionales. Si se le asigna el valor "False", los usuarios de Protección Avanzada solo tendrán acceso a las funciones estándar.</translation>
@@ -11349,6 +11363,11 @@ Esta política anula el comportamiento de <ph name="DEFAULT_SUB_APPS_WITHOUT_PRO
           El valor de esta política debe especificarse en milisegundos. Los valores deben ser inferiores o iguales al retraso de inactividad.</translation>
 <translation id="7992613144342460685">Permite la colocación de ventanas en estos sitios</translation>
 <translation id="7995610550667275367">Análisis (compatible desde la versión 87)</translation>
+<translation id="7997288303774758253">Si se asigna un valor a esta política, se especificará el tiempo (en milisegundos) que tardará el servicio de gestión en solicitar información de la política de usuarios. Los valores válidos están comprendidos entre 1.800.000 (30 minutos) y 86.400.000 (1 día). Cualquier valor fuera de este intervalo se ajustará al límite correspondiente, excepto en Android y iOS, donde los valores superiores a este intervalo se ajustarán a 604.800.000 (1 semana).
+
+      Si no se define esta política, se usará el valor predeterminado de 3 horas, o de 1 día en Android y iOS.
+
+      Nota: Las notificaciones acerca de políticas forzarán una actualización cuando se produzca algún cambio en la política. De esta manera, no será necesario realizar actualizaciones frecuentemente. Si la plataforma admite estas notificaciones, el periodo entre actualizaciones se establecerá en 24 horas (se ignorarán los valores predeterminados y el valor de esta política).</translation>
 <translation id="7999023147219236247">Política para conceder solicitudes de permiso a aplicaciones. PERMISSION_POLICY_UNSPECIFIED: política no especificada. Si no se especifica ninguna política para un permiso a cualquier nivel, se usará el comportamiento "PROMPT" de forma predeterminada. PROMPT: solicita al usuario que conceda un permiso. GRANT: concede un permiso de forma automática. DENY: deniega un permiso de forma automática.</translation>
 <translation id="7999336306414770162">Inhabilitar los informes sobre VPD del dispositivo</translation>
 <translation id="7999818120028621358">Habilitar informes de eventos de prevención de filtración de datos</translation>
@@ -11432,6 +11451,11 @@ Varias políticas indican orígenes que afectan a las solicitudes al dispositivo
 <translation id="8062485064082966327">Usar un servicio de Google anónimo para proporcionar descripciones automáticas para imágenes que no tengan descripción</translation>
 <translation id="8064875716442437829">Habilitar accesibilidad del renderizador</translation>
 <translation id="8066428282805800713">Enviar datos adicionales de hardware con ChromeOS Flex</translation>
+<translation id="8070654368411601340">Si se define esta política, asignará los servidores en los que puede delegar <ph name="PRODUCT_NAME" />. Si hay varios nombres de servidores, se deben separar con comas. Se permite el uso de caracteres comodín (<ph name="WILDCARD_VALUE" />).
+
+      Si no se define esta política, <ph name="PRODUCT_NAME" /> no delegará las credenciales de usuario aunque se detecte una intranet como servidor.
+
+      En <ph name="LINUX_OS_NAME" />, <ph name="MAC_OS_NAME" /> y <ph name="PRODUCT_OS_NAME" />, cuando esta política permite la delegación a un servidor, la biblioteca GSSAPI/Kerberos del sistema puede canonicalizar su nombre de host a otro host principal del servicio (por ejemplo, mediante búsquedas de CNAME de DNS o PTR de DNS inverso). <ph name="PRODUCT_NAME" /> retendrá la delegación de ese principal de servicio, a menos que esta política también permita ese host.</translation>
 <translation id="8071371098891664137">Si se utiliza <ph name="PRINTERS_BLOCKLIST" /> para la política <ph name="PRINTERS_BULK_ACCESS_MODE_POLICY_NAME" />, al establecer la política <ph name="PRINTERS_BULK_BLOCKLIST_POLICY_NAME" />, esta especifica qué impresoras no pueden utilizar los usuarios. El usuario podrá utilizar todas las impresoras, excepto aquellas con los ID indicados en la política. Los ID deben coincidir con los campos <ph name="ID_FIELD" /> o <ph name="GUID_FIELD" /> del archivo definido en la política <ph name="PRINTERS_BULK_CONFIGURATION_POLICY_NAME" />.</translation>
 <translation id="8076539570602616846">Restringir las cuentas de Google aptas para guardar archivos PDF en Google Drive desde el visor de PDFs de <ph name="PRODUCT_NAME" /></translation>
 <translation id="8078224178125125527">Si se define esta política, se especificará en qué servidores proxy se deben permitir los esquemas de autenticación HTTP admitidos por <ph name="PRODUCT_NAME" />, independientemente de la política <ph name="AUTH_SCHEMES_POLICY_NAME" />.
@@ -11867,9 +11891,6 @@ Si no se le asigna ningún valor, el control con gestos faciales se inhabilitar�
       Si se habilita esta política, no se programará ningún otro proceso en el mismo núcleo de CPU cuando se esté ejecutando el proceso de renderizado.
       Si se inhabilita esta política, todos los demás procesos se podrán programar en el mismo núcleo de CPU cuando se esté ejecutando un proceso de renderizado en él.
       Si no se define esta política, todos los demás procesos se podrán programar en el mismo núcleo de CPU cuando se esté ejecutando un proceso de renderizado en el núcleo. Esta configuración puede variar en función de la versión de <ph name="PRODUCT_NAME" />, de las pruebas de campo que se estén ejecutando en ese momento y de la plataforma.</translation>
-<translation id="8337114537412769126">Si <ph name="DEFAULT_SEARCH_PROVIDER_ENABLED_POLICY_NAME" /> está activada y se asigna un valor a <ph name="DEFAULT_SEARCH_PROVIDER_SUGGEST_URL_POST_PARAMS_POLICY_NAME" />, se especificarán los parámetros utilizados al buscar sugerencias con POST. Se compone de pares de nombre-valor separados por comas. Si un valor es un parámetro de plantilla, como <ph name="SEARCH_TERM_MARKER" />, se sustituirá por datos de términos de búsqueda reales.
-
-      Si no se asigna ningún valor a <ph name="DEFAULT_SEARCH_PROVIDER_SUGGEST_URL_POST_PARAMS_POLICY_NAME" />, las solicitudes de búsqueda de sugerencias se enviarán mediante el método GET.</translation>
 <translation id="8337200442224446773">Evitar la aleatorización del grupo de sockets para proxies</translation>
 <translation id="8337961007759352651">Las secuencias de comandos de workers (web workers, service workers, etc.) requieren un tipo de MIME de JavaScript, como <ph name="MIMETYPE_TEXT_JAVASCRIPT" />. Las secuencias de comandos de workers que tengan tipos de MIME antiguos, como <ph name="MIMETYPE_TEXT_ASCII" />, se rechazarán.</translation>
 <translation id="8339089771335211509">WebRTC solo usará la interfaz al conectarse a una red pública, y no se conectará a través de direcciones IP privadas.</translation>

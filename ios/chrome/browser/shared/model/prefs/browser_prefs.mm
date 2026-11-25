@@ -153,7 +153,7 @@
 #import "ui/base/l10n/l10n_util.h"
 
 #if !BUILDFLAG(IS_IOS_MACCATALYST)
-#import "ios/chrome/browser/default_browser/default_status/model/default_status_helper.h"
+#import "ios/chrome/browser/default_browser/default_status/model/default_browser_api_monitor.h"
 #endif  // !BUILDFLAG(IS_IOS_MACCATALYST)
 
 namespace {
@@ -264,6 +264,8 @@ inline constexpr char kPumaRcClientId[] = "private_metrics.puma.client_id.rc";
 // Deprecated 11/2026.
 inline constexpr char kPrefsThemesSearchEnginesAccountStorageEnabled[] =
     "signin.prefs_themes_search_engines_account_storage_enabled";
+inline constexpr char kIosImageFetcherShouldClearCache[] =
+    "ios.image_fetcher_should_clear_cache";
 
 }  // namespace
 
@@ -307,7 +309,7 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   feature_engagement::RegisterLocalStatePrefs(registry);
 
 #if !BUILDFLAG(IS_IOS_MACCATALYST)
-  default_status::RegisterDefaultStatusPrefs(registry);
+  DefaultBrowserAPIMonitor::RegisterLocalStatePrefs(registry);
 #endif  // !BUILDFLAG(IS_IOS_MACCATALYST)
 
   // Preferences related to the profile manager.
@@ -603,7 +605,6 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(
       prefs::kNTPContentSuggestionsEnabled, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-  registry->RegisterBooleanPref(prefs::kIosImageFetcherShouldClearCache, true);
   registry->RegisterBooleanPref(
       prefs::kArticlesForYouEnabled, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
@@ -647,6 +648,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(prefs::kPrintingEnabled, true);
 
   registry->RegisterBooleanPref(prefs::kAllowChromeDataInBackups, true);
+  registry->RegisterBooleanPref(prefs::kAllowDinosaurEasterEgg, true);
 
   // Register HTTPS related settings.
   registry->RegisterBooleanPref(prefs::kHttpsOnlyModeEnabled, false);
@@ -960,6 +962,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   // Deprecated 11/2026.
   registry->RegisterBooleanPref(kPrefsThemesSearchEnginesAccountStorageEnabled,
                                 false);
+  registry->RegisterBooleanPref(kIosImageFetcherShouldClearCache, false);
 }
 
 // This method should be periodically pruned of year+ old migrations.
@@ -1066,6 +1069,7 @@ void MigrateObsoleteProfilePrefs(PrefService* prefs) {
 
   // Added 11/2026.
   prefs->ClearPref(kPrefsThemesSearchEnginesAccountStorageEnabled);
+  prefs->ClearPref(kIosImageFetcherShouldClearCache);
 }
 
 void MigrateObsoleteUserDefault() {

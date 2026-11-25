@@ -305,6 +305,7 @@ public class AwContents implements SmartClipProvider {
         int SUCCESS = 0;
         int DESTROYED = 1;
         int OLD_CONTAINER_ATTACHED = 2;
+        // Obsolete: new container may already be attached (e.g. when startup is deferred).
         int NEW_CONTAINER_ATTACHED = 3;
         int COUNT = 4;
     }
@@ -1505,11 +1506,6 @@ public class AwContents implements SmartClipProvider {
             throw new IllegalStateException(
                     "AwContents must be detached from the window before adopting.");
         }
-        if (newContainerView.isAttachedToWindow()) {
-            recordAdoptResult(AdoptResult.NEW_CONTAINER_ATTACHED);
-            throw new IllegalStateException(
-                    "The new container view must be detached from the window before adopting.");
-        }
         recordAdoptResult(AdoptResult.SUCCESS);
         // Clear mOnscreenContentProvider so the old provider's ContentCaptureSession doesn't keep
         // the previous Activity alive. This is safe because mOnscreenContentProvider is already
@@ -1521,23 +1517,24 @@ public class AwContents implements SmartClipProvider {
         // Cancel any open JS dialogs so that dialogs shown in the previous Activity don't leave the
         // page blocked if that Activity is destroyed.
         mContentsClientBridge.cancelPendingJsDialogs();
+        cancelPendingIntents();
         updateContext(newContainerView.getContext());
         mPrimaryInternalAccessAdapter = internalAccessAdapter;
         setInternalAccessAdapter(internalAccessAdapter);
         mPrimaryContainerView = newContainerView;
         mDisplayCutoutController.unregisterContainerView(mContainerView);
+        mDisplayCutoutController.registerContainerView(newContainerView);
 
-        // A new container is created detached, so it is still 0x0 unless it has been laid out.
-        // Keep the page at its current size until the new container is laid out and passes its real
-        // size down through onSizeChanged(). If we don't do this, we accidentally trigger a
-        // relayout.
+        // A newly constructed container is detached and 0x0 unless it has already been attached
+        // (e.g. when startup is deferred and adopt() drains from the run queue after the view was
+        // added to a window) or explicitly laid out. Keep the page at its current size while
+        // detached so we don't trigger a spurious 0x0 relayout before the new container lays out.
         boolean keepCurrentSize =
-                !newContainerView.isLaidOut()
+                !newContainerView.isAttachedToWindow()
+                        && !newContainerView.isLaidOut()
                         && newContainerView.getWidth() == 0
                         && newContainerView.getHeight() == 0;
         setContainerView(newContainerView, keepCurrentSize);
-
-        mDisplayCutoutController.registerContainerView(newContainerView);
     }
 
     private static void recordAdoptResult(@AdoptResult int result) {
@@ -3963,6 +3960,12 @@ public class AwContents implements SmartClipProvider {
         Log.e(TAG, "Received activity result for an unknown request code %d", requestCode);
     }
 
+    private void cancelPendingIntents() {
+        for (int i = mOutstandingIntents.size() - 1; i >= 0; i--) {
+            onActivityResult(mOutstandingIntents.keyAt(i), Activity.RESULT_CANCELED, null);
+        }
+    }
+
     private static void recordIfAttachedToPopupWindow(View view) {
         ViewGroup.LayoutParams viewGroupParams = view.getRootView().getLayoutParams();
         if (viewGroupParams instanceof WindowManager.LayoutParams params) {
@@ -4406,16 +4409,19 @@ public class AwContents implements SmartClipProvider {
     }
 
     public void setAudioMuted(boolean mute) {
+        if (isDestroyed(WARN)) return;
         mWebContents.setAudioMuted(mute);
     }
 
     public boolean isAudioMuted() {
+        if (isDestroyed(WARN)) return false;
         return mWebContents.isAudioMuted();
     }
 
     public void setRendererPriorityPolicy(
             @RendererPriority int rendererRequestedPriority, boolean waivedWhenNotVisible) {
         if (TRACE) Log.i(TAG, "%s setRendererPriorityPolicy", this);
+        if (isDestroyed(WARN)) return;
         mRendererPriority = rendererRequestedPriority;
         mRendererPriorityWaivedWhenNotVisible = waivedWhenNotVisible;
         updateChildProcessImportance();
@@ -4423,12 +4429,14 @@ public class AwContents implements SmartClipProvider {
 
     public void setTextClassifier(TextClassifier textClassifier) {
         if (TRACE) Log.i(TAG, "%s setTextClassifier", this);
+        if (isDestroyed(WARN)) return;
         assert mWebContents != null;
         SelectionPopupController.fromWebContents(mWebContents).setTextClassifier(textClassifier);
     }
 
     public TextClassifier getTextClassifier() {
         if (TRACE) Log.i(TAG, "%s getTextClassifier", this);
+        if (isDestroyed(WARN)) return TextClassifier.NO_OP;
         assert mWebContents != null;
         return SelectionPopupController.fromWebContents(mWebContents).getTextClassifier();
     }

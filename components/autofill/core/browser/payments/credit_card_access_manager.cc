@@ -285,7 +285,7 @@ void CreditCardAccessManager::GetUnmaskDetailsIfUserIsVerifiable(
     payments_autofill_client().GetPaymentsNetworkInterface()->GetUnmaskDetails(
         base::BindOnce(&CreditCardAccessManager::OnDidGetUnmaskDetails,
                        GetWeakPtr()),
-        std::string(payments_data_manager().app_locale().tag_string()));
+        payments_data_manager().app_locale());
     autofill_metrics::LogCardUnmaskPreflightCalled(
         GetOrCreateFidoAuthenticator()->IsUserOptedIn());
   }
@@ -424,14 +424,29 @@ void CreditCardAccessManager::FetchCreditCard(
             : PaymentsRpcCardType::kServerCard);
   }
 
-  // If the to-be-unmasked card is a virtual card eligible card (this also
-  // implicitly checks the RecordType to be masked server card), send the
+  // If the to-be-unmasked card is a virtual card eligible card, send the
   // virtual card enrollment preflight call early.
   auto* virtual_card_enrollment_manager =
       payments_autofill_client().GetVirtualCardEnrollmentManager();
-  if (card->virtual_card_enrollment_state() ==
-          CreditCard::VirtualCardEnrollmentState::kUnenrolledAndEligible &&
-      virtual_card_enrollment_manager) {
+  bool should_init_virtual_card_enrollment = false;
+  if (virtual_card_enrollment_manager) {
+    if (base::FeatureList::IsEnabled(
+            features::kAutofillFixVcnStrikeDatabaseFallback)) {
+      // `card_unmasked_from_cache` is left unset so that the downstream
+      // latency timestamp is not recorded here; it is recorded at form import
+      // time instead.
+      should_init_virtual_card_enrollment =
+          virtual_card_enrollment_manager->ShouldOfferVirtualCardEnrollment(
+              *card, /*card_instrument_id=*/card->instrument_id(),
+              /*card_unmasked_from_cache=*/std::nullopt,
+              VirtualCardEnrollmentSource::kDownstream);
+    } else {
+      should_init_virtual_card_enrollment =
+          card->virtual_card_enrollment_state() ==
+          CreditCard::VirtualCardEnrollmentState::kUnenrolledAndEligible;
+    }
+  }
+  if (should_init_virtual_card_enrollment) {
     // Set empty callback as we need to wait for form submission & card
     // extraction from the form, before we start the next step.
     virtual_card_enrollment_manager->InitVirtualCardEnroll(
@@ -499,8 +514,7 @@ void CreditCardAccessManager::RetrieveCreditCardForOpaqueToken(
 
   payments::GetDataForAgentRequestDetails request_details;
   request_details.opaque_token = credit_card_opaque_token;
-  request_details.app_locale =
-      payments_data_manager().app_locale().tag_string();
+  request_details.app_locale = payments_data_manager().app_locale();
   // The token is single use, so a failed request is not retried. The response
   // handler does not depend on `this`, so that `callback` is run even if
   // `this` is destroyed while the request is in flight.

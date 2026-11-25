@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/frame/browser_view.h"
 
+#include <cmath>
 #include <memory>
 #include <optional>
 
@@ -21,7 +22,6 @@
 #include "base/test/run_until.h"
 #include "base/test/values_test_util.h"
 #include "base/time/time.h"
-#include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -103,7 +103,7 @@
 #include "components/enterprise/connectors/core/common.h"
 #include "components/enterprise/connectors/core/connectors_prefs.h"
 #include "components/enterprise/data_controls/core/browser/test_utils.h"
-#include "components/enterprise/isolated_mode/isolated_mode_features.h"
+#include "components/enterprise/isolated_mode/scoped_isolated_mode_override_for_testing.h"
 #include "components/javascript_dialogs/app_modal_dialog_controller.h"
 #include "components/javascript_dialogs/app_modal_dialog_view.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
@@ -133,6 +133,8 @@
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
 #include "ui/accessibility/platform/ax_platform_node_test_helper.h"
 #include "ui/actions/action_id.h"
@@ -148,6 +150,7 @@
 #include "ui/base/ozone_buildflags.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/ui_base_features.h"
+#include "ui/compositor/canvas_painter.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
 #include "ui/gfx/geometry/point.h"
@@ -185,10 +188,6 @@
 #include "chrome/browser/ui/ash/test_util.h"
 #include "chrome/browser/ui/chromeos/locked_state/locked_state_controller.h"
 #endif
-
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
-#include "chrome/test/base/scoped_channel_override.h"
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_WIN)
 
@@ -304,7 +303,7 @@ IN_PROC_BROWSER_TEST_F(BrowserViewPipTest, NewWindowInitializationIsolation) {
                                    browser()->GetProfile(),
                                    /*from_user_gesture=*/true);
   BrowserWindowInterface* new_normal_browser =
-      CreateBrowserWindow(std::move(params));
+      CreateBrowserWindowForTesting(std::move(params));
   new_normal_browser->GetWindow()->Show();
 
   BrowserView* new_normal_view =
@@ -494,7 +493,7 @@ class TestTabModalConfirmDialogDelegate : public TabModalConfirmDialogDelegate {
 // Additionally when one of the tabs is destroyed NotifyNavigationStateChanged()
 // is invoked on the other.
 IN_PROC_BROWSER_TEST_F(BrowserViewTest, CloseWithTabs) {
-  BrowserWindowInterface* browser2 = CreateBrowserWindow(
+  BrowserWindowInterface* browser2 = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(browser()->GetProfile(),
                                 /*from_user_gesture=*/true));
   chrome::AddTabAt(browser2, GURL(), -1, true);
@@ -508,7 +507,7 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, CloseWithTabs) {
 // Same as CloseWithTabs, but activates the first tab, which is the first tab
 // BrowserView will destroy.
 IN_PROC_BROWSER_TEST_F(BrowserViewTest, CloseWithTabsStartWithActive) {
-  BrowserWindowInterface* browser2 = CreateBrowserWindow(
+  BrowserWindowInterface* browser2 = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(browser()->GetProfile(),
                                 /*from_user_gesture=*/true));
   chrome::AddTabAt(browser2, GURL(), -1, true);
@@ -1026,7 +1025,7 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, UpdateActiveBrowser) {
 #endif
   // Create browser2 without showing it first, so browser() remains the active
   // window.
-  BrowserWindowInterface* browser2 = CreateBrowserWindow(
+  BrowserWindowInterface* browser2 = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(profile(), /*from_user_gesture=*/true));
   EXPECT_EQ(2u, GlobalBrowserCollection::GetInstance()->GetSize());
   EXPECT_EQ(browser(), GetLastActiveBrowserWindowInterfaceWithAnyProfile());
@@ -1114,19 +1113,9 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, AccessibleWindowTitleIncognito) {
 }
 
 class BrowserViewIsolatedTest : public BrowserViewTest {
- public:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    BrowserViewTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch(
-        enterprise_isolated_mode::switches::
-            kForceEnterpriseIsolatedModeReplacesIncognito);
-  }
-
  private:
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
-  chrome::ScopedChannelOverride channel_override_{
-      chrome::ScopedChannelOverride::Channel::kDev};
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
+  enterprise_isolated_mode::ScopedIsolatedModeOverrideForTesting
+      scoped_isolated_mode_;
 };
 
 IN_PROC_BROWSER_TEST_F(BrowserViewIsolatedTest, AccessibleWindowTitleIsolated) {
@@ -2466,7 +2455,7 @@ class TabAddingWidgetObserver : public views::WidgetObserver {
 // Regression test for crbug.com/456102314 crash in
 // ContentsWebView::CloneWebContentsLayer during synchronous widget destruction.
 IN_PROC_BROWSER_TEST_F(BrowserViewTest, CloseWidgetWithTabsNoCrash) {
-  BrowserWindowInterface* browser2 = CreateBrowserWindow(
+  BrowserWindowInterface* browser2 = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(browser()->GetProfile(),
                                 /*from_user_gesture=*/true));
   chrome::AddTabAt(browser2, GURL("about:blank"), -1, true);
@@ -2501,7 +2490,7 @@ class BrowserViewDeferLayoutTest : public InProcessBrowserTest {
 
 IN_PROC_BROWSER_TEST_F(BrowserViewDeferLayoutTest, DeferLayoutWhileInvisible) {
   // Create a new browser window without showing it.
-  BrowserWindowInterface* browser2 = CreateBrowserWindow(
+  BrowserWindowInterface* browser2 = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(browser()->GetProfile(),
                                 /*from_user_gesture=*/true));
   BrowserView* browser_view2 = BrowserView::GetBrowserViewForBrowser(browser2);
@@ -2548,7 +2537,7 @@ IN_PROC_BROWSER_TEST_F(BrowserViewDeferLayoutTest, DeferLayoutWhileInvisible) {
 
 IN_PROC_BROWSER_TEST_F(BrowserViewDeferLayoutTest,
                        NoDeferLayoutOnSizeChangeWhileInvisible) {
-  BrowserWindowInterface* browser2 = CreateBrowserWindow(
+  BrowserWindowInterface* browser2 = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(browser()->GetProfile(),
                                 /*from_user_gesture=*/true));
   BrowserView* browser_view2 = BrowserView::GetBrowserViewForBrowser(browser2);
@@ -2631,7 +2620,8 @@ IN_PROC_BROWSER_TEST_F(BrowserViewDeferLayoutTest,
   BrowserWindowCreateParams params(browser()->GetProfile(),
                                    /*from_user_gesture=*/true);
   params.in_tab_dragging = true;
-  BrowserWindowInterface* browser2 = CreateBrowserWindow(std::move(params));
+  BrowserWindowInterface* browser2 =
+      CreateBrowserWindowForTesting(std::move(params));
   BrowserView* browser_view2 = BrowserView::GetBrowserViewForBrowser(browser2);
   views::Widget* widget2 = browser_view2->GetWidget();
   ASSERT_FALSE(widget2->IsVisible());
@@ -2650,4 +2640,55 @@ IN_PROC_BROWSER_TEST_F(BrowserViewDeferLayoutTest,
   EXPECT_FALSE(browser_view2->is_layout_deferred_for_testing());
 
   widget2->CloseNow();
+}
+
+// Regression test for https://crbug.com/503507695: at fractional scale factors
+// where the toolbar's bottom edge in pixels has fractional part >= 0.5, the
+// straight bottom edge of ToolbarView's CustomCornersBackground must snap to
+// the same pixel boundary as adjacent views rather than leaving a
+// semi-transparent anti-aliased pixel row.
+IN_PROC_BROWSER_TEST_F(BrowserViewTest,
+                       ToolbarBottomEdgeOpaqueAtFractionalScale) {
+  if (features::IsGlassFrameEnabled()) {
+    GTEST_SKIP() << "The glass frame view paints to its own layer, so "
+                    "OnNativeWidgetPaint() does not paint the toolbar.";
+  }
+  browser()->GetProfile()->GetPrefs()->SetBoolean(
+      bookmarks::prefs::kShowBookmarkBar, false);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("about:blank")));
+  views::test::RunScheduledLayout(browser_view());
+
+  ASSERT_TRUE(browser_view()->toolbar()->GetVisible());
+
+  views::View* root_view = browser_view()->GetWidget()->GetRootView();
+  const gfx::Rect toolbar_in_root = views::View::ConvertRectToTarget(
+      browser_view()->toolbar(), root_view,
+      browser_view()->toolbar()->GetLocalBounds());
+
+  // Pick a fractional scale (~1.3x) such that `toolbar_in_root.bottom() *
+  // scale` has fractional part 0.625, so an adjacent snapped layer starts on
+  // the next pixel row (`boundary_px`).
+  const float target_bottom_px =
+      std::floor(toolbar_in_root.bottom() * 1.3f) + 0.625f;
+  const float scale = target_bottom_px / toolbar_in_root.bottom();
+  const int boundary_px = base::ClampRound(target_bottom_px);
+
+  SkBitmap bitmap;
+  {
+    ui::CanvasPainter painter(&bitmap, root_view->size(), scale,
+                              SK_ColorTRANSPARENT, /*is_pixel_canvas=*/false);
+    browser_view()->GetWidget()->OnNativeWidgetPaint(painter.context());
+  }
+
+  const int sample_x =
+      base::ClampRound(toolbar_in_root.CenterPoint().x() * scale);
+  ASSERT_GT(boundary_px, 1);
+  ASSERT_LT(boundary_px, bitmap.height());
+  ASSERT_LT(sample_x, bitmap.width());
+
+  const SkColor toolbar_interior = bitmap.getColor(sample_x, boundary_px - 2);
+  const SkColor toolbar_bottom_row = bitmap.getColor(sample_x, boundary_px - 1);
+
+  EXPECT_EQ(SK_AlphaOPAQUE, SkColorGetA(toolbar_interior));
+  EXPECT_EQ(toolbar_interior, toolbar_bottom_row);
 }

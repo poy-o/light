@@ -17,13 +17,13 @@ export function getHtml(this: ProfileCustomizationAppElement) {
       <div id="header">
         <div id="avatarContainer">
           <img id="avatar" alt="" src="${this.pictureUrl_}">
-          ${!this.isLocalProfileCreation_ ? html`
+          ${!this.shouldShowCustomizeAvatar_() ? html`
             <div class="avatar-badge" id="workBadge"
                 ?hidden="${!this.isManaged_}">
               <cr-icon class="icon" icon="cr:domain"></cr-icon>
             </div>
           ` : ''}
-          ${this.isLocalProfileCreation_ ? html`
+          ${this.shouldShowCustomizeAvatar_() ? html`
             <div class="avatar-badge">
               <cr-icon-button id="customizeAvatarIcon"
                   iron-icon="cr:edit-filled"
@@ -70,22 +70,15 @@ export function getHtml(this: ProfileCustomizationAppElement) {
             @click="${this.onDoneCustomizationClick_}">
           $i18n{profileCustomizationDoneLabel}
         </cr-button>
-        ${this.shouldShowCancelButton_() ? html`
-          <cr-button id="skipButton" @click="${this.onSkipCustomizationClick_}">
-            $i18n{profileCustomizationSkipLabel}
-          </cr-button>
-        ` : ''}
-        ${this.isLocalProfileCreation_ ? html`
-          <cr-button id="deleteProfileButton"
-              @click="${this.onDeleteProfileClick_}">
-            $i18n{profileCustomizationDeleteProfileLabel}
-          </cr-button>
-        ` : ''}
+        <cr-button id="secondaryButton"
+            @click="${this.onSecondaryButtonClick_}">
+          ${this.getSecondaryButtonLabel_()}
+        </cr-button>
       </div>
     </div>
   </div>
 
-  ${this.isLocalProfileCreation_ ? html`
+  ${this.shouldShowCustomizeAvatar_() ? html`
     <div id="selectAvatarDialog" slot="view">
       <div class="select-avatar-header">
         <cr-icon-button iron-icon="cr:arrow-back" id="selectAvatarBackButton"

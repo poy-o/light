@@ -14,10 +14,6 @@
 #include "third_party/blink/public/platform/web_private_ptr.h"
 #include "third_party/blink/public/web/web_performance_metrics_for_reporting.h"
 
-namespace gfx {
-class Rect;
-}  // namespace gfx
-
 namespace blink {
 class WebFormElement;
 class WebLocalFrame;
@@ -49,12 +45,6 @@ class BLINK_EXPORT WebLocalFrameObserver : public base::CheckedObserver {
   // Called when a frame's page lifecycle state gets updated.
   virtual void DidSetPageLifecycleState(BFCacheStateChange bfcache_change) {}
 
-  // Called when an ad element's geometry changed. An empty `ad_rect` is used to
-  // signal the removal of the element. Only invoked on the outermost main
-  // frame.
-  virtual void OnMainFrameAdRectangleChanged(int element_id,
-                                             const gfx::Rect& ad_rect) {}
-
   // A performance timing event (e.g. first paint) occurred.
   virtual void DidChangePerformanceTiming() {}
 
@@ -73,6 +63,16 @@ class BLINK_EXPORT WebLocalFrameObserver : public base::CheckedObserver {
                                       const WebString& source_name,
                                       unsigned source_line,
                                       const WebString& stack_trace) {}
+
+  // Called when a load is explicitly stopped by the user or browser.
+  virtual void OnStop() {}
+
+  // Called when script in the page calls window.print().
+  virtual void ScriptedPrint(bool user_initiated) {}
+
+  // The frame's document and all of its subresources succeeded to load for
+  // printing.
+  virtual void DidFinishLoadForPrinting() {}
 
   // Retrieves the WebLocalFrame that is being observed. Can be null.
   WebLocalFrame* GetWebLocalFrame() const;

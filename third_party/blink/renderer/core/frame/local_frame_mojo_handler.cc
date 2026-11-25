@@ -57,6 +57,7 @@
 #include "third_party/blink/renderer/core/frame/remote_frame_owner.h"
 #include "third_party/blink/renderer/core/frame/reporting_context.h"
 #include "third_party/blink/renderer/core/frame/savable_resources.h"
+#include "third_party/blink/renderer/core/frame/web_frame_serializer_impl.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
@@ -700,10 +701,10 @@ void LocalFrameMojoHandler::StopLoading() {
   if (!frame_->IsAttached())
     return;
 
-  // Notify RenderFrame observers.
-  WebLocalFrameClient* client = frame_->Client()->GetWebFrame()->Client();
-  if (client)
-    client->OnStopLoading();
+  // Notify WebLocalFrame observers.
+  if (WebLocalFrameImpl* web_frame = WebLocalFrameImpl::FromFrame(frame_)) {
+    web_frame->OnStop();
+  }
 }
 
 void LocalFrameMojoHandler::Collapse(bool collapsed) {
@@ -1180,6 +1181,18 @@ void LocalFrameMojoHandler::GetSavableResourceLinks(
   std::move(callback).Run(std::move(reply));
 }
 
+void LocalFrameMojoHandler::GetSerializedHtmlWithLocalLinks(
+    const HashMap<KURL, base::FilePath>& url_map,
+    const HashMap<FrameToken, base::FilePath>& frame_token_map,
+    bool save_with_empty_url,
+    mojo::PendingRemote<mojom::blink::FrameHTMLSerializerHandler>
+        handler_remote) {
+  WebFrameSerializerImpl serializer(frame_, url_map, frame_token_map,
+                                    save_with_empty_url,
+                                    std::move(handler_remote));
+  serializer.Serialize();
+}
+
 void LocalFrameMojoHandler::MixedContentFound(
     const KURL& main_resource_url,
     const KURL& mixed_content_url,
@@ -1632,6 +1645,8 @@ void LocalFrameMojoHandler::UpdatePrerenderURL(
       matched_url, NavigateEventType::kPrerenderNoVarySearchActivation,
       WebFrameLoadType::kReplaceCurrentItem);
   params->is_browser_initiated = true;
+  params->has_transient_user_activation =
+      blink::LocalFrame::HasTransientUserActivation(frame_);
 
   // TODO(crbug.com/41494389): Add test for how the navigation API can intercept
   // this update.
@@ -1648,7 +1663,7 @@ void LocalFrameMojoHandler::UpdatePrerenderURL(
       /*data=*/nullptr, WebFrameLoadType::kReplaceCurrentItem,
       FirePopstate::kNo,
       /*should_skip_screenshot=*/true, params->involvement,
-      params->interaction_id,
+      params->has_transient_user_activation, params->interaction_id,
       /*is_browser_initiated=*/true);
   std::move(callback).Run();
 }

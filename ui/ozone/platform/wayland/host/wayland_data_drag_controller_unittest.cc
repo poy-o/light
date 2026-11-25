@@ -356,6 +356,22 @@ TEST_P(WaylandDataDragControllerTest, StartDragWithWrongMimeType) {
   ReadAndCheckData(kMimeTypePlainText, {});
 }
 
+// Regression test for https://crbug.com/589214126: requesting an offered
+// pickled format must not deliver the text representation.
+TEST_P(WaylandDataDragControllerTest, StartDragAndRequestPickledMimeType) {
+  FocusAndPressLeftPointerButton(window_.get(), &delegate_);
+
+  constexpr char kPickledMimeType[] = "chromium/x-bookmark-entries";
+  OSExchangeData os_exchange_data;
+  os_exchange_data.SetString(sample_text_for_dnd());
+  os_exchange_data.SetPickledData(
+      ClipboardFormatType::CustomPlatformType(kPickledMimeType), {});
+  drag_controller()->StartSession(os_exchange_data, DragDropTypes::DRAG_COPY,
+                                  DragEventSource::kMouse, window());
+
+  ReadAndCheckData(kPickledMimeType, {});
+}
+
 TEST_P(WaylandDataDragControllerTest, StartDragWithLink) {
   FocusAndPressLeftPointerButton(window_.get(), &delegate_);
 
@@ -1960,8 +1976,8 @@ TEST_P(WaylandDataDragControllerTest,
     auto* cursor_position = connection()->wayland_cursor_position();
     ASSERT_TRUE(cursor_position);
 
-    // Forcibly update the cursor position before sending drag motion event.
-    cursor_position->OnCursorPositionChanged(gfx::Point(1, 2));
+    // Forcibly update the touch position before sending drag motion event.
+    cursor_position->OnTouchPositionChanged(gfx::Point(1, 2));
 
     // Send a drag motion and see if cursor position is updated.
     SendDndMotion(gfx::Point(10, 11));

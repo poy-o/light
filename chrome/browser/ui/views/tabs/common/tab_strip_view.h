@@ -69,7 +69,7 @@ class TabStripView final : public views::View,
   }
 
   // Returns `scroll_view`'s local bounds (mirrored for RTL) inset by any
-  // active horizontal overflow indicator opaque regions or seam padding.
+  // active horizontal overflow indicator overlaps or seam padding.
   gfx::Rect GetScrollViewUnmaskedBounds(
       const views::ScrollView* scroll_view) const;
 
@@ -161,14 +161,17 @@ class TabStripView final : public views::View,
 
   gfx::Rect GetBoundsInScrollViewContents(views::View* view,
                                           views::ScrollView* scroll_view);
+  gfx::Rect GetUnmirroredScrollViewUnmaskedBounds(
+      const views::ScrollView* scroll_view) const;
+  void UpdateScrollViewViewportClip(views::ScrollView* scroll_view);
   gfx::Rect GetOpaqueVisibleRectForScrollTarget(
       views::ScrollView* scroll_view,
       const gfx::Rect& target_bounds) const;
 
   bool ShouldDrawPinnedAboveUnpinned() const;
 
-  // Updates overflow indicator opaque widths and layer z-order for the pinned
-  // and unpinned scroll views.
+  // Updates overflow indicator overlaps, viewport layer clips, and layer
+  // z-order for the pinned and unpinned scroll views.
   void UpdateScrollViewLayers();
   void OnContentsScrolled();
   void HideHoverCardOnScroll();

@@ -30,7 +30,6 @@
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_non_2d_resource_provider.h"
-#include "third_party/blink/renderer/platform/graphics/canvas_resource.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/canvas_utils.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/webgpu_mailbox_texture.h"
@@ -262,9 +261,6 @@ GPUCanvasContext::GetOrCreateCanvasNon2DResourceProvider() {
     }
     if (!provider) {
       did_fail_to_create_resource_provider_ = true;
-    } else {
-      base::UmaHistogramEnumeration("Blink.Canvas.ResourceProviderType",
-                                    CanvasResourceProviderType::kSharedImage);
     }
   }
   return provider;

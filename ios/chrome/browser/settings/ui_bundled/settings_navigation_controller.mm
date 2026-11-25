@@ -257,16 +257,12 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
 }
 
 + (instancetype)
-           accountsControllerForBrowser:(Browser*)browser
-                     baseViewController:(UIViewController*)baseViewController
-                               delegate:
-                                   (id<SettingsNavigationControllerDelegate>)
-                                       delegate
-              closeSettingsOnAddAccount:(BOOL)closeSettingsOnAddAccount
-                      showSignoutButton:(BOOL)showSignoutButton
-                         showDoneButton:(BOOL)showDoneButton
-    signoutDismissalByParentCoordinator:
-        (BOOL)signoutDismissalByParentCoordinator {
+    accountsControllerForBrowser:(Browser*)browser
+                        delegate:
+                            (id<SettingsNavigationControllerDelegate>)delegate
+       closeSettingsOnAddAccount:(BOOL)closeSettingsOnAddAccount
+               showSignoutButton:(BOOL)showSignoutButton
+                  showDoneButton:(BOOL)showDoneButton {
   SettingsNavigationController* navigationController =
       [[SettingsNavigationController alloc]
           initWithRootViewController:nil
@@ -283,9 +279,6 @@ NSString* const kSettingsDoneButtonId = @"kSettingsDoneButtonId";
   navigationController.manageAccountsCoordinator.showSignoutButton =
       showSignoutButton;
   [navigationController.manageAccountsCoordinator start];
-  [baseViewController presentViewController:navigationController
-                                   animated:YES
-                                 completion:nil];
   return navigationController;
 }
 

@@ -73,21 +73,35 @@ enum class ActorTaskStoppedReason {
   kUserStartedNewChat = 6
 };
 
-// Why a task request failed.
-enum class ActorTaskError {
-  // The task cannot take the request now. The task is not stopped.
-  kRejected,
-  // The task does not exist or stopped.
-  kTaskWentAway,
+// Why an intervention delegate failed to show a prompt.
+enum class InterventionDelegateError {
+  // The intervention delegate does not support the request.
+  kUnsupported,
 };
 
-// Result of a task request.
+// Result from an intervention delegate prompt.
 template <typename T>
-using ActorTaskResult = base::expected<T, ActorTaskError>;
+using InterventionDelegateResult = base::expected<T, InterventionDelegateError>;
 
-// Receives the result of a task request.
+// Why an intervention request failed.
+enum class InterventionError {
+  // The task could not take the request when it was sent. The task is not
+  // stopped.
+  kTaskRejected,
+  // The task does not exist or was stopped.
+  kTaskWentAway,
+  // The intervention delegate does not support the request.
+  kDelegateUnsupported,
+};
+
+// Result of an intervention request.
 template <typename T>
-using ActorTaskResultCallback = base::OnceCallback<void(ActorTaskResult<T>)>;
+using InterventionResult = base::expected<T, InterventionError>;
+
+// Receives the result of an intervention request.
+template <typename T>
+using InterventionResultCallback =
+    base::OnceCallback<void(InterventionResult<T>)>;
 
 // Represents the result of an action execution.
 // TODO(crbug.com/505085267): Add latency and stabilization information.
@@ -168,21 +182,60 @@ struct ConfirmationInterrupt {
   std::string button_text;
 };
 
+// Asks the user a question and waits for a typed answer.
+struct ClarificationInterrupt {
+  // Question asked to the user. Required.
+  std::string message;
+};
+
 // An interrupt; the alternative selects its type.
-using InterruptRequest = std::variant<ConfirmationInterrupt>;
+using InterruptRequest =
+    std::variant<ConfirmationInterrupt, ClarificationInterrupt>;
 
 // How the user answered an interrupt.
 enum class InterruptResponse {
   // The user confirmed a `ConfirmationInterrupt`.
   kConfirmed,
+  // The user answered a `ClarificationInterrupt`.
+  kAnswered,
   // The user paused the task since the last reply, so the interrupt went
   // unanswered.
   kUserPaused,
 };
 
+// Reply of a task to an interrupt.
+// TODO(crbug.com/590286157): Tie interrupt replies to each request kind.
+class InterruptReply {
+ public:
+  // Returns a reply for a confirmed `ConfirmationInterrupt`.
+  static InterruptReply Confirmed();
+  // Returns a reply for an answered `ClarificationInterrupt`. `answer` must
+  // be non-empty.
+  static InterruptReply Answered(std::string answer);
+  // Returns a reply indicating the user paused the task before answering.
+  static InterruptReply UserPaused();
+
+  InterruptReply(const InterruptReply&);
+  InterruptReply& operator=(const InterruptReply&);
+  InterruptReply(InterruptReply&&) noexcept;
+  InterruptReply& operator=(InterruptReply&&) noexcept;
+  ~InterruptReply();
+
+  // How the user answered.
+  InterruptResponse response() const { return response_; }
+  // Text typed by the user. Empty unless `response()` is `kAnswered`.
+  const std::string& answer() const { return answer_; }
+
+ private:
+  InterruptReply(InterruptResponse response, std::string answer);
+
+  InterruptResponse response_;
+  std::string answer_;
+};
+
 // Result of a successful `ActorService::InterruptTask()`.
 struct InterruptTaskResult {
-  InterruptTaskResult(InterruptResponse response,
+  InterruptTaskResult(InterruptReply reply,
                       std::unique_ptr<TabObservationResponse> observation);
   ~InterruptTaskResult();
   InterruptTaskResult(const InterruptTaskResult&) = delete;
@@ -191,7 +244,7 @@ struct InterruptTaskResult {
   InterruptTaskResult& operator=(InterruptTaskResult&&) noexcept;
 
   // How the user answered.
-  InterruptResponse response;
+  InterruptReply reply;
   // Observation of the task's tab once the user answered, or null if the task
   // controls no live tab.
   std::unique_ptr<TabObservationResponse> observation;
@@ -216,6 +269,17 @@ using NavigationConfirmationDecisionCallback =
 using NavigationConfirmationCallback = base::RepeatingCallback<void(
     const url::Origin& navigation_origin,
     NavigationConfirmationDecisionCallback callback)>;
+
+// Callback invoked with the user's decision on whether allow navigating to
+// a sensitive or unconfirmed origin (`true` if the user confirmed).
+using UserConfirmationDialogDecisionCallback =
+    base::OnceCallback<void(bool permission_granted)>;
+
+// Callback to prompt the user for confirmation before navigating to
+// `navigation_origin`.
+using UserConfirmationDialogCallback = base::RepeatingCallback<void(
+    const url::Origin& navigation_origin,
+    UserConfirmationDialogDecisionCallback callback)>;
 
 }  // namespace actor
 

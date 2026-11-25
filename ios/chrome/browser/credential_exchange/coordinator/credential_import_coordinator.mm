@@ -39,7 +39,7 @@
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_account_password_store_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_profile_password_store_factory.h"
-#import "ios/chrome/browser/settings/ui_bundled/password/create_password_manager_title_view.h"
+#import "ios/chrome/browser/passwords/ui/create_password_manager_title_view.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/reauthentication/local_reauthentication_coordinator.h"
 #import "ios/chrome/browser/settings/ui_bundled/utils/password_auto_fill_status_manager.h"
 #import "ios/chrome/browser/shared/coordinator/alert/alert_coordinator.h"
@@ -263,6 +263,7 @@
           fetchTrustedVaultKeysForGaia:account.gaia.ToNSString()
                             credential:nil
                                purpose:webauthn::ReauthenticatePurpose::kEncrypt
+                               allowUI:YES
                             completion:completion_block];
       break;
     }

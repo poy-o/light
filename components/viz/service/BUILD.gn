@@ -99,8 +99,6 @@ viz_component("service") {
     "display/frame_interval_matchers.h",
     "display/full_screen_video_util.cc",
     "display/full_screen_video_util.h",
-    "display/hdr_video_passthrough.cc",
-    "display/hdr_video_passthrough.h",
     "display/null_renderer.cc",
     "display/null_renderer.h",
     "display/occlusion_culler.cc",
@@ -621,7 +619,6 @@ viz_source_set("unit_tests") {
     "display/frame_interval_decider_unittest.cc",
     "display/frame_interval_matchers_unittest.cc",
     "display/full_screen_video_util_unittest.cc",
-    "display/hdr_video_passthrough_unittest.cc",
     "display/occlusion_culler_unittest.cc",
     "display/overdraw_tracker_unittest.cc",
     "display/overlay_candidate_factory_unittest.cc",
@@ -765,6 +762,7 @@ viz_source_set("unit_tests") {
       "display_embedder/software_output_device_win_unittest.cc",
       "display_embedder/test_support/dcomp_mocks.cc",
       "display_embedder/test_support/dcomp_mocks.h",
+      "frame_sinks/external_begin_frame_source_win_unittest.cc",
     ]
 
     deps += [

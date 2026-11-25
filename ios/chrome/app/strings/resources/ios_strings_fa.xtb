@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">هم‌رسانی گذرواژه‌ها</translation>
 <translation id="1554043146674176775">خاموش کردن «حالت هوشواره‌ای»</translation>
 <translation id="1554477036522844996">پنجره جدید</translation>
+<translation id="1555014818414775661">افزودن تصویر</translation>
 <translation id="1557806604681757705">رایانه شما</translation>
 <translation id="1558391695376153246">بستن «برگه‌های ناشناس»</translation>
 <translation id="1560153516220021659">دکمه نوارابزار فرعی جمع‌شده</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">‏‫<ph name="BEGIN_BOLD" />Safari Settings (تنظیمات Safari)<ph name="END_BOLD" /> را باز کنید</translation>
 <translation id="3858860766373142691">نام</translation>
 <translation id="386224966259596343">دفعه بعد که فرم مربوطی را تکمیل کنید، فرصت خواهید داشت که این اطلاعات را در کیف پول ذخیره کنید.</translation>
-<translation id="3868495844258915202">نمایش نشانی وب کامل</translation>
 <translation id="3870931306085184145">هیچ گذرواژه‌ای برای <ph name="DOMAIN" /> ذخیره نشده است</translation>
 <translation id="3875783148670536197">نشان دادن روش کار</translation>
 <translation id="3878657761594430423">ورق‌گیر</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">‏برای دریافت اعلان‌های «پیگیری قیمت»، اعلان‌ها را در «تنظیمات» iOS روشن کنید.</translation>
 <translation id="528857768909044842">گروه زبانه‌ها در اینجا ذخیره می‌شوند</translation>
 <translation id="5294624619177114121">اعلان‌های تلفن همراه</translation>
-<translation id="5295239312320826323">حساب <ph name="USER_EMAIL" /> برداشته شود؟</translation>
 <translation id="5300589172476337783">نمایش</translation>
 <translation id="5311061401280561833">دسترسی به دوربین و میکروفون مجاز است</translation>
 <translation id="5313967007315987356">افزودن سایت</translation>
@@ -1788,6 +1787,7 @@ Handoff باید در بخش عمومی تنظیمات نیز فعال شود و
 <translation id="6504541289630702018">به‌راحتی به گروه زبانه‌های میز کار دسترسی پیدا کنید</translation>
 <translation id="6505334220040167806">جمع کردن گروه زبانه.</translation>
 <translation id="6506996418997555004">هم‌رسانی کردن گروه زبانه «<ph name="GROUP_NAME" />»</translation>
+<translation id="650770261448122895">آنچه را می‌بینید با «لنز» جستجو کنید</translation>
 <translation id="6507973708545996744">برای دریافت فهرست خواندن در همه دستگاه‌هایتان، به سیستم وارد شوید</translation>
 <translation id="6518133107902771759">درستی‌سنجی</translation>
 <translation id="6523575793810663688">نشان دادن روش کار</translation>
@@ -2147,7 +2147,6 @@ Handoff باید در بخش عمومی تنظیمات نیز فعال شود و
 <translation id="7603852183842204213">پنجره‌های بازشوی مسدود (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">همگام‌سازی کار نمی‌کند</translation>
 <translation id="760667371114328991">خاموش کردن اعلان‌های «بررسی ایمنی»</translation>
-<translation id="7612619742409846846">‏ثبت ورودشده در Google به‌عنوان</translation>
 <translation id="7612849887607288481">باز کردن «منو ساخت نمونه نخستین هوش مصنوعی»</translation>
 <translation id="7618220760967055820">انتخاب کنید چه دکمه‌ای در نوارابزار نشان داده شود</translation>
 <translation id="7620522820075868385">لغو</translation>
@@ -2430,6 +2429,7 @@ Handoff باید در بخش عمومی تنظیمات نیز فعال شود و
 <translation id="8439758443371991593">پنهان کردن «افزودن به فهرست خواندن»</translation>
 <translation id="8443986842926457191">نشانی وب بیش‌از ۲۰۴۸ نویسه دارد</translation>
 <translation id="8449869326050867919">گذرواژه هم‌رسانی شد</translation>
+<translation id="8473367210869452063">‏برای تعامل با این سایت، تکلیف فعلی را متوقف کنید یا منتظر بمانید Gemini کارش را تمام کند</translation>
 <translation id="8473815223723723001">‏ویرایش تصویر با Gemini</translation>
 <translation id="8473863474539038330">نشانی‌ها و غیره</translation>
 <translation id="8474378002946546633">مجاز بودن اعلان‌ها</translation>

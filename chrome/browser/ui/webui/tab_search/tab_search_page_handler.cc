@@ -49,6 +49,7 @@
 #include "chrome/browser/ui/webui/metrics_reporter/metrics_reporter.h"
 #include "chrome/browser/ui/webui/tab_search/tab_search.mojom.h"
 #include "chrome/browser/ui/webui/tab_search/tab_search_prefs.h"
+#include "chrome/browser/ui/webui/top_chrome/top_chrome_webui_user_profile.h"
 #include "chrome/browser/ui/webui/top_chrome/webui_contents_preload_manager.h"
 #include "chrome/browser/ui/webui/util/image_util.h"
 #include "chrome/browser/ui/webui/webui_embedding_context.h"
@@ -183,7 +184,7 @@ TabSearchPageHandler::TabSearchPageHandler(
       receiver_(this, std::move(receiver)),
       page_(std::move(page)),
       web_ui_(web_ui),
-      profile_(Profile::FromWebUI(web_ui_)),
+      profile_(webui::GetUserProfile(web_ui->GetWebContents())),
       webui_controller_(webui_controller),
       metrics_reporter_(metrics_reporter),
       debounce_timer_(std::make_unique<base::RetainingOneShotTimer>(
@@ -215,6 +216,11 @@ TabSearchPageHandler::TabSearchPageHandler(
     bubble_showing_ = true;
   }
   BrowserWindowInterfaceChanged();
+  if (tabs::TabInterface* tab =
+          webui::GetTabInterface(web_ui_->GetWebContents())) {
+    split_changed_subscription_ = tab->RegisterSplitChanged(base::BindRepeating(
+        &TabSearchPageHandler::OnSplitChanged, base::Unretained(this)));
+  }
 }
 
 TabSearchPageHandler::~TabSearchPageHandler() {
@@ -375,10 +381,10 @@ tabs::TabInterface* TabSearchPageHandler::GetTabInterface(int32_t tab_id) {
 
 void TabSearchPageHandler::GetIsSplit(GetIsSplitCallback callback) {
   bool is_split = false;
-  GURL url = web_ui_->GetWebContents()->GetURL();
+  const GURL& url = web_ui_->GetWebContents()->GetLastCommittedURL();
   if (search::IsSplitViewNewTabPage(url)) {
-    is_split = tabs::TabInterface::GetFromContents(web_ui_->GetWebContents())
-                   ->IsSplit();
+    tabs::TabInterface* tab = webui::GetTabInterface(web_ui_->GetWebContents());
+    is_split = tab && tab->IsSplit();
   }
   std::move(callback).Run(is_split);
 }
@@ -451,7 +457,9 @@ void TabSearchPageHandler::ReplaceActiveSplitTab(int32_t replacement_tab_id) {
     const auto result = GetTabStripService(browser_)->ReplaceTabInSplit(
         tabs_api::NodeId::FromTabHandle(active_tab->GetHandle()),
         tabs_api::NodeId::FromTabHandle(tabs::TabHandle(replacement_tab_id)));
-    CHECK(result.has_value(), base::NotFatalUntil::M162);
+    // TODO(crbug.com/590111100): CHECK-exclusion: Convert to a CHECK once we
+    // are confident it won't be triggered.
+    DCHECK(result.has_value());
   }
 }
 
@@ -931,24 +939,8 @@ void TabSearchPageHandler::OnTabEvents(
     const std::vector<tabs_api::mojom::TabsEventPtr>& events) {
   const auto* preload_state =
       WebUIContentsPreloadState::FromWebContents(web_ui_->GetWebContents());
-  if (preload_state && preload_state->pending_request) {
-    return;
-  }
-  if (!IsWebContentsVisible()) {
-    // TODO(crbug.com/587492900): Remove this workaround once
-    // TabSearchPageHandler listens directly to split events.
-    if (search::IsSplitViewNewTabPage(web_ui_->GetWebContents()->GetURL())) {
-      for (const auto& event : events) {
-        if (!event->is_nodes_closed_event()) {
-          continue;
-        }
-        for (const auto& node_id : event->get_nodes_closed_event()->node_ids) {
-          if (node_id.Type() == tabs_api::NodeId::Type::kCollection) {
-            OnSplitTabRemoved();
-          }
-        }
-      }
-    }
+  if (!IsWebContentsVisible() ||
+      (preload_state && preload_state->pending_request)) {
     return;
   }
 
@@ -1000,8 +992,6 @@ void TabSearchPageHandler::OnNodesRemoved(
       if (base::StringToInt(node_id.Id(), &tab_id)) {
         tab_ids.push_back(tab_id);
       }
-    } else if (node_id.Type() == tabs_api::NodeId::Type::kCollection) {
-      OnSplitTabRemoved();
     }
   }
 
@@ -1068,13 +1058,14 @@ void TabSearchPageHandler::OnTabDataChanged(
   page_->TabUpdated(std::move(tab_update_info));
 }
 
-void TabSearchPageHandler::OnSplitTabRemoved() {
-  GURL url = web_ui_->GetWebContents()->GetURL();
-  if (!search::IsSplitViewNewTabPage(url)) {
+void TabSearchPageHandler::OnSplitChanged(
+    tabs::TabInterface* /*tab*/,
+    std::optional<split_tabs::SplitTabId> new_split) {
+  if (new_split.has_value()) {
     return;
   }
-  if (!tabs::TabInterface::GetFromContents(web_ui_->GetWebContents())
-           ->IsSplit()) {
+  const GURL& url = web_ui_->GetWebContents()->GetLastCommittedURL();
+  if (search::IsSplitViewNewTabPage(url)) {
     page_->TabUnsplit();
   }
 }

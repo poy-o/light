@@ -24,6 +24,13 @@ enum class InstallError {
   kFailed,
   // There is not enough free disk space for the download.
   kNotEnoughDiskSpace,
+
+  // The device is offline, so the download didn't start.
+  kOffline,
+  // Data Saver is enabled, so the download didn't start.
+  kDataSaverEnabled,
+  // The connection is metered and metered downloads are blocked.
+  kMeteredConnectionBlocked,
 };
 
 // This is a singleton interface, the actual instance should be obtained through
@@ -57,8 +64,10 @@ class OnDeviceTranslationInstaller {
     // started failed. A later `Init()` call retries the install.
     virtual void OnLibraryInstallFailed(InstallError error) {}
     // Called when a download of a language pack that `InstallLanguagePack()`
-    // started failed. The language pack stays registered, and a later
-    // `InstallLanguagePack()` call retries the download.
+    // started failed. If the pack was already registered it stays registered,
+    // while pre-download rejections (such as `kOffline`) leave an unregistered
+    // pack unregistered. A later `InstallLanguagePack()` call retries the
+    // download.
     virtual void OnLanguagePackInstallFailed(LanguagePackKey language_pack,
                                              InstallError error) {}
   };
@@ -67,6 +76,9 @@ class OnDeviceTranslationInstaller {
   // `OnDeviceTranslationInstaller`.
   static OnDeviceTranslationInstaller* GetInstance();
 
+  // Returns whether the TranslateKit library can be installed and run on this
+  // device. If not, translation is unavailable.
+  virtual bool IsSupported() const = 0;
   // Returns whether the OnDeviceTranslation has completed initialization.
   virtual bool IsInit() const = 0;
   // Returns the set of registered language packs.

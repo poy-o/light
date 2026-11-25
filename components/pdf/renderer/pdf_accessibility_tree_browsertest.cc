@@ -25,6 +25,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/test_future.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
@@ -420,8 +421,26 @@ class TestPdfAccessibilityImageFetcher
   SkBitmap GetImageBitmap(uint32_t page_index,
                           int32_t page_object_index,
                           uint32_t max_image_dimension) override {
-    return SkBitmap();
+    received_image_info_ =
+        PdfAccessibilityTree::ImageInfo{page_index, page_object_index};
+    received_max_image_dimension_ = max_image_dimension;
+    return image_bitmap_;
   }
+
+  void set_image_bitmap(const SkBitmap& bitmap) { image_bitmap_ = bitmap; }
+
+  std::optional<PdfAccessibilityTree::ImageInfo> received_image_info() const {
+    return received_image_info_;
+  }
+
+  std::optional<uint32_t> received_max_image_dimension() const {
+    return received_max_image_dimension_;
+  }
+
+ private:
+  SkBitmap image_bitmap_;
+  std::optional<PdfAccessibilityTree::ImageInfo> received_image_info_;
+  std::optional<uint32_t> received_max_image_dimension_;
 };
 
 struct ImagePosition {
@@ -435,6 +454,24 @@ void WaitForThreadTasks() {
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, run_loop.QuitClosure());
   run_loop.Run();
+}
+
+const ui::AXNode* GetImageNode(const ui::AXNode* root,
+                               size_t page_index,
+                               size_t image_index) {
+  // Child 0 of `root` is the banner node; pages start at index 1.
+  if (!root || page_index + 1 >= root->GetChildCount()) {
+    return nullptr;
+  }
+  const ui::AXNode* page_node = root->GetChildAtIndex(page_index + 1);
+  if (!page_node || page_node->GetChildCount() == 0u) {
+    return nullptr;
+  }
+  const ui::AXNode* para_node = page_node->GetChildAtIndex(0u);
+  if (!para_node || image_index >= para_node->GetChildCount()) {
+    return nullptr;
+  }
+  return para_node->GetChildAtIndex(image_index);
 }
 
 class TestPdfAccessibilityTree : public PdfAccessibilityTree {
@@ -750,6 +787,25 @@ class PdfAccessibilityTreeTest : public content::RenderViewTest {
     image.bounds = gfx::RectF(0.0f, 0.0f, 1.0f, 1.0f);
     image.page_object_index = 0;
     return image;
+  }
+
+  // Populates the accessibility tree with one page per entry in
+  // `pages_of_images` and waits for the tree to finish unserializing.
+  void SetUpPagesWithImages(
+      const std::vector<std::vector<chrome_pdf::AccessibilityImageInfo>>&
+          pages_of_images) {
+    page_count_ = pages_of_images.size();
+    pdf_accessibility_tree_->SetAccessibilityViewportInfo(viewport_info_);
+    pdf_accessibility_tree_->SetAccessibilityDocInfo(
+        CreateAccessibilityDocInfo());
+    for (size_t i = 0; i < pages_of_images.size(); ++i) {
+      page_info_.page_index = i;
+      page_objects_.images = pages_of_images[i];
+      pdf_accessibility_tree_->SetAccessibilityPageInfo(page_info_, text_runs_,
+                                                        chars_, page_objects_);
+    }
+    WaitForThreadTasks();
+    WaitForThreadDelayedTasks();
   }
 
   // Builds a tagged tree whose only page child is a `tag_type` element holding
@@ -7822,6 +7878,37 @@ TEST_F(PdfAccessibilityTreeTest, HeuristicOrderedListLowerAlphaStartsAtX) {
       ListStartReason::kLowerAlphaStartsAboveA, 1);
 }
 
+// A list starting at "i." is lettered when "j." follows, e.g. when a lettered
+// list continues at the top of a new page.
+TEST_F(PdfAccessibilityTreeTest, HeuristicOrderedListLowerAlphaStartsAtI) {
+  base::HistogramTester histogram_tester;
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {::features::kPdfAccessibilityHeuristicEnhancements},
+      {chrome_pdf::features::kPdfTags});
+
+  const ui::AXNode* page = SetUpUniformHeuristicPage(
+      {"i.", "Item I", "j.", "Item J", "k.", "Item K"},
+      {
+          gfx::RectF(30.0f, 20.0f, 20.0f, 12.0f),
+          gfx::RectF(55.0f, 20.0f, 60.0f, 12.0f),
+          gfx::RectF(30.0f, 35.0f, 20.0f, 12.0f),
+          gfx::RectF(55.0f, 35.0f, 60.0f, 12.0f),
+          gfx::RectF(30.0f, 50.0f, 20.0f, 12.0f),
+          gfx::RectF(55.0f, 50.0f, 60.0f, 12.0f),
+      });
+  ASSERT_NE(nullptr, page);
+  ASSERT_EQ(1u, page->GetChildCount());
+
+  CheckOrderedList(page->GetChildAtIndex(0u), {"Item I", "Item J", "Item K"},
+                   {"i. ", "j. ", "k. "});
+  histogram_tester.ExpectUniqueSample(
+      "Accessibility.PdfHeuristics.ListStartReason",
+      ListStartReason::kLowerAlphaStartsAboveA, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Accessibility.PdfHeuristics.OrderedListLookaheadLines", 0, 1);
+}
+
 // A lone letter followed by a period (e.g. "v." in a case name) needs the next
 // letter to confirm a list, and abbreviations such as "e.g." aren't markers.
 TEST_F(PdfAccessibilityTreeTest,
@@ -8073,6 +8160,104 @@ TEST_F(PdfAccessibilityTreeTest,
   histogram_tester.ExpectUniqueSample(
       "Accessibility.PdfHeuristics.ListStartReason",
       ListStartReason::kLowerRomanStartsAboveI, 1);
+}
+
+// A list starting at "v." is Roman when "vi." follows, e.g. when a Roman list
+// continues at the top of a new page.
+TEST_F(PdfAccessibilityTreeTest, HeuristicOrderedListLowerRomanStartsAtV) {
+  base::HistogramTester histogram_tester;
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {::features::kPdfAccessibilityHeuristicEnhancements},
+      {chrome_pdf::features::kPdfTags});
+
+  const ui::AXNode* page = SetUpUniformHeuristicPage(
+      {"v.", "Item v", "vi.", "Item vi", "vii.", "Item vii"},
+      {
+          gfx::RectF(30.0f, 20.0f, 20.0f, 12.0f),
+          gfx::RectF(55.0f, 20.0f, 60.0f, 12.0f),
+          gfx::RectF(30.0f, 35.0f, 20.0f, 12.0f),
+          gfx::RectF(55.0f, 35.0f, 60.0f, 12.0f),
+          gfx::RectF(30.0f, 50.0f, 20.0f, 12.0f),
+          gfx::RectF(55.0f, 50.0f, 60.0f, 12.0f),
+      });
+  ASSERT_NE(nullptr, page);
+  ASSERT_EQ(1u, page->GetChildCount());
+
+  CheckOrderedList(page->GetChildAtIndex(0u), {"Item v", "Item vi", "Item vii"},
+                   {"v. ", "vi. ", "vii. "});
+  histogram_tester.ExpectUniqueSample(
+      "Accessibility.PdfHeuristics.ListStartReason",
+      ListStartReason::kLowerRomanStartsAboveI, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Accessibility.PdfHeuristics.OrderedListLookaheadLines", 0, 1);
+}
+
+// A list starting at "x." is Roman when "xi." follows.
+TEST_F(PdfAccessibilityTreeTest, HeuristicOrderedListLowerRomanStartsAtX) {
+  base::HistogramTester histogram_tester;
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {::features::kPdfAccessibilityHeuristicEnhancements},
+      {chrome_pdf::features::kPdfTags});
+
+  const ui::AXNode* page = SetUpUniformHeuristicPage(
+      {"x.", "Item x", "xi.", "Item xi", "xii.", "Item xii"},
+      {
+          gfx::RectF(30.0f, 20.0f, 20.0f, 12.0f),
+          gfx::RectF(55.0f, 20.0f, 60.0f, 12.0f),
+          gfx::RectF(30.0f, 35.0f, 20.0f, 12.0f),
+          gfx::RectF(55.0f, 35.0f, 60.0f, 12.0f),
+          gfx::RectF(30.0f, 50.0f, 20.0f, 12.0f),
+          gfx::RectF(55.0f, 50.0f, 60.0f, 12.0f),
+      });
+  ASSERT_NE(nullptr, page);
+  ASSERT_EQ(1u, page->GetChildCount());
+
+  CheckOrderedList(page->GetChildAtIndex(0u), {"Item x", "Item xi", "Item xii"},
+                   {"x. ", "xi. ", "xii. "});
+  histogram_tester.ExpectUniqueSample(
+      "Accessibility.PdfHeuristics.ListStartReason",
+      ListStartReason::kLowerRomanStartsAboveI, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Accessibility.PdfHeuristics.OrderedListLookaheadLines", 0, 1);
+}
+
+// The letter "v." reads the Roman list below it as item text and reaches the
+// lookahead limit. The lookahead histogram records the Roman retry instead,
+// which confirms the list on the next line.
+TEST_F(PdfAccessibilityTreeTest,
+       HeuristicOrderedListLowerRomanStartsAtVRecordsRetryLookahead) {
+  base::HistogramTester histogram_tester;
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {::features::kPdfAccessibilityHeuristicEnhancements},
+      {chrome_pdf::features::kPdfTags});
+
+  // "vi." is followed by 15 lines of its item text, so the letter "v." scans
+  // 16 lines without finding "w.".
+  std::vector<std::string> texts = {"v.", "Item v", "vi.", "Item vi"};
+  std::vector<gfx::RectF> bounds = {gfx::RectF(30.0f, 20.0f, 20.0f, 12.0f),
+                                    gfx::RectF(55.0f, 20.0f, 60.0f, 12.0f),
+                                    gfx::RectF(30.0f, 35.0f, 20.0f, 12.0f),
+                                    gfx::RectF(55.0f, 35.0f, 60.0f, 12.0f)};
+  for (int i = 2; i <= 16; ++i) {
+    texts.push_back("Line");
+    bounds.emplace_back(55.0f, 20.0f + i * 15.0f, 60.0f, 12.0f);
+  }
+
+  const ui::AXNode* page = SetUpUniformHeuristicPage(texts, bounds);
+  ASSERT_NE(nullptr, page);
+  ASSERT_EQ(1u, page->GetChildCount());
+  const ui::AXNode* list = page->GetChildAtIndex(0u);
+  EXPECT_EQ(ax::mojom::Role::kList, list->GetRole());
+  EXPECT_EQ(2u, list->GetChildCount());
+
+  histogram_tester.ExpectUniqueSample(
+      "Accessibility.PdfHeuristics.ListStartReason",
+      ListStartReason::kLowerRomanStartsAboveI, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Accessibility.PdfHeuristics.OrderedListLookaheadLines", 0, 1);
 }
 
 // "x." after "ix." is a Roman numeral, not a letter, and numerals past ten
@@ -8487,6 +8672,287 @@ TEST_F(PdfAccessibilityTreeTest, HeuristicListTypeChangeStartsNewSublist) {
   // Items within each list have equal lengths.
   histogram_tester.ExpectUniqueSample(
       "Accessibility.PdfHeuristics.ListLastItemLengthRatio", 100, 3);
+}
+
+TEST_F(PdfAccessibilityTreeTest, HeuristicListWithNestedLink) {
+  base::HistogramTester histogram_tester;
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {::features::kPdfAccessibilityHeuristicEnhancements},
+      {chrome_pdf::features::kPdfTags});
+
+  page_objects_.links.emplace_back(
+      kChromiumTestUrl, /*index_in_page=*/0,
+      gfx::RectF(50.0f, 20.0f, 100.0f, 40.0f),
+      chrome_pdf::AccessibilityTextRunRangeInfo{.index = 0, .count = 3});
+  page_objects_.links.emplace_back(
+      kChromiumTestUrl, /*index_in_page=*/1,
+      gfx::RectF(50.0f, 34.0f, 80.0f, 12.0f),
+      chrome_pdf::AccessibilityTextRunRangeInfo{.index = 1, .count = 1});
+
+  const ui::AXNode* page = SetUpUniformHeuristicPage(
+      {"1. First item", "part two", "part three", "2. Second item"},
+      {
+          gfx::RectF(50.0f, 20.0f, 100.0f, 12.0f),
+          gfx::RectF(50.0f, 34.0f, 80.0f, 12.0f),
+          gfx::RectF(50.0f, 48.0f, 90.0f, 12.0f),
+          gfx::RectF(50.0f, 62.0f, 100.0f, 12.0f),
+      });
+  ASSERT_NE(nullptr, page);
+  ASSERT_EQ(1u, page->GetChildCount());
+
+  const ui::AXNode* list = page->GetChildAtIndex(0u);
+  ASSERT_NE(nullptr, list);
+  EXPECT_EQ(ax::mojom::Role::kList, list->GetRole());
+  EXPECT_EQ("ol",
+            list->GetStringAttribute(ax::mojom::StringAttribute::kHtmlTag));
+  ASSERT_EQ(2u, list->GetChildCount());
+
+  const ui::AXNode* item1 = list->GetChildAtIndex(0u);
+  ASSERT_NE(nullptr, item1);
+  EXPECT_EQ(ax::mojom::Role::kListItem, item1->GetRole());
+  ASSERT_EQ(3u, item1->GetChildCount());
+  CheckListMarker(item1->GetChildAtIndex(0u), "1. ");
+  EXPECT_EQ(ax::mojom::Role::kLink, item1->GetChildAtIndex(1u)->GetRole());
+  const ui::AXNode* inner_link_node = item1->GetChildAtIndex(2u);
+  EXPECT_EQ(ax::mojom::Role::kLink, inner_link_node->GetRole());
+  EXPECT_EQ("part two", inner_link_node->GetStringAttribute(
+                            ax::mojom::StringAttribute::kName));
+
+  CheckListItem(list->GetChildAtIndex(1u), "Second item", "2. ");
+  // Item 1 text after "1. " is "First item" (10) + "part two" (8) +
+  // "part three" (10) = 28 chars. Item 2 text after "2. " is
+  // "Second item" (11) chars.
+  histogram_tester.ExpectUniqueSample(
+      "Accessibility.PdfHeuristics.ListLastItemLengthRatio", 39, 1);
+}
+
+TEST_F(PdfAccessibilityTreeTest,
+       HeuristicCombinedListMarkerWithImageAndZeroLengthLink) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {::features::kPdfAccessibilityHeuristicEnhancements},
+      {chrome_pdf::features::kPdfTags});
+
+  page_objects_.links.emplace_back(
+      kChromiumTestUrl, /*index_in_page=*/0,
+      gfx::RectF(50.0f, 20.0f, 10.0f, 12.0f),
+      chrome_pdf::AccessibilityTextRunRangeInfo{.index = 0, .count = 0});
+
+  chrome_pdf::AccessibilityImageInfo image = CreateMockInaccessibleImage();
+  image.text_run_index = 0;
+  image.page_object_index = 0;
+  image.bounds = gfx::RectF(40.0f, 20.0f, 8.0f, 8.0f);
+  page_objects_.images.push_back(std::move(image));
+
+  const ui::AXNode* page = SetUpUniformHeuristicPage(
+      {"• Item with image"}, {gfx::RectF(50.0f, 20.0f, 120.0f, 12.0f)});
+  ASSERT_NE(nullptr, page);
+  ASSERT_EQ(1u, page->GetChildCount());
+
+  const ui::AXNode* list = page->GetChildAtIndex(0u);
+  ASSERT_NE(nullptr, list);
+  EXPECT_EQ(ax::mojom::Role::kList, list->GetRole());
+  ASSERT_EQ(1u, list->GetChildCount());
+
+  const ui::AXNode* item = list->GetChildAtIndex(0u);
+  ASSERT_NE(nullptr, item);
+  ASSERT_EQ(4u, item->GetChildCount());
+  CheckListMarker(item->GetChildAtIndex(0u), "• ");
+  EXPECT_EQ(ax::mojom::Role::kLink, item->GetChildAtIndex(1u)->GetRole());
+  EXPECT_EQ(ax::mojom::Role::kImage, item->GetChildAtIndex(2u)->GetRole());
+  EXPECT_EQ(ax::mojom::Role::kStaticText, item->GetChildAtIndex(3u)->GetRole());
+  EXPECT_EQ("Item with image", item->GetChildAtIndex(3u)->GetStringAttribute(
+                                   ax::mojom::StringAttribute::kName));
+}
+
+// The second link starts inside the first one, so both links hold a copy of
+// runs 1 and 2. The first link's last run must not link to the second link's
+// copy of an earlier run.
+TEST_F(PdfAccessibilityTreeTest, HeuristicPartiallyOverlappingLinks) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {::features::kPdfAccessibilityHeuristicEnhancements},
+      {chrome_pdf::features::kPdfTags});
+
+  page_objects_.links.emplace_back(
+      kChromiumTestUrl, /*index_in_page=*/0,
+      gfx::RectF(50.0f, 100.0f, 98.0f, 12.0f),
+      chrome_pdf::AccessibilityTextRunRangeInfo{.index = 0, .count = 3});
+  page_objects_.links.emplace_back(
+      kChromiumTestUrl, /*index_in_page=*/1,
+      gfx::RectF(84.0f, 100.0f, 98.0f, 12.0f),
+      chrome_pdf::AccessibilityTextRunRangeInfo{.index = 1, .count = 3});
+
+  const ui::AXNode* page =
+      SetUpUniformHeuristicPage({"Alpha", "beta", "gamma", "delta"},
+                                {
+                                    gfx::RectF(50.0f, 100.0f, 30.0f, 12.0f),
+                                    gfx::RectF(84.0f, 100.0f, 30.0f, 12.0f),
+                                    gfx::RectF(118.0f, 100.0f, 30.0f, 12.0f),
+                                    gfx::RectF(152.0f, 100.0f, 30.0f, 12.0f),
+                                });
+  ASSERT_NE(nullptr, page);
+  ASSERT_EQ(1u, page->GetChildCount());
+
+  const ui::AXNode* paragraph = page->GetChildAtIndex(0u);
+  ASSERT_NE(nullptr, paragraph);
+  ASSERT_EQ(2u, paragraph->GetChildCount());
+  const ui::AXNode* first_link = paragraph->GetChildAtIndex(0u);
+  const ui::AXNode* second_link = paragraph->GetChildAtIndex(1u);
+  ASSERT_EQ(ax::mojom::Role::kLink, first_link->GetRole());
+  ASSERT_EQ(ax::mojom::Role::kLink, second_link->GetRole());
+  ASSERT_EQ(1u, first_link->GetChildCount());
+  ASSERT_EQ(1u, second_link->GetChildCount());
+
+  const ui::AXNode* first_static_text = first_link->GetChildAtIndex(0u);
+  const ui::AXNode* second_static_text = second_link->GetChildAtIndex(0u);
+  ASSERT_EQ(3u, first_static_text->GetChildCount());
+  ASSERT_EQ(3u, second_static_text->GetChildCount());
+  EXPECT_FALSE(first_static_text->GetChildAtIndex(2u)->HasIntAttribute(
+      ax::mojom::IntAttribute::kNextOnLineId));
+  EXPECT_FALSE(second_static_text->GetChildAtIndex(0u)->HasIntAttribute(
+      ax::mojom::IntAttribute::kPreviousOnLineId));
+}
+
+// The second link starts on the first link's last run, so both links hold a
+// copy of run 1. The two copies must not link to each other.
+TEST_F(PdfAccessibilityTreeTest, HeuristicLinkStartingOnPreviousLinksLastRun) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {::features::kPdfAccessibilityHeuristicEnhancements},
+      {chrome_pdf::features::kPdfTags});
+
+  page_objects_.links.emplace_back(
+      kChromiumTestUrl, /*index_in_page=*/0,
+      gfx::RectF(50.0f, 100.0f, 64.0f, 12.0f),
+      chrome_pdf::AccessibilityTextRunRangeInfo{.index = 0, .count = 2});
+  page_objects_.links.emplace_back(
+      kChromiumTestUrl, /*index_in_page=*/1,
+      gfx::RectF(84.0f, 100.0f, 64.0f, 12.0f),
+      chrome_pdf::AccessibilityTextRunRangeInfo{.index = 1, .count = 2});
+
+  const ui::AXNode* page = SetUpUniformHeuristicPage(
+      {"Alpha", "beta", "gamma"}, {
+                                      gfx::RectF(50.0f, 100.0f, 30.0f, 12.0f),
+                                      gfx::RectF(84.0f, 100.0f, 30.0f, 12.0f),
+                                      gfx::RectF(118.0f, 100.0f, 30.0f, 12.0f),
+                                  });
+  ASSERT_NE(nullptr, page);
+  ASSERT_EQ(1u, page->GetChildCount());
+
+  const ui::AXNode* paragraph = page->GetChildAtIndex(0u);
+  ASSERT_NE(nullptr, paragraph);
+  ASSERT_EQ(2u, paragraph->GetChildCount());
+  const ui::AXNode* first_link = paragraph->GetChildAtIndex(0u);
+  const ui::AXNode* second_link = paragraph->GetChildAtIndex(1u);
+  ASSERT_EQ(ax::mojom::Role::kLink, first_link->GetRole());
+  ASSERT_EQ(ax::mojom::Role::kLink, second_link->GetRole());
+  ASSERT_EQ(1u, first_link->GetChildCount());
+  ASSERT_EQ(1u, second_link->GetChildCount());
+
+  const ui::AXNode* first_static_text = first_link->GetChildAtIndex(0u);
+  const ui::AXNode* second_static_text = second_link->GetChildAtIndex(0u);
+  ASSERT_EQ(2u, first_static_text->GetChildCount());
+  ASSERT_EQ(2u, second_static_text->GetChildCount());
+  EXPECT_FALSE(first_static_text->GetChildAtIndex(1u)->HasIntAttribute(
+      ax::mojom::IntAttribute::kNextOnLineId));
+  EXPECT_FALSE(second_static_text->GetChildAtIndex(0u)->HasIntAttribute(
+      ax::mojom::IntAttribute::kPreviousOnLineId));
+}
+
+// The highlight ends before the link's last run, so adding it must not step
+// back and add the link's last run again as plain text.
+TEST_F(PdfAccessibilityTreeTest, HeuristicHighlightInsideMultiRunLink) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {::features::kPdfAccessibilityHeuristicEnhancements},
+      {chrome_pdf::features::kPdfTags});
+
+  page_objects_.links.emplace_back(
+      kChromiumTestUrl, /*index_in_page=*/0,
+      gfx::RectF(50.0f, 100.0f, 98.0f, 12.0f),
+      chrome_pdf::AccessibilityTextRunRangeInfo{.index = 0, .count = 3});
+  chrome_pdf::AccessibilityHighlightInfo highlight;
+  highlight.bounds = gfx::RectF(50.0f, 100.0f, 30.0f, 12.0f);
+  highlight.text_range = {.index = 0, .count = 1};
+  page_objects_.highlights.push_back(std::move(highlight));
+
+  const ui::AXNode* page =
+      SetUpUniformHeuristicPage({"Alpha", "beta", "gamma", "delta"},
+                                {
+                                    gfx::RectF(50.0f, 100.0f, 30.0f, 12.0f),
+                                    gfx::RectF(84.0f, 100.0f, 30.0f, 12.0f),
+                                    gfx::RectF(118.0f, 100.0f, 30.0f, 12.0f),
+                                    gfx::RectF(152.0f, 100.0f, 30.0f, 12.0f),
+                                });
+  ASSERT_NE(nullptr, page);
+  ASSERT_EQ(1u, page->GetChildCount());
+
+  const ui::AXNode* paragraph = page->GetChildAtIndex(0u);
+  ASSERT_NE(nullptr, paragraph);
+  ASSERT_EQ(3u, paragraph->GetChildCount());
+  EXPECT_EQ(ax::mojom::Role::kLink, paragraph->GetChildAtIndex(0u)->GetRole());
+  EXPECT_EQ(ax::mojom::Role::kPdfActionableHighlight,
+            paragraph->GetChildAtIndex(1u)->GetRole());
+  const ui::AXNode* static_text = paragraph->GetChildAtIndex(2u);
+  EXPECT_EQ(ax::mojom::Role::kStaticText, static_text->GetRole());
+  EXPECT_EQ("delta",
+            static_text->GetStringAttribute(ax::mojom::StringAttribute::kName));
+}
+
+// The second link only covers the first link's last run. Its copy of that run
+// must not join the line, so the first link's copy still links to the next run.
+TEST_F(PdfAccessibilityTreeTest, HeuristicLinkNestedInPreviousLinksLastRun) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {::features::kPdfAccessibilityHeuristicEnhancements},
+      {chrome_pdf::features::kPdfTags});
+
+  page_objects_.links.emplace_back(
+      kChromiumTestUrl, /*index_in_page=*/0,
+      gfx::RectF(50.0f, 100.0f, 64.0f, 12.0f),
+      chrome_pdf::AccessibilityTextRunRangeInfo{.index = 0, .count = 2});
+  page_objects_.links.emplace_back(
+      kChromiumTestUrl, /*index_in_page=*/1,
+      gfx::RectF(84.0f, 100.0f, 30.0f, 12.0f),
+      chrome_pdf::AccessibilityTextRunRangeInfo{.index = 1, .count = 1});
+
+  const ui::AXNode* page = SetUpUniformHeuristicPage(
+      {"Alpha", "beta", "gamma"}, {
+                                      gfx::RectF(50.0f, 100.0f, 30.0f, 12.0f),
+                                      gfx::RectF(84.0f, 100.0f, 30.0f, 12.0f),
+                                      gfx::RectF(118.0f, 100.0f, 30.0f, 12.0f),
+                                  });
+  ASSERT_NE(nullptr, page);
+  ASSERT_EQ(1u, page->GetChildCount());
+
+  const ui::AXNode* paragraph = page->GetChildAtIndex(0u);
+  ASSERT_NE(nullptr, paragraph);
+  ASSERT_EQ(3u, paragraph->GetChildCount());
+  const ui::AXNode* first_link = paragraph->GetChildAtIndex(0u);
+  const ui::AXNode* second_link = paragraph->GetChildAtIndex(1u);
+  const ui::AXNode* static_text = paragraph->GetChildAtIndex(2u);
+  ASSERT_EQ(ax::mojom::Role::kLink, first_link->GetRole());
+  ASSERT_EQ(ax::mojom::Role::kLink, second_link->GetRole());
+  ASSERT_EQ(ax::mojom::Role::kStaticText, static_text->GetRole());
+  ASSERT_EQ(1u, first_link->GetChildCount());
+  ASSERT_EQ(1u, second_link->GetChildCount());
+  ASSERT_EQ(1u, static_text->GetChildCount());
+
+  const ui::AXNode* first_static_text = first_link->GetChildAtIndex(0u);
+  const ui::AXNode* second_static_text = second_link->GetChildAtIndex(0u);
+  ASSERT_EQ(2u, first_static_text->GetChildCount());
+  ASSERT_EQ(1u, second_static_text->GetChildCount());
+  EXPECT_EQ(static_text->GetChildAtIndex(0u)->id(),
+            first_static_text->GetChildAtIndex(1u)->GetIntAttribute(
+                ax::mojom::IntAttribute::kNextOnLineId));
+  const ui::AXNode* nested_inline_text_box =
+      second_static_text->GetChildAtIndex(0u);
+  EXPECT_FALSE(nested_inline_text_box->HasIntAttribute(
+      ax::mojom::IntAttribute::kPreviousOnLineId));
+  EXPECT_FALSE(nested_inline_text_box->HasIntAttribute(
+      ax::mojom::IntAttribute::kNextOnLineId));
 }
 
 TEST_F(PdfAccessibilityTreeTest, HeuristicOrderedListRequiresSequence) {
@@ -13254,32 +13720,18 @@ TEST_F(PdfAccessibilityTreeTest, StitchChildTreeAction) {
 TEST_F(PdfAccessibilityTreeTest, GetImageInfo) {
   CreatePdfAccessibilityTree();
 
-  page_count_ = 2u;
-  pdf_accessibility_tree_->SetAccessibilityViewportInfo(viewport_info_);
-  pdf_accessibility_tree_->SetAccessibilityDocInfo(
-      CreateAccessibilityDocInfo());
-
-  // Page 0 with two images at non-zero page object indices.
-  page_info_.page_index = 0u;
-  page_objects_.images.emplace_back(
-      /*alt_text=*/"Image 1", /*text_run_index=*/0u,
-      gfx::RectF(10.0f, 10.0f, 50.0f, 50.0f), /*page_object_index=*/3);
-  page_objects_.images.emplace_back(
-      /*alt_text=*/"Image 2", /*text_run_index=*/0u,
-      gfx::RectF(10.0f, 70.0f, 50.0f, 50.0f), /*page_object_index=*/7);
-  pdf_accessibility_tree_->SetAccessibilityPageInfo(page_info_, text_runs_,
-                                                    chars_, page_objects_);
-
-  // Page 1 with one image.
-  page_info_.page_index = 1u;
-  page_objects_.images.clear();
-  page_objects_.images.emplace_back(
-      /*alt_text=*/"Image 3", /*text_run_index=*/0u,
-      gfx::RectF(20.0f, 20.0f, 40.0f, 40.0f), /*page_object_index=*/5);
-  pdf_accessibility_tree_->SetAccessibilityPageInfo(page_info_, text_runs_,
-                                                    chars_, page_objects_);
-  WaitForThreadTasks();
-  WaitForThreadDelayedTasks();
+  // Page 0 with two images at non-zero page object indices, and page 1 with
+  // one image.
+  SetUpPagesWithImages(
+      {{chrome_pdf::AccessibilityImageInfo(
+            /*alt_text=*/"Image 1", /*text_run_index=*/0u,
+            gfx::RectF(10.0f, 10.0f, 50.0f, 50.0f), /*page_object_index=*/3),
+        chrome_pdf::AccessibilityImageInfo(
+            /*alt_text=*/"Image 2", /*text_run_index=*/0u,
+            gfx::RectF(10.0f, 70.0f, 50.0f, 50.0f), /*page_object_index=*/7)},
+       {chrome_pdf::AccessibilityImageInfo(
+           /*alt_text=*/"Image 3", /*text_run_index=*/0u,
+           gfx::RectF(20.0f, 20.0f, 40.0f, 40.0f), /*page_object_index=*/5)}});
 
   const ui::AXNode* root_node = pdf_accessibility_tree_->GetRoot();
   CheckRootAndStatusNodes(root_node, page_count_,
@@ -13287,27 +13739,17 @@ TEST_F(PdfAccessibilityTreeTest, GetImageInfo) {
                           /*create_empty_ocr_results=*/false);
   ASSERT_EQ(3u, root_node->GetChildCount());
 
-  const ui::AXNode* page0_node = root_node->GetChildAtIndex(1u);
-  ASSERT_NE(nullptr, page0_node);
-  ASSERT_EQ(1u, page0_node->GetChildCount());
-  const ui::AXNode* para0_node = page0_node->GetChildAtIndex(0u);
-  ASSERT_NE(nullptr, para0_node);
-  ASSERT_EQ(2u, para0_node->GetChildCount());
-  const ui::AXNode* page0_image0 = para0_node->GetChildAtIndex(0u);
-  const ui::AXNode* page0_image1 = para0_node->GetChildAtIndex(1u);
+  const ui::AXNode* page0_image0 =
+      GetImageNode(root_node, /*page_index=*/0u, /*image_index=*/0u);
+  const ui::AXNode* page0_image1 =
+      GetImageNode(root_node, /*page_index=*/0u, /*image_index=*/1u);
+  const ui::AXNode* page1_image0 =
+      GetImageNode(root_node, /*page_index=*/1u, /*image_index=*/0u);
   ASSERT_NE(nullptr, page0_image0);
   ASSERT_NE(nullptr, page0_image1);
+  ASSERT_NE(nullptr, page1_image0);
   EXPECT_EQ(ax::mojom::Role::kImage, page0_image0->GetRole());
   EXPECT_EQ(ax::mojom::Role::kImage, page0_image1->GetRole());
-
-  const ui::AXNode* page1_node = root_node->GetChildAtIndex(2u);
-  ASSERT_NE(nullptr, page1_node);
-  ASSERT_EQ(1u, page1_node->GetChildCount());
-  const ui::AXNode* para1_node = page1_node->GetChildAtIndex(0u);
-  ASSERT_NE(nullptr, para1_node);
-  ASSERT_EQ(1u, para1_node->GetChildCount());
-  const ui::AXNode* page1_image0 = para1_node->GetChildAtIndex(0u);
-  ASSERT_NE(nullptr, page1_image0);
   EXPECT_EQ(ax::mojom::Role::kImage, page1_image0->GetRole());
 
   const int32_t page0_image0_id = page0_image0->id();
@@ -13322,6 +13764,10 @@ TEST_F(PdfAccessibilityTreeTest, GetImageInfo) {
             pdf_accessibility_tree_->GetImageInfo(page1_image0_id));
 
   // Non-image nodes and unknown IDs should return std::nullopt.
+  const ui::AXNode* page0_node = root_node->GetChildAtIndex(1u);
+  ASSERT_NE(nullptr, page0_node);
+  const ui::AXNode* para0_node = page0_node->GetChildAtIndex(0u);
+  ASSERT_NE(nullptr, para0_node);
   EXPECT_EQ(std::nullopt,
             pdf_accessibility_tree_->GetImageInfo(root_node->id()));
   EXPECT_EQ(std::nullopt,
@@ -13331,15 +13777,7 @@ TEST_F(PdfAccessibilityTreeTest, GetImageInfo) {
   EXPECT_EQ(std::nullopt, pdf_accessibility_tree_->GetImageInfo(0));
 
   // Reloading the accessibility tree should clear previous image mappings.
-  page_count_ = 1u;
-  page_info_.page_index = 0u;
-  page_objects_.images.clear();
-  pdf_accessibility_tree_->SetAccessibilityDocInfo(
-      CreateAccessibilityDocInfo());
-  pdf_accessibility_tree_->SetAccessibilityPageInfo(page_info_, text_runs_,
-                                                    chars_, page_objects_);
-  WaitForThreadTasks();
-  WaitForThreadDelayedTasks();
+  SetUpPagesWithImages({{}});
 
   EXPECT_EQ(std::nullopt,
             pdf_accessibility_tree_->GetImageInfo(page0_image0_id));
@@ -13366,11 +13804,9 @@ TEST_F(PdfAccessibilityTreeTest, GetImageInfo) {
   WaitForThreadTasks();
   WaitForThreadDelayedTasks();
 
-  const ui::AXNode* reloaded_root = pdf_accessibility_tree_->GetRoot();
-  ASSERT_NE(nullptr, reloaded_root);
   const ui::AXNode* valid_image_node =
-      reloaded_root->GetChildAtIndex(1u)->GetChildAtIndex(0u)->GetChildAtIndex(
-          0u);
+      GetImageNode(pdf_accessibility_tree_->GetRoot(), /*page_index=*/0u,
+                   /*image_index=*/0u);
   ASSERT_NE(nullptr, valid_image_node);
   const int32_t valid_image_node_id = valid_image_node->id();
   EXPECT_EQ((PdfAccessibilityTree::ImageInfo{0u, 9}),
@@ -13388,6 +13824,49 @@ TEST_F(PdfAccessibilityTreeTest, GetImageInfo) {
   EXPECT_EQ(nullptr, pdf_accessibility_tree_->GetRoot());
   EXPECT_EQ(std::nullopt,
             pdf_accessibility_tree_->GetImageInfo(valid_image_node_id));
+}
+
+TEST_F(PdfAccessibilityTreeTest, GetImageForNode) {
+  CreatePdfAccessibilityTree();
+
+  SetUpPagesWithImages({{chrome_pdf::AccessibilityImageInfo(
+      /*alt_text=*/"Image 1", /*text_run_index=*/0u,
+      gfx::RectF(0.0f, 0.0f, 10.0f, 10.0f), /*page_object_index=*/5)}});
+
+  const ui::AXNode* image_node =
+      GetImageNode(pdf_accessibility_tree_->GetRoot(), /*page_index=*/0u,
+                   /*image_index=*/0u);
+  ASSERT_NE(nullptr, image_node);
+  EXPECT_EQ(ax::mojom::Role::kImage, image_node->GetRole());
+
+  SkBitmap expected_bitmap;
+  expected_bitmap.allocN32Pixels(24, 36);
+  image_fetcher_.set_image_bitmap(expected_bitmap);
+
+  // Unknown node ID returns an empty bitmap without querying `image_fetcher_`.
+  {
+    base::test::TestFuture<const SkBitmap&> future;
+    pdf_accessibility_tree_->GetImageForNode(/*ax_node_id=*/999,
+                                             future.GetCallback());
+    EXPECT_TRUE(future.Get().drawsNothing());
+    EXPECT_EQ(std::nullopt, image_fetcher_.received_image_info());
+    EXPECT_EQ(std::nullopt, image_fetcher_.received_max_image_dimension());
+  }
+
+  // Valid image node ID resolves to (`page_index`=0, `page_object_index`=5)
+  // and returns the bitmap from `image_fetcher_`.
+  {
+    base::test::TestFuture<const SkBitmap&> future;
+    pdf_accessibility_tree_->GetImageForNode(image_node->id(),
+                                             future.GetCallback());
+    const SkBitmap& result = future.Get();
+    EXPECT_FALSE(result.drawsNothing());
+    EXPECT_EQ(24, result.width());
+    EXPECT_EQ(36, result.height());
+    EXPECT_EQ((PdfAccessibilityTree::ImageInfo{0u, 5}),
+              image_fetcher_.received_image_info());
+    EXPECT_EQ(4096u, image_fetcher_.received_max_image_dimension());
+  }
 }
 
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)

@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_STORAGE_PARTITION_IMPL_H_
 #define CONTENT_BROWSER_STORAGE_PARTITION_IMPL_H_
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <memory>
@@ -65,6 +66,7 @@ class ProtoDatabaseProvider;
 }  // namespace leveldb_proto
 
 namespace net {
+class CookiePartitionKey;
 class IsolationInfo;
 }  // namespace net
 
@@ -523,9 +525,17 @@ class CONTENT_EXPORT StoragePartitionImpl
   void ClearNetworkRestrictionsAfterDelay(
       const std::vector<base::UnguessableToken>& network_restrictions_ids);
 
+  // Returns true if restrictions are currently tracked for
+  // `network_restrictions_id` (including while a delayed clear is pending).
+  bool HasNetworkRestrictions(
+      const base::UnguessableToken& network_restrictions_id) const;
+
   void SetClearNetworkRestrictionsParamsForTesting(
       const base::TimeDelta& delay,
       base::RepeatingClosure callback);
+  size_t GetNetworkRestrictionsCountForTesting() const {
+    return network_restrictions_ids_.size();
+  }
 
   base::UnguessableToken GetPartitionUUIDPerStorageKey(
       const blink::StorageKey& storage_key);
@@ -760,10 +770,22 @@ class CONTENT_EXPORT StoragePartitionImpl
   void CreateURLLoaderFactoryForBrowserProcessInternal(
       mojo::PendingRemote<network::mojom::URLLoaderFactory>* out_factory);
 
+  // Calculates the `blink::StorageKey` to scope `Clear-Site-Data` deletions for
+  // `origin`, or returns `std::nullopt` if third-party storage partitioning is
+  // disabled or no context/partition info is available:
+  // - `nonce`: If present, always takes precedence to create a nonced key.
+  // - `top_level_site`: Trusted top-level site from the network service, used
+  //   as a fallback when the initiating frame is gone (e.g. keepalive requests)
+  //   and to scope cross-site requests to a third-party key.
+  // - `cookie_partition_key`: Optional (`nullptr` when unavailable; not
+  //   retained) partition key from the network service, used to detect
+  //   third-party requests when `origin` is same-site with `top_level_site`
+  //   (e.g. a cross-site subframe requesting a top-level-site resource).
   std::optional<blink::StorageKey> CalculateStorageKeyForClearSiteData(
       const url::Origin& origin,
       const std::optional<net::SchemefulSite>& top_level_site,
-      const std::optional<base::UnguessableToken>& nonce);
+      const std::optional<base::UnguessableToken>& nonce,
+      const net::CookiePartitionKey* cookie_partition_key);
 
   GlobalRenderFrameHostId GetRenderFrameHostIdFromNetworkContext();
 

@@ -164,6 +164,15 @@ Legend: ✅ supported · ⚠️ partial / approximated · ❌ not supported
     generator. The `MojoAsyncFunctionGenerator` is used instead of the
     `AsyncFunctionGenerator`, both for setting a custom weight and for ensuring
     that the generated function is itself awaited.
+*   Remotes that the browser returns in replies are rarely used, since using
+    one needs an await, a property retrieval and a method call in the same
+    scope. So each maximal chain of calls giving JS a remote gets a
+    `MojoReplyChain<N>Generator`. A call gives JS a remote either in its reply,
+    or by taking a `pending_receiver` or `pending_associated_receiver` for an
+    interface that JS calls. A chain ends when no there is no call that gives
+    JS a remote to an interface that is not already in the chain. Chains do not
+    pass through the primary interface, and chains that end a longer chain are
+    left out. The chain generators share a weight of 5000.
 *   All type generators have a weight of 1. These are registered so that
     `findOrGenerateType` can use them.
 *   Arrays and maps used in the JS side get generators that generate the
@@ -183,6 +192,8 @@ Legend: ✅ supported · ⚠️ partial / approximated · ❌ not supported
     available to use at the start of the program.
 *   The response from asynchronous methods can only be used in the scope where
     it is awaited.
+*   A failed call in a reply chain leaves `null` or `undefined` instead of a
+    remote, so the rest of the chain throws.
 
 #### Include every common definition
 

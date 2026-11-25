@@ -1476,7 +1476,17 @@ class BottomSheetCoordinator
     }
 
     void setBottomMargin(@Px int bottomMargin) {
+        @Px int previousEdgeToEdgeBottomInset = getEdgeToEdgeBottomInset();
         mMediator.setBottomMargin(bottomMargin);
+        if (getCurrentSheetContent() == null
+                || getEdgeToEdgeBottomInset() == previousEdgeToEdgeBottomInset) {
+            return;
+        }
+        // The edge-to-edge bottom inset only applies while the container has no bottom margin.
+        // Apply the content padding that depends on it now, before the layout pass that resizes
+        // the container. Padding changed from a layout callback during that pass would not be laid
+        // out, leaving the bottom of the content clipped (crbug.com/572884371).
+        updateContentContainerHeight();
     }
 
     void onSheetBackgroundColorOverrideChanged() {
@@ -1573,6 +1583,11 @@ class BottomSheetCoordinator
         }
     }
 
+    /** Seeks the running settle animation to {@code fraction} without ending it. */
+    void setSettleAnimationFractionForTesting(float fraction) {
+        assumeNonNull(mSettleAnimator).setCurrentFraction(fraction);
+    }
+
     /**
      * Get the color to use for bottom sheet that's shown on a scrim. The sheet on scrim has
      * different color based on light / dark theme, since the scrim can cause contrast issue between
@@ -1623,6 +1638,13 @@ class BottomSheetCoordinator
         @Px
         int topInset =
                 insets != null ? insets.getInsets(WindowInsetsCompat.Type.statusBars()).top : 0;
+        if (mSheetContainer.isAttachedToWindow() && mSheetContainer.isLaidOut()) {
+            int[] containerLoc = new int[2];
+            int[] decorLoc = new int[2];
+            mSheetContainer.getLocationInWindow(containerLoc);
+            decorView.getLocationInWindow(decorLoc);
+            topInset = Math.max(containerLoc[1] - decorLoc[1], mTopInset);
+        }
 
         return mMediator.getProjectedContentHeightForIme(
                 insets, decorHeight, topInset, mAppHeaderHeight, getHandlebarHeight());

@@ -390,7 +390,7 @@ class InstallerConfig:
 
     # Runtime/Installer
     appstream_screenshot_url: str = (
-        "https://www.gstatic.com/chrome/appstream/chrome-2.png"
+        "https://www.gstatic.com/chrome/appstream/chrome-3.png"
     )
     desktop_exec: str = ""
     desktop_icon: str = ""
@@ -488,10 +488,15 @@ class InstallerConfig:
             dt = datetime.datetime.fromtimestamp(ts, datetime.timezone.utc)
             self.release_date = dt.strftime("%Y-%m-%d")
 
-        self.flatpak_package_filename = (
-            f"{self.package_orig}-{self.channel}_{self.versionfull}_"
-            f"{self.arch}.flatpak"
-        )
+        if self.is_official_build:
+            self.flatpak_package_filename = (
+                f"{self.package_orig}-{self.channel}_{self.versionfull}_"
+                f"{self.arch}.flatpak"
+            )
+        else:
+            self.flatpak_package_filename = (
+                f"{self.package_orig}-{self.channel}_{self.arch}.flatpak"
+            )
 
     @staticmethod
     def _load_branding_and_version(

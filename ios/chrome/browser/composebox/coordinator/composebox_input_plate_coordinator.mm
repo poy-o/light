@@ -184,7 +184,7 @@ omnibox::ToolMode ToolModeForComposeboxMode(ComposeboxMode mode) {
   ComposeboxSnackbarPresenter* _snackbarPresenter;
 
   // The coordinator for the bottom sheet menu.
-  ComposeboxMenuCoordinator* _menuCoorinator;
+  ComposeboxMenuCoordinator* _menuCoordinator;
 
   // Parameters used to focus and initialize the composebox.
   ComposeboxFocusParams* _focusParams;
@@ -358,9 +358,9 @@ omnibox::ToolMode ToolModeForComposeboxMode(ComposeboxMode mode) {
 }
 
 - (void)stop {
-  if (_menuCoorinator) {
-    [_menuCoorinator stop];
-    _menuCoorinator = nil;
+  if (_menuCoordinator) {
+    [_menuCoordinator stop];
+    _menuCoordinator = nil;
   }
   [_snackbarPresenter dismissAllSnackbars];
   [_snackbarPresenter stop];
@@ -406,7 +406,7 @@ omnibox::ToolMode ToolModeForComposeboxMode(ComposeboxMode mode) {
 
 - (void)hideComposeboxMenu {
   if (IsComposeboxPlusButtonBottomSheet()) {
-    [_menuCoorinator dismissMenu];
+    [_menuCoordinator dismissMenu];
   } else {
     [_viewController dismissContextMenu];
   }
@@ -437,10 +437,7 @@ omnibox::ToolMode ToolModeForComposeboxMode(ComposeboxMode mode) {
   [_metricsRecorder recordVoiceSearchButtonUsed];
 
   if (IsVoiceSearchEvolutionPhase1Enabled()) {
-    [self stopVoiceSearchCoordinator];
-    _voiceSearchCoordinator = ios::provider::CreateVoiceSearchCoordinator(
-        _viewController, self.browser, self);
-    [_voiceSearchCoordinator start];
+    [self startVoiceSearchCoordinator];
     return;
   }
 
@@ -542,7 +539,7 @@ omnibox::ToolMode ToolModeForComposeboxMode(ComposeboxMode mode) {
   if (_entrypoint == ComposeboxEntrypoint::kCobrowse ||
       IsComposeboxPlusButtonBottomSheet()) {
     [self createMenuCoordinatorForInputState:state];
-    [_menuCoorinator presentBottomSheetMenu];
+    [_menuCoordinator presentBottomSheetMenu];
 
     // Hide the input plate when the bottom sheet modal is open.
     if (_entrypoint == ComposeboxEntrypoint::kCobrowse) {
@@ -578,11 +575,11 @@ omnibox::ToolMode ToolModeForComposeboxMode(ComposeboxMode mode) {
 
 - (UIMenu*)composeboxViewControllerPlusButtonMenu:
     (ComposeboxInputPlateViewController*)composeboxViewController {
-  if (!_menuCoorinator) {
+  if (!_menuCoordinator) {
     ComposeboxUIInputState* state = [_mediator currentUIInputState];
     [self createMenuCoordinatorForInputState:state];
   }
-  return [_menuCoorinator createMenu];
+  return [_menuCoordinator createMenu];
 }
 
 - (BOOL)tabExistsOnCurrentProfile:(TabInfo*)tabInfo {
@@ -635,7 +632,7 @@ omnibox::ToolMode ToolModeForComposeboxMode(ComposeboxMode mode) {
 
 - (void)inputStateManagerDidUpdateUIState {
   // Don't recreate the coordinator if it's presenting the bottom sheet.
-  if (_menuCoorinator.presentingBottomSheet) {
+  if (_menuCoordinator.presentingBottomSheet) {
     return;
   }
   ComposeboxUIInputState* state = [_mediator currentUIInputState];
@@ -741,7 +738,23 @@ omnibox::ToolMode ToolModeForComposeboxMode(ComposeboxMode mode) {
   [self stopVoiceSearchCoordinator];
 }
 
+- (void)voiceSearchCoordinatorDidRequestRetry:(ChromeCoordinator*)coordinator {
+  if (!_viewController) {
+    return;
+  }
+  // Keeps this composebox and its state.
+  [self startVoiceSearchCoordinator];
+}
+
 #pragma mark - Private helpers
+
+// Starts a new Voice Search coordinator over the composebox.
+- (void)startVoiceSearchCoordinator {
+  [self stopVoiceSearchCoordinator];
+  _voiceSearchCoordinator = ios::provider::CreateVoiceSearchCoordinator(
+      _viewController, self.browser, self);
+  [_voiceSearchCoordinator start];
+}
 
 // Stops the Voice Search coordinator, if any.
 - (void)stopVoiceSearchCoordinator {
@@ -797,19 +810,19 @@ omnibox::ToolMode ToolModeForComposeboxMode(ComposeboxMode mode) {
 
 // Creates a new menu coordinator for the given input state.
 - (void)createMenuCoordinatorForInputState:(ComposeboxUIInputState*)state {
-  if (_menuCoorinator) {
-    [_menuCoorinator stop];
+  if (_menuCoordinator) {
+    [_menuCoordinator stop];
   }
-  _menuCoorinator = [[ComposeboxMenuCoordinator alloc]
+  _menuCoordinator = [[ComposeboxMenuCoordinator alloc]
       initWithBaseViewController:_viewController
                          browser:self.browser
           preselectedAttachments:_mediator.currentAttachmentSelection
                       inputState:state
                  metricsRecorder:_metricsRecorder
                       entrypoint:_entrypoint];
-  _menuCoorinator.inputPlateDelegate = self;
-  _menuCoorinator.delegate = self;
-  [_menuCoorinator start];
+  _menuCoordinator.inputPlateDelegate = self;
+  _menuCoordinator.delegate = self;
+  [_menuCoordinator start];
 }
 
 #pragma mark - ComposeboxPickerPresenterDelegate

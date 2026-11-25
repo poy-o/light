@@ -43,6 +43,7 @@ use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo, Track};
 use symphonia::core::io::{MediaSource, MediaSourceStream, MediaSourceStreamOptions};
 use symphonia::core::meta::MetadataOptions;
+use symphonia::core::packet::Packet;
 use symphonia::core::units::{Time, TimeBase, Timestamp};
 
 #[cxx::bridge(namespace = "media")]
@@ -165,6 +166,9 @@ pub mod ffi {
         status: SymphoniaReadPacketStatus,
         error_str: String,
         packet: SymphoniaDemuxerPacket,
+        /// The container's tracks after a reset. Only populated when `status`
+        /// is `ResetRequired`, e.g. at the start of a new chained Ogg stream.
+        tracks: Vec<SymphoniaTrackInfo>,
     }
 
     /// Status of a seek operation.
@@ -216,8 +220,10 @@ pub mod ffi {
             self: &mut SymphoniaDemuxerBridge,
             source: Pin<&mut SymphoniaSourceBridge>,
             time_us: u64,
-            track_id: i32,
+            track_id: i64,
         ) -> SymphoniaSeekResult;
+
+        fn acknowledge_reset_required(self: &mut SymphoniaDemuxerBridge);
 
         fn container_name(&self) -> &str;
         fn duration_us(&self) -> i64;
@@ -442,6 +448,24 @@ pub fn calc_duration_us(timebase: Option<TimeBase>, frames: u64) -> i64 {
     calc_timestamp_us(timebase, Timestamp::new(frames as i64))
 }
 
+/// Returns a packet's valid (post-trim) duration in `TimeBase` units.
+///
+/// Symphonia's `Packet` contract requires `packet.dur` to exclude `trim_start`
+/// and `trim_end` (as Ogg does), but Symphonia 0.6's
+/// `PacketBuilder::trimmed_dur()` (used by the MP1/MP2/MP3 reader) subtracts
+/// `self.trim_*` (0) instead of the newly computed trim values, leaving
+/// `packet.dur` equal to the untrimmed block duration.
+#[inline]
+pub fn trimmed_packet_dur(container_name: &str, packet: &Packet) -> u64 {
+    let dur = match container_name {
+        "mp1" | "mp2" | "mp3" => {
+            packet.dur.saturating_sub(packet.trim_start).saturating_sub(packet.trim_end)
+        }
+        _ => packet.dur,
+    };
+    dur.get()
+}
+
 /// Converts a Symphonia `Track` into `ffi::SymphoniaTrackInfo`.
 pub fn convert_track_info(track: &Track) -> ffi::SymphoniaTrackInfo {
     let (time_base_num, time_base_den) =
@@ -478,7 +502,7 @@ pub fn convert_track_info(track: &Track) -> ffi::SymphoniaTrackInfo {
                 if let Some(ref ch) = audio_params.channels {
                     track_info.channels = ch.count() as u32;
                     track_info.channel_mask = match ch {
-                        Channels::Positioned(pos) => pos.bits() as u32,
+                        Channels::Positioned(pos) => u32::try_from(pos.bits()).unwrap_or(0),
                         _ => 0,
                     };
                 }
@@ -509,6 +533,19 @@ pub struct SymphoniaDemuxerBridge {
     duration_us: i64,
     tracks: Vec<ffi::SymphoniaTrackInfo>,
     timebases: HashMap<u32, TimeBase>,
+    /// Offset added to every packet timestamp so that timestamps keep
+    /// increasing across chained streams (e.g. chained Ogg), whose timestamps
+    /// restart from zero.
+    ts_offset_us: i64,
+    /// The latest packet end time emitted so far, including `ts_offset_us`.
+    max_end_us: i64,
+    /// True when the reader hit `Error::ResetRequired` and `read_packet()` has
+    /// not yet delivered that reset to C++ (or C++ dropped a reply across an
+    /// aborted read before `seek_to()` ran).
+    pending_reset_required: bool,
+    /// True after a reset until the first packet of the new stream has been
+    /// read and `ts_offset_us` has been updated for it.
+    pending_chain_offset: bool,
 }
 
 impl ffi::SymphoniaDemuxerPacket {
@@ -528,11 +565,25 @@ impl ffi::SymphoniaDemuxerPacket {
 
 impl ffi::SymphoniaReadPacketResult {
     fn ok(packet: ffi::SymphoniaDemuxerPacket) -> Self {
-        Self { status: ffi::SymphoniaReadPacketStatus::Ok, error_str: String::new(), packet }
+        Self {
+            status: ffi::SymphoniaReadPacketStatus::Ok,
+            error_str: String::new(),
+            packet,
+            tracks: Vec::new(),
+        }
     }
 
     fn err(status: ffi::SymphoniaReadPacketStatus, error_str: String) -> Self {
-        Self { status, error_str, packet: ffi::SymphoniaDemuxerPacket::empty() }
+        Self { status, error_str, packet: ffi::SymphoniaDemuxerPacket::empty(), tracks: Vec::new() }
+    }
+
+    fn reset_required(tracks: Vec<ffi::SymphoniaTrackInfo>) -> Self {
+        Self {
+            status: ffi::SymphoniaReadPacketStatus::ResetRequired,
+            error_str: String::new(),
+            packet: ffi::SymphoniaDemuxerPacket::empty(),
+            tracks,
+        }
     }
 }
 
@@ -634,6 +685,30 @@ impl SymphoniaDemuxerBridge {
             duration_us: 0,
             tracks: Vec::new(),
             timebases: HashMap::new(),
+            ts_offset_us: 0,
+            max_end_us: 0,
+            pending_reset_required: false,
+            pending_chain_offset: false,
+        }
+    }
+
+    pub fn acknowledge_reset_required(&mut self) {
+        self.pending_reset_required = false;
+    }
+
+    /// Rebuilds the track list and time bases from the reader, e.g. after a
+    /// chained stream starts.
+    fn refresh_tracks(&mut self) {
+        let Some(reader) = self.reader.as_ref() else {
+            return;
+        };
+        self.timebases.clear();
+        self.tracks.clear();
+        for track in reader.tracks() {
+            if let Some(tb) = track.time_base {
+                self.timebases.insert(track.id, tb);
+            }
+            self.tracks.push(convert_track_info(track));
         }
     }
 
@@ -653,6 +728,10 @@ impl SymphoniaDemuxerBridge {
         &mut self,
         source: Pin<&mut ffi::SymphoniaSourceBridge>,
     ) -> ffi::SymphoniaReadPacketResult {
+        if self.pending_reset_required {
+            return ffi::SymphoniaReadPacketResult::reset_required(self.tracks.clone());
+        }
+
         let _source_guard = self.source_handle.as_ref().map(|h| h.bind(source));
 
         let reader = match self.reader.as_mut() {
@@ -670,15 +749,26 @@ impl SymphoniaDemuxerBridge {
                 let track_id = packet.track_id;
                 let timebase = self.timebases.get(&track_id).copied();
 
-                let pts_us = calc_timestamp_us(timebase, packet.pts);
-                let dts_us = if packet.dts == packet.pts {
-                    pts_us
+                let raw_pts_us = calc_timestamp_us(timebase, packet.pts);
+                let raw_dts_us = if packet.dts == packet.pts {
+                    raw_pts_us
                 } else {
                     calc_timestamp_us(timebase, packet.dts)
                 };
-                let duration_us = calc_duration_us(timebase, packet.dur.get());
+                let duration_us =
+                    calc_duration_us(timebase, trimmed_packet_dur(&self.container_name, &packet));
                 let trim_start_us = calc_duration_us(timebase, packet.trim_start.get());
                 let trim_end_us = calc_duration_us(timebase, packet.trim_end.get());
+
+                // A chained stream restarts its timestamps. Shift them so that
+                // the new stream starts where the previous one ended.
+                if self.pending_chain_offset {
+                    self.pending_chain_offset = false;
+                    self.ts_offset_us = self.max_end_us.saturating_sub(raw_pts_us).max(0);
+                }
+                let pts_us = raw_pts_us.saturating_add(self.ts_offset_us);
+                let dts_us = raw_dts_us.saturating_add(self.ts_offset_us);
+                self.max_end_us = self.max_end_us.max(pts_us.saturating_add(duration_us));
 
                 // Audio frames are always random access points (keyframe =
                 // true). TODO(crbug.com/550619039): Inspect
@@ -701,10 +791,17 @@ impl SymphoniaDemuxerBridge {
                 ffi::SymphoniaReadPacketStatus::EndOfStream,
                 String::new(),
             ),
-            Err(Error::ResetRequired) => ffi::SymphoniaReadPacketResult::err(
-                ffi::SymphoniaReadPacketStatus::ResetRequired,
-                "Format reader reset required".to_string(),
-            ),
+            Err(Error::ResetRequired) => {
+                // A new stream started (e.g. chained Ogg). Report its tracks
+                // so that the caller can update decoder configs. Keep the
+                // reset pending until the media sequence acknowledges it, in
+                // case an overlapping `AbortPendingReads()` or `Seek()` drops
+                // this reply.
+                self.refresh_tracks();
+                self.pending_reset_required = true;
+                self.pending_chain_offset = true;
+                ffi::SymphoniaReadPacketResult::reset_required(self.tracks.clone())
+            }
             Err(err) => ffi::SymphoniaReadPacketResult::err(
                 ffi::SymphoniaReadPacketStatus::Error,
                 format!("Failed to read packet: {err:?}"),
@@ -716,7 +813,7 @@ impl SymphoniaDemuxerBridge {
         &mut self,
         source: Pin<&mut ffi::SymphoniaSourceBridge>,
         time_us: u64,
-        track_id: i32,
+        track_id: i64,
     ) -> ffi::SymphoniaSeekResult {
         let _source_guard = self.source_handle.as_ref().map(|h| h.bind(source));
 
@@ -732,14 +829,27 @@ impl SymphoniaDemuxerBridge {
 
         // If track_id >= 0, seek specifically taking into account that track's
         // index / keyframes. A negative track_id (e.g. -1) seeks across any
-        // track.
+        // track. `i64` holds the full `u32` track ID range (including random
+        // 32-bit Ogg serial numbers).
         let seek_to = SeekTo::Time {
             time: Time::from_micros_u64(time_us),
-            track_id: if track_id >= 0 { Some(track_id as u32) } else { None },
+            track_id: u32::try_from(track_id).ok(),
         };
 
         match reader.seek(SeekMode::Accurate, seek_to) {
             Ok(seeked_to) => {
+                // Timestamps after a seek come from the reader's current
+                // position, so drop any chained stream offset. If an earlier
+                // read had already advanced into a new chained stream and its
+                // `ResetRequired` was dropped by the seek, leave
+                // `pending_reset_required` set so the first post-seek
+                // `read_packet()` still notifies the caller.
+                // TODO(crbug.com/550619039): Keep timestamps continuous when
+                // seeking within a later stream of a chained Ogg file.
+                self.ts_offset_us = 0;
+                self.max_end_us = 0;
+                self.pending_chain_offset = false;
+
                 let actual_time_us = self
                     .timebases
                     .get(&seeked_to.track_id)
@@ -815,6 +925,10 @@ pub fn init_symphonia_demuxer(
                 duration_us,
                 tracks: tracks.clone(),
                 timebases,
+                ts_offset_us: 0,
+                max_end_us: 0,
+                pending_reset_required: false,
+                pending_chain_offset: false,
             };
 
             ffi::SymphoniaDemuxerInitResult::ok(

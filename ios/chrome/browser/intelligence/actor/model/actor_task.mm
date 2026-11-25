@@ -23,6 +23,7 @@
 #import "components/actor/core/aggregated_journal.h"
 #import "components/actor/public/mojom/actor_types.mojom.h"
 #import "components/sessions/core/session_id.h"
+#import "components/url_formatter/elide_url.h"
 #import "ios/chrome/browser/intelligence/actor/model/actor_browser_agent.h"
 #import "ios/chrome/browser/intelligence/actor/model/actor_engine.h"
 #import "ios/chrome/browser/intelligence/actor/model/actor_tab_helper.h"
@@ -101,9 +102,18 @@ void PostActReply(ActCallback callback, mojom::ActionResultCode code) {
       FROM_HERE, base::BindOnce(std::move(callback), MakeActionResults(code)));
 }
 
+// Maps an `InterventionDelegateError` to the corresponding `InterventionError`.
+InterventionError ToInterventionError(InterventionDelegateError error) {
+  switch (error) {
+    case InterventionDelegateError::kUnsupported:
+      return InterventionError::kDelegateUnsupported;
+  }
+  NOTREACHED();
+}
+
 // Posts `callback` with `result`, so that callers are never re-entered.
-void PostInterruptReply(ActorTaskResultCallback<InterruptResponse> callback,
-                        ActorTaskResult<InterruptResponse> result) {
+void PostInterruptReply(InterventionResultCallback<InterruptReply> callback,
+                        InterventionResult<InterruptReply> result) {
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), std::move(result)));
 }
@@ -356,7 +366,7 @@ void ActorTask::Resume() {
   } else if (pending_interrupt_) {
     owes_pause_notice_ = false;
     PostInterruptReply(std::move(pending_interrupt_),
-                       InterruptResponse::kUserPaused);
+                       InterruptReply::UserPaused());
   }
   SetState(ActorTaskState::kReflecting);
 }
@@ -372,10 +382,10 @@ void ActorTask::SetInterventionDelegate(
 
 void ActorTask::Interrupt(
     const InterruptRequest& request,
-    ActorTaskResultCallback<InterruptResponse> on_response) {
+    InterventionResultCallback<InterruptReply> on_response) {
   if (IsCompleted() || HasPendingOperation()) {
     PostInterruptReply(std::move(on_response),
-                       base::unexpected(ActorTaskError::kRejected));
+                       base::unexpected(InterventionError::kTaskRejected));
     return;
   }
   // Held without prompting: the reply tells the caller the task was paused
@@ -386,12 +396,12 @@ void ActorTask::Interrupt(
   }
   if (!CanBeInterrupted()) {
     PostInterruptReply(std::move(on_response),
-                       base::unexpected(ActorTaskError::kRejected));
+                       base::unexpected(InterventionError::kTaskRejected));
     return;
   }
   if (owes_pause_notice_) {
     owes_pause_notice_ = false;
-    PostInterruptReply(std::move(on_response), InterruptResponse::kUserPaused);
+    PostInterruptReply(std::move(on_response), InterruptReply::UserPaused());
     return;
   }
   std::visit(
@@ -433,6 +443,7 @@ bool ActorTask::CanBeInterrupted() const {
 
 void ActorTask::EnterWaitingOnUser() {
   engine_->PauseOngoingActions();
+  load_timeout_timer_.Stop();
   SetState(ActorTaskState::kWaitingOnUser);
 }
 
@@ -440,17 +451,27 @@ void ActorTask::ExitWaitingOnUser(ActorTaskState resumed_state) {
   if (state_ != ActorTaskState::kWaitingOnUser) {
     return;
   }
+  // Snapshot before `DidUninterruptTask()`, which may synchronously complete an
+  // in-flight tool and start a new page-load wait via `OnActCompleted()`.
+  const bool has_deferred_act = pending_act_ && pending_act_->deferred_results;
   SetState(resumed_state);
   engine_->DidUninterruptTask();
+  if (resumed_state == ActorTaskState::kActing && has_deferred_act) {
+    if (scoped_web_state_observations_.IsObservingAnySource()) {
+      StartPageLoadTimeout();
+    } else {
+      FinishDeferredAct();
+    }
+  }
 }
 
 void ActorTask::InterruptFor(
     const ConfirmationInterrupt& confirmation,
-    ActorTaskResultCallback<InterruptResponse> on_response) {
+    InterventionResultCallback<InterruptReply> on_response) {
   if (confirmation.title.empty() || confirmation.button_text.empty() ||
       !intervention_delegate_) {
     PostInterruptReply(std::move(on_response),
-                       base::unexpected(ActorTaskError::kRejected));
+                       base::unexpected(InterventionError::kTaskRejected));
     return;
   }
   EnterWaitingOnUser();
@@ -462,7 +483,7 @@ void ActorTask::ShowInterruptConfirmation(
     const ConfirmationInterrupt& confirmation) {
   // Posted so that a delegate completing synchronously never re-enters the
   // task.
-  void (^completion)(void) =
+  ActorConfirmationCallback callback =
       base::CallbackToBlock(base::BindPostTaskToCurrentDefault(
           base::BindOnce(&ActorTask::OnInterruptConfirmationResolved,
                          operation_weak_ptr_factory_.GetWeakPtr())));
@@ -476,17 +497,61 @@ void ActorTask::ShowInterruptConfirmation(
                               subtitle:subtitle
                             buttonText:base::SysUTF8ToNSString(
                                            confirmation.button_text)
-                     completionHandler:completion];
+                              callback:callback];
 }
 
-void ActorTask::OnInterruptConfirmationResolved() {
+void ActorTask::OnInterruptConfirmationResolved(
+    InterventionDelegateResult<void> result) {
+  if (!result.has_value()) {
+    ResolveInterrupt(base::unexpected(ToInterventionError(result.error())));
+    return;
+  }
+  ResolveInterrupt(InterruptReply::Confirmed());
+}
+
+void ActorTask::InterruptFor(
+    const ClarificationInterrupt& clarification,
+    InterventionResultCallback<InterruptReply> on_response) {
+  if (clarification.message.empty() || !intervention_delegate_) {
+    PostInterruptReply(std::move(on_response),
+                       base::unexpected(InterventionError::kTaskRejected));
+    return;
+  }
+  EnterWaitingOnUser();
+  pending_interrupt_ = std::move(on_response);
+  ShowInterruptClarification(clarification);
+}
+
+void ActorTask::ShowInterruptClarification(
+    const ClarificationInterrupt& clarification) {
+  // Posted so that a delegate answering synchronously never re-enters the task.
+  ActorClarificationCallback callback =
+      base::CallbackToBlock(base::BindPostTaskToCurrentDefault(
+          base::BindOnce(&ActorTask::OnInterruptClarificationResolved,
+                         operation_weak_ptr_factory_.GetWeakPtr())));
+  [intervention_delegate_ actorTask:task_id_
+      requestClarificationWithMessage:base::SysUTF8ToNSString(
+                                          clarification.message)
+                             callback:callback];
+}
+
+void ActorTask::OnInterruptClarificationResolved(
+    InterventionDelegateResult<NSString*> result) {
+  if (!result.has_value()) {
+    ResolveInterrupt(base::unexpected(ToInterventionError(result.error())));
+    return;
+  }
+  ResolveInterrupt(
+      InterruptReply::Answered(base::SysNSStringToUTF8(result.value())));
+}
+
+void ActorTask::ResolveInterrupt(InterventionResult<InterruptReply> result) {
   // Only `Stop()` and `Pause()` can move the task out of `kWaitingOnUser`
-  // before the user confirms, and both invalidate the weak pointer, cancelling
-  // this call.
+  // before the delegate replies, and both invalidate the weak pointer,
+  // cancelling the delegate's callback.
   CHECK_EQ(state_, ActorTaskState::kWaitingOnUser);
   CHECK(pending_interrupt_);
-  PostInterruptReply(std::move(pending_interrupt_),
-                     InterruptResponse::kConfirmed);
+  PostInterruptReply(std::move(pending_interrupt_), std::move(result));
   ExitWaitingOnUser(ActorTaskState::kReflecting);
 }
 
@@ -662,7 +727,7 @@ void ActorTask::CancelOngoingOperationAndReply() {
   }
   if (pending_interrupt_) {
     PostInterruptReply(std::move(pending_interrupt_),
-                       base::unexpected(ActorTaskError::kTaskWentAway));
+                       base::unexpected(InterventionError::kTaskWentAway));
   }
 }
 
@@ -675,6 +740,9 @@ void ActorTask::CancelOngoingOperation() {
   load_timeout_timer_.Stop();
   if (pending_act_) {
     pending_act_->deferred_results.reset();
+  }
+  if (pending_navigation_confirmation_callback_) {
+    std::move(pending_navigation_confirmation_callback_).Run(false);
   }
 }
 
@@ -702,7 +770,10 @@ bool ActorTask::ObserveLoadingWebStates() {
 
 void ActorTask::DeferActCompletion(std::vector<ActionResult> results) {
   pending_act_->deferred_results = std::move(results);
+  StartPageLoadTimeout();
+}
 
+void ActorTask::StartPageLoadTimeout() {
   load_timeout_timer_.Start(
       FROM_HERE, kPageLoadTimeout,
       base::BindOnce(&ActorTask::OnPageLoadedTimeout,
@@ -737,7 +808,8 @@ void ActorTask::OnWebStateFinishedLoading(web::WebState* web_state) {
   }
   scoped_web_state_observations_.RemoveObservation(web_state);
 
-  if (scoped_web_state_observations_.IsObservingAnySource()) {
+  if (scoped_web_state_observations_.IsObservingAnySource() ||
+      state_ == ActorTaskState::kWaitingOnUser) {
     return;
   }
 
@@ -827,6 +899,55 @@ void ActorTask::ConfirmNavigationToOrigin(
   navigation_confirmation_callback_.Run(
       navigation_origin,
       base::BindPostTaskToCurrentDefault(std::move(guarded_callback)));
+}
+
+void ActorTask::RequestUserConfirmationForNavigation(
+    const url::Origin& navigation_origin,
+    UserConfirmationDialogDecisionCallback callback) {
+  if (state_ != ActorTaskState::kActing || !intervention_delegate_) {
+    std::move(callback).Run(false);
+    return;
+  }
+  CHECK(!pending_navigation_confirmation_callback_);
+
+  pending_navigation_confirmation_callback_ = std::move(callback);
+  EnterWaitingOnUser();
+
+  std::u16string formatted_origin =
+      url_formatter::FormatOriginForSecurityDisplay(
+          navigation_origin, url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS);
+
+  // Posted so that a delegate completing synchronously never re-enters the
+  // task.
+  ActorNavigationConfirmationCallback delegate_callback =
+      base::CallbackToBlock(base::BindPostTaskToCurrentDefault(
+          base::BindOnce(&ActorTask::OnNavigationUserConfirmationResolved,
+                         operation_weak_ptr_factory_.GetWeakPtr())));
+
+  [intervention_delegate_ actorTask:task_id_
+      requestNavigationConfirmationForDomain:base::SysUTF16ToNSString(
+                                                 formatted_origin)
+                                    callback:delegate_callback];
+}
+
+void ActorTask::OnNavigationUserConfirmationResolved(
+    InterventionDelegateResult<bool> result) {
+  CHECK_EQ(state_, ActorTaskState::kWaitingOnUser);
+  CHECK(pending_navigation_confirmation_callback_);
+
+  UserConfirmationDialogDecisionCallback callback =
+      std::move(pending_navigation_confirmation_callback_);
+  const bool permission_granted = result.value_or(false);
+
+  if (!permission_granted) {
+    OnNavigationBlocked(mojom::ActionResultCode::kTriggeredNavigationBlocked);
+  }
+
+  // Resume `kActing` and unpause tool timers before running `callback` so the
+  // resumed navigation sees the task in `kActing`.
+  ExitWaitingOnUser(ActorTaskState::kActing);
+
+  std::move(callback).Run(permission_granted);
 }
 
 #pragma mark - ActorTaskBackgroundWorker::TaskStateDelegate

@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/ui.gni")
+import("//components/bidi_mapper/buildflags.gni")
 import("//components/enterprise/buildflags/buildflags.gni")
 import("//content/browser/devtools/features.gni")
 import("//extensions/buildflags/buildflags.gni")
@@ -231,6 +232,8 @@ static_library("devtools") {
       "gca_service_handler.h",
       "gdp_service_handler.cc",
       "gdp_service_handler.h",
+      "protocol/ads_handler.cc",
+      "protocol/ads_handler.h",
       "protocol/autofill_handler.cc",
       "protocol/autofill_handler.h",
       "url_constants.cc",
@@ -507,16 +510,12 @@ static_library("devtools") {
       "devtools_navigation_gating_service_factory.h",
       "devtools_navigation_throttle.cc",
       "devtools_navigation_throttle.h",
-      "protocol/ads_handler.cc",
-      "protocol/ads_handler.h",
       "protocol/browser_handler.cc",
       "protocol/browser_handler.h",
       "protocol/cast_handler.cc",
       "protocol/cast_handler.h",
       "protocol/emulation_handler.cc",
       "protocol/emulation_handler.h",
-      "protocol/extensions_handler.cc",
-      "protocol/extensions_handler.h",
       "protocol/page_handler.cc",
       "protocol/page_handler.h",
       "protocol/page_handler_desktop.cc",
@@ -554,10 +553,17 @@ static_library("devtools") {
 
   sources += rebase_path(_protocol_generated, ".", target_gen_dir)
 
-  if (enable_extensions) {
+  if (enable_extensions_core) {
+    sources += [
+      "protocol/extensions_handler.cc",
+      "protocol/extensions_handler.h",
+    ]
     deps += [
+      "//chrome/browser/ui/extensions",
+      "//chrome/browser/ui/toolbar",
       "//chrome/common/extensions/api",
       "//extensions/browser",
+      "//extensions/common",
     ]
   }
 
@@ -744,6 +750,7 @@ if (enable_devtools_frontend) {
       ":devtools",
       ":test_support",
       "//base",
+      "//chrome/browser:browser_process",
       "//chrome/browser/actor:test_support",
       "//chrome/browser/actor:tools_test_support",
       "//chrome/browser/autofill:test_support",
@@ -767,7 +774,11 @@ if (enable_devtools_frontend) {
       "//components/infobars/content",
       "//components/javascript_dialogs",
       "//components/language/core/browser",
+      "//components/prefs",
       "//components/private_verification_tokens/common:private_verification_tokens_token",
+      "//components/subresource_filter/content/browser:test_support",
+      "//components/subresource_filter/core/common",
+      "//components/subresource_filter/core/common:test_support",
       "//components/ukm:test_support",
       "//content/test:test_support",
       "//testing/gtest",
@@ -782,18 +793,30 @@ if (enable_devtools_frontend) {
         "//chrome/browser/apps/app_service",
         "//chrome/browser/media/webrtc",
         "//chrome/browser/ui:browser_commands",
+        "//chrome/browser/ui/side_panel",
+        "//chrome/browser/ui/side_panel:side_panel_views_dependent",
         "//chrome/browser/ui/views/frame:browser_view_header",
         "//chrome/browser/ui/web_applications/test:test_support_ui",
         "//chrome/browser/ui/webui/top_chrome",
         "//chrome/browser/web_applications:web_applications_test_support",
-        "//components/prefs",
         "//media:media_buildflags",
         "//ui/views:test_support",
       ]
     }
 
     if (enable_extensions_core) {
-      deps += [ "//chrome/browser/ui/extensions" ]
+      sources += [ "protocol/devtools_extensions_browsertest.cc" ]
+      deps += [
+        "//chrome/browser/extensions",
+        "//chrome/browser/extensions:test_support",
+        "//chrome/browser/policy",
+        "//chrome/browser/ui/extensions",
+        "//chrome/browser/ui/toolbar",
+        "//chrome/common:constants",
+        "//extensions:test_support",
+        "//extensions/browser",
+        "//extensions/common",
+      ]
     }
 
     if (is_android) {
@@ -849,7 +872,6 @@ if (!is_android) {
       "devtools_navigation_throttle_browsertest.cc",
       "devtools_policy_browsertest.cc",
       "protocol/audits_protocol_test.cc",
-      "protocol/devtools_extensions_browsertest.cc",
       "protocol/devtools_iwa_browsertest.cc",
       "protocol/devtools_pwa_browsertest.cc",
       "protocol/devtools_tab_discard_browsertest.cc",
@@ -879,6 +901,14 @@ if (!is_android) {
       "//content/test:test_support",
       "//testing/gtest",
     ]
+
+    if (enable_bidi_mapper) {
+      sources += [ "bidi_mapper_host_browsertest.cc" ]
+      deps += [
+        "//components/bidi_mapper/host",
+        "//components/bidi_mapper/host:features",
+      ]
+    }
 
     if (enable_pdf && enable_printing && !is_chromeos) {
       sources += [ "protocol/devtools_printtopdf_browsertest.cc" ]

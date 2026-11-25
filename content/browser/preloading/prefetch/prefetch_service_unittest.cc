@@ -1124,6 +1124,16 @@ class PrefetchServicePrePrefetchTest : public PrefetchServiceTest {
  public:
   void SetUp() override {
     PrefetchServiceTest::SetUp();
+    // Skip the `force_off_the_main_thread` params, which would just duplicate
+    // the others here:
+    // - The tests here start prefetches only via `PrePrefetchService`, which
+    //   `features::kPrefetchOffTheMainThreadForceForTesting` doesn't affect.
+    // - `InitScopedFeatureList()` overrides the parameters of
+    //   `features::kPrefetchOffTheMainThread` set by `InitRearchFeatures()`.
+    if (rearch_param().force_off_the_main_thread) {
+      GTEST_SKIP() << "PrefetchServicePrePrefetchTest doesn't use "
+                      "force_off_the_main_thread.";
+    }
     pre_prefetch_service_ = PrePrefetchService::Create(
         browser_context(),
         /*embedder_non_ui_thread_update_headers_callbacks=*/{},
@@ -1149,26 +1159,9 @@ class PrefetchServicePrePrefetchTest : public PrefetchServiceTest {
 
   [[nodiscard]] std::unique_ptr<PrePrefetchHandle> PostMakePrePrefetchAndWait(
       const GURL& prefetch_url) {
-    base::test::TestFuture<std::unique_ptr<PrePrefetchHandle>> future;
-    base::ThreadPool::PostTaskAndReplyWithResult(
-        FROM_HERE, {base::MayBlock()},
-        base::BindOnce(
-            [](PrePrefetchService* service_ptr, const GURL& url) {
-              base::ScopedAllowBaseSyncPrimitivesForTesting allow_blocking;
-              return service_ptr->StartPrePrefetchRequest(
-                  url, test::kPreloadingEmbedderHistogramSuffixForTesting,
-                  /*javascript_enabled=*/true,
-                  /*no_vary_search_hint=*/std::nullopt,
-                  /*priority=*/PrefetchPriority::kHighest,
-                  /*additional_headers=*/{},
-                  /*request_status_listener=*/nullptr, base::TimeDelta(),
-                  /*should_append_variations_header=*/false,
-                  /*should_disable_block_until_head_timeout=*/false,
-                  /*should_bypass_http_cache=*/false);
-            },
-            pre_prefetch_service(), prefetch_url),
-        future.GetCallback());
-    return future.Take();
+    CHECK(pre_prefetch_service());
+    return PostStartPrePrefetchRequestAndWaitForTesting(*pre_prefetch_service(),
+                                                        prefetch_url);
   }
   [[nodiscard]] std::unique_ptr<PrefetchHandle> AddPrefetchFromPrePrefetch(
       std::unique_ptr<PrePrefetchHandle> pre_prefetch_handle) {

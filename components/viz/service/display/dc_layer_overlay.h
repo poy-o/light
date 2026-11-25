@@ -31,8 +31,7 @@ class VIZ_SERVICE_EXPORT DCLayerOverlayProcessor final
       public base::PowerStateObserver {
  public:
   using FilterOperationsMap =
-      base::flat_map<AggregatedRenderPassId,
-                     raw_ptr<cc::FilterOperations, CtnExperimental>>;
+      base::flat_map<AggregatedRenderPassId, raw_ptr<cc::FilterOperations>>;
   // When |skip_initialization_for_testing| is true, object will be isolated
   // for unit tests.
   explicit DCLayerOverlayProcessor(
@@ -228,9 +227,6 @@ class VIZ_SERVICE_EXPORT DCLayerOverlayProcessor final
     // latency canvas or protected video which are allowed for multiple
     // overlays.
     bool has_non_clear_video_overlays = false;
-
-    // Used for recording overlay histograms.
-    bool has_occluding_damage_rect = false;
 
     // Whether to reject all overlays for this frame. This can be true if we
     // have more than one overlay quad and not all of them are promoted to

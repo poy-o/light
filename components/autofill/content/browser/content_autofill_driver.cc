@@ -436,12 +436,14 @@ void ContentAutofillDriver::ExtractLabeledTextNodeValue(
 }
 
 void ContentAutofillDriver::LoadCustomFormControlScript(
-    const std::string& script) {
+    const std::string& script,
+    base::OnceCallback<void(bool success)> callback) {
   if (!IsActive()) {
+    std::move(callback).Run(false);
     return;
   }
   GetCustomFormControlAgent()->LoadUnsafeScript(
-      render_frame_host_->GetDocumentToken(), script, base::DoNothing());
+      render_frame_host_->GetDocumentToken(), script, std::move(callback));
 }
 
 // static
@@ -540,10 +542,6 @@ bool ContentAutofillDriver::CanShowAutofillUi() const {
   // ignore the calls from inactive RFH as the renderer is not expecting a reply
   // and it doesn't lead to browser-renderer consistency issues.
   return render_frame_host_->IsActive();
-}
-
-bool ContentAutofillDriver::DocumentUsedWebOtp() const {
-  return render_frame_host_->DocumentUsedWebOTP();
 }
 
 std::optional<net::IsolationInfo> ContentAutofillDriver::GetIsolationInfo() {

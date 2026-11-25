@@ -8,6 +8,7 @@
 
 #import <optional>
 
+#import "base/apple/foundation_util.h"
 #import "base/ios/ios_util.h"
 #import "base/memory/raw_ptr.h"
 #import "base/metrics/histogram_functions.h"
@@ -145,6 +146,15 @@ inline base::PassKey<FullscreenMediatorPassKeyFactory> PassKey() {
     [defaultCenter addObserver:self
                       selector:@selector(keyboardWillChangeFrame:)
                           name:UIKeyboardWillChangeFrameNotification
+                        object:nil];
+    // On iPadOS, collapsing the software keyboard while keeping focus (e.g.
+    // with a hardware keyboard) can post only
+    // `UIKeyboardDidChangeFrameNotification` without
+    // `UIKeyboardWillChangeFrameNotification` or
+    // `UIKeyboardWillHideNotification`.
+    [defaultCenter addObserver:self
+                      selector:@selector(keyboardDidChangeFrame:)
+                          name:UIKeyboardDidChangeFrameNotification
                         object:nil];
     [defaultCenter addObserver:self
                       selector:@selector(keyboardWillHide:)
@@ -307,8 +317,8 @@ inline base::PassKey<FullscreenMediatorPassKeyFactory> PassKey() {
   CGFloat panTransDelta = panTranslation.y - _lastPanTranslationY;
   _lastPanTranslationY = panTranslation.y;
 
-  if (scrollView.isTracking && panTransDelta * delta < 0) {
-    _lastTrackingScrollDelta = delta;
+  if (delta == 0) {
+    return;
   }
 
   CGFloat minOffset = -scrollView.contentInset.top;
@@ -330,30 +340,24 @@ inline base::PassKey<FullscreenMediatorPassKeyFactory> PassKey() {
   // Ignore programmatic `contentOffset` adjustments triggered by WebKit layer
   // tree commits (e.g., `adjustMainFrameDelegatedScrollPosition` or
   // `contentSize` clamping) while a drag or deceleration is active. When WebKit
-  // snaps `contentOffset` against the active gesture or deceleration within the
-  // scrollable bounds, restore `previousContentOffset` so the page does not
-  // visibly jump.
+  // snaps `contentOffset` without pan gesture movement or against active
+  // deceleration within the scrollable bounds, restore `previousContentOffset`
+  // so the page does not visibly jump. Check `panTransDelta == 0` rather than
+  // requiring opposite signs because dragging the native scroll indicator moves
+  // the pan gesture in the same direction as `contentOffset`.
   if (contentHeightChanged) {
     return;
   }
 
-  BOOL canRestoreOffset =
-      previousContentOffset > minOffset && previousContentOffset < maxOffset;
-
-  if (scrollView.isTracking) {
-    if (panTransDelta * delta >= 0) {
-      if (delta != 0 && canRestoreOffset) {
-        _lastContentOffset = previousContentOffset;
-        _updatingInsets = YES;
-        scrollView.contentOffset =
-            CGPointMake(scrollView.contentOffset.x, previousContentOffset);
-        _updatingInsets = NO;
-      }
-      return;
-    }
-  } else if (scrollView.isDecelerating && _lastTrackingScrollDelta != 0 &&
-             delta * _lastTrackingScrollDelta <= 0) {
-    if (delta * _lastTrackingScrollDelta < 0 && canRestoreOffset) {
+  BOOL isProgrammaticTrackingScroll =
+      scrollView.isTracking && panTransDelta == 0;
+  BOOL isOpposingDecelerationScroll =
+      !scrollView.isTracking && scrollView.isDecelerating &&
+      _lastTrackingScrollDelta != 0 && delta * _lastTrackingScrollDelta < 0;
+  if (isProgrammaticTrackingScroll || isOpposingDecelerationScroll) {
+    BOOL canRestoreOffset =
+        previousContentOffset > minOffset && previousContentOffset < maxOffset;
+    if (canRestoreOffset) {
       _lastContentOffset = previousContentOffset;
       _updatingInsets = YES;
       scrollView.contentOffset =
@@ -363,18 +367,20 @@ inline base::PassKey<FullscreenMediatorPassKeyFactory> PassKey() {
     return;
   }
 
+  if (scrollView.isTracking) {
+    _lastTrackingScrollDelta = delta;
+  }
+
   if (IsFullscreenEasedTransitionsEnabled() && _browserAgent->is_animating()) {
     return;
   }
   _handlingScroll = YES;
 
-  if (delta != 0) {
-    // If the direction changed, reset the _scrollTotal.
-    if ((delta > 0 && _scrollTotal < 0) || (delta < 0 && _scrollTotal > 0)) {
-      _scrollTotal = delta;
-    } else {
-      _scrollTotal += delta;
-    }
+  // If the direction changed, reset the _scrollTotal.
+  if ((delta > 0 && _scrollTotal < 0) || (delta < 0 && _scrollTotal > 0)) {
+    _scrollTotal = delta;
+  } else {
+    _scrollTotal += delta;
   }
 
   CGFloat scrollVelocity = 0.0;
@@ -523,14 +529,20 @@ inline base::PassKey<FullscreenMediatorPassKeyFactory> PassKey() {
   [self updateKeyboardHeightFromNotification:notification];
 }
 
+- (void)keyboardDidChangeFrame:(NSNotification*)notification {
+  [self updateKeyboardHeightFromNotification:notification];
+}
+
 - (void)keyboardWillHide:(NSNotification*)notification {
-  if (_browserAgent) {
-    _browserAgent->SetKeyboardObscuredInset(0);
+  if ([self isKeyboardNotificationFromOtherScreen:notification]) {
+    return;
   }
+  _browserAgent->SetKeyboardObscuredInset(0);
 }
 
 - (void)updateKeyboardHeightFromNotification:(NSNotification*)notification {
-  if (!_browserAgent || !self.webState) {
+  if (!self.webState ||
+      [self isKeyboardNotificationFromOtherScreen:notification]) {
     return;
   }
 
@@ -541,6 +553,17 @@ inline base::PassKey<FullscreenMediatorPassKeyFactory> PassKey() {
 
   _browserAgent->SetKeyboardObscuredInset(
       VisibleKeyboardHeightFromNotification(notification, view.window));
+}
+
+// Returns YES if `notification` originates from a different screen than the
+// active WebState's window.
+- (BOOL)isKeyboardNotificationFromOtherScreen:(NSNotification*)notification {
+  UIScreen* notificationScreen =
+      base::apple::ObjCCast<UIScreen>(notification.object);
+  UIScreen* windowScreen =
+      self.webState ? self.webState->GetView().window.windowScene.screen : nil;
+  return notificationScreen && windowScreen &&
+         notificationScreen != windowScreen;
 }
 
 #pragma mark - FullscreenBrowserAgentObserving

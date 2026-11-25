@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">პაროლების გაზიარება</translation>
 <translation id="1554043146674176775">ხელოვნური ინტელექტის რეჟიმის გამორთვა</translation>
 <translation id="1554477036522844996">ახალი ფანჯარა</translation>
+<translation id="1555014818414775661">სურათების დამატება</translation>
 <translation id="1557806604681757705">თქვენი კომპიუტერიდან</translation>
 <translation id="1558391695376153246">ინკოგნ. ჩანართების დახურვა</translation>
 <translation id="1560153516220021659">ხელსაწყოთა ზოლის მეორეული ღილაკი ჩაიკეცა</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">გახსენით <ph name="BEGIN_BOLD" />Safari-ს პარამეტრები<ph name="END_BOLD" /></translation>
 <translation id="3858860766373142691">სახელი</translation>
 <translation id="386224966259596343">შესაბამისი ფორმის შევსებისას, მომავალში, გექნებათ შესაძლებლობა, შეინახოთ ეს ინფორმაცია საფულეში.</translation>
-<translation id="3868495844258915202">სრული URL-ის ჩვენება</translation>
 <translation id="3870931306085184145"><ph name="DOMAIN" />-ისთვის შენახული პაროლები არ არის</translation>
 <translation id="3875783148670536197">ინსტრუქციის ნახვა</translation>
 <translation id="3878657761594430423">ფურცლის შემგროვებელი</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">ფასისთვის თვალის მიდევნების შეტყობინებების მისაღებად ჩართეთ შეტყობინებები iOS-ის პარამეტრებში.</translation>
 <translation id="528857768909044842">ჩანართების ჯგუფები აქ შეინახება</translation>
 <translation id="5294624619177114121">მობილური შეტყობინებები</translation>
-<translation id="5295239312320826323">გსურთ, ამოშალოთ <ph name="USER_EMAIL" />?</translation>
 <translation id="5300589172476337783">ჩვენება</translation>
 <translation id="5311061401280561833">კამერასა და მიკროფონზე წვდომა დაშვებულია</translation>
 <translation id="5313967007315987356">საიტის დამატება</translation>
@@ -1788,6 +1787,7 @@ Handoff ასევე უნდა იყოს ჩართული პა�
 <translation id="6504541289630702018">მარტივად მიიღეთ წვდომა თქვენს დესკტოპის ჩანართების ჯგუფებზე</translation>
 <translation id="6505334220040167806">ჩანართების ჯგუფის ჩაკეცვა.</translation>
 <translation id="6506996418997555004">ჩანართების ჯგუფის „<ph name="GROUP_NAME" />“ გაზიარება</translation>
+<translation id="650770261448122895">მოიძიეთ ობიექტები თქვენ გარშემო Lens-ით</translation>
 <translation id="6507973708545996744">ყველა თქვენს მოწყობილობაზე საკითხავი სიის მისაღებად შედით სისტემაში.</translation>
 <translation id="6518133107902771759">გადამოწმება</translation>
 <translation id="6523575793810663688">ინსტრუქციის ნახვა</translation>
@@ -2147,7 +2147,6 @@ Handoff ასევე უნდა იყოს ჩართული პა�
 <translation id="7603852183842204213">კონტექსტური ფანჯრები დაბლოკილია (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">სინქრონიზაცია არ მუშაობს</translation>
 <translation id="760667371114328991">უსაფრთხოების შემოწმების შეტყობინებების გამორთვა</translation>
-<translation id="7612619742409846846">Google-ში შესულია:</translation>
 <translation id="7612849887607288481">Open AI-ს პროტოტიპირების მენიუ</translation>
 <translation id="7618220760967055820">აირჩიეთ, რომელი ღილაკი გამოჩნდეს ხელსაწყოთა ზოლში</translation>
 <translation id="7620522820075868385">გაუქმება</translation>
@@ -2430,6 +2429,7 @@ Handoff ასევე უნდა იყოს ჩართული პა�
 <translation id="8439758443371991593">საკითხავ სიაში დამატების დამალვა</translation>
 <translation id="8443986842926457191">URL შედგება 2048-ზე მეტი სიმბოლოსგან</translation>
 <translation id="8449869326050867919">პაროლი გაზიარებულია</translation>
+<translation id="8473367210869452063">ამ საიტთან ინტერაქციისთვის შეწყვიტეთ მიმდინარე ამოცანა ან დაელოდეთ Gemini-ს მუშაობის დასრულებას</translation>
 <translation id="8473815223723723001">სურათის რედაქტირება Gemini-ს მეშვეობით</translation>
 <translation id="8473863474539038330">მისამართები და სხვა</translation>
 <translation id="8474378002946546633">შეტყობინებების დაშვება</translation>

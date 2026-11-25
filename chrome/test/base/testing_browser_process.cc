@@ -42,6 +42,7 @@
 #include "chrome/test/base/testing_browser_process_platform_part.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/application_locale_storage/application_locale_storage.h"
+#include "components/component_updater/component_updater_service.h"
 #include "components/embedder_support/origin_trials/origin_trials_settings_storage.h"
 #include "components/metrics/metrics_service.h"
 #include "components/network_time/network_time_tracker.h"
@@ -102,7 +103,6 @@
 #include "chrome/browser/usb/usb_status_icon.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/web_applications/isolated_web_apps/runtime_init.h"
-#include "components/component_updater/component_updater_service.h"
 #include "components/keep_alive_registry/keep_alive_registry.h"
 #if !BUILDFLAG(IS_CHROMEOS)
 #include "components/enterprise/browser/controller/chrome_browser_cloud_management_controller.h"
@@ -229,6 +229,11 @@ TestingBrowserProcess::~TestingBrowserProcess() {
   if (test_network_connection_tracker_) {
     content::SetNetworkConnectionTrackerForTesting(nullptr);
   }
+
+#if !BUILDFLAG(IS_ANDROID)
+  web_app::ShutdownIsolatedWebAppRuntimeForTesting(
+      base::PassKey<TestingBrowserProcess>());
+#endif  // !BUILDFLAG(IS_ANDROID)
 
   // Destroy objects in the same way as BrowserProcessImpl does.
   serial_policy_allowed_ports_.reset();
@@ -628,11 +633,7 @@ TestingBrowserProcess::activity_reporter() {
 
 component_updater::ComponentUpdateService*
 TestingBrowserProcess::component_updater() {
-#if !BUILDFLAG(IS_ANDROID)
   return component_updater_.get();
-#else
-  return nullptr;
-#endif
 }
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -791,6 +792,11 @@ void TestingBrowserProcess::SetNotificationUIManager(
 }
 #endif
 
+void TestingBrowserProcess::SetNotificationPlatformBridge(
+    std::unique_ptr<NotificationPlatformBridge> notification_platform_bridge) {
+  notification_platform_bridge_ = std::move(notification_platform_bridge);
+}
+
 void TestingBrowserProcess::SetSystemNotificationHelper(
     std::unique_ptr<SystemNotificationHelper> system_notification_helper) {
   system_notification_helper_ = std::move(system_notification_helper);
@@ -861,16 +867,16 @@ void TestingBrowserProcess::SetStatusTray(
   status_tray_ = std::move(status_tray);
 }
 
-#if !BUILDFLAG(IS_ANDROID)
-speech::SpeechRecognitionSmallExpertModelInstaller*
-TestingBrowserProcess::speech_recognition_small_expert_model_installer() {
-  return speech_recognition_small_expert_model_installer_.get();
-}
-
 void TestingBrowserProcess::SetComponentUpdater(
     std::unique_ptr<component_updater::ComponentUpdateService>
         component_updater) {
   component_updater_ = std::move(component_updater);
+}
+
+#if !BUILDFLAG(IS_ANDROID)
+speech::SpeechRecognitionSmallExpertModelInstaller*
+TestingBrowserProcess::speech_recognition_small_expert_model_installer() {
+  return speech_recognition_small_expert_model_installer_.get();
 }
 
 void TestingBrowserProcess::SetSpeechRecognitionSmallExpertModelInstaller(

@@ -5,8 +5,12 @@
 package org.chromium.chrome.browser.compositor;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -15,7 +19,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.content.Context;
+import android.content.ContextWrapper;
+import android.content.res.Configuration;
+import android.content.res.Resources;
+import android.graphics.Color;
 import android.graphics.PixelFormat;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.view.ContextThemeWrapper;
 import android.view.View.MeasureSpec;
 import android.widget.FrameLayout;
@@ -28,6 +38,7 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -39,6 +50,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tab_ui.TabContentManager;
+import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.insets.InsetObserver;
@@ -177,5 +189,114 @@ public class CompositorViewUnitTest {
         mCompositorView.forceLayout();
         measure(1080, 1704);
         assertEquals(1848, mCompositorView.getMeasuredHeight());
+    }
+
+    @Test
+    public void testUpdateTempBackgroundColor_updatesActiveBackground() {
+        reset(mCompositorSurfaceManager);
+
+        mCompositorView.updateTempBackgroundColor(Color.DKGRAY);
+
+        assertEquals(Color.DKGRAY, ((ColorDrawable) mCompositorView.getBackground()).getColor());
+        ArgumentCaptor<Drawable> drawableCaptor = ArgumentCaptor.forClass(Drawable.class);
+        verify(mCompositorSurfaceManager).setBackgroundDrawable(drawableCaptor.capture());
+        assertEquals(Color.DKGRAY, ((ColorDrawable) drawableCaptor.getValue()).getColor());
+        verify(mCompositorViewJni).setBackgroundColor(mNativeCompositorView, Color.DKGRAY);
+    }
+
+    @Test
+    public void testUpdateTempBackgroundColor_ignoresTransparent() {
+        int initialColor = ((ColorDrawable) mCompositorView.getBackground()).getColor();
+        reset(mCompositorSurfaceManager);
+        clearInvocations(mCompositorViewJni);
+
+        mCompositorView.updateTempBackgroundColor(Color.TRANSPARENT);
+
+        assertEquals(initialColor, ((ColorDrawable) mCompositorView.getBackground()).getColor());
+        verify(mCompositorSurfaceManager, never()).setBackgroundDrawable(any());
+        verify(mCompositorViewJni, never()).setBackgroundColor(any(), anyInt());
+    }
+
+    @Test
+    public void testUpdateTempBackgroundColor_noOpAfterRemoved() {
+        mCompositorView.setBackgroundResource(0);
+        assertNull(mCompositorView.getBackground());
+        reset(mCompositorSurfaceManager);
+        clearInvocations(mCompositorViewJni);
+
+        mCompositorView.updateTempBackgroundColor(Color.DKGRAY);
+        mCompositorView.refreshTempBackgroundColor();
+
+        assertNull(mCompositorView.getBackground());
+        verify(mCompositorSurfaceManager, never()).setBackgroundDrawable(any());
+        verify(mCompositorViewJni, never()).setBackgroundColor(any(), anyInt());
+    }
+
+    @Test
+    public void testRefreshTempBackgroundColor_updatesOnThemeChange() {
+        Context appContext = ApplicationProvider.getApplicationContext();
+        Configuration lightConfig = new Configuration(appContext.getResources().getConfiguration());
+        lightConfig.uiMode =
+                (lightConfig.uiMode & ~Configuration.UI_MODE_NIGHT_MASK)
+                        | Configuration.UI_MODE_NIGHT_NO;
+        Context lightContext =
+                new ContextThemeWrapper(
+                        appContext.createConfigurationContext(lightConfig),
+                        R.style.Theme_BrowserUI_DayNight);
+
+        Configuration darkConfig = new Configuration(lightConfig);
+        darkConfig.uiMode =
+                (darkConfig.uiMode & ~Configuration.UI_MODE_NIGHT_MASK)
+                        | Configuration.UI_MODE_NIGHT_YES;
+        Context darkContext =
+                new ContextThemeWrapper(
+                        appContext.createConfigurationContext(darkConfig),
+                        R.style.Theme_BrowserUI_DayNight);
+
+        int expectedLightColor = ChromeColors.getPrimaryBackgroundColor(lightContext, false);
+        int expectedDarkColor = ChromeColors.getPrimaryBackgroundColor(darkContext, false);
+        assertNotEquals(expectedLightColor, expectedDarkColor);
+
+        Context[] delegate = new Context[] {lightContext};
+        Context rebasedContext =
+                new ContextWrapper(lightContext) {
+                    @Override
+                    public Resources getResources() {
+                        return delegate[0].getResources();
+                    }
+
+                    @Override
+                    public Resources.Theme getTheme() {
+                        return delegate[0].getTheme();
+                    }
+                };
+
+        CompositorView view = new CompositorView(rebasedContext, mLayoutRenderHost);
+        assertEquals(expectedLightColor, ((ColorDrawable) view.getBackground()).getColor());
+
+        view.setCompositorSurfaceManagerForTesting(mCompositorSurfaceManager);
+        reset(mCompositorSurfaceManager);
+
+        delegate[0] = darkContext;
+        view.refreshTempBackgroundColor();
+
+        assertEquals(expectedDarkColor, ((ColorDrawable) view.getBackground()).getColor());
+        ArgumentCaptor<Drawable> drawableCaptor = ArgumentCaptor.forClass(Drawable.class);
+        verify(mCompositorSurfaceManager).setBackgroundDrawable(drawableCaptor.capture());
+        assertEquals(expectedDarkColor, ((ColorDrawable) drawableCaptor.getValue()).getColor());
+
+        // Clearing the temporary Java drawable must preserve the refreshed color for native init.
+        view.setBackgroundResource(0);
+        reset(mCompositorViewJni);
+        when(mCompositorViewJni.init(any(), any(), any())).thenReturn(mNativeCompositorView);
+        view.initNativeCompositor(mWindowAndroid, mTabContentManager);
+        verify(mCompositorViewJni).setBackgroundColor(mNativeCompositorView, expectedDarkColor);
+    }
+
+    @Test
+    public void testInitNativeCompositor_setsBackgroundColor() {
+        int expectedColor =
+                ChromeColors.getPrimaryBackgroundColor(mCompositorView.getContext(), false);
+        verify(mCompositorViewJni).setBackgroundColor(mNativeCompositorView, expectedColor);
     }
 }

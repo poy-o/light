@@ -232,6 +232,15 @@ bool AreCredentialArraysEqual(NSArray<id<Credential>>* first,
   credentialCell.backgroundColor = [UIColor colorNamed:kBackgroundColor];
   credentialCell.accessibilityTraits |= UIAccessibilityTraitButton;
 
+  // Show the cached favicon right away, so that reloading the table (e.g. on
+  // every search keystroke) doesn't flash the default world icon.
+  FaviconAttributes* cachedAttributes =
+      CachedFaviconAttributes(credential.favicon);
+  if (cachedAttributes) {
+    [credentialCell.faviconView configureWithAttributes:cachedAttributes];
+    return credentialCell;
+  }
+
   // Load favicon.
   if (credential.favicon.length) {
     // Load the favicon from disk.
@@ -264,17 +273,12 @@ bool AreCredentialArraysEqual(NSArray<id<Credential>>* first,
   NSString* serviceIdentifier = credential.serviceIdentifier;
 
   FetchFaviconAsync(credential.favicon, ^(FaviconAttributes* attributes) {
-    if (!attributes) {
+    // Only set favicon if one was found and the cell hasn't been reused.
+    if (!attributes ||
+        ![credentialCell.uniqueIdentifier isEqualToString:serviceIdentifier]) {
       return;
     }
-    // The cell must only be accessed on the main thread. Checking for reuse
-    // there also guarantees the cell can't be reused between the check and
-    // the update.
-    dispatch_async(dispatch_get_main_queue(), ^{
-      if ([credentialCell.uniqueIdentifier isEqualToString:serviceIdentifier]) {
-        [credentialCell.faviconView configureWithAttributes:attributes];
-      }
-    });
+    [credentialCell.faviconView configureWithAttributes:attributes];
   });
 }
 

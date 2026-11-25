@@ -479,4 +479,9 @@ public class CustomTabsConnectionUnitTest {
             ApplicationStatus.onStateChangeForTesting(activity, ActivityState.DESTROYED);
         }
     }
+
+    @Test
+    public void testExtractInternalExtras_returnsNullByDefault() {
+        assertNull(mConnection.extractInternalExtras(new Intent()));
+    }
 }

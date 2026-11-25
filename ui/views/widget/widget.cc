@@ -12,6 +12,7 @@
 #include "base/check_op.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
+#include "base/i18n/char_iterator.h"
 #include "base/i18n/rtl.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
@@ -19,6 +20,7 @@
 #include "base/task/current_thread.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "third_party/icu/source/common/unicode/uchar.h"
 #include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/platform/ax_platform.h"
 #include "ui/base/cursor/cursor.h"
@@ -54,7 +56,6 @@
 #include "ui/views/focus/focus_manager_factory.h"
 #include "ui/views/focus/native_view_focus_manager.h"
 #include "ui/views/input_protection/default_input_protection_policy.h"
-#include "ui/views/input_protection/input_protection_event_handler.h"
 #include "ui/views/input_protection/occluded_widget_input_protector.h"
 #include "ui/views/input_protection/window_activation_input_protection_policy.h"
 #include "ui/views/views_delegate.h"
@@ -146,6 +147,19 @@ ui::mojom::WindowShowState GetShowState(views::Widget* widget) {
   return ui::mojom::WindowShowState::kNormal;
 }
 #endif
+
+bool HasLtrParagraphDirection(const std::u16string& text) {
+  for (base::i18n::UTF16CharIterator it(text); !it.end(); it.Advance()) {
+    const UCharDirection dir = u_charDirection(it.get());
+    if (dir == U_LEFT_TO_RIGHT) {
+      return true;
+    }
+    if (dir == U_RIGHT_TO_LEFT || dir == U_RIGHT_TO_LEFT_ARABIC) {
+      return false;
+    }
+  }
+  return true;
+}
 
 }  // namespace
 
@@ -1386,7 +1400,9 @@ bool Widget::IsVisibleOnScreen() const {
 }
 
 void Widget::EnableInputEventActivationProtection(
-    std::unique_ptr<InputEventActivationProtector> custom_protector) {
+    std::unique_ptr<InputEventActivationProtector> custom_protector,
+    std::optional<InputProtectionEventHandler::InputProtectionWidgetIdentifier>
+        widget_identifier) {
   if (!base::FeatureList::IsEnabled(features::kEnableInputProtection)) {
     return;
   }
@@ -1399,6 +1415,11 @@ void Widget::EnableInputEventActivationProtection(
   }
 
   input_event_activation_protection_enabled_ = true;
+
+  if (input_protection_event_handler_) {
+    input_protection_event_handler_->set_widget_identifier(widget_identifier);
+  }
+
   if (custom_protector) {
     input_protector_ = std::move(custom_protector);
     return;
@@ -1582,7 +1603,15 @@ void Widget::UpdateWindowTitle() {
   // Update the native frame's text. We do this regardless of whether or not
   // the native frame is being used, since this also updates the taskbar, etc.
   std::u16string window_title = widget_delegate_->GetWindowTitle();
-  base::i18n::AdjustStringForLocaleDirection(&window_title);
+  // In an LTR UI, AdjustStringForLocaleDirection() wraps any string with RTL
+  // characters in RLE...PDF, reordering LTR runs in mixed-direction titles.
+  // Skip it when the first UAX #9 P2 strong {L, AL, R} character is already L
+  // (ignoring LRE so LRE...PDF RTL URLs still receive an outer LRM).
+  // TODO(crbug.com/40882137): Isolate untrusted title tokens in FSI...PDI at
+  // composition time and anchor only the outer paragraph direction here.
+  if (base::i18n::IsRTL() || !HasLtrParagraphDirection(window_title)) {
+    base::i18n::AdjustStringForLocaleDirection(&window_title);
+  }
   bool title_changed = native_widget_->SetWindowTitle(window_title);
 
   // Continue UpdateWindowTitle() only if the title or title visibility changes.

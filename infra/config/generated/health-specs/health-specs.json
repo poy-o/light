@@ -6441,26 +6441,6 @@
           }
         ]
       },
-      "android-11-x86-fyi-rel": {
-        "problem_specs": [
-          {
-            "name": "Unhealthy",
-            "period_days": 7,
-            "score": 5,
-            "thresholds": {
-              "_default": "_default"
-            }
-          },
-          {
-            "name": "Low Value",
-            "period_days": 90,
-            "score": 1,
-            "thresholds": {
-              "_default": "_default"
-            }
-          }
-        ]
-      },
       "android-11-x86-rel": {
         "problem_specs": [
           {
@@ -9590,8 +9570,8 @@
           }
         ]
       },
-      "linux-arm64-rel-cft": {
-        "contact_team_email": "browser-automation-staff@google.com",
+      "linux-arm64-rel": {
+        "contact_team_email": "chrome-linux-engprod@google.com",
         "problem_specs": [
           {
             "name": "Unhealthy",
@@ -9611,8 +9591,8 @@
           }
         ]
       },
-      "linux-arm64-rel-fyi": {
-        "contact_team_email": "chrome-linux-engprod@google.com",
+      "linux-arm64-rel-cft": {
+        "contact_team_email": "browser-automation-staff@google.com",
         "problem_specs": [
           {
             "name": "Unhealthy",

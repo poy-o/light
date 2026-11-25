@@ -17,7 +17,6 @@
 #include "base/check.h"
 #include "base/check_deref.h"
 #include "base/check_op.h"
-#include "base/containers/flat_set.h"
 #include "base/containers/span.h"
 #include "base/containers/to_vector.h"
 #include "base/functional/bind.h"
@@ -98,6 +97,44 @@ void CreditCardFidoAuthenticator::Authenticate(
 
   if (IsValidRequestOptions(request_options)) {
     current_flow_ = Flow::kAuthenticationFlow;
+    GetAssertion(ParseRequestOptions(std::move(request_options)));
+  } else if (requester_) {
+    requester_->OnFIDOAuthenticationComplete(
+        FidoAuthenticationResponse{.did_succeed = false});
+  }
+}
+
+void CreditCardFidoAuthenticator::EnrollAndAuthenticateWithCreationOptions(
+    CreditCard card,
+    base::WeakPtr<Requester> requester,
+    base::DictValue creation_options) {
+  card_ = std::move(card);
+  requester_ = requester;
+
+  // Cancel any previous pending WebAuthn requests.
+  authenticator()->Cancel();
+
+  if (IsValidCreationOptions(creation_options)) {
+    current_flow_ = Flow::kEnrollmentDuringUnmaskFlow;
+    MakeCredential(ParseCreationOptions(std::move(creation_options)));
+  } else if (requester_) {
+    requester_->OnFIDOAuthenticationComplete(
+        FidoAuthenticationResponse{.did_succeed = false});
+  }
+}
+
+void CreditCardFidoAuthenticator::EnrollAndAuthenticateWithRequestOptions(
+    CreditCard card,
+    base::WeakPtr<Requester> requester,
+    base::DictValue request_options) {
+  card_ = std::move(card);
+  requester_ = requester;
+
+  // Cancel any previous pending WebAuthn requests.
+  authenticator()->Cancel();
+
+  if (IsValidRequestOptions(request_options)) {
+    current_flow_ = Flow::kEnrollmentDuringUnmaskFlow;
     GetAssertion(ParseRequestOptions(std::move(request_options)));
   } else if (requester_) {
     requester_->OnFIDOAuthenticationComplete(
@@ -345,18 +382,20 @@ void CreditCardFidoAuthenticator::GetAssertion(
 void CreditCardFidoAuthenticator::MakeCredential(
     blink::mojom::PublicKeyCredentialCreationOptionsPtr creation_options) {
 #if !BUILDFLAG(IS_ANDROID)
-  // On desktop, close the WebAuthn offer dialog and get ready to show the OS
-  // level authentication dialog. If dialog is already closed, then the offer
-  // was declined during the fetching challenge process, and thus returned
-  // early.
-  if (autofill_client_->GetPaymentsAutofillClient()->CloseWebauthnDialog()) {
-    // Now that the dialog has closed and will proceed to a WebAuthn prompt,
-    // the user must have accepted the dialog without cancelling.
-    autofill_metrics::LogWebauthnOptInPromoUserDecision(
-        autofill_metrics::WebauthnOptInPromoUserDecisionMetric::kAccepted);
-  } else {
-    current_flow_ = Flow::kNoneFlow;
-    return;
+  // On desktop, during an opt-in flow, close the WebAuthn offer dialog and get
+  // ready to show the OS level authentication dialog. If dialog is already
+  // closed, then the offer was declined during the fetching challenge process,
+  // and thus returned early.
+  if (current_flow_ == Flow::kOptInWithChallengeFlow) {
+    if (autofill_client_->GetPaymentsAutofillClient()->CloseWebauthnDialog()) {
+      // Now that the dialog has closed and will proceed to a WebAuthn prompt,
+      // the user must have accepted the dialog without cancelling.
+      autofill_metrics::LogWebauthnOptInPromoUserDecision(
+          autofill_metrics::WebauthnOptInPromoUserDecisionMetric::kAccepted);
+    } else {
+      current_flow_ = Flow::kNoneFlow;
+      return;
+    }
   }
 #endif
   authenticator()->MakeCredential(
@@ -368,8 +407,7 @@ void CreditCardFidoAuthenticator::MakeCredential(
 void CreditCardFidoAuthenticator::OptChange(
     base::DictValue authenticator_response) {
   payments::OptChangeRequestDetails request_details;
-  request_details.app_locale =
-      payments_data_manager().app_locale().tag_string();
+  request_details.app_locale = payments_data_manager().app_locale();
 
   switch (current_flow_) {
     case Flow::kOptInWithChallengeFlow:
@@ -459,11 +497,25 @@ void CreditCardFidoAuthenticator::OnDidMakeCredential(
       UpdateUserPref();
     }
 
+    // The enrollment during unmask flow is the only credential creation that a
+    // requester is waiting for.
+    const bool should_notify_requester =
+        current_flow_ == Flow::kEnrollmentDuringUnmaskFlow;
     current_flow_ = Flow::kNoneFlow;
+    if (should_notify_requester && requester_) {
+      requester_->OnFIDOAuthenticationComplete(
+          FidoAuthenticationResponse{.did_succeed = false});
+    }
     return;
   }
 
-  OptChange(ParseAttestationResponse(std::move(attestation_response)));
+  base::DictValue response =
+      ParseAttestationResponse(std::move(attestation_response));
+  if (current_flow_ == Flow::kEnrollmentDuringUnmaskFlow) {
+    GetFullCardViaFidoEnrollment(std::move(response));
+    return;
+  }
+  OptChange(std::move(response));
 }
 
 void CreditCardFidoAuthenticator::OnDidGetOptChangeResult(
@@ -517,7 +569,15 @@ void CreditCardFidoAuthenticator::OnFullCardRequestSucceeded(
     const payments::FullCardRequest& full_card_request,
     const CreditCard& card,
     const std::u16string& cvc) {
-  DCHECK_EQ(Flow::kAuthenticationFlow, current_flow_);
+  DCHECK(current_flow_ == Flow::kAuthenticationFlow ||
+         current_flow_ == Flow::kEnrollmentDuringUnmaskFlow);
+  if (current_flow_ == Flow::kEnrollmentDuringUnmaskFlow) {
+    // The server enrolled this device into FIDO authentication when it
+    // unmasked the card. Keep the user preference in sync with the server,
+    // because the opt-in and opt-out flows act on a mismatch between the two.
+    user_is_opted_in_ = true;
+    UpdateUserPref();
+  }
   current_flow_ = Flow::kNoneFlow;
 
   if (!requester_)
@@ -530,7 +590,8 @@ void CreditCardFidoAuthenticator::OnFullCardRequestSucceeded(
 void CreditCardFidoAuthenticator::OnFullCardRequestFailed(
     CreditCard::RecordType card_type,
     payments::FullCardRequest::FailureType failure_type) {
-  DCHECK_EQ(Flow::kAuthenticationFlow, current_flow_);
+  DCHECK(current_flow_ == Flow::kAuthenticationFlow ||
+         current_flow_ == Flow::kEnrollmentDuringUnmaskFlow);
   current_flow_ = Flow::kNoneFlow;
 
   if (!requester_)
@@ -664,7 +725,7 @@ CreditCardFidoAuthenticator::ParseCredentialDescriptor(
   std::vector<uint8_t> credential_id = Base64ToBytes(
       CHECK_DEREF(key_info.GetDict().FindString("credential_id")));
 
-  base::flat_set<device::FidoTransportProtocol> authenticator_transports;
+  device::FidoTransportProtocolSet authenticator_transports;
   const auto* transports =
       key_info.GetDict().FindList("authenticator_transport_support");
   if (transports && !transports->empty()) {
@@ -673,13 +734,13 @@ CreditCardFidoAuthenticator::ParseCredentialDescriptor(
           device::ConvertToFidoTransportProtocol(
               base::ToLowerASCII(transport_type.GetString()));
       if (protocol.has_value())
-        authenticator_transports.insert(*protocol);
+        authenticator_transports.Put(*protocol);
     }
   }
 
   return device::PublicKeyCredentialDescriptor(
       device::CredentialType::kPublicKey, std::move(credential_id),
-      std::move(authenticator_transports));
+      authenticator_transports);
 }
 
 base::DictValue CreditCardFidoAuthenticator::ParseAssertionResponse(
@@ -733,6 +794,10 @@ void CreditCardFidoAuthenticator::LogWebauthnResult(
     case Flow::kAuthenticationFlow:
       event = autofill_metrics::WebauthnFlowEvent::kImmediateAuthentication;
       break;
+    case Flow::kEnrollmentDuringUnmaskFlow:
+      // TODO(crbug.com/553156099): Log the result of the WebAuthn prompt of the
+      // enrollment during unmask flow.
+      return;
     case Flow::kFollowupAfterCvcAuthFlow:
       event = autofill_metrics::WebauthnFlowEvent::kAuthenticationAfterCvc;
       break;
@@ -789,6 +854,14 @@ void CreditCardFidoAuthenticator::HandleGetAssertionSuccess(
       // Return here to skip the OptChange call.
       return;
     }
+    case Flow::kEnrollmentDuringUnmaskFlow: {
+      base::DictValue response;
+      response.Set("fido_assertion_info",
+                   ParseAssertionResponse(std::move(assertion_response)));
+      GetFullCardViaFidoEnrollment(std::move(response));
+      // Return here to skip the OptChange call.
+      return;
+    }
     case Flow::kFollowupAfterCvcAuthFlow: {
       // The user-facing portion of the authorization is complete, which should
       // be reported so that the form can be filled.
@@ -820,7 +893,8 @@ void CreditCardFidoAuthenticator::HandleGetAssertionSuccess(
 
 void CreditCardFidoAuthenticator::HandleGetAssertionFailure() {
   switch (current_flow_) {
-    case Flow::kAuthenticationFlow: {
+    case Flow::kAuthenticationFlow:
+    case Flow::kEnrollmentDuringUnmaskFlow: {
       // End the flow if there was an authentication error.
       if (requester_) {
         requester_->OnFIDOAuthenticationComplete(
@@ -861,6 +935,15 @@ void CreditCardFidoAuthenticator::HandleGetAssertionFailure() {
     }
   }
   current_flow_ = Flow::kNoneFlow;
+}
+
+void CreditCardFidoAuthenticator::GetFullCardViaFidoEnrollment(
+    base::DictValue fido_authenticator_response) {
+  full_card_request_ =
+      std::make_unique<payments::FullCardRequest>(autofill_client_);
+  full_card_request_->GetFullCardViaFidoEnrollment(
+      *card_, payments::PaymentsAutofillClient::UnmaskCardReason::kAutofill,
+      weak_ptr_factory_.GetWeakPtr(), std::move(fido_authenticator_response));
 }
 
 webauthn::InternalAuthenticator* CreditCardFidoAuthenticator::authenticator() {

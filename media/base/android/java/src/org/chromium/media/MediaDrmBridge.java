@@ -14,6 +14,7 @@ import android.os.Build;
 import org.jni_zero.CalledByNative;
 import org.jni_zero.CalledByNativeForTesting;
 import org.jni_zero.JNINamespace;
+import org.jni_zero.JniType;
 import org.jni_zero.NativeMethods;
 
 import org.chromium.base.ApiCompatibilityUtils;
@@ -33,6 +34,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Queue;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 
 // Implementation Notes of MediaDrmBridge:
 //
@@ -127,13 +129,18 @@ public class MediaDrmBridge {
     // Whether the current MediaDrmBridge instance is waiting for provisioning response.
     private boolean mProvisioningPending;
 
+    // Whether this instance called sMediaCryptoDeferrer.onProvisionStarted() and has not called
+    // sMediaCryptoDeferrer.onProvisionDone() yet.
+    private boolean mStartedMediaCryptoDeferrerProvisioning;
+
     // Current 'ORIGIN" setting.
     private @Nullable String mOrigin;
 
     // Boolean to track if 'ORIGIN' is set in MediaDrm.
     private boolean mOriginSet;
 
-    private @Nullable SessionEventDeferrer mSessionEventDeferrer;
+    // Whether setOrigin() should fail. Only set by tests.
+    private boolean mFailSetOriginForTesting;
 
     // Defer the creation of MediaCryptor creation. Only used when mRequiresMediaCrypto is true.
     private static final MediaCryptoDeferrer sMediaCryptoDeferrer = new MediaCryptoDeferrer();
@@ -187,38 +194,6 @@ public class MediaDrmBridge {
                     return;
                 }
             }
-        }
-    }
-
-    // Block MediaDrm event for |mSessionId|. MediaDrm may fire event before the
-    // functions return. This may break Chromium CDM API's assumption. For
-    // example, when loading session, 'restoreKeys' will trigger key status
-    // change event. But the session isn't known to Chromium CDM because the
-    // promise isn't resolved. The class can block and collect these events and
-    // fire these events later.
-    private static class SessionEventDeferrer {
-        private final SessionId mSessionId;
-        private final ArrayList<Runnable> mEventHandlers;
-
-        SessionEventDeferrer(SessionId sessionId) {
-            mSessionId = sessionId;
-            mEventHandlers = new ArrayList<>();
-        }
-
-        boolean shouldDefer(SessionId sessionId) {
-            return mSessionId.isEqual(sessionId);
-        }
-
-        void defer(Runnable handler) {
-            mEventHandlers.add(handler);
-        }
-
-        void fire() {
-            for (Runnable r : mEventHandlers) {
-                r.run();
-            }
-
-            mEventHandlers.clear();
         }
     }
 
@@ -296,11 +271,6 @@ public class MediaDrmBridge {
 
         mProvisioningPending = false;
 
-        mMediaDrm.setOnEventListener(new EventListener());
-        mMediaDrm.setOnExpirationUpdateListener(new ExpirationUpdateListener(), null);
-        mMediaDrm.setOnKeyStatusChangeListener(new KeyStatusChangeListener(), null);
-        mMediaDrm.setOnSessionLostStateListener(new SessionLostStateListener(), null);
-
         if (isWidevine()) {
             mMediaDrm.setPropertyString(PRIVACY_MODE, ENABLE);
             mMediaDrm.setPropertyString(SESSION_SHARING, ENABLE);
@@ -342,7 +312,13 @@ public class MediaDrmBridge {
 
             // Cannot provision. Defer MediaCrypto creation and try again later.
             Log.d(TAG, "defer CreateMediaCrypto() calls");
-            sMediaCryptoDeferrer.defer(() -> createMediaCrypto());
+            sMediaCryptoDeferrer.defer(
+                    () -> {
+                        // This instance may have been released or destroyed while waiting.
+                        if (mMediaDrm != null && isNativeMediaDrmBridgeValid()) {
+                            createMediaCrypto();
+                        }
+                    });
 
             return true;
         }
@@ -555,9 +531,28 @@ public class MediaDrmBridge {
             return null;
         }
 
+        // Register listeners only after creation succeeds so failed create() paths cannot leak
+        // callbacks onto Binder threads after returning null.
+        mediaDrmBridge.registerListeners();
         return mediaDrmBridge;
     }
 
+    private void registerListeners() {
+        assert mMediaDrm != null;
+        Executor listenerExecutor = this::postToTaskRunner;
+        mMediaDrm.setOnEventListener(listenerExecutor, new EventListener());
+        mMediaDrm.setOnExpirationUpdateListener(listenerExecutor, new ExpirationUpdateListener());
+        mMediaDrm.setOnKeyStatusChangeListener(listenerExecutor, new KeyStatusChangeListener());
+        mMediaDrm.setOnSessionLostStateListener(listenerExecutor, new SessionLostStateListener());
+    }
+
+    /**
+     * Set the security origin and create a MediaCrypto object.
+     *
+     * @return false upon fatal error. Native CompleteInitialization() waits for Java to notify a
+     *     null MediaCrypto on failure, so every false return must call onCreateError() and
+     *     release() first, like createMediaCrypto() does.
+     */
     @CalledByNative
     private boolean initializeWithOriginAndCrypto(String originId) {
         mRequiresMediaCrypto = true;
@@ -604,6 +599,11 @@ public class MediaDrmBridge {
      */
     private boolean setOrigin(String origin) {
         Log.d(TAG, "Set origin: %s", origin);
+
+        if (mFailSetOriginForTesting) {
+            Log.e(TAG, "Failing setOrigin() for testing");
+            return false;
+        }
 
         if (!isWidevine()) {
             Log.d(TAG, "Property %s isn't supported", ORIGIN);
@@ -747,6 +747,11 @@ public class MediaDrmBridge {
                 Log.e(TAG, "Failed to destroy MediaDrmBridge properly", e);
             }
         }
+
+        // The provisioning response will never arrive once the native object is gone. Make sure
+        // other instances waiting on provisioning started by this one are not blocked forever,
+        // even if release() above failed.
+        finishMediaCryptoDeferrerProvisioning();
     }
 
     /** Release all allocated resources and finish all pending operations. */
@@ -798,6 +803,11 @@ public class MediaDrmBridge {
 
             mMediaDrm = null;
         }
+
+        // 6. If this instance was released while provisioning (e.g. the page was closed before
+        // the provisioning response arrived, or the provisioning request could not be
+        // generated), unblock MediaCrypto creation on other instances.
+        finishMediaCryptoDeferrerProvisioning();
     }
 
     /**
@@ -1199,17 +1209,12 @@ public class MediaDrmBridge {
 
             assert sessionInfo.keyType() == MediaDrm.KEY_TYPE_OFFLINE;
 
-            // Defer event handlers until license is loaded.
-            assert mSessionEventDeferrer == null;
-            mSessionEventDeferrer = new SessionEventDeferrer(sessionId);
-
+            // Listener events triggered by restoreKeys() are posted to |task_runner_|, so they run
+            // after onPromiseResolvedWithSession() below.
             assert sessionId.keySetId() != null;
             mMediaDrm.restoreKeys(assumeNonNull(sessionId.drmId()), sessionId.keySetId());
 
             onPromiseResolvedWithSession(promiseId, sessionId);
-
-            mSessionEventDeferrer.fire();
-            mSessionEventDeferrer = null;
         } catch (android.media.NotProvisionedException e) {
             // If device isn't provisioned, storage loading should fail.
             onPersistentLicenseLoadFail(sessionId, promiseId, e);
@@ -1231,7 +1236,6 @@ public class MediaDrmBridge {
     private void onPersistentLicenseLoadFail(
             SessionId sessionId, final long promiseId, Exception e) {
         Log.w(TAG, "Persistent license load failed for session %s", sessionId, e);
-        mSessionEventDeferrer = null;
         closeSessionNoException(sessionId);
         mSessionManager.remove(sessionId);
         mSessionManager.clearPersistentSessionInfo(
@@ -1385,6 +1389,11 @@ public class MediaDrmBridge {
     }
 
     @CalledByNativeForTesting
+    private void setFailSetOriginForTesting(boolean fail) {
+        mFailSetOriginForTesting = fail;
+    }
+
+    @CalledByNativeForTesting
     private boolean setPropertyStringForTesting(String property, String value) {
         try {
             assumeNonNull(mMediaDrm).setPropertyString(property, value);
@@ -1411,9 +1420,23 @@ public class MediaDrmBridge {
 
         if (mRequiresMediaCrypto) {
             sMediaCryptoDeferrer.onProvisionStarted();
+            mStartedMediaCryptoDeferrerProvisioning = true;
         }
 
         return startProvisioning(/* retryAllowed= */ true);
+    }
+
+    /**
+     * Notifies sMediaCryptoDeferrer that provisioning started by this instance has finished, so
+     * that deferred MediaCrypto creation on other instances can proceed. No-op if this instance did
+     * not start provisioning, or has already notified.
+     */
+    private void finishMediaCryptoDeferrerProvisioning() {
+        if (!mStartedMediaCryptoDeferrerProvisioning) {
+            return;
+        }
+        mStartedMediaCryptoDeferrerProvisioning = false;
+        sMediaCryptoDeferrer.onProvisionDone();
     }
 
     /**
@@ -1502,14 +1525,12 @@ public class MediaDrmBridge {
             success = isResponseReceived ? provideProvisionResponse(response) : false;
         }
 
-        // This may call release() internally. However, sMediaCryptoDeferrer.onProvisionDone() will
-        // still be called below to ensure provisioning failure here doesn't block other
-        // MediaDrmBridge instances from proceeding.
+        // On failure this calls release(), which notifies sMediaCryptoDeferrer. On success,
+        // release() isn't called, so notify it here to let other MediaDrmBridge instances waiting
+        // for provisioning proceed.
         onProvisioned(success);
 
-        if (mRequiresMediaCrypto) {
-            sMediaCryptoDeferrer.onProvisionDone();
-        }
+        finishMediaCryptoDeferrerProvisioning();
     }
 
     /**
@@ -1574,19 +1595,6 @@ public class MediaDrmBridge {
 
                     createMediaCrypto();
                 });
-    }
-
-    /**
-     * Delay session event handler if {@code mSessionEventDeferrer} exists and matches {@code
-     * sessionId}. Otherwise run the handler immediately.
-     */
-    private void deferEventHandleIfNeeded(SessionId sessionId, Runnable handler) {
-        if (mSessionEventDeferrer != null && mSessionEventDeferrer.shouldDefer(sessionId)) {
-            mSessionEventDeferrer.defer(handler);
-            return;
-        }
-
-        handler.run();
     }
 
     // Helper functions to make native calls.
@@ -1705,6 +1713,14 @@ public class MediaDrmBridge {
         runNativeCallback((nativePtr) -> MediaDrmBridgeJni.get().onCreateError(nativePtr, error));
     }
 
+    private void postToTaskRunner(Runnable runnable) {
+        Runnable task =
+                () -> {
+                    if (mMediaDrm != null) runnable.run();
+                };
+        runNativeCallback((nativePtr) -> MediaDrmBridgeJni.get().postToTaskRunner(nativePtr, task));
+    }
+
     private class EventListener implements MediaDrm.OnEventListener {
         @Override
         public void onEvent(
@@ -1794,28 +1810,19 @@ public class MediaDrmBridge {
         @Override
         public void onSessionLostState(MediaDrm md, byte[] drmSessionId) {
             final SessionId sessionId = getSessionIdByDrmId(drmSessionId);
-            assert sessionId != null;
+            if (sessionId == null) {
+                Log.w(TAG, "SessionLost: Unknown session %s", SessionId.toHexString(drmSessionId));
+                return;
+            }
 
-            deferEventHandleIfNeeded(
-                    sessionId,
-                    () -> {
-                        if (sessionId == null) {
-                            Log.w(
-                                    TAG,
-                                    "SessionLost: Unknown session %s",
-                                    SessionId.toHexString(drmSessionId));
-                            return;
-                        }
-
-                        Log.d(TAG, "SessionLost: %s", sessionId);
-                        if (mMediaDrm != null) {
-                            closeSessionNoException(sessionId);
-                        }
-                        mSessionManager.remove(sessionId);
-                        // TODO(crbug.com/40181810): Consider passing a reason for sessionClosed
-                        // that more closely represents a lost state.
-                        onSessionClosed(sessionId, MediaDrmCdmSessionClosedReason.CLOSE);
-                    });
+            Log.d(TAG, "SessionLost: %s", sessionId);
+            if (mMediaDrm != null) {
+                closeSessionNoException(sessionId);
+            }
+            mSessionManager.remove(sessionId);
+            // TODO(crbug.com/40181810): Consider passing a reason for sessionClosed
+            // that more closely represents a lost state.
+            onSessionClosed(sessionId, MediaDrmCdmSessionClosedReason.CLOSE);
         }
     }
 
@@ -1835,34 +1842,28 @@ public class MediaDrmBridge {
                 final List<MediaDrm.KeyStatus> keyInformation,
                 final boolean hasNewUsableKey) {
             final SessionId sessionId = getSessionIdByDrmId(drmSessionId);
-            assert sessionId != null;
+            if (sessionId == null) {
+                Log.w(
+                        TAG,
+                        "KeyStatusChange: Unknown session %s",
+                        SessionId.toHexString(drmSessionId));
+                return;
+            }
 
-            deferEventHandleIfNeeded(
+            SessionInfo sessionInfo = mSessionManager.get(sessionId);
+            if (sessionInfo == null) {
+                Log.w(TAG, "KeyStatusChange: No info for session %s", sessionId);
+                return;
+            }
+
+            boolean isKeyRelease = sessionInfo.keyType() == MediaDrm.KEY_TYPE_RELEASE;
+
+            Log.i(TAG, "KeysStatusChange(%s): %b", sessionId, hasNewUsableKey);
+            onSessionKeysChange(
                     sessionId,
-                    () -> {
-                        if (sessionId == null) {
-                            Log.w(
-                                    TAG,
-                                    "KeyStatusChange: Unknown session %s",
-                                    SessionId.toHexString(drmSessionId));
-                            return;
-                        }
-
-                        SessionInfo sessionInfo = mSessionManager.get(sessionId);
-                        if (sessionInfo == null) {
-                            Log.w(TAG, "KeyStatusChange: No info for session %s", sessionId);
-                            return;
-                        }
-
-                        boolean isKeyRelease = sessionInfo.keyType() == MediaDrm.KEY_TYPE_RELEASE;
-
-                        Log.i(TAG, "KeysStatusChange(%s): %b", sessionId, hasNewUsableKey);
-                        onSessionKeysChange(
-                                sessionId,
-                                getKeysInfo(keyInformation).toArray(),
-                                hasNewUsableKey,
-                                isKeyRelease);
-                    });
+                    getKeysInfo(keyInformation).toArray(),
+                    hasNewUsableKey,
+                    isKeyRelease);
         }
     }
 
@@ -1871,27 +1872,16 @@ public class MediaDrmBridge {
         public void onExpirationUpdate(
                 MediaDrm md, byte[] drmSessionId, final long expirationTime) {
             final SessionId sessionId = getSessionIdByDrmId(drmSessionId);
-            assert sessionId != null;
+            if (sessionId == null) {
+                Log.w(
+                        TAG,
+                        "ExpirationUpdate: Unknown session %s",
+                        SessionId.toHexString(drmSessionId));
+                return;
+            }
 
-            deferEventHandleIfNeeded(
-                    sessionId,
-                    () -> {
-                        if (sessionId == null) {
-                            Log.w(
-                                    TAG,
-                                    "ExpirationUpdate: Unknown session %s",
-                                    SessionId.toHexString(drmSessionId));
-                            return;
-                        }
-
-                        Log.i(
-                                TAG,
-                                "ExpirationUpdate(%s): %tF %tT",
-                                sessionId,
-                                expirationTime,
-                                expirationTime);
-                        onSessionExpirationUpdate(sessionId, expirationTime);
-                    });
+            Log.i(TAG, "ExpirationUpdate(%s): %tF %tT", sessionId, expirationTime, expirationTime);
+            onSessionExpirationUpdate(sessionId, expirationTime);
         }
     }
 
@@ -1958,5 +1948,8 @@ public class MediaDrmBridge {
                 long nativeMediaDrmBridge, byte[] emeSessionId, long expirationTime);
 
         void onCreateError(long nativeMediaDrmBridge, int errorCode);
+
+        void postToTaskRunner(
+                long nativeMediaDrmBridge, @JniType("base::OnceClosure") Runnable runnable);
     }
 }

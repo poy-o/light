@@ -219,6 +219,7 @@ BookmarkModel::BookmarkModel(std::unique_ptr<BookmarkClient> client)
   uuid_index_.emplace(NodeTypeForUuidLookup::kLocalOrSyncableNodes,
                       UuidIndex());
   uuid_index_.emplace(NodeTypeForUuidLookup::kAccountNodes, UuidIndex());
+  id_index_.insert(owned_root_.get());
   client_->Init(this);
 }
 
@@ -567,17 +568,18 @@ void BookmarkModel::Move(const BookmarkNode* node,
                          size_t index) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(loaded_);
-  DCHECK(node);
-  DCHECK(node->HasAncestor(root_node()));
+  CHECK(node);
+  CHECK(new_parent);
+  CHECK(node->HasAncestor(root_node()));
   CHECK(new_parent->HasAncestor(root_node()));
-  DCHECK(IsValidIndex(new_parent, index, true));
-  DCHECK(!is_root_node(new_parent));
-  DCHECK(!is_permanent_node(node));
+  CHECK(!is_root_node(new_parent));
+  CHECK(!is_permanent_node(node));
   CHECK(!new_parent->HasAncestor(node));
 
   SCOPED_CRASH_KEY_NUMBER("BookmarkModelMove", "newParentType",
                           new_parent->type());
   DUMP_WILL_BE_CHECK(new_parent->is_folder());
+  CHECK_LE(index, new_parent->children().size());
 
   const BookmarkNode* old_parent = node->parent();
   size_t old_index = old_parent->GetIndexOf(node).value();
@@ -937,6 +939,13 @@ const BookmarkNode* BookmarkModel::GetNodeByUuid(
   return it == uuid_index.end() ? nullptr : *it;
 }
 
+const BookmarkNode* BookmarkModel::GetNodeById(int64_t id) const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  auto it = id_index_.find(id);
+  return it == id_index_.end() ? nullptr : *it;
+}
+
 const BookmarkNode* BookmarkModel::GetMostRecentlyAddedUserNodeForURL(
     const GURL& url) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -1293,6 +1302,7 @@ void BookmarkModel::DoneLoading(std::unique_ptr<BookmarkLoadDetails> details) {
       details->owned_local_or_syncable_uuid_index();
   uuid_index_[NodeTypeForUuidLookup::kAccountNodes] =
       details->owned_account_uuid_index();
+  id_index_ = details->owned_id_index();
   url_index_ = details->url_index();
   root_ = url_index_->root();
   // See declaration for details on why `owned_root_` is reset.
@@ -1423,6 +1433,9 @@ void BookmarkModel::AddNodeToIndicesRecursive(
   bool uuid_is_unique = uuid_index_[type_for_uuid_lookup].insert(node).second;
   DUMP_WILL_BE_CHECK(uuid_is_unique);
 
+  bool id_is_unique = id_index_.insert(node).second;
+  DUMP_WILL_BE_CHECK(id_is_unique);
+
   if (node->is_url()) {
     titled_url_index_->Add(node);
   } else {
@@ -1545,6 +1558,8 @@ void BookmarkModel::RemoveNodeFromIndicesRecursive(
   }
 
   uuid_index_[type_for_uuid_lookup].erase(node);
+  size_t erased_id_count = id_index_.erase(node);
+  DUMP_WILL_BE_CHECK(erased_id_count == 1u);
 
   // Reset favicon state for the case when the `node` is restored.
   CancelPendingFaviconLoadRequests(node);

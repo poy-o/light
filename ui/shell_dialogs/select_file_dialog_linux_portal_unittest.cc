@@ -4,17 +4,26 @@
 
 #include "ui/shell_dialogs/select_file_dialog_linux_portal.h"
 
+#include <optional>
+#include <vector>
+
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread.h"
+#include "base/types/expected.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window_tree_host_platform.h"
 #include "ui/display/test/test_screen.h"
+#include "ui/linux/fake_linux_ui.h"
+#include "ui/linux/linux_ui.h"
+#include "ui/linux/linux_ui_delegate.h"
 #include "ui/ozone/public/ozone_switches.h"
 #include "ui/shell_dialogs/activation_key_tracker_linux.h"
 #include "ui/shell_dialogs/select_file_policy.h"
@@ -23,7 +32,7 @@ namespace ui {
 
 namespace {
 
-// Mock listener for testing. Methods are not called in these tests.
+// Mock listener for testing.
 class MockSelectFileDialogListener : public SelectFileDialog::Listener {
  public:
   MockSelectFileDialogListener() = default;
@@ -33,7 +42,84 @@ class MockSelectFileDialogListener : public SelectFileDialog::Listener {
   void FileSelected(const ui::SelectedFileInfo& file, int index) override {}
   void MultiFilesSelected(
       const std::vector<ui::SelectedFileInfo>& files) override {}
-  void FileSelectionCanceled() override {}
+  void FileSelectionCanceled() override { cancellations_++; }
+
+  int cancellations() const { return cancellations_; }
+
+ private:
+  int cancellations_ = 0;
+};
+
+// A dialog that records the type of the SelectFile() calls it gets.
+class RecordingSelectFileDialog : public SelectFileDialog {
+ public:
+  RecordingSelectFileDialog(Listener* listener, std::vector<Type>* calls)
+      : SelectFileDialog(listener, nullptr), calls_(calls) {}
+
+  // SelectFileDialog:
+  bool IsRunning(gfx::NativeWindow owning_window) const override {
+    return false;
+  }
+  void ListenerDestroyed() override { listener_ = nullptr; }
+
+ protected:
+  ~RecordingSelectFileDialog() override = default;
+
+  // SelectFileDialog:
+  void SelectFileImpl(Type type,
+                      const std::u16string& title,
+                      const base::FilePath& default_path,
+                      const FileTypeInfo* file_types,
+                      int file_type_index,
+                      const base::FilePath::StringType& default_extension,
+                      gfx::NativeWindow owning_window,
+                      const GURL* caller) override {
+    calls_->push_back(type);
+  }
+  bool HasMultipleFileTypeChoicesImpl() override { return false; }
+
+ private:
+  raw_ptr<std::vector<Type>> calls_;
+};
+
+// A LinuxUi whose file dialogs are RecordingSelectFileDialogs.
+class FallbackLinuxUi : public FakeLinuxUi {
+ public:
+  SelectFileDialog* CreateSelectFileDialog(
+      SelectFileDialog::Listener* listener,
+      std::unique_ptr<SelectFilePolicy> policy) const override {
+    return new RecordingSelectFileDialog(listener, &fallback_calls_);
+  }
+
+  const std::vector<SelectFileDialog::Type>& fallback_calls() const {
+    return fallback_calls_;
+  }
+
+ private:
+  mutable std::vector<SelectFileDialog::Type> fallback_calls_;
+};
+
+class FakeLinuxUiDelegate : public LinuxUiDelegate {
+ public:
+  explicit FakeLinuxUiDelegate(int x11_screen_number)
+      : x11_screen_number_(x11_screen_number) {}
+  ~FakeLinuxUiDelegate() override = default;
+
+  bool exported_window_handle() const { return exported_window_handle_; }
+
+  // LinuxUiDelegate:
+  LinuxUiBackend GetBackend() const override { return LinuxUiBackend::kX11; }
+  int GetX11ScreenNumber() const override { return x11_screen_number_; }
+  void ExportWindowHandle(
+      gfx::AcceleratedWidget window_id,
+      base::OnceCallback<void(std::string)> callback) override {
+    // Don't run `callback`, which would make a D-Bus portal request.
+    exported_window_handle_ = true;
+  }
+
+ private:
+  const int x11_screen_number_;
+  bool exported_window_handle_ = false;
 };
 
 class FakeWindowTreeHost : public aura::WindowTreeHostPlatform {
@@ -127,6 +213,8 @@ class TestableSelectFileDialogLinuxPortal : public SelectFileDialogLinuxPortal {
   using SelectFileDialogLinuxPortal::IsAcceptAllowed;
   using SelectFileDialogLinuxPortal::listener_;
   using SelectFileDialogLinuxPortal::ListenerDestroyed;
+  using SelectFileDialogLinuxPortal::OnFileChooserResponse;
+  using SelectFileDialogLinuxPortal::OnPortalAvailable;
   using SelectFileDialogLinuxPortal::OnWidgetActivationChanged;
   using SelectFileDialogLinuxPortal::reenable_window_event_handling_;
   using SelectFileDialogLinuxPortal::StartAcceptDelay;
@@ -356,6 +444,65 @@ TEST_F(SelectFileDialogLinuxPortalTest, DeactivationRestartsAcceptDelay) {
   dialog->OnWidgetActivationChanged(nullptr, /*active=*/true);
   task_environment_.FastForwardBy(base::Milliseconds(100));
   EXPECT_TRUE(dialog->IsAcceptAllowed());
+}
+
+// Tests that the fallback dialog is shown when the portal rejects the file
+// chooser call, e.g. with org.freedesktop.DBus.Error.AccessDenied.
+TEST_F(SelectFileDialogLinuxPortalTest,
+       FallbackDialogShownOnMethodCallFailure) {
+  FallbackLinuxUi linux_ui;
+  LinuxUi* old_linux_ui = LinuxUi::SetInstance(&linux_ui);
+  auto dialog = base::MakeRefCounted<TestableSelectFileDialogLinuxPortal>(
+      listener_.get());
+  dialog->SelectFile(SelectFileDialog::SELECT_OPEN_FILE, std::u16string(),
+                     base::FilePath(), nullptr, 0, base::FilePath::StringType(),
+                     gfx::NativeWindow());
+
+  dialog->OnFileChooserResponse(
+      base::unexpected(dbus_xdg::ResponseError::kMethodCallFailed));
+
+  EXPECT_EQ(
+      std::vector<SelectFileDialog::Type>{SelectFileDialog::SELECT_OPEN_FILE},
+      linux_ui.fallback_calls());
+  EXPECT_EQ(0, listener_->cancellations());
+
+  dialog->ListenerDestroyed();
+  LinuxUi::SetInstance(old_linux_ui);
+}
+
+// Tests that the portal is used on X11 screen 0.
+TEST_F(SelectFileDialogLinuxPortalTest, UsesPortalOnX11Screen0) {
+  FakeLinuxUiDelegate delegate(/*x11_screen_number=*/0);
+  auto dialog = base::MakeRefCounted<TestableSelectFileDialogLinuxPortal>(
+      listener_.get());
+  FakeWindowTreeHost host(base::DoNothing());
+  dialog->host_ = host.GetWeakPtr();
+
+  dialog->OnPortalAvailable(u"", base::FilePath(), "", std::nullopt,
+                            /*version=*/3);
+
+  EXPECT_TRUE(delegate.exported_window_handle());
+  EXPECT_EQ(0, listener_->cancellations());
+  dialog->ListenerDestroyed();
+}
+
+// Regression test for crbug.com/40917377: The portal shows its dialog on X11
+// screen 0, so it must not be used when Chrome runs on another screen of a
+// multi-screen ("Zaphod") X server. The in-process dialog is used instead,
+// which cancels here since there is no LinuxUi in this test.
+TEST_F(SelectFileDialogLinuxPortalTest, NoPortalOnOtherX11Screen) {
+  FakeLinuxUiDelegate delegate(/*x11_screen_number=*/1);
+  auto dialog = base::MakeRefCounted<TestableSelectFileDialogLinuxPortal>(
+      listener_.get());
+  FakeWindowTreeHost host(base::DoNothing());
+  dialog->host_ = host.GetWeakPtr();
+
+  dialog->OnPortalAvailable(u"", base::FilePath(), "", std::nullopt,
+                            /*version=*/3);
+
+  EXPECT_FALSE(delegate.exported_window_handle());
+  EXPECT_EQ(1, listener_->cancellations());
+  dialog->ListenerDestroyed();
 }
 
 }  // namespace ui

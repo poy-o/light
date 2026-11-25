@@ -9,7 +9,6 @@
 #import <UIKit/UIKit.h>
 
 #import "base/ios/block_types.h"
-#import "ios/chrome/browser/fullscreen/public/fullscreen_metrics.h"
 
 enum class ComposeboxEntrypoint;
 namespace send_tab_to_self {
@@ -86,11 +85,6 @@ enum class TrustedVaultUserActionTriggerForUMA;
 // Shows the AddCreditCard UI.
 - (void)showAddCreditCard;
 
-#if !defined(NDEBUG)
-// Inserts a new tab showing the HTML source of the current page.
-- (void)viewSource;
-#endif
-
 // Animates the NTP fakebox to the focused position and focuses the real
 // omnibox.
 - (void)focusFakebox;
@@ -102,17 +96,6 @@ enum class TrustedVaultUserActionTriggerForUMA;
 
 // Shows the spotlight debugger.
 - (void)showSpotlightDebugger;
-
-// Preloads voice search in the current BVC.
-- (void)preloadVoiceSearch;
-
-// Shows the voice search UI after stopping it on all other browsers in the
-// scene.
-- (void)startVoiceSearch;
-
-// Stops voice search on this browser. To stop voice search on all browsers in
-// a scene, `stopAllVoiceSearch` from `SceneCommands` can be used.
-- (void)stopVoiceSearch;
 
 // Dismiss the card unmask authentication prompt.
 // Deprecated: use AutofillCommands instead.
@@ -163,9 +146,6 @@ enum class TrustedVaultUserActionTriggerForUMA;
 
 // Dismisses the multimodal actions menu.
 - (void)dismissMultimodalActionsMenu;
-
-// Forces fullscreen mode which means that toolbars are collapsed.
-- (void)forceFullscreenMode:(FullscreenModeTransitionTrigger)trigger;
 
 // Clears any presented state on BVC.
 - (void)clearPresentedStateWithCompletion:(ProceduralBlock)completion

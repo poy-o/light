@@ -1,0 +1,63 @@
+Name: libunwindstack
+URL: https://android.googlesource.com/platform/system/unwinding
+Version: android-17.0.0_r1
+Revision: 31327c70da147fdc069598c4a5fd075aea8d3312
+License: Apache-2.0, BSD-2-Clause
+License File: //third_party/libunwindstack/LICENSE, src/libunwindstack/LICENSE_BSD
+Shipped: yes
+Security Critical: yes
+Update Mechanism: Manual
+
+Description: Canonical library to unwind Android call stacks.
+
+`libunwindstack` (and its relevant dependencies) are copied from Android's
+`system/unwinding`. `libunwindstack` handles many of the details of unwinding
+on Android, which is inherently more difficult than on other platforms due to
+the wider variety of frame types that occur on Android. These include Java
+frames, JITted Java frames, Chromium C++ frames, and system library C++ frames.
+Different frame types can have different call frame information (CFI) formats
+that the unwinder must parse to know how to move up the stack. These formats
+include `DWARF`, `MiniDebugInfo`, and `EHABI`. `libunwindstack` handles much of
+this complexity.
+
+`libunwindstack` is copied from the Android tree and utilizes common Android
+libraries from that tree. This is analagous to how a static library that is
+built within the Chromium tree might utilize `//base` and `//threading`. For
+`libunwindstack`, we copy its Android tree dependencies next to this directory.
+
+`libunwindstack` uses `libdexfile` for symbolizing interpreted java frames
+client-side, as doing this server-side is not currently practical. `libdexfile`
+is backwards-compatible and can parse dex files for Chromium built with
+`min-sdk` version 23 and dex version 35. It should be able to handle future
+`min-sdk` version bumps, given it can currently parse versions from 35-40.
+`libdexfile` and its dependency `libartbase` come from `platform/art/` in AOSP.
+
+Update instructions:
+Update commit hashes in crowbar.txtpb, then run from this directory:
+crowbar build --no-dry-run ./
+
+copy.bara.sky lists every file it imports. If the new upstream version
+adds a file Chromium needs, add it there and to ../BUILD.gn.
+../libprocinfo/, ../libbase/ and ../art/ are separate Crowbar packages with
+their own update instructions.
+
+
+Local Modifications:
+The patches are in patches/; copy.bara.sky applies them in this order.
+The libbase and ART patches are in ../libbase/patches/ and ../art/patches/.
+- 0002-create-local-process-memory.patch: add
+  Memory::CreateLocalProcessMemory().
+- 0004-dont-include-bionic-headers.patch: no <bionic/mte.h> or
+  <bionic/pac.h> in NDK builds.
+- 0005-stub-out-logging-libunwindstack.patch: no-op log functions
+  (Fatal() only aborts), so no liblog.
+- 0013-use-third-party-rustc-demangle.patch: use Chromium's
+  rustc_demangle() C API.
+- 0016-remove-static-initializers.patch: no static initializers in
+  DexFile.
+- 0017-add-type-cast.patch: fix the DwarfSection postfix ++/-- step and
+  cast MapInfo flags.
+- 0018-handle-process-vm-readv-availability.patch: no
+  process_vm_readv() below Android API 23.
+- 0019-add-missing-include-in-regsinfo-header.patch: include
+  <stdlib.h> in RegsInfo.h.

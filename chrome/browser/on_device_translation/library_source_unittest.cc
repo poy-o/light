@@ -7,10 +7,14 @@
 #include <memory>
 #include <utility>
 
+#include "base/byte_size.h"
 #include "base/files/file_path.h"
 #include "base/memory/raw_ptr.h"
 #include "base/test/mock_callback.h"
+#include "base/test/run_until.h"
+#include "base/test/scoped_amount_of_physical_memory_override.h"
 #include "base/test/scoped_command_line.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/on_device_translation/component_updater_library_source.h"
 #include "chrome/browser/on_device_translation/installer_impl.h"
@@ -23,6 +27,11 @@
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/features_generated.h"
+
+#if BUILDFLAG(IS_ANDROID)
+#include "base/android/device_info.h"
+#endif  // BUILDFLAG(IS_ANDROID)
 
 namespace on_device_translation {
 namespace {
@@ -77,6 +86,13 @@ class MockObserver : public OnDeviceTranslationInstaller::Observer {
 
 class TranslateKitLibrarySourceTest : public ::testing::Test {
  protected:
+  void SetUp() override {
+#if BUILDFLAG(IS_ANDROID)
+    // Don't depend on the form factor of the device running the test.
+    base::android::device_info::set_is_automotive_for_testing(false);
+#endif  // BUILDFLAG(IS_ANDROID)
+  }
+
   // Creates an installer that gets the library from a `FakeLibrarySource`.
   void CreateInstaller() {
     auto library_source = std::make_unique<FakeLibrarySource>();
@@ -86,6 +102,9 @@ class TranslateKitLibrarySourceTest : public ::testing::Test {
   }
 
   void TearDown() override {
+#if BUILDFLAG(IS_ANDROID)
+    base::android::device_info::reset_is_automotive_for_testing();
+#endif  // BUILDFLAG(IS_ANDROID)
     library_source_ = nullptr;
     installer_.reset();
     TestingBrowserProcess::GetGlobal()->local_state()->ClearPref(
@@ -115,7 +134,11 @@ TEST_F(TranslateKitLibrarySourceTest, InitWaitsForInstall) {
   base::MockCallback<base::RepeatingClosure> on_ready2;
   installer_->Init(on_ready1.Get());
   installer_->Init(on_ready2.Get());
-  EXPECT_EQ(library_source_->install_count(), 2);
+
+  // Concurrent `Init()` calls coalesce into a single connectivity check and
+  // install request.
+  EXPECT_TRUE(base::test::RunUntil(
+      [&]() { return library_source_->install_count() == 1; }));
 
   EXPECT_CALL(on_ready1, Run());
   EXPECT_CALL(on_ready2, Run());
@@ -123,6 +146,20 @@ TEST_F(TranslateKitLibrarySourceTest, InitWaitsForInstall) {
   library_source_->FinishInstall(base::FilePath(kLibraryPath));
   EXPECT_TRUE(installer_->IsInit());
   installer_->RemoveObserver(&observer);
+}
+
+// Tests that `Init()` asks the source again while an install runs. The source
+// ignores the request if its install still runs, and starts a new one if the
+// earlier one ended without a report.
+TEST_F(TranslateKitLibrarySourceTest, InitAsksSourceWhileInstallRuns) {
+  CreateInstaller();
+  installer_->Init(base::RepeatingClosure());
+  EXPECT_TRUE(base::test::RunUntil(
+      [&]() { return library_source_->install_count() == 1; }));
+
+  installer_->Init(base::RepeatingClosure());
+  EXPECT_TRUE(base::test::RunUntil(
+      [&]() { return library_source_->install_count() == 2; }));
 }
 
 TEST_F(TranslateKitLibrarySourceTest, InitDropsCallbacksWhenInstallFails) {
@@ -133,6 +170,8 @@ TEST_F(TranslateKitLibrarySourceTest, InitDropsCallbacksWhenInstallFails) {
   base::MockCallback<base::RepeatingClosure> on_ready1;
   EXPECT_CALL(on_ready1, Run()).Times(0);
   installer_->Init(on_ready1.Get());
+  ASSERT_TRUE(base::test::RunUntil(
+      [&]() { return library_source_->install_count() == 1; }));
   EXPECT_CALL(observer, OnLibraryInstallFailed(InstallError::kFailed));
   library_source_->FailInstall(InstallError::kFailed);
   EXPECT_FALSE(installer_->IsInit());
@@ -141,7 +180,8 @@ TEST_F(TranslateKitLibrarySourceTest, InitDropsCallbacksWhenInstallFails) {
   // The next `Init()` retries the install.
   base::MockCallback<base::RepeatingClosure> on_ready2;
   installer_->Init(on_ready2.Get());
-  EXPECT_EQ(library_source_->install_count(), 2);
+  EXPECT_TRUE(base::test::RunUntil(
+      [&]() { return library_source_->install_count() == 2; }));
   EXPECT_CALL(on_ready2, Run());
   EXPECT_CALL(observer, OnInstallationChanged());
   library_source_->FinishInstall(base::FilePath(kLibraryPath));
@@ -166,6 +206,56 @@ TEST_F(TranslateKitLibrarySourceTest, CreateUsesPathFromCommandLine) {
   std::unique_ptr<TranslateKitLibrarySource> library_source =
       TranslateKitLibrarySource::Create();
   EXPECT_EQ(library_source->GetLibraryPath(), base::FilePath(kLibraryPath));
+}
+
+TEST_F(TranslateKitLibrarySourceTest, UnsupportedWithLittleMemory) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeatureWithParameters(
+      blink::features::kTranslationAPI,
+      {{"TranslationAPIMinPhysicalMemoryMB", "2048"}});
+  CreateInstaller();
+  {
+    base::test::ScopedAmountOfPhysicalMemoryOverride memory(base::MiB(1900));
+    EXPECT_FALSE(installer_->IsSupported());
+  }
+  {
+    base::test::ScopedAmountOfPhysicalMemoryOverride memory(base::MiB(3800));
+    EXPECT_TRUE(installer_->IsSupported());
+  }
+}
+
+TEST_F(TranslateKitLibrarySourceTest, SupportedWhenMinPhysicalMemoryDisabled) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeatureWithParameters(
+      blink::features::kTranslationAPI,
+      {{"TranslationAPIMinPhysicalMemoryMB", "0"}});
+  CreateInstaller();
+  base::test::ScopedAmountOfPhysicalMemoryOverride memory(base::MiB(1900));
+  EXPECT_TRUE(installer_->IsSupported());
+}
+
+#if BUILDFLAG(IS_ANDROID)
+TEST_F(TranslateKitLibrarySourceTest, UnsupportedOnAutomotive) {
+  base::test::ScopedAmountOfPhysicalMemoryOverride memory(base::MiB(4096));
+  CreateInstaller();
+  EXPECT_TRUE(installer_->IsSupported());
+
+  base::android::device_info::set_is_automotive_for_testing(true);
+  EXPECT_FALSE(installer_->IsSupported());
+
+  MockObserver observer;
+  installer_->AddObserver(&observer);
+  EXPECT_CALL(observer, OnLibraryInstallFailed(InstallError::kFailed));
+  installer_->Init(base::RepeatingClosure());
+  EXPECT_EQ(library_source_->install_count(), 0);
+  installer_->RemoveObserver(&observer);
+}
+#endif  // BUILDFLAG(IS_ANDROID)
+
+TEST_F(TranslateKitLibrarySourceTest, FixedPathSourceWithoutPathIsUnsupported) {
+  EXPECT_TRUE(
+      FixedPathLibrarySource(base::FilePath(kLibraryPath)).IsSupported());
+  EXPECT_FALSE(FixedPathLibrarySource(base::FilePath()).IsSupported());
 }
 
 TEST_F(TranslateKitLibrarySourceTest, ComponentUpdaterSourceReadsPref) {

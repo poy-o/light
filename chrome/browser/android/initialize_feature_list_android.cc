@@ -8,11 +8,10 @@
 #include "base/android/background_thread_pool_field_trial.h"
 #include "base/profiler/thread_group_profiler.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
+#include "base/threading/platform_thread.h"
 #include "chrome/browser/metrics/chrome_feature_list_creator.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/profiler/chrome_thread_group_profiler_client.h"
-#include "components/variations/service/variations_network_clock.h"
-#include "components/variations/variations_ids_provider.h"
 #include "content/public/browser/startup_helper.h"
 
 // Must come after all headers that specialize FromJniType() / ToJniType().
@@ -43,10 +42,7 @@ void InitializeLocalStateEarly() {
   content::CreateBrowserTaskExecutor();
   ChromeFeatureListCreator* chrome_feature_list_creator =
       ChromeFeatureListCreator::GetInstance();
-  variations::VariationsIdsProvider::CreateInstance(
-      variations::VariationsIdsProvider::Mode::kUseSignedInState,
-      std::make_unique<variations::VariationsNetworkClock>(
-          chrome_feature_list_creator->network_time_tracker()));
+  chrome_feature_list_creator->CreateVariationsIdsProvider();
   chrome_feature_list_creator->CreatePrefService();
   did_init_local_state_early = true;
 }
@@ -79,6 +75,10 @@ void EnsureFeatureListInitialized() {
   // the task executor was created before FeatureList and could not access
   // Finch/field trial configurations.
   content::PostFeatureListInit();
+
+  // Initialize PlatformThread features before starting the ThreadPool so the
+  // worker threads pick up the configured priorities and affinity.
+  base::PlatformThread::InitializeFeatures();
 
   // The FeatureList needs to be created before starting the ThreadPool.
   content::StartThreadPool();

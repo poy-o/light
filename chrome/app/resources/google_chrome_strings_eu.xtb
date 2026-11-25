@@ -81,6 +81,7 @@ Eginbide batzuk agian dira erabilgarri egongo eta hobespenei egindako aldaketak 
 <translation id="1688214853608504530">Helbide-barran edo bilaketa-koadroan zerbait idazten duzunean, Chrome-k erakundearen bilaketa- eta agente-tresnetara, eta AA bidezkoetara bidaltzen du idatzitakoa, iradokizunak lortzeko.</translation>
 <translation id="1698376642261615901">Web-orriak eta aplikazioak ziztu bizian abiarazten dituen web-arakatzailea da Google Chrome. Bizkorra, egonkorra eta erabilerraza da. Sarea segurtasun osoz arakatu ahal izango duzu, Google Chrome-k malwarearen eta phishingaren aurkako babesa barneratuta baitu.</translation>
 <translation id="1713301662689114961">{0,plural, =1{Ordubete barru exekutatuko da Chrome berriro}other{# ordu barru exekutatuko da Chrome berriro}}</translation>
+<translation id="1713866023633141719">Gailuko AA prest dago</translation>
 <translation id="1722488837206509557">Erabilgarri dauden gailuen artean hautatu ahal izango duzu, eta haietan edukia bistaratu.</translation>
 <translation id="1724094881572874997">Chrome-n egiten duzun lana babesteko, erakundeak informazio jakina ikusi edo kudeatu ahalko du Chrome-n saioa hasita daukazunean.</translation>
 <translation id="1769661297620183092">Google Bilaketa zerbitzuaren panela berriro ireki dezakezu, arakatu bitartean galderak egiteko</translation>
@@ -102,12 +103,14 @@ Eginbide batzuk agian dira erabilgarri egongo eta hobespenei egindako aldaketak 
 <translation id="1896602904211344018">Lortu Chrome aplikazioa</translation>
 <translation id="1919130412786645364">Baimendu Chrome-n saioa hastea</translation>
 <translation id="1925069572871307609">Etorkizunean Google Chrome-ren eguneratzeak jasotzeko, Windows 10-en 1809 bertsioa edo berriago bat beharko duzu. Ordenagailu honek Windows 10-en bertsio zaharrago bat darabil.</translation>
+<translation id="1975400514743766362">Eraman Google-ren segurtasuna edonora <ph name="DEVICE_TYPE" /> gailurako Chrome aplikazioarekin</translation>
 <translation id="1979600810166324878">Egon seguruago edonoiz eta edonon iOS-erako Chrome-ko arakatze seguru hobetuarekin</translation>
 <translation id="2001586581944147178">Zaildu zure Interneteko trafikorako sarbidea duten pertsonei bisitatzen dituzun webguneak ikustea. Chrome-k konexio seguru bat erabiltzen du DNSan (domeinu-izenen sistema) webgune baten IP helbidea bilatzean.</translation>
 <translation id="2018879682492276940">Ezin izan da instalatu. Saiatu berriro.</translation>
 <translation id="2024959665595762054">Chrome-ko datuak Google-ko kontuan gordetzeko eta erabiltzeko, egiaztatu zeu zarela</translation>
 <translation id="2034233344106846793">Chrome-k konexio ez-seguruen maila HTTPSra igotzen du automatikoki posible denean</translation>
 <translation id="2039417478970545937">Ezarpenak.</translation>
+<translation id="2040220733769034247">Eskaneatu QR kodea telefonoarekin Chrome deskargatzeko eta Google-ko kontuan saioa hasteko.</translation>
 <translation id="2044908892530830113">Erakutsi Chrome-rekin bilatzeko aukera Mac-eko menu-barran eta aktibatu lasterbidea</translation>
 <translation id="2050189601866423230">Google Bilaketa zerbitzuaren AA modua aingura dezakezu, arakatu bitartean galderak egiteko</translation>
 <translation id="2060311596979880693">Eginda! Orain, arakatu bitartean galderak egin ditzakezu erraz, Chrome-ko Google Bilaketa zerbitzuarekin.</translation>
@@ -140,7 +143,6 @@ Eginbide batzuk agian dira erabilgarri egongo eta hobespenei egindako aldaketak 
 <translation id="2307973900865360088">Mantendu Dock-ean</translation>
 <translation id="2309047409763057870">Google Chrome-ren bigarren mailako instalazio bat da hau; beraz, ezin duzu ezarri arakatzaile lehenetsi gisa.</translation>
 <translation id="2345992953227471816">Luzapenok malwarea dutela hauteman du Chrome-k:</translation>
-<translation id="2350411688004301551">Aldatu Gemini Enterprise-ra</translation>
 <translation id="2358140144860869442">Irakurketa-zerrenda eta bestelako datuak gailu guztietan eskuratzeko, hasi saioa Chrome-n</translation>
 <translation id="2359808026110333948">Egin aurrera</translation>
 <translation id="2403703063067034158">Abiarazte-errorea: konfigurazioaren beste instantzia bat exekutatzen ari da. Saiatu berriro geroago.</translation>
@@ -153,6 +155,7 @@ Eginbide batzuk agian dira erabilgarri egongo eta hobespenei egindako aldaketak 
 <translation id="2513154137948333830">Berrabiarazi egin behar da: <ph name="INSTALL_SUCCESS" /></translation>
 <translation id="251329670120169391">zure erakundea</translation>
 <translation id="2521391734665471391">Itxi Google Bilaketa zerbitzuaren AA modua</translation>
+<translation id="2523048609826818526">Idazketa orokorra</translation>
 <translation id="2523492931736391680">Zure lana Chrome-n babestuta dago</translation>
 <translation id="2534365042754120737">Datuak babesteko, eman azkenaldian bisitatu ez dituzun webguneei baimenak kentzeko baimena Chrome-ri. Ez ditu geldiarazten jakinarazpenak.</translation>
 <translation id="2556847002339236023">Erakundeak Chrome ixten du <ph name="TIMEOUT_DURATION" />z erabiltzen ez denean. Arakatze-datuak ezabatu dira. Arakatze-datuen barnean daude historia, automatikoki betetako datuak eta deskargak.</translation>
@@ -197,7 +200,6 @@ Orri honek espero bezala funtzionatzen ez badu, eman optimizatzeko baimena.</tra
 <translation id="2876628302275096482">Lortu <ph name="BEGIN_LINK" />Chrome-k zure datuen pribatutasuna babesteko duen moduari<ph name="END_LINK" /> buruzko informazio gehiago</translation>
 <translation id="2885378588091291677">Zereginen kudeatzailea</translation>
 <translation id="2888126860611144412">Chrome-ri buruz</translation>
-<translation id="2898830646167954300">Itzuli kudeatu gabeko Gemini laguntzailera</translation>
 <translation id="2915996080311180594">Berrabiarazi geroago</translation>
 <translation id="2926952073016206995">Chrome-k kamera erabiltzeko baimena behar du webgune honetan</translation>
 <translation id="2945997411976714835">Instalazio-errorea: instalatzailearen prozesua ezin izan da hasi.</translation>
@@ -251,6 +253,7 @@ Orri honek espero bezala funtzionatzen ez badu, eman optimizatzeko baimena.</tra
 <translation id="3373752068427117404">Chrome-ren eginbide eta luzapen batzuek lasterbideak dituzte. Haiek berriro aktibatzea aukera dezakezu.</translation>
 <translation id="3379938682270551431">{0,plural, =0{Orain exekutatuko da Chromium berriro}=1{1 segundo barru exekutatuko da Chromium berriro}other{# segundo barru exekutatuko da Chromium berriro}}</translation>
 <translation id="3380249972812870825">Chrome-ko Gemini irekitzeko, sakatu <ph name="GLOBAL_HOTKEY" /></translation>
+<translation id="3392127217442962664">Chrome-k gailuan exekutatzen den AA gehitu du. Webguneek eta Chrome-k eginbide hauetarako erabil dezakete, besteak beste:</translation>
 <translation id="3396977131400919238">Sistema-eragilean errore bat gertatu da instalatu bitartean. Deskargatu Google Chrome berriro.</translation>
 <translation id="3428747202529429621">Babestuta mantentzen zaitu Chrome-n, eta segurtasuna hobetzeko erabil daiteke Google-ren beste aplikazio batzuetan saioa hasita daukazunean</translation>
 <translation id="3438681572027105609">Pasahitzak eta bestelako datuak zure gailu guztietan gordeta edukitzeko, hasi saioa Chrome-n</translation>
@@ -299,6 +302,7 @@ Orri honek espero bezala funtzionatzen ez badu, eman optimizatzeko baimena.</tra
 <translation id="3973161977468201858">Google Chrome-k Google-ren Pasahitz-kudeatzailea zerbitzuan dauzkazun datuak ezabatu behar ditu. Horretarako baimena emateko, idatzi Windows-eko pasahitza.</translation>
 <translation id="3984557288004650913">Tresna-barran dagoen "Chrome-ko Google Bilaketa" botoiaren bidez, Chrome-ko Google Bilaketa berriro ireki dezakezu, arakatu bitartean galderak egiteko</translation>
 <translation id="399788104667917863">Ainguratu tresna-barran</translation>
+<translation id="4000385468528550798">Gailuko AA eguneratu da</translation>
 <translation id="400161754580828648">Pantaila partekatzeko, eman pantaila grabatzeko baimena Chrome-ri sistemaren ezarpenetan.</translation>
 <translation id="4012899077942246412">Saioa hasita daukazunean, Google-ko kontuko pasahitzak eta beste erabil ditzakezu Chrome-n. Hori aldatzeko, joan "Zure kontua Chrome-n" atalera.</translation>
 <translation id="4022972681110646219">Itzuli pantaila</translation>
@@ -417,7 +421,6 @@ Agian eginbide batzuk ez dira erabilgarri egongo. Zehaztu profilaren beste direk
 <translation id="5271833978500241046">Erabili Chrome-ko Gemini-ren beste eginbide batzuekin batera</translation>
 <translation id="5320351714793324716">Cookieak onartzen badituzu, baliteke Chrome-k haiek erabiltzea orriak aurrez kargatzeko</translation>
 <translation id="5321325624576443340">Google Lens ez dago erabilgarri. Saiatu berriro geroago.</translation>
-<translation id="5336664042114176802"><ph name="DOMAIN" /> erakundeak kudeatzen ez duen eta aurrez zure Google-ko kontuarekin lotuta zegoen Gemini laguntzailera alda zaitezke. Aurrerantzean, erantzunak ez dira oinarrituko <ph name="DOMAIN" /> enpresak kudeatutako fitxategi edo zerbitzuetan, eta ez da mantenduko elkarrizketa-historia. Baliteke lanerako egokia ez izatea. Aldatzeko, Chrome berriro exekutatu behar da.</translation>
 <translation id="5346389065299425353">Sakondu bilaketan fitxa, fitxategi eta tresna bat baino gehiago gehituta</translation>
 <translation id="5353252989841766347">Esportatu pasahitzak Chrome-tik</translation>
 <translation id="5368118228313795342">Kode gehigarria: <ph name="EXTRA_CODE" />.</translation>
@@ -536,7 +539,6 @@ Google Chrome-k ezin ditu berreskuratu zure ezarpenak.</translation>
 <translation id="6438015621983209660">Hedatu Arakatze seguru hobetua telefonoan Chrome-rekin</translation>
 <translation id="6442774133615368941">arakatu produktuak, itzuli testua eta identifikatu ikusten duzuna kamerarekin iOS-erako Chrome aplikazioan</translation>
 <translation id="6446105560007692480">Chrome-rekin bilatzeko edo <ph name="BEGIN_LINK" />Ezarpenak<ph name="END_LINK" /> atalean pertsonalizatzeko</translation>
-<translation id="6447943657065463998">Kudeatutako arakatzaile honek <ph name="DOMAIN" /> erakundeak lanerako konfiguratutako Gemini laguntzaile bat erabil dezake. Erakundearen fitxategietan eta onartutako zerbitzuetan oinarrituta informazioa aurkitu eta erantzunak eman ditzake. Agian ez da gomendagarria profil pertsonal batekin erabiltzea. Elkarrizketa-historia ez da mantenduko. Aldatzeko, Chrome berriro exekutatu behar da.</translation>
 <translation id="6448835208126432197">Chrome-ko Gemini-n pantailaren zati bat hautatzeko, erabili lasterbidea.</translation>
 <translation id="6473905796280459355">Joan "Chrome-ri buruz" orrira</translation>
 <translation id="6481963882741794338">Lotu Chrome eta Google-ren beste zerbitzuak pertsonalizaziorako eta bestelako helburuetarako</translation>
@@ -558,6 +560,7 @@ Google Chrome-k ezin ditu berreskuratu zure ezarpenak.</translation>
 <translation id="6632012506031284914">Chrome-rekin bilatzeko.</translation>
 <translation id="6634299872736643004">Ezarpen honetan egindako aldaketak Chrome berrabiarazi ondoren aplikatuko dira.</translation>
 <translation id="6644846457769259194">Gailua eguneratzen (<ph name="PROGRESS_PERCENT" />)</translation>
+<translation id="6659177157954429254">Gailuko AA eguneratuta dago</translation>
 <translation id="6660596345553328257">Chrome-n saioa hasi nahi duzu?</translation>
 <translation id="6664219008737641504">Pasaesaldia ahazten bazaizu edo ezarpena aldatu nahi baduzu, <ph name="SETTINGS_LINK" /> kontuko Chrome-ko datuak</translation>
 <translation id="6676384891291319759">Sartu Interneten</translation>
@@ -599,6 +602,7 @@ Google Chrome-k ezin ditu berreskuratu zure ezarpenak.</translation>
 <translation id="7024536598735240744">Despaketatze-errorea: <ph name="UNPACK_ERROR" />.</translation>
 <translation id="7025800014283535195">Aldatu Chrome-ko profila hemen</translation>
 <translation id="7026856149118332950">Chrome zereginen barran ainguratzeko eta bizkor atzitzeko, sakatu <ph name="BEGIN_BOLD" />Bai<ph name="END_BOLD" /> Windows-en jakinarazpenean.</translation>
+<translation id="7033785662379319359">Gailuko AAren bertsio berri eta trinkoago bat erabiltzeko prest dago, laburpenak, zuzenketak eta abar egiteko</translation>
 <translation id="7047386856539490735">Erabilgarriak al dira emaitzak?</translation>
 <translation id="7051685429025310665">Azkenaldian ez duzu bisitatu webgune hau. Chrome-k <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> eta <ph name="PERMISSION_3" /> erabiltzeko baimenak kendu dizkio.</translation>
 <translation id="7059914902409643750">Pertsonalizatu Chrome</translation>
@@ -705,7 +709,6 @@ Google Chrome-k ezin ditu berreskuratu zure ezarpenak.</translation>
 <translation id="8064965390968184078">1. Sakatu beheko <ph name="BUTTON_LABEL" />.
 2. Sakatu <ph name="BUTTON_2" /> Windows-en ezarpenetan.
 3. Chrome zereginen barran ainguratzeko eta bizkor atzitzeko, sakatu <ph name="BUTTON_3" /> Windows-en jakinarazpenean.</translation>
-<translation id="8066474819446975249">Aldatzeko, exekutatu Chrome berriro</translation>
 <translation id="8074398340364918139">Chrome-ren eginbide edo luzapen jakin bat bilatzeko, idatzi haren lasterbidea helbide-barran eta, ondoren, sakatu hautatutako tekla</translation>
 <translation id="8077579734294125741">Chrome-ko beste profilak</translation>
 <translation id="8086881907087796310">Instalazioak huts egin du, ordenagailuak hardwarearen gutxieneko eskakizunak betetzen ez dituelako.</translation>

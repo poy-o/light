@@ -728,7 +728,7 @@
     ],
     "exclusive_tests": "ALL",
     "args": ["--enable-features=DeclarativePerformanceObserver"],
-    "expires": "Nov 27, 2026"
+    "expires": "May 27, 2027"
   },
   {
     "prefix": "delay-async-when-lcp-in-html",
@@ -1021,7 +1021,7 @@
     "owners": [
       "wangxianzhu@chromium.org"
     ],
-    "expires": "Dev 31, 2024"
+    "expires": "Dec 31, 2024"
   },
   {
     "prefix": "disable-single-axis-scroll-containers",
@@ -2495,6 +2495,7 @@
     "bases": [
       "editing/execCommand/insertHTML-aborted.html",
       "external/wpt/dom/nodes/insertion-removing-steps/insertion-removing-steps-iframe.window.js",
+      "external/wpt/html/dom/partial-updates/tentative/template-for-mutation-observer.html",
       "external/wpt/html/semantics/scripting-1/the-template-element/template-for/template-for-invokes-pagehide-with-end.html",
       "external/wpt/html/semantics/scripting-1/the-template-element/template-for/template-for-invokes-pagehide-without-end.html",
       "external/wpt/html/semantics/scripting-1/the-template-element/template-for/template-for-pagehide-dynamic-markup-insertion.html",
@@ -2809,7 +2810,7 @@
       "external/wpt/speculation-rules/prefetch/"
     ],
     "args": [
-      "--enable-features=PrefetchOffTheMainThread,PrefetchOffTheMainThreadForceForTesting"
+      "--enable-features=PrefetchOffTheMainThread:check_will_create_url_loader_factory/false,PrefetchOffTheMainThreadForceForTesting"
     ],
     "expires": "Dec 31, 2026"
   },
@@ -2990,8 +2991,8 @@
     ],
     "expires": "never"
   },
-  "Runs the remoteClientDataJSON Permissions Policy tests with its runtime",
-  "feature enabled. Requests use invalid client data so policy behavior is",
+  "Runs the remoteClientDataJSON web tests with its runtime feature enabled.",
+  "Permissions Policy requests use invalid client data so policy behavior is",
   "tested without invoking an authenticator.",
   {
     "prefix": "remote-client-data-json-policy",
@@ -3004,10 +3005,12 @@
       "Win"
     ],
     "bases": [
+      "external/wpt/webauthn/remote-client-data-json-permission.tentative.https.html",
       "webexposed/feature-policy-features.html",
       "wpt_internal/permissions-policy/remote-client-data-json/"
     ],
     "exclusive_tests": [
+      "external/wpt/webauthn/remote-client-data-json-permission.tentative.https.html",
       "wpt_internal/permissions-policy/remote-client-data-json/"
     ],
     "args": [
@@ -3250,7 +3253,7 @@
       "agpalak@chromium.org",
       "guidou@chromium.org"
     ],
-    "expires": "Nov 11, 2026"
+    "expires": "May 24, 2027"
   },
   {
     "prefix": "select-parsing-filtering-disabled",

@@ -17,6 +17,7 @@
 #import "base/metrics/histogram_functions.h"
 #import "base/notreached.h"
 #import "base/strings/utf_string_conversions.h"
+#import "base/types/optional_ref.h"
 #import "base/uuid.h"
 #import "components/cbor/writer.h"
 #import "components/password_manager/core/browser/passkey_credential.h"
@@ -67,19 +68,6 @@ std::vector<uint8_t> ToByteVector(const std::string& str) {
   return std::vector<uint8_t>(str.begin(), str.end());
 }
 
-// Returns the bytes of the key in `keys` with `version`, or `std::nullopt` if
-// there is no such key.
-std::optional<base::span<const uint8_t>> FindDeviceAuthorizationKeyWithVersion(
-    const DeviceAuthorizationKeys& keys,
-    int32_t version) {
-  const auto key =
-      std::ranges::find(keys.keys(), version, &DeviceAuthorizationKey::version);
-  if (key == keys.keys().end()) {
-    return std::nullopt;
-  }
-  return base::as_byte_span(key->key());
-}
-
 // Utility function to create a passkey and an attestation object from the
 // provided parameters.
 // TODO(crbug.com/460485333): Merge this code with PerformPasskeyCreation.
@@ -87,19 +75,18 @@ std::pair<sync_pb::WebauthnCredentialSpecifics,
           PasskeyJavaScriptFeature::AttestationData>
 CreatePasskeyAndAttestationObject(
     const SharedKey& trusted_vault_key,
+    base::optional_ref<const DeviceAuthorizationKey> device_authorization_key,
     std::string client_data_json,
     std::string_view rp_id,
     const PasskeyModel::UserEntity& user_entity,
     const passkey_model_utils::ExtensionInputData& extension_input_data,
     bool did_complete_uv) {
   passkey_model_utils::ExtensionOutputData extension_output_data;
-  // TODO(crbug.com/434939433): Pass the device authorization key.
   auto [passkey, public_key_spki_der] =
       passkey_model_utils::GeneratePasskeyAndEncryptSecrets(
           rp_id, user_entity, trusted_vault_key,
-          /*trusted_vault_key_version=*/0,
-          /*device_authorization_key=*/std::nullopt, extension_input_data,
-          &extension_output_data);
+          /*trusted_vault_key_version=*/0, device_authorization_key,
+          extension_input_data, &extension_output_data);
 
   device::AttestationObject attestation_object =
       passkey_model_utils::MakeAttestationObjectForCreation(
@@ -183,6 +170,20 @@ std::optional<sync_pb::WebauthnCredentialSpecifics> FindPasskey(
   return *it;
 }
 
+// Returns all unhidden, unshadowed passkeys for `rp_id`.
+std::vector<sync_pb::WebauthnCredentialSpecifics> GetVisiblePasskeys(
+    const PasskeyModel& passkey_model,
+    std::string_view rp_id) {
+  std::vector<sync_pb::WebauthnCredentialSpecifics> passkeys =
+      passkey_model.GetPasskeys(rp_id,
+                                PasskeyModel::ShadowedCredentials::kExclude);
+  std::erase_if(passkeys,
+                [](const sync_pb::WebauthnCredentialSpecifics& passkey) {
+                  return passkey.hidden();
+                });
+  return passkeys;
+}
+
 }  // namespace
 
 PasskeyTabHelper::~PasskeyTabHelper() = default;
@@ -200,7 +201,6 @@ void PasskeyTabHelper::HandleCancelRequestEvent(
   }
 
   const std::string request_id = request_info.request_id;
-  client_->CancelPasskeyRequest(std::move(request_info));
 
   loaders_.erase(request_id);
   // `PendingRequest` is not assignable due to const members in
@@ -235,6 +235,11 @@ void PasskeyTabHelper::HandleCancelRequestEvent(
   ClearAssertionDelegateCredentials(request_id);
   assertion_requests_.erase(request_id);
   registration_requests_.erase(request_id);
+
+  // Notify the client only after removing internal request state so that
+  // synchronous dismissal (which may call `RejectPendingRequest()`) sees the
+  // request as already cancelled.
+  client_->CancelPasskeyRequest(std::move(request_info));
 }
 
 void PasskeyTabHelper::HandleGetRequestedEvent(AssertionRequestParams params) {
@@ -674,10 +679,11 @@ bool PasskeyTabHelper::HasCredential(const std::string& rp_id,
   if (!passkey_model_->IsReady()) {
     return false;
   }
-  return passkey_model_
-      ->GetPasskey(rp_id, credential_id,
-                   webauthn::PasskeyModel::ShadowedCredentials::kExclude)
-      .has_value();
+  std::optional<sync_pb::WebauthnCredentialSpecifics> passkey =
+      passkey_model_->GetPasskey(
+          rp_id, credential_id,
+          webauthn::PasskeyModel::ShadowedCredentials::kExclude);
+  return passkey.has_value() && !passkey->hidden();
 }
 
 PasskeyTabHelper::PasskeyTabHelper(
@@ -744,10 +750,8 @@ bool PasskeyTabHelper::HasExcludedPasskey(
     return false;
   }
 
-  std::vector<sync_pb::WebauthnCredentialSpecifics> passkeys =
-      passkey_model_->GetPasskeys(params.RpId(),
-                                  PasskeyModel::ShadowedCredentials::kExclude);
-  for (const auto& passkey : passkeys) {
+  for (const sync_pb::WebauthnCredentialSpecifics& passkey :
+       GetVisiblePasskeys(*passkey_model_, params.RpId())) {
     if (exclude_credentials.contains(ToByteVector(passkey.credential_id()))) {
       return true;
     }
@@ -759,23 +763,23 @@ std::vector<sync_pb::WebauthnCredentialSpecifics>
 PasskeyTabHelper::GetFilteredPasskeys(
     const AssertionRequestParams& params) const {
   std::vector<sync_pb::WebauthnCredentialSpecifics> passkeys =
-      passkey_model_->GetPasskeys(params.RpId(),
-                                  PasskeyModel::ShadowedCredentials::kExclude);
+      GetVisiblePasskeys(*passkey_model_, params.RpId());
   if (passkeys.empty()) {
     return passkeys;
   }
 
   // If the allowed credentials array is empty, then the relying party accepts
-  // any passkey credential.
+  // any unhidden passkey credential.
   std::set<std::vector<uint8_t>> allow_credentials =
       params.GetAllowCredentialIds();
   if (allow_credentials.empty()) {
     return passkeys;
   }
 
-  std::erase_if(passkeys, [&](sync_pb::WebauthnCredentialSpecifics cred) {
-    return !allow_credentials.contains(ToByteVector(cred.credential_id()));
-  });
+  std::erase_if(
+      passkeys, [&](const sync_pb::WebauthnCredentialSpecifics& cred) {
+        return !allow_credentials.contains(ToByteVector(cred.credential_id()));
+      });
 
   return passkeys;
 }
@@ -849,14 +853,24 @@ void PasskeyTabHelper::StartPasskeyCreation(std::string request_id,
        frame_hierarchy.is_cross_origin_iframe},
       /*payment_json=*/std::nullopt);
 
-  PasskeyUserVerificationStatus status =
-      DetermineUserVerificationStatus(params, did_complete_uv);
+  if (base::FeatureList::IsEnabled(
+          features::kDeviceAuthorizationPasskeyEncryption)) {
+    CHECK(base::FeatureList::IsEnabled(
+        features::kDeviceAuthorizationPasskeyDecryption));
+    // TODO(crbug.com/434939433): Allow embedded ReAuth for modal creation once
+    // the creation bottom sheet is dismissed before fetching keys.
+    client_->FetchDeviceAuthorizationKeys(
+        /*allow_reauth=*/false,
+        base::BindOnce(
+            &PasskeyTabHelper::OnDeviceAuthorizationKeysFetchedForCreation,
+            this->AsWeakPtr(), std::move(params), std::move(client_data_json),
+            did_complete_uv));
+    return;
+  }
 
-  client_->FetchTrustedVaultKeys(
-      ReauthenticatePurpose::kEncrypt, status,
-      base::BindOnce(&PasskeyTabHelper::CompletePasskeyCreation,
-                     this->AsWeakPtr(), std::move(params),
-                     std::move(client_data_json)));
+  FetchTrustedVaultKeysForCreation(
+      std::move(params), std::move(client_data_json),
+      /*device_authorization_keys=*/{}, did_complete_uv);
 }
 
 std::optional<std::pair<std::string, PasskeyRequestParams::RequestType>>
@@ -1025,10 +1039,50 @@ PasskeyUserVerificationStatus PasskeyTabHelper::DetermineUserVerificationStatus(
   return PasskeyUserVerificationStatus::kNotRequired;
 }
 
-void PasskeyTabHelper::CompletePasskeyCreation(RegistrationRequestParams params,
-                                               std::string client_data_json,
-                                               SharedKeyList shared_key_list,
-                                               bool did_complete_uv) {
+void PasskeyTabHelper::OnDeviceAuthorizationKeysFetchedForCreation(
+    RegistrationRequestParams params,
+    std::string client_data_json,
+    bool did_complete_uv,
+    DeviceAuthFetchResult result) {
+  web::WebFrame* web_frame = GetWebFrame(params.FrameId());
+  if (!web_frame) {
+    return;
+  }
+
+  const DeviceAuthorizationKeys* keys = result.keys();
+  if (!keys || keys->keys().empty()) {
+    DeferToRendererForFrame(web_frame, params.RequestId(), params.Type());
+    return;
+  }
+
+  FetchTrustedVaultKeysForCreation(
+      std::move(params), std::move(client_data_json), *keys, did_complete_uv);
+}
+
+void PasskeyTabHelper::FetchTrustedVaultKeysForCreation(
+    RegistrationRequestParams params,
+    std::string client_data_json,
+    DeviceAuthorizationKeys device_authorization_keys,
+    bool did_complete_uv) {
+  PasskeyUserVerificationStatus status =
+      DetermineUserVerificationStatus(params, did_complete_uv);
+  const bool allow_ui =
+      params.Type() != PasskeyRequestParams::RequestType::kConditionalCreate;
+
+  client_->FetchTrustedVaultKeys(
+      ReauthenticatePurpose::kEncrypt, status, allow_ui,
+      base::BindOnce(&PasskeyTabHelper::CompletePasskeyCreation,
+                     this->AsWeakPtr(), std::move(params),
+                     std::move(client_data_json),
+                     std::move(device_authorization_keys)));
+}
+
+void PasskeyTabHelper::CompletePasskeyCreation(
+    RegistrationRequestParams params,
+    std::string client_data_json,
+    DeviceAuthorizationKeys device_authorization_keys,
+    SharedKeyList shared_key_list,
+    bool did_complete_uv) {
   web::WebFrame* web_frame = GetWebFrame(params.FrameId());
   if (!web_frame) {
     return;
@@ -1045,8 +1099,11 @@ void PasskeyTabHelper::CompletePasskeyCreation(RegistrationRequestParams params,
   passkey_model_utils::ExtensionInputData extension_input_data =
       params.ExtensionInputForCreation();
   auto [passkey, attestation_data] = CreatePasskeyAndAttestationObject(
-      shared_key_list[0], std::move(client_data_json), params.RpId(),
-      params.UserEntity(), extension_input_data, did_complete_uv);
+      shared_key_list[0],
+      passkey_model_utils::FindLatestDeviceAuthorizationKey(
+          device_authorization_keys),
+      std::move(client_data_json), params.RpId(), params.UserEntity(),
+      extension_input_data, did_complete_uv);
 
   if (!webauthn::passkey_model_utils::IsPasskeyValid(passkey)) {
     DeferToRendererForFrame(web_frame, passkey_request_id, params.Type());
@@ -1104,10 +1161,12 @@ void PasskeyTabHelper::StartPasskeyAssertion(std::string request_id,
   if (passkey->has_security_domain_encrypted() &&
       base::FeatureList::IsEnabled(
           features::kDeviceAuthorizationPasskeyDecryption)) {
-    client_->FetchDeviceAuthorizationKeys(base::BindOnce(
-        &PasskeyTabHelper::OnDeviceAuthorizationKeysFetched, this->AsWeakPtr(),
-        std::move(params), std::move(*passkey), std::move(client_data_json),
-        did_complete_uv));
+    client_->FetchDeviceAuthorizationKeys(
+        /*allow_reauth=*/true,
+        base::BindOnce(
+            &PasskeyTabHelper::OnDeviceAuthorizationKeysFetchedForAssertion,
+            this->AsWeakPtr(), std::move(params), std::move(*passkey),
+            std::move(client_data_json), did_complete_uv));
     return;
   }
 
@@ -1116,7 +1175,7 @@ void PasskeyTabHelper::StartPasskeyAssertion(std::string request_id,
       /*device_authorization_keys=*/{}, did_complete_uv);
 }
 
-void PasskeyTabHelper::OnDeviceAuthorizationKeysFetched(
+void PasskeyTabHelper::OnDeviceAuthorizationKeysFetchedForAssertion(
     AssertionRequestParams params,
     sync_pb::WebauthnCredentialSpecifics passkey,
     std::string client_data_json,
@@ -1128,7 +1187,7 @@ void PasskeyTabHelper::OnDeviceAuthorizationKeysFetched(
   }
 
   const DeviceAuthorizationKeys* keys = result.keys();
-  if (!keys) {
+  if (!keys || keys->keys().empty()) {
     DeferToRendererForFrame(web_frame, params.RequestId(), params.Type());
     return;
   }
@@ -1148,7 +1207,7 @@ void PasskeyTabHelper::FetchTrustedVaultKeysForAssertion(
       DetermineUserVerificationStatus(params, did_complete_uv);
 
   client_->FetchTrustedVaultKeys(
-      ReauthenticatePurpose::kDecrypt, status,
+      ReauthenticatePurpose::kDecrypt, status, /*allow_ui=*/true,
       base::BindOnce(&PasskeyTabHelper::CompletePasskeyAssertion,
                      this->AsWeakPtr(), std::move(params), std::move(passkey),
                      std::move(client_data_json),
@@ -1177,7 +1236,7 @@ void PasskeyTabHelper::CompletePasskeyAssertion(
   base::span<const uint8_t> device_authorization_key;
   if (passkey.has_security_domain_encrypted()) {
     const std::optional<base::span<const uint8_t>> key =
-        FindDeviceAuthorizationKeyWithVersion(
+        passkey_model_utils::FindDeviceAuthorizationKeyWithVersion(
             device_authorization_keys,
             passkey.device_authorization_key_version());
     if (!key.has_value()) {

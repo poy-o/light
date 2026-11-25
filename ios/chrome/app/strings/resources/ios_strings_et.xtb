@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">Paroolide jagamine</translation>
 <translation id="1554043146674176775">Lülita AI-režiim välja</translation>
 <translation id="1554477036522844996">Uus aken</translation>
+<translation id="1555014818414775661">Piltide lisamine</translation>
 <translation id="1557806604681757705">arvuti</translation>
 <translation id="1558391695376153246">Sule inkognito vahelehed</translation>
 <translation id="1560153516220021659">Teisese tööriistariba ahendamise nupp</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">Avage <ph name="BEGIN_BOLD" />Safari seaded<ph name="END_BOLD" /></translation>
 <translation id="3858860766373142691">Nimi</translation>
 <translation id="386224966259596343">Teil on võimalus see teave Walletisse salvestada järgmine kord, kui täidate asjakohase vormi.</translation>
-<translation id="3868495844258915202">Kuva kogu URL</translation>
 <translation id="3870931306085184145">Domeeni <ph name="DOMAIN" /> jaoks pole paroole salvestatud</translation>
 <translation id="3875783148670536197">Kuva juhised</translation>
 <translation id="3878657761594430423">Lehepüüdja (sheet grabber)</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">Hinnajälgimise märguannete saamiseks lülitage iOS-i seadetes märguanded sisse.</translation>
 <translation id="528857768909044842">Vahelehegrupid salvestatakse siia</translation>
 <translation id="5294624619177114121">Mobiilimärguanded</translation>
-<translation id="5295239312320826323">Kas eemaldada konto <ph name="USER_EMAIL" />?</translation>
 <translation id="5300589172476337783">Kuva</translation>
 <translation id="5311061401280561833">Juurdepääs kaamerale ja mikrofonile on lubatud</translation>
 <translation id="5313967007315987356">Lisa sait</translation>
@@ -1788,6 +1787,7 @@ Handoff peab olema lubatud seadete jaotises General ja seadmed peavad kasutama s
 <translation id="6504541289630702018">Hõlbus juurdepääs töölaua vahelehegruppidele</translation>
 <translation id="6505334220040167806">Vahelehegrupi ahendamine.</translation>
 <translation id="6506996418997555004">Jagamine vahelehegrupiga „<ph name="GROUP_NAME" />“</translation>
+<translation id="650770261448122895">Otsige nähtavat Lensiga</translation>
 <translation id="6507973708545996744">Logige sisse, et hankida lugemisloend kõigisse oma seadmetesse.</translation>
 <translation id="6518133107902771759">Kinnita</translation>
 <translation id="6523575793810663688">Näita, kuidas seda teha</translation>
@@ -2147,7 +2147,6 @@ Saate igal ajal uuesti alustada.</translation>
 <translation id="7603852183842204213">Blokeer. hüpikuid (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Sünkroonimine ei tööta</translation>
 <translation id="760667371114328991">Lülitage ohutuskontrolli märguanded välja</translation>
-<translation id="7612619742409846846">Google'isse sisse logitud kasutajana</translation>
 <translation id="7612849887607288481">Avage AI prototüübi loomise menüü</translation>
 <translation id="7618220760967055820">Valige, milline nupp tööriistaribal kuvada</translation>
 <translation id="7620522820075868385">Tühista</translation>
@@ -2430,6 +2429,7 @@ Saate igal ajal uuesti alustada.</translation>
 <translation id="8439758443371991593">Peida valik Lisa lugemisloendisse</translation>
 <translation id="8443986842926457191">URL on pikem kui 2048 tähemärki</translation>
 <translation id="8449869326050867919">Parool on jagatud</translation>
+<translation id="8473367210869452063">Selle saidiga interakteerumiseks peatage praegune ülesanne või oodake, kuni Gemini töö lõpetab.</translation>
 <translation id="8473815223723723001">Muuda pilti Geminiga</translation>
 <translation id="8473863474539038330">Aadressid ja muu</translation>
 <translation id="8474378002946546633">Luba märguanded</translation>

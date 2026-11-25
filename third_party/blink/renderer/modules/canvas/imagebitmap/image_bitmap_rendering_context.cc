@@ -30,7 +30,6 @@
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_non_2d_resource_provider.h"
-#include "third_party/blink/renderer/platform/graphics/canvas_resource.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
@@ -490,8 +489,6 @@ ImageBitmapRenderingContext::GetResourceForPushFrame(
     Host()->UpdateMemoryUsage();
 
     if (resource_provider_for_offscreen_canvas_.get()) {
-      base::UmaHistogramEnumeration("Blink.Canvas.ResourceProviderType",
-                                    CanvasResourceProviderType::kSharedImage);
       Host()->DidDraw();
     }
   }

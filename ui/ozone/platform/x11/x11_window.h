@@ -92,6 +92,7 @@ class X11Window : public PlatformWindow,
   void SetTransientWindow(x11::Window window);
 
   bool has_pointer() const { return has_pointer_; }
+  bool IsActive() const;
 
   // Returns true if the window has been requested to map but the server has
   // not yet responded with a MapNotify (or UnmapNotify).  During this period
@@ -189,7 +190,7 @@ class X11Window : public PlatformWindow,
     return platform_window_delegate_;
   }
 
-  void OnXWindowStateChanged();
+  void OnXWindowStateChanged(bool was_fullscreen);
   void OnXWindowDamageEvent(const gfx::Rect& damage_rect);
   void OnXWindowCloseRequested();
   void OnXWindowIsActiveChanged(bool active);
@@ -210,6 +211,9 @@ class X11Window : public PlatformWindow,
   FRIEND_TEST_ALL_PREFIXES(X11WindowTest, WindowManagerTogglesFullscreen);
 
   void UpdateDecorationInsets();
+
+  // Sets the win_gravity in WM_NORMAL_HINTS and updates `static_gravity_`.
+  void SetWinGravity(uint32_t gravity);
 
   // PlatformEventDispatcher:
   bool CanDispatchEvent(const PlatformEvent& event) override;
@@ -280,7 +284,6 @@ class X11Window : public PlatformWindow,
   void Map(bool inactive = false);
   void SetWMStateFullscreen(bool fullscreen);
   void SetWMStateMaximize(bool maximize);
-  bool IsActive() const;
   bool IsTargetedBy(const x11::Event& xev) const;
   // Returns the XI2 touch event being dispatched, if any.
   const x11::Input::DeviceEvent* GetDispatchingTouchEvent() const;
@@ -439,6 +442,10 @@ class X11Window : public PlatformWindow,
   // Is this window able to receive focus?
   bool activatable_ = true;
 
+  // Does this window receive pointer input? If not, its input shape is empty
+  // so that events go to the window underneath it.
+  bool accept_events_ = true;
+
   // Was this window initialized with the override_redirect window attribute?
   bool override_redirect_ = false;
 
@@ -555,6 +562,9 @@ class X11Window : public PlatformWindow,
 
   // The size of the window manager provided borders (if any).
   gfx::Insets native_window_frame_borders_in_pixels_;
+
+  // True if WM_NORMAL_HINTS has StaticGravity.
+  bool static_gravity_ = false;
 
   // The client-side decoration insets last set in _GTK_FRAME_EXTENTS, or
   // nullopt if they have not been set yet (before the window is mapped).

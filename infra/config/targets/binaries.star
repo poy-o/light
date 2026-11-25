@@ -1082,6 +1082,13 @@ targets.binaries.generated_script(
 )
 
 targets.binaries.generated_script(
+    name = "devtools_script_tests",
+    label = "//:devtools_script_tests",
+    skip_usage_check = True,
+    module_scheme = "mocha",
+)
+
+targets.binaries.generated_script(
     name = "devtools_unit_tests",
     label = "//:devtools_unit_tests",
     skip_usage_check = True,
@@ -1865,6 +1872,12 @@ targets.binaries.generated_script(
 )
 
 targets.binaries.generated_script(
+    name = "litert_conversation_e2e_tests",
+    label = "//components/optimization_guide/internal/testing:litert_conversation_e2e_tests",
+    module_scheme = "flat",
+)
+
+targets.binaries.generated_script(
     name = "litert_lm_advanced_main_legacy_tests",
     label = "//components/optimization_guide/internal/testing:litert_lm_advanced_main_legacy_tests",
     module_scheme = "flat",
@@ -1898,6 +1911,8 @@ targets.binaries.generated_script(
 targets.binaries.console_test_launcher(
     name = "openscreen_unittests",
     label = "//chrome/browser/media/router:openscreen_unittests",
+    # All references have been moved to starlark
+    skip_usage_check = True,
     module_scheme = "gtest",
 )
 

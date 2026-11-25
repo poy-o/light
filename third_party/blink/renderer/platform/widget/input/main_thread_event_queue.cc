@@ -8,12 +8,10 @@
 #include <optional>
 #include <utility>
 
-#include "base/command_line.h"
 #include "base/containers/circular_deque.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -25,7 +23,6 @@
 #include "third_party/blink/public/common/input/web_gesture_event.h"
 #include "third_party/blink/public/common/input/web_input_event_attribution.h"
 #include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
-#include "third_party/blink/public/common/switches.h"
 
 namespace blink {
 
@@ -60,21 +57,18 @@ class QueuedClosure : public MainThreadEventQueueTask {
   base::OnceClosure closure_;
 };
 
-// Default minimum time interval at which touchmove events during scroll will be
-// skipped during rAF signal.
-constexpr base::TimeDelta kDefaultAsyncTouchMoveInterval =
+// Legacy minimum time interval at which touchmove events during scroll will be
+// skipped during rAF signal when kConfigurableAsyncTouchMoveInterval is
+// disabled.
+constexpr base::TimeDelta kLegacyAsyncTouchMoveInterval =
     base::Milliseconds(200);
 
 base::TimeDelta GetAsyncTouchMoveInterval() {
-  int throttle_time_ms = 0;
-  if (base::StringToInt(
-          base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-              switches::kAsyncTouchMoveThrottleTimeMs),
-          &throttle_time_ms) &&
-      throttle_time_ms >= 0) {
-    return base::Milliseconds(throttle_time_ms);
+  if (base::FeatureList::IsEnabled(
+          blink::features::kConfigurableAsyncTouchMoveInterval)) {
+    return blink::features::kConfigurableAsyncTouchMoveIntervalParam.Get();
   }
-  return kDefaultAsyncTouchMoveInterval;
+  return kLegacyAsyncTouchMoveInterval;
 }
 
 bool IsGestureScroll(WebInputEvent::Type type) {
@@ -382,8 +376,7 @@ MainThreadEventQueue::MainThreadEventQueue(
   raf_fallback_timer_ = std::make_unique<base::OneShotTimer>();
   raf_fallback_timer_->SetTaskRunner(main_task_runner_);
 
-  event_predictor_ = std::make_unique<InputEventPrediction>(
-      base::FeatureList::IsEnabled(blink::features::kResamplingInputEvents));
+  event_predictor_ = std::make_unique<InputEventPrediction>();
 
 #if DCHECK_IS_ON()
   compositor_task_runner_ = compositor_task_runner;
@@ -659,7 +652,7 @@ void MainThreadEventQueue::DispatchEvents() {
       task = shared_state_.events_.Pop();
     }
 
-    HandleEventResampling(task, base::TimeTicks::Now());
+    HandleEventPrediction(task);
     // Dispatching the event is outside of critical section.
     task->Dispatch(this);
   }
@@ -772,7 +765,7 @@ void MainThreadEventQueue::DispatchRafAlignedInput(base::TimeTicks frame_time) {
       }
       task = shared_state_.events_.Pop();
     }
-    HandleEventResampling(task, frame_time);
+    HandleEventPrediction(task);
     // Dispatching the event is outside of critical section.
     task->Dispatch(this);
   }
@@ -908,12 +901,11 @@ bool MainThreadEventQueue::IsRafAlignedEvent(
   }
 }
 
-void MainThreadEventQueue::HandleEventResampling(
-    const std::unique_ptr<MainThreadEventQueueTask>& item,
-    base::TimeTicks frame_time) {
+void MainThreadEventQueue::HandleEventPrediction(
+    const std::unique_ptr<MainThreadEventQueueTask>& item) {
   if (item->IsWebInputEvent() && allow_raf_aligned_input_ && event_predictor_) {
     QueuedWebInputEvent* event = static_cast<QueuedWebInputEvent*>(item.get());
-    event_predictor_->HandleEvents(*event->MutableCoalescedEvent(), frame_time);
+    event_predictor_->HandleEvents(*event->MutableCoalescedEvent());
   }
 }
 

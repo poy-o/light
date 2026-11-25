@@ -77,7 +77,6 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase
   static override get properties() {
     return {
       currentUpdateStatusEvent_: {type: Object},
-      isManaged_: {type: Boolean},
       managedByIcon_: {type: String},
 
       // <if expr="_google_chrome and is_macosx">
@@ -104,7 +103,7 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase
     progress: 0,
     status: UpdateStatus.DISABLED,
   };
-  protected accessor isManaged_: boolean = loadTimeData.getBoolean('isManaged');
+  protected readonly isManaged_: boolean = loadTimeData.getBoolean('isManaged');
   protected accessor managedByIcon_: string =
       loadTimeData.getString('managedByIcon');
 
@@ -132,8 +131,10 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase
       loadTimeData.getString('settingsRefresh2026') !== '';
 
   // <if expr="_google_chrome">
-  protected accessor feedbackAllowedPref_:
+  private accessor feedbackAllowedPref_:
       chrome.settingsPrivate.PrefObject<boolean>|undefined;
+  private feedbackDisabledDialogEnabled_: boolean =
+      loadTimeData.getBoolean('feedbackDisabledDialogEnabled');
   // </if>
 
   private aboutBrowserProxy_: AboutPageBrowserProxy =
@@ -149,7 +150,9 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase
     // </if>
 
     // <if expr="_google_chrome">
-    this.mirrorPref('feedback_allowed', 'feedbackAllowedPref_');
+    if (!this.feedbackDisabledDialogEnabled_) {
+      this.mirrorPref('feedback_allowed', 'feedbackAllowedPref_');
+    }
     // </if>
   }
 
@@ -355,6 +358,11 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase
   }
 
   // <if expr="_google_chrome">
+  protected shouldShowReportIssue_(): boolean {
+    return this.feedbackDisabledDialogEnabled_ ||
+        Boolean(this.feedbackAllowedPref_?.value);
+  }
+
   protected onReportIssueClick_() {
     this.aboutBrowserProxy_.openFeedbackDialog();
   }

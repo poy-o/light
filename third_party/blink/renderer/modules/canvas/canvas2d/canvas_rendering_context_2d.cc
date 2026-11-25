@@ -104,7 +104,6 @@
 #include "third_party/blink/renderer/platform/geometry/physical_offset.h"
 #include "third_party/blink/renderer/platform/geometry/stroke_data.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_hibernation_handler.h"
-#include "third_party/blink/renderer/platform/graphics/canvas_resource.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/canvas_utils.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_context_rate_limiter.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
@@ -141,9 +140,6 @@
 namespace base {
 struct PendingTask;
 }  // namespace base
-namespace cc {
-class PaintFlags;
-}  // namespace cc
 
 namespace blink {
 class ExecutionContext;
@@ -162,10 +158,6 @@ static mojom::blink::ColorScheme GetColorSchemeFromCanvas(
   }
   return mojom::blink::ColorScheme::kLight;
 }
-
-namespace {
-
-}  // namespace
 
 CanvasRenderingContext* CanvasRenderingContext2D::Factory::Create(
     ExecutionContext* execution_context,
@@ -454,11 +446,15 @@ void CanvasRenderingContext2D::ScrollPathIntoViewInternal(const Path& path) {
           mojom::blink::ScrollBehavior::kAuto));
 }
 
-sk_sp<PaintFilter> CanvasRenderingContext2D::StateGetFilter() {
+void CanvasRenderingContext2D::UpdateStyleForFilterIfNeeded() {
   HTMLCanvasElement* const element = canvas();
   if (GetState().HasCSSFilterWithUrl() && element->GetDocument().GetFrame()) {
     element->GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kCanvas);
   }
+}
+
+sk_sp<PaintFilter> CanvasRenderingContext2D::StateGetFilter() {
+  HTMLCanvasElement* const element = canvas();
   return GetState().GetFilter(element, element->Size(), this);
 }
 
@@ -495,10 +491,6 @@ void CanvasRenderingContext2D::WillDraw(
     CanvasRenderingContext::DidDraw(inflated_dirty_rect, draw_type);
   } else {
     CanvasRenderingContext::DidDraw(dirty_rect, draw_type);
-  }
-
-  if (!canvas()) {
-    return;
   }
 
   // Always draw everything during printing.
@@ -857,6 +849,17 @@ void CanvasRenderingContext2D::PageVisibilityChanged() {
 
   if (!element->IsPageVisible()) {
     PruneLocalFontCache(0);
+    ShrinkRecordingIfFlushed();
+  }
+}
+
+void CanvasRenderingContext2D::ShrinkRecordingIfFlushed() {
+  if (!RuntimeEnabledFeatures::Canvas2dShrinkRecordingWhenHiddenEnabled()) {
+    return;
+  }
+  MemoryManagedPaintRecorder* recorder = Recorder();
+  if (recorder && !recorder->HasReleasableDrawOps()) {
+    recorder->ReleaseExcessCapacity();
   }
 }
 
@@ -1162,10 +1165,14 @@ bool CanvasRenderingContext2D::InitializeBacking() {
 void CanvasRenderingContext2D::ResetBacking() {
   BaseRenderingContext2D::ResetBacking();
   last_recording_ = std::nullopt;
+  // Hibernation has just flushed the recording.
+  if (IsHibernating()) {
+    ShrinkRecordingIfFlushed();
+  }
 }
 
 void CanvasRenderingContext2D::DropAndRecreateExistingBacking() {
-  if (!canvas() || !HasBacking()) {
+  if (!HasBacking()) {
     return;
   }
 
@@ -1214,8 +1221,6 @@ void CanvasRenderingContext2D::RecreateBacking() {
     ResetRecorder();
     return;
   }
-
-  RecordBackingHistograms();
 
   if (GetHibernationHandler()->IsHibernating()) {
     WakeUpFromHibernation();

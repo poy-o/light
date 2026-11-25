@@ -11,7 +11,6 @@
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
 #include "base/i18n/language_tag.h"
-#include "base/i18n/tag_converters.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/gmock_callback_support.h"
@@ -190,7 +189,7 @@ class TestPaymentsAutofillClientMock : public TestPaymentsAutofillClient {
       (base::span<const BnplIssuerContext> bnpl_issuer_contexts,
        std::optional<int64_t> extracted_amount,
        bool is_amount_supported_by_any_issuer,
-       const std::optional<std::string>& app_locale,
+       const std::optional<base::i18n::LanguageTag>& app_locale,
        base::OnceCallback<void(autofill::BnplIssuer)> selected_issuer_callback,
        base::OnceClosure cancel_callback),
       (override));
@@ -205,7 +204,7 @@ class MockBnplUiDelegate : public BnplUiDelegate {
       void,
       ShowSelectBnplIssuerUi,
       (std::vector<BnplIssuerContext> bnpl_issuer_context,
-       std::string app_locale,
+       const base::i18n::LanguageTag& app_locale,
        base::RepeatingCallback<void(BnplIssuer)> selected_issuer_callback,
        base::OnceClosure cancel_callback,
        bool has_seen_ai_terms),
@@ -216,7 +215,7 @@ class MockBnplUiDelegate : public BnplUiDelegate {
       (std::vector<BnplIssuerContext> bnpl_issuer_context,
        std::optional<int64_t> extracted_amount,
        bool is_amount_supported_by_any_issuer,
-       const std::optional<std::string>& app_locale,
+       const std::optional<base::i18n::LanguageTag>& app_locale,
        base::OnceCallback<void(autofill::BnplIssuer)> selected_issuer_callback,
        base::OnceClosure cancel_callback),
       (override));
@@ -262,7 +261,8 @@ class BnplManagerTest : public Test,
   const std::string kContextToken = "CONTEXT_TOKEN";
   const GURL kRedirectUrl = GURL("REDIRECT_URL");
   const GURL kPopupUrl = GURL("https://test.url/sometestpath/");
-  const std::string kAppLocale = "en-US";
+  const base::i18n::LanguageTag kAppLocale =
+      base::i18n::GetKnownLanguageTag("en-US");
   const std::u16string kLegalMessage = u"LEGAL_MESSAGE";
   const std::string kCurrency = "USD";
   const GURL kDomain = GURL("https://dummytest.com/somepathforurl");
@@ -285,8 +285,7 @@ class BnplManagerTest : public Test,
 
   void SetUp() override {
     InitAutofillClient();
-    autofill_client().set_app_locale(
-        base::i18n::GetLanguageTagFromString(kAppLocale).value());
+    autofill_client().set_app_locale(kAppLocale);
     autofill_client().set_last_committed_primary_main_frame_url(kDomain);
     autofill_client().GetPersonalDataManager().set_payments_data_manager(
         std::make_unique<TestPaymentsDataManager>());
@@ -439,7 +438,7 @@ TEST_F(BnplManagerTest, OnUserDecisionToUseBnpl_SetsInitialState) {
   EXPECT_EQ(
       kAmount,
       test_api(*bnpl_manager_).GetOngoingFlowState()->final_checkout_amount);
-  EXPECT_EQ(autofill_client().GetAppLocale().tag_string(),
+  EXPECT_EQ(autofill_client().GetAppLocale(),
             test_api(*bnpl_manager_).GetOngoingFlowState()->app_locale);
   EXPECT_EQ(
       GetBillingCustomerId(payments_autofill_client().GetPaymentsDataManager()),
@@ -465,7 +464,7 @@ TEST_F(BnplManagerTest,
   EXPECT_EQ(
       final_checkout_amount,
       test_api(*bnpl_manager_).GetOngoingFlowState()->final_checkout_amount);
-  EXPECT_EQ(autofill_client().GetAppLocale().tag_string(),
+  EXPECT_EQ(autofill_client().GetAppLocale(),
             test_api(*bnpl_manager_).GetOngoingFlowState()->app_locale);
   EXPECT_EQ(
       GetBillingCustomerId(payments_autofill_client().GetPaymentsDataManager()),
@@ -495,9 +494,7 @@ TEST_F(BnplManagerTest, TosDialogAccepted_PrefetchedRiskDataNotLoaded) {
   EXPECT_CALL(
       *payments_network_interface_,
       CreateBnplPaymentInstrument(/*request_details=*/
-                                  FieldsAre(std::string(autofill_client()
-                                                            .GetAppLocale()
-                                                            .tag_string()),
+                                  FieldsAre(autofill_client().GetAppLocale(),
                                             GetBillingCustomerId(
                                                 payments_autofill_client()
                                                     .GetPaymentsDataManager()),
@@ -530,9 +527,7 @@ TEST_F(BnplManagerTest, TosDialogAccepted_PrefetchedRiskDataLoaded) {
   EXPECT_CALL(
       *payments_network_interface_,
       CreateBnplPaymentInstrument(/*request_details=*/
-                                  FieldsAre(std::string(autofill_client()
-                                                            .GetAppLocale()
-                                                            .tag_string()),
+                                  FieldsAre(autofill_client().GetAppLocale(),
                                             GetBillingCustomerId(
                                                 payments_autofill_client()
                                                     .GetPaymentsDataManager()),
@@ -572,9 +567,7 @@ TEST_F(BnplManagerTest,
   EXPECT_CALL(
       *payments_network_interface_,
       UpdateBnplPaymentInstrument(/*request_details=*/
-                                  FieldsAre(std::string(autofill_client()
-                                                            .GetAppLocale()
-                                                            .tag_string()),
+                                  FieldsAre(autofill_client().GetAppLocale(),
                                             GetBillingCustomerId(
                                                 payments_autofill_client()
                                                     .GetPaymentsDataManager()),
@@ -618,9 +611,7 @@ TEST_F(BnplManagerTest,
   EXPECT_CALL(
       *payments_network_interface_,
       UpdateBnplPaymentInstrument(/*request_details=*/
-                                  FieldsAre(std::string(autofill_client()
-                                                            .GetAppLocale()
-                                                            .tag_string()),
+                                  FieldsAre(autofill_client().GetAppLocale(),
                                             GetBillingCustomerId(
                                                 payments_autofill_client()
                                                     .GetPaymentsDataManager()),
@@ -1872,7 +1863,7 @@ TEST_F(BnplManagerTest, GetSortedBnplIssuerContext_OrdersEligibleFirst) {
           // Unlinked eligible issuers.
           EqualsBnplIssuerContext(IssuerId::kBnplZip,
                                   BnplIssuerEligibilityForPage::kIsEligible),
-          // Linked uneligible issuers.
+          // Linked ineligible issuers.
           EqualsBnplIssuerContext(
               IssuerId::kBnplAfterpay,
               BnplIssuerEligibilityForPage::
@@ -1891,7 +1882,7 @@ TEST_F(BnplManagerTest, GetSortedBnplIssuerContext_OrdersEligibleFirst) {
 // ineligible.
 // - Test 2(current test): Checks the order of unlinked eligible, linked
 // ineligible, and unlinked ineligible.
-TEST_F(BnplManagerTest, GetSortedBnplIssuerContext_OrdersUneligibleLast) {
+TEST_F(BnplManagerTest, GetSortedBnplIssuerContext_OrdersIneligibleLast) {
   // Unlinked issuer + eligibility: kIsEligible.
   SetUpUnlinkedBnplIssuer(/*price_lower_bound_in_micros=*/10'000'000,
                           /*price_higher_bound_in_micros=*/1'000'000'000,
@@ -1931,11 +1922,11 @@ TEST_F(BnplManagerTest, GetSortedBnplIssuerContext_OrdersUneligibleLast) {
           // Unlinked eligible issuers.
           EqualsBnplIssuerContext(IssuerId::kBnplZip,
                                   BnplIssuerEligibilityForPage::kIsEligible),
-          // Linked uneligible issuers.
+          // Linked ineligible issuers.
           EqualsBnplIssuerContext(IssuerId::kBnplAfterpay,
                                   BnplIssuerEligibilityForPage::
                                       kNotEligibleIssuerDoesNotSupportMerchant),
-          // Unlinked uneligible issuers.
+          // Unlinked ineligible issuers.
           EqualsBnplIssuerContext(
               IssuerId::kBnplAffirm,
               BnplIssuerEligibilityForPage::

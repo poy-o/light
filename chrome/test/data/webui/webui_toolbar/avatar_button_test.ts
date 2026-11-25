@@ -3,12 +3,11 @@
 // found in the LICENSE file.
 
 import 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
-import 'chrome://webui-toolbar.top-chrome/lazy_load.js';
 
 import {assertEquals, assertFalse, assertGT, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {microtasksFinished} from 'chrome://webui-test/test_util.js';
-import type {AvatarButtonElement} from 'chrome://webui-toolbar.top-chrome/lazy_load.js';
+import {hasStyle, microtasksFinished} from 'chrome://webui-test/test_util.js';
 import {AvatarToolbarButtonState, BrowserProxyImpl, ToolbarAppElement} from 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
+import type {AvatarButtonElement} from 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
 
 import {TestToolbarBrowserProxy} from './test_toolbar_browser_proxy.js';
 
@@ -48,8 +47,8 @@ suite('AvatarButtonTest', function() {
     toolbar.style.display = 'flex';
     toolbar.style.setProperty('--toolbar-button-height', `${BUTTON_HEIGHT}px`);
     toolbar.style.setProperty('--toolbar-button-icon-size', '20px');
-    toolbar.style.setProperty('--avatar-chip-padding-left', '10px');
-    toolbar.style.setProperty('--avatar-chip-padding-right', '4px');
+    toolbar.style.setProperty('--avatar-chip-padding-start', '10px');
+    toolbar.style.setProperty('--avatar-chip-padding-end', '4px');
     toolbar.style.setProperty('--avatar-chip-icon-label-spacing', '6px');
     // Remove the inner button's outer margins, which are the difference
     // between these, to keep the widths below simple.
@@ -283,6 +282,22 @@ suite('AvatarButtonTest', function() {
     layout(0);
     assertEquals('collapsed', avatar.getAttribute('label-mode'));
     assertTrue(chip.hasAttribute('outset-focus-ring'));
+  });
+
+  // The labelled guest chip has a border. Like native ToolbarButton's border,
+  // toolbar-chip-button paints it around the visible pill, without changing
+  // the button's size.
+  test('GuestBorderIsPaintedOnPill', async function() {
+    avatar.style.setProperty(
+        '--cr-toolbar-button-border-color', 'rgb(1, 2, 3)');
+    const chip = avatar.$.button;
+    assertTrue(hasStyle(chip.$.background, 'border-top-style', 'none'));
+
+    await setState({state: AvatarToolbarButtonState.kGuestSession});
+    assertTrue(chip.hasAttribute('has-border'));
+    assertTrue(
+        hasStyle(chip.$.background, 'border-top', '1px solid rgb(1, 2, 3)'));
+    assertEquals(BUTTON_HEIGHT, chip.getBoundingClientRect().height);
   });
 
   test('RequestLayout', async function() {

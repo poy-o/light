@@ -78,7 +78,6 @@ import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridgeFac
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridgeFactoryJni;
 import org.chromium.chrome.browser.price_tracking.PriceTrackingFeatures;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.tab.MockTab;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.state.LevelDBPersistedDataStorage;
@@ -114,6 +113,7 @@ import org.chromium.components.payments.ui.CurrencyFormatterJni;
 import org.chromium.components.tab_group_sync.EitherId.EitherGroupId;
 import org.chromium.components.tab_group_sync.LocalTabGroupId;
 import org.chromium.components.tab_groups.TabGroupColorId;
+import org.chromium.components.tab_groups.TabGroupId;
 import org.chromium.components.tab_groups.TabGroupsFeatureMap;
 import org.chromium.content_public.browser.BrowserContextHandle;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -341,7 +341,6 @@ public class TabListViewHolderTest {
         doReturn(false).when(mProfile).isOffTheRecord();
         doReturn(mProfile).when(mProfile).getOriginalProfile();
 
-        ProfileManager.setLastUsedProfileForTesting(mProfile);
         PriceTrackingFeatures.setPriceAnnotationsEnabledForTesting(false);
 
         CurrencyFormatterJni.setInstanceForTesting(mCurrencyFormatterJniMock);
@@ -1045,7 +1044,8 @@ public class TabListViewHolderTest {
         TabGroupColorViewProvider provider =
                 new TabGroupColorViewProvider(
                         sActivity,
-                        EitherGroupId.createLocalId(new LocalTabGroupId(new Token(1L, 2L))),
+                        EitherGroupId.createLocalId(
+                                new LocalTabGroupId(TabGroupId.fromRawToken(new Token(1L, 2L)))),
                         /* isIncognito= */ false,
                         TabGroupColorId.BLUE,
                         /* tabGroupSyncService= */ null,

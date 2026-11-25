@@ -6,9 +6,10 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
-#include "base/auto_reset.h"
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
@@ -19,8 +20,10 @@
 #include "base/metrics/statistics_recorder.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
+#include "base/strings/escape.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -36,11 +39,9 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/browser/apps/platform_apps/shortcut_manager.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
-#include "chrome/browser/enterprise/util/managed_browser_utils.h"
 #include "chrome/browser/extensions/api/identity/web_auth_flow.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_init_params.h"
@@ -66,7 +67,6 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
 #include "chrome/browser/ui/signin/signin_view_controller.h"
-#include "chrome/browser/ui/simple_message_box_internal.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/profiles/dice_web_signin_interception_bubble_view.h"
 #include "chrome/browser/ui/webui/signin/history_sync_optin_service.h"
@@ -165,7 +165,6 @@ const char kChromeSyncEndpointURL[] = "/signin/chrome/sync";
 const char kEnableSyncURL[] = "/enable_sync";
 const char kGoogleSignoutResponseHeader[] = "Google-Accounts-SignOut";
 const char kMainGmailEmail[] = "main_email@gmail.com";
-const char kMainManagedEmail[] = "main_email@managed.com";
 const char kNoDiceRequestHeader[] = "NoDiceHeader";
 const char kOAuth2TokenExchangeURL[] = "/oauth2/v4/token";
 const char kOAuth2TokenRevokeURL[] = "/o/oauth2/revoke";
@@ -617,6 +616,7 @@ class DiceBrowserTest : public InProcessBrowserTest,
   void TearDownOnMainThread() override {
     identity_manager_observation_.Reset();
     account_reconcilor_observation_.Reset();
+    InProcessBrowserTest::TearDownOnMainThread();
   }
 
   // Calls |closure| if it is not null and resets it after.
@@ -638,7 +638,6 @@ class DiceBrowserTest : public InProcessBrowserTest,
     EXPECT_EQ(dice_request_header != kNoDiceRequestHeader,
               IsReconcilorBlocked());
     dice_request_header_ = dice_request_header;
-    RunClosureIfValid(std::move(signin_requested_quit_closure_));
   }
 
   void OnChromeSigninEmbeddedRequest(const std::string& dice_request_header) {
@@ -704,6 +703,15 @@ class DiceBrowserTest : public InProcessBrowserTest,
 
   void OnRefreshTokensLoaded() override {
     RunClosureIfValid(std::move(tokens_loaded_quit_closure_));
+  }
+
+  void OnIdentityManagerShutdown(
+      signin::IdentityManager* identity_manager) override {
+    identity_manager_observation_.Reset();
+    // `AccountReconcilor::Observer` has no shutdown hook; `KeyedService`
+    // two-phase shutdown runs `IdentityManager::Shutdown()` before
+    // `~AccountReconcilor()` checks that its observer list is empty.
+    account_reconcilor_observation_.Reset();
   }
 
   // Returns true if the account reconcilor is currently blocked.
@@ -774,12 +782,6 @@ class DiceBrowserTest : public InProcessBrowserTest,
     EXPECT_EQ(count, token_revoked_count_);
   }
 
-  void CloseBrowser() {
-    identity_manager_observation_.Reset();
-    account_reconcilor_observation_.Reset();
-    CloseBrowserSynchronously(browser());
-  }
-
   void UpdateAccountInfoForAccount(AccountInfo account_info) {
     // Fill the account info.
     account_info = AccountInfo::Builder(account_info)
@@ -830,7 +832,6 @@ class DiceBrowserTest : public InProcessBrowserTest,
   base::OnceClosure unblock_count_quit_closure_;
   base::OnceClosure tokens_loaded_quit_closure_;
   base::OnceClosure on_primary_account_set_quit_closure_;
-  base::OnceClosure signin_requested_quit_closure_;
 
  private:
   base::test::ScopedFeatureList feature_list_;
@@ -1344,7 +1345,7 @@ IN_PROC_BROWSER_TEST_F(DiceBrowserTest, TurnOffDice_SignedIn) {
 
 // Checks that Dice is disabled in incognito mode.
 IN_PROC_BROWSER_TEST_F(DiceBrowserTest, Incognito) {
-  BrowserWindowInterface* incognito_browser = CreateBrowserWindow(
+  BrowserWindowInterface* incognito_browser = CreateBrowserWindowForTesting(
       BrowserWindowCreateParams(browser()->GetProfile()->GetPrimaryOTRProfile(
                                     /*create_if_needed=*/true),
                                 /*from_user_gesture=*/true));
@@ -2539,78 +2540,291 @@ IN_PROC_BROWSER_TEST_F(DiceBrowserTestWithChromeSigninIPH,
                        kIPHExplicitBrowserSigninPreferenceRememberedFeature));
 }
 
-// This test is not specifically related to DICE, but it extends
-// |DiceBrowserTest| for convenience.
-class DiceManageAccountBrowserTest : public DiceBrowserTest {
- public:
-  DiceManageAccountBrowserTest()
-      : DiceBrowserTest(kMainManagedEmail),
-        // Skip showing the error message box to avoid freezing the main thread.
-        skip_message_box_auto_reset_(
-            &chrome::internal::g_should_skip_message_box_for_test,
-            true) {}
+namespace {
 
-  void SetUp() override {
-#if BUILDFLAG(IS_WIN)
-    // Shortcut deletion delays tests shutdown on Win-7 and results in time out.
-    // See crbug.com/40686320.
-    AppShortcutManager::SuppressShortcutsForTesting();
-#endif
-    DiceBrowserTest::SetUp();
+constexpr char kLinkedSigninURL[] = "/signin/linked";
+constexpr std::string_view kLinkedAuthCodePrefix = "linked_auth_code_";
+
+std::optional<std::string> ExtractAuthCodeFromRequest(
+    const HttpRequest& request) {
+  if (!request.has_content) {
+    return std::nullopt;
+  }
+  base::StringViewPairs pairs;
+  base::SplitStringIntoKeyValueViewPairs(request.content, '=', '&', &pairs);
+  for (const auto& [key, value] : pairs) {
+    if (key == "code" && !value.empty()) {
+      return base::UnescapeBinaryURLComponent(
+          value, base::UnescapeRule::REPLACE_PLUS_WITH_SPACE);
+    }
+  }
+  return std::nullopt;
+}
+
+}  // namespace
+
+// Test fixture for multi-account DICE linked-account flows.
+//
+// `HandleLinkedSigninRequest()` and `HandleLinkedTokenExchangeRequest()` run on
+// the embedded test server's IO thread and are stateless (configured via
+// request URL query parameters and auth-code prefixes), posting notifications
+// to the UI thread. `pending_token_responses_` is accessed exclusively on the
+// UI thread, and `TearDownOnMainThread()` shuts down `https_server_` before
+// destruction so the `base::Unretained(this)` handlers cannot outlive this
+// fixture.
+class DiceLinkedAccountsBrowserTest : public DiceBrowserTest {
+ public:
+  DiceLinkedAccountsBrowserTest() {
+    https_server_.RegisterRequestHandler(base::BindRepeating(
+        &DiceLinkedAccountsBrowserTest::HandleLinkedSigninRequest,
+        base::Unretained(this)));
+    https_server_.RegisterRequestHandler(base::BindRepeating(
+        &DiceLinkedAccountsBrowserTest::HandleLinkedTokenExchangeRequest,
+        base::Unretained(this)));
   }
 
  protected:
-  base::AutoReset<bool> skip_message_box_auto_reset_;
-  unsigned int number_of_profiles_added_ = 0;
-};
-
-// Tests that prohiting sign-in on startup for a managed profile clears the
-// profile directory on next start-up.
-IN_PROC_BROWSER_TEST_F(DiceManageAccountBrowserTest,
-                       PRE_ClearManagedProfileOnStartup) {
-  // Ensure that there are not deleted profiles before running this test.
-  PrefService* local_state = g_browser_process->local_state();
-  DCHECK(local_state);
-  const base::ListValue& deleted_profiles =
-      local_state->GetList(prefs::kProfilesDeleted);
-  ASSERT_TRUE(deleted_profiles.empty());
-
-  // Sign the profile in.
-  ASSERT_NO_FATAL_FAILURE(SetupSignedInAccounts());
-  enterprise_util::SetUserAcceptedAccountManagement(browser()->GetProfile(),
-                                                    true);
-
-  // Prohibit sign-in on next start-up.
-  browser()->GetProfile()->GetPrefs()->SetBoolean(
-      prefs::kSigninAllowedOnNextStartup, false);
-}
-
-IN_PROC_BROWSER_TEST_F(DiceManageAccountBrowserTest,
-                       ClearManagedProfileOnStartup) {
-  PrefService* local_state = g_browser_process->local_state();
-  DCHECK(local_state);
-
-  // Initial profile should have been deleted as sign-in and sign out were no
-  // longer allowed. If the profile has not yet been deleted, wait for the pref
-  // to be updated.
-  if (local_state->GetList(prefs::kProfilesDeleted).empty()) {
-    base::RunLoop run_loop;
-    PrefChangeRegistrar pref_registrar;
-    pref_registrar.Init(local_state);
-    // Quit the run loop when the 'kProfilesDeleted' pref changes.
-    pref_registrar.Add(prefs::kProfilesDeleted, run_loop.QuitClosure());
-    run_loop.Run();
+  void TearDownOnMainThread() override {
+    EXPECT_TRUE(https_server_.ShutdownAndWaitUntilComplete());
+    pending_token_responses_.clear();
+    DiceBrowserTest::TearDownOnMainThread();
   }
 
-  const base::ListValue& deleted_profiles =
-      local_state->GetList(prefs::kProfilesDeleted);
-  EXPECT_EQ(1U, deleted_profiles.size());
+  static std::string BuildLinkedSigninURL(
+      const std::vector<std::string>& emails,
+      std::optional<std::string_view> meta_header = std::nullopt) {
+    std::vector<std::string> query_params;
+    query_params.reserve(emails.size() + (meta_header.has_value() ? 1 : 0));
+    for (const std::string& email : emails) {
+      query_params.push_back(base::StrCat(
+          {"email=", base::EscapeQueryParamValue(email, /*use_plus=*/true)}));
+    }
+    if (meta_header.has_value()) {
+      query_params.push_back(
+          base::StrCat({"meta=", base::EscapeQueryParamValue(
+                                     *meta_header, /*use_plus=*/true)}));
+    }
+    if (query_params.empty()) {
+      return kLinkedSigninURL;
+    }
+    return base::StrCat(
+        {kLinkedSigninURL, "?", base::JoinString(query_params, "&")});
+  }
 
-  content::RunAllTasksUntilIdle();
+  static std::string FormatMetaHeader(std::string_view initiator_email,
+                                      bool primary_is_connected) {
+    return base::StringPrintf(
+        "initiator_id=%s;primary_is_connected=%d",
+        signin::GetTestGaiaIdForEmail(std::string(initiator_email))
+            .ToString()
+            .c_str(),
+        primary_is_connected ? 1 : 0);
+  }
 
-  // Verify that there is an active profile.
-  Profile* initial_profile = browser()->GetProfile();
+  CoreAccountId GetAccountIdForEmail(const std::string& email) {
+    return GetIdentityManager()->PickAccountIdForAccount(
+        signin::GetTestGaiaIdForEmail(email), email);
+  }
+
+  bool HasTokenRequest(const std::string& email) const {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+    return pending_token_responses_.contains(email);
+  }
+
+  void WaitForTokenRequest(const std::string& email) {
+    ASSERT_TRUE(base::test::RunUntil([&] { return HasTokenRequest(email); }));
+  }
+
+  void SendTokenResponseAndWaitForAdded(const std::string& email) {
+    WaitForTokenRequest(email);
+    auto node = pending_token_responses_.extract(email);
+    ASSERT_TRUE(node);
+    std::move(node.mapped()).Run();
+    CoreAccountId account_id = GetAccountIdForEmail(email);
+    ASSERT_TRUE(base::test::RunUntil([&] {
+      return GetIdentityManager()->HasAccountWithRefreshToken(account_id);
+    }));
+  }
+
+ private:
+  static std::string GetAuthCodeForEmail(std::string_view email) {
+    return base::StrCat({kLinkedAuthCodePrefix, email});
+  }
+
+  std::unique_ptr<HttpResponse> HandleLinkedSigninRequest(
+      const HttpRequest& request) {
+    if (!net::test_server::ShouldHandle(request, kLinkedSigninURL)) {
+      return nullptr;
+    }
+
+    std::string header_value = kNoDiceRequestHeader;
+    if (auto it = request.headers.find(signin::kDiceRequestHeader);
+        it != request.headers.end()) {
+      header_value = it->second;
+    }
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(&DiceLinkedAccountsBrowserTest::OnSigninRequest,
+                       base::Unretained(this), header_value));
+
+    auto http_response = std::make_unique<BasicHttpResponse>();
+    http_response->AddCustomHeader("Cache-Control", "no-store");
+
+    net::test_server::RequestQuery queries =
+        net::test_server::ParseQuery(request.GetURL());
+    auto emails_it = queries.find("email");
+    if (header_value == kNoDiceRequestHeader || emails_it == queries.end() ||
+        emails_it->second.empty()) {
+      return http_response;
+    }
+
+    const std::vector<std::string>& emails = emails_it->second;
+    std::vector<std::string> account_entries;
+    account_entries.reserve(emails.size());
+    for (size_t i = 0; i < emails.size(); ++i) {
+      const std::string& email = emails[i];
+      account_entries.push_back(base::StringPrintf(
+          "action=SIGNIN;authuser=%zu;id=%s;email=%s;authorization_code=%s;"
+          "eligible_for_token_binding=ES256 RS256",
+          i + 1, signin::GetTestGaiaIdForEmail(email).ToString().c_str(),
+          email.c_str(), GetAuthCodeForEmail(email).c_str()));
+    }
+    http_response->AddCustomHeader(kDiceResponseHeader,
+                                   base::JoinString(account_entries, ","));
+    if (auto meta_it = queries.find("meta");
+        meta_it != queries.end() && !meta_it->second.empty()) {
+      http_response->AddCustomHeader(signin::kDiceLinkedAccountsMetaHeader,
+                                     meta_it->second.front());
+    }
+    http_response->AddCustomHeader(
+        "Set-Cookie", "SAPISID=fake; Path=/; Secure; Max-Age=86400");
+    return http_response;
+  }
+
+  std::unique_ptr<HttpResponse> HandleLinkedTokenExchangeRequest(
+      const HttpRequest& request) {
+    if (!net::test_server::ShouldHandle(request, kOAuth2TokenExchangeURL)) {
+      return nullptr;
+    }
+
+    std::optional<std::string> auth_code = ExtractAuthCodeFromRequest(request);
+    if (!auth_code.has_value()) {
+      return nullptr;
+    }
+
+    std::optional<std::string_view> email =
+        base::RemovePrefix(*auth_code, kLinkedAuthCodePrefix);
+    if (!email.has_value() || email->empty()) {
+      return nullptr;
+    }
+
+    auto http_response = std::make_unique<BlockedHttpResponse>(
+        base::BindOnce(&DiceLinkedAccountsBrowserTest::OnLinkedTokenRequest,
+                       base::Unretained(this), std::string(*email)));
+    base::DictValue response =
+        base::DictValue()
+            .Set("access_token", "access_" + *auth_code)
+            .Set("refresh_token", "refresh_" + *auth_code)
+            .Set("expires_in", 9999);
+    http_response->set_content(*base::WriteJson(response));
+    http_response->set_content_type("text/plain");
+    http_response->AddCustomHeader("Cache-Control", "no-store");
+    return http_response;
+  }
+
+  void OnLinkedTokenRequest(std::string email,
+                            base::OnceClosure unblock_closure) {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+    EXPECT_TRUE(IsReconcilorBlocked());
+    EXPECT_FALSE(pending_token_responses_.contains(email));
+    pending_token_responses_[std::move(email)] = std::move(unblock_closure);
+  }
+
+  std::map<std::string, base::OnceClosure> pending_token_responses_;
+  base::test::ScopedFeatureList scoped_feature_list_{
+      switches::kDiceLinkedAccounts};
+};
+
+// Tests that when a signed-in profile receives a multi-account DICE response
+// with `primary_is_connected=1`, tokens are fetched in parallel (`kAll`),
+// interception is suppressed (`kAbortAccountConnected`), and all accounts are
+// added directly to the active profile.
+IN_PROC_BROWSER_TEST_F(DiceLinkedAccountsBrowserTest,
+                       PrimaryConnected_ParallelFetch_NoInterception) {
+  static constexpr char kInitiatorEmail[] = "initiator@gmail.com";
+  static constexpr char kLinkedSecondaryEmail1[] =
+      "linked_secondary1@gmail.com";
+  std::string client_id = GaiaUrls::GetInstance()->oauth2_chrome_client_id();
+
+  // While signed out, verify `linked_accounts=1` is sent without
+  // `primary_account_id`.
+  NavigateToURL(kLinkedSigninURL);
+  EXPECT_EQ(
+      base::StringPrintf("version=%s,client_id=%s,device_id=%s,"
+                         "linked_accounts=1,"
+                         "signin_mode=all_accounts,"
+                         "signout_mode=show_confirmation",
+                         signin::DiceHeaderHelper::GetDiceProtocolVersion(),
+                         client_id.c_str(), GetDeviceId().c_str()),
+      dice_request_header_);
+  WaitForReconcilorUnblockedCount(1);
+
+  // Sign in the primary account.
+  AccountInfo primary_info = signin::MakePrimaryAccountAvailable(
+      GetIdentityManager(), main_email_, signin::ConsentLevel::kSignin);
+
+  // Configure a 2-account connected response (`primary_is_connected=1`) and
+  // navigate to Gaia.
+  base::HistogramTester histogram_tester;
+  NavigateToURL(BuildLinkedSigninURL(
+      {kInitiatorEmail, kLinkedSecondaryEmail1},
+      FormatMetaHeader(kInitiatorEmail, /*primary_is_connected=*/true)));
+
+  EXPECT_EQ(
+      base::StringPrintf("version=%s,client_id=%s,device_id=%s,"
+                         "primary_account_id=%s,linked_accounts=1,"
+                         "signin_mode=all_accounts,"
+                         "signout_mode=show_confirmation",
+                         signin::DiceHeaderHelper::GetDiceProtocolVersion(),
+                         client_id.c_str(), GetDeviceId().c_str(),
+                         primary_info.GetGaiaId().ToString().c_str()),
+      dice_request_header_);
+
+  // Verify both token requests arrive in parallel (`FetchMode::kAll`) before
+  // either response is sent.
+  WaitForTokenRequest(kInitiatorEmail);
+  WaitForTokenRequest(kLinkedSecondaryEmail1);
+
+  // Fulfill the secondary account first, then the initiator account.
+  SendTokenResponseAndWaitForAdded(kLinkedSecondaryEmail1);
+  SendTokenResponseAndWaitForAdded(kInitiatorEmail);
+  WaitForReconcilorUnblockedCount(2);
+
+  // All 3 accounts remain in the source profile with no interception UI.
   EXPECT_EQ(1U, g_browser_process->profile_manager()->GetNumberOfProfiles());
-  EXPECT_EQ(g_browser_process->profile_manager()->GetLastUsedProfile(),
-            initial_profile);
+  EXPECT_EQ(
+      primary_info.GetAccountId(),
+      GetIdentityManager()->GetPrimaryAccountId(signin::ConsentLevel::kSignin));
+  EXPECT_TRUE(GetIdentityManager()->HasAccountWithRefreshToken(
+      GetAccountIdForEmail(kInitiatorEmail)));
+  EXPECT_TRUE(GetIdentityManager()->HasAccountWithRefreshToken(
+      GetAccountIdForEmail(kLinkedSecondaryEmail1)));
+
+  histogram_tester.ExpectUniqueSample(
+      "Signin.DiceLinkedAccountsMetaHeaderStatus",
+      signin::DiceHeaderHelper::DiceLinkedAccountsMetaHeaderStatus::kValid, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Signin.Dice.LinkedAccounts.MultiAccountCount", 2, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Signin.Dice.InvalidPrimaryConnectedInUnsignedProfile", false, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Signin.Intercept.HeuristicOutcome",
+      SigninInterceptionHeuristicOutcome::kAbortAccountConnected, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Signin.Dice.LinkedAccounts.SessionResult.All",
+      DiceResponseHandler::LinkedAccountsSessionResult::kAllSucceeded, 1);
+  histogram_tester.ExpectTotalCount(
+      "Signin.Dice.LinkedAccounts.Latency.InitiatorTokenFetch", 1);
+  histogram_tester.ExpectTotalCount(
+      "Signin.Dice.LinkedAccounts.Latency.TotalSessionDuration", 1);
 }

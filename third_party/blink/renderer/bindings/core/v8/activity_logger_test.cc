@@ -543,13 +543,13 @@ TEST_F(ActivityLoggerTest, FormActionAttribute) {
 }
 
 TEST_F(ActivityLoggerTest, LocalDOMWindowAttribute) {
-  ScopedAllowContentInitiatedDataUrlNavigationsForTest allow_data_url(true);
-
   const char* code =
       "location.href = 'data:text/html;charset=utf-8,A';"
       "location.assign('data:text/html;charset=utf-8,B');"
       "location.replace('data:text/html;charset=utf-8,C');"
-      "location.protocol = 'protocol';"
+      // Setting the protocol does not navigate: the document's about: scheme
+      // cannot become an HTTP(S) scheme, so nothing is logged.
+      "location.protocol = 'https';"
       "location.pathname = 'pathname';"
       "location.search = 'search';"
       "location.hash = 'hash';"
@@ -557,16 +557,10 @@ TEST_F(ActivityLoggerTest, LocalDOMWindowAttribute) {
   const char* expected_activities =
       "blinkSetAttribute | LocalDOMWindow | url | about:blank | "
       "data:text/html;charset=utf-8,A\n"
-      "blinkRequestResource | Main resource | data:text/html;charset=utf-8,A\n"
       "blinkSetAttribute | LocalDOMWindow | url | about:blank | "
       "data:text/html;charset=utf-8,B\n"
-      "blinkRequestResource | Main resource | data:text/html;charset=utf-8,B\n"
       "blinkSetAttribute | LocalDOMWindow | url | about:blank | "
       "data:text/html;charset=utf-8,C\n"
-      "blinkRequestResource | Main resource | data:text/html;charset=utf-8,C\n"
-      "blinkSetAttribute | LocalDOMWindow | url | about:blank | "
-      "protocol:blank\n"
-      "blinkRequestResource | Main resource | protocol:blank\n"
       "blinkSetAttribute | LocalDOMWindow | url | about:blank | "
       "about:pathname\n"
       "blinkSetAttribute | LocalDOMWindow | url | about:blank | "

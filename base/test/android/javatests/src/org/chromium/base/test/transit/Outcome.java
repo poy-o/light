@@ -34,6 +34,9 @@ import java.util.function.Supplier;
  * <p>The join works both ways: {@code trip.reach(outcome)} and {@code outcome.after(trip)} do the
  * same; pick the one that reads better at the call site.
  *
+ * <p>Either half also works alone: {@link TripBuilder#complete()} runs a Trigger with no state
+ * changes, and {@link #await()} waits for an Outcome with no Trigger.
+ *
  * <p>The factory method sets the result type R: the Station or the first ConditionalState entered,
  * or nothing. Chained calls add more state changes without changing it, except {@link
  * #returning(Supplier)}.
@@ -41,13 +44,15 @@ import java.util.function.Supplier;
  * <p>An Outcome holds NEW ConditionalStates, so it can only be reached once. Methods that offer an
  * Outcome should return a new one per call.
  *
- * @param <R> the type returned by {@link TripBuilder#reach(Outcome)} and {@link #after}.
+ * @param <R> the type returned by {@link TripBuilder#reach(Outcome)}, {@link #after} and {@link
+ *     #await()}.
  */
 @NullMarked
 @CheckReturnValue
 public class Outcome<R extends @Nullable Object> {
     private final List<Facility<?>> mFacilitiesToEnter = new ArrayList<>();
     private final List<Facility<?>> mFacilitiesToExit = new ArrayList<>();
+    private final List<Facility<?>> mDefaultFacilitiesToSkip = new ArrayList<>();
     private final List<State> mStatesToEnter = new ArrayList<>();
     private final List<State> mStatesToExit = new ArrayList<>();
     private final List<Condition> mConditions = new ArrayList<>();
@@ -66,6 +71,22 @@ public class Outcome<R extends @Nullable Object> {
     public static <StationT extends Station<?>> Outcome<StationT> enter(StationT station) {
         station.assertInPhase(Phase.NEW);
         return new Outcome<>(station, () -> station);
+    }
+
+    /**
+     * Hop on Public Transit at |station| in |activity|, without an origin Station. Returns
+     * |station|.
+     *
+     * <p>Usually reached with {@link #await()}, since code that hops on is outside Public Transit
+     * and has no Trigger to run.
+     *
+     * @see TripBuilder#hopOnToAnd(Activity, Station)
+     */
+    public static <StationT extends Station<?>> Outcome<StationT> hopOnAt(
+            Activity activity, StationT station) {
+        Outcome<StationT> outcome = enter(station);
+        outcome.mHopOnActivity = activity;
+        return outcome;
     }
 
     /**
@@ -130,9 +151,29 @@ public class Outcome<R extends @Nullable Object> {
         return this;
     }
 
+    /**
+     * Also skip |facility|, a default Facility of the destination Station, when the app is expected
+     * to arrive without it.
+     */
+    public Outcome<R> withoutDefaultFacility(Facility<?> facility) {
+        mDefaultFacilitiesToSkip.add(facility);
+        return this;
+    }
+
     /** Also wait for |conditions|. */
     public Outcome<R> andWaitFor(Condition... conditions) {
         mConditions.addAll(Arrays.asList(conditions));
+        return this;
+    }
+
+    /**
+     * The destination Station is in a new task, e.g. a new window. The Stations already active are
+     * not exited.
+     */
+    public Outcome<R> inNewTask() {
+        assert mDestination != null : "A new Station needs to be entered in the new task";
+        assert mHopOnActivity == null : "Hopping on cannot be combined with a new task";
+        mInNewTask = true;
         return this;
     }
 
@@ -167,6 +208,19 @@ public class Outcome<R extends @Nullable Object> {
     }
 
     /**
+     * Wait for this Outcome without running a Trigger.
+     *
+     * <p>For state changes caused by something already done, or that happen on their own, e.g. a
+     * page finishing loading.
+     *
+     * @return the result of this Outcome.
+     */
+    @CanIgnoreReturnValue
+    public R await() {
+        return Triggers.noopTo().reach(this);
+    }
+
+    /**
      * Add |other|'s state changes to this Outcome. Called by TripBuilder#reach() on the Outcome
      * TripBuilder accumulates.
      */
@@ -189,6 +243,7 @@ public class Outcome<R extends @Nullable Object> {
             mStatesToExit.add(state);
         }
         mConditions.addAll(other.mConditions);
+        mDefaultFacilitiesToSkip.addAll(other.mDefaultFacilitiesToSkip);
         mInNewTask |= other.mInNewTask;
     }
 
@@ -200,11 +255,6 @@ public class Outcome<R extends @Nullable Object> {
         destination.assertInPhase(Phase.NEW);
         mDestination = destination;
         mHopOnActivity = hopOnActivity;
-    }
-
-    /** The destination Station is in a new task, so the Stations already active are not exited. */
-    void setInNewTask() {
-        mInNewTask = true;
     }
 
     @Nullable Station<?> getDestination() {
@@ -221,6 +271,10 @@ public class Outcome<R extends @Nullable Object> {
 
     List<Facility<?>> getFacilitiesToExit() {
         return mFacilitiesToExit;
+    }
+
+    List<Facility<?>> getDefaultFacilitiesToSkip() {
+        return mDefaultFacilitiesToSkip;
     }
 
     List<State> getStatesToEnter() {

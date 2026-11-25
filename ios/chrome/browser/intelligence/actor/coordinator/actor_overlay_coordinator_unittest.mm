@@ -19,7 +19,6 @@
 #import "ios/chrome/browser/shared/public/snackbar/snackbar_constants.h"
 #import "ios/chrome/browser/shared/public/snackbar/snackbar_message.h"
 #import "ios/chrome/grit/ios_strings.h"
-#import "ios/web/public/test/fakes/fake_web_state.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "testing/gtest/include/gtest/gtest.h"
 #import "testing/gtest_mac.h"
@@ -68,11 +67,9 @@ class ActorOverlayCoordinatorTest : public PlatformTest {
 // Test that `start()` and `stop()` correctly add/remove the child view
 // controller and its view.
 TEST_F(ActorOverlayCoordinatorTest, StartAndStopLifecycle) {
-  web::FakeWebState fake_web_state;
   ActorOverlayCoordinator* coordinator = [[ActorOverlayCoordinator alloc]
       initWithBaseViewController:base_view_controller_
-                         browser:browser_.get()
-                        webState:&fake_web_state];
+                         browser:browser_.get()];
 
   EXPECT_NE(coordinator, nil);
 
@@ -104,11 +101,9 @@ TEST_F(ActorOverlayCoordinatorTest, StartAndStopLifecycle) {
 // Test that calling `start()` multiple times consecutively does not result in
 // duplicate child view controllers or duplicate subviews.
 TEST_F(ActorOverlayCoordinatorTest, StartReentrance) {
-  web::FakeWebState fake_web_state;
   ActorOverlayCoordinator* coordinator = [[ActorOverlayCoordinator alloc]
       initWithBaseViewController:base_view_controller_
-                         browser:browser_.get()
-                        webState:&fake_web_state];
+                         browser:browser_.get()];
 
   EXPECT_NE(coordinator, nil);
 
@@ -133,16 +128,14 @@ TEST_F(ActorOverlayCoordinatorTest, StartReentrance) {
   EXPECT_FALSE([base_view_controller_.view.subviews containsObject:child.view]);
 }
 
-// Tests that tapping the scrim presents the snackbar with the expected title
-// and standard duration, deduplicates repeated taps until dismissed, and
-// dismisses the snackbar on `stop`.
+// Tests that `showInteractionLimitedSnackbar` and scrim taps present the
+// snackbar with the expected title and standard duration, deduplicate repeated
+// requests until dismissed, and dismiss the snackbar on `stop`.
 TEST_F(ActorOverlayCoordinatorTest,
-       ScrimTapShowsSnackbarDeduplicatesAndDismissesOnStop) {
-  web::FakeWebState fake_web_state;
+       ShowInteractionLimitedSnackbarDeduplicatesAndDismissesOnStop) {
   ActorOverlayCoordinator* coordinator = [[ActorOverlayCoordinator alloc]
       initWithBaseViewController:base_view_controller_
-                         browser:browser_.get()
-                        webState:&fake_web_state];
+                         browser:browser_.get()];
   [coordinator start];
 
   ActorOverlayViewController* overlay_vc =
@@ -169,22 +162,25 @@ TEST_F(ActorOverlayCoordinatorTest,
   ASSERT_NE(captured_message, nil);
   ASSERT_NE(captured_message.completionHandler, nil);
 
-  // Repeated taps while visible are ignored.
+  // Repeated requests while visible are ignored.
+  [coordinator showInteractionLimitedSnackbar];
   [overlay_vc.delegate actorOverlayViewControllerDidTapScrim:overlay_vc];
   EXPECT_OCMOCK_VERIFY(mock_snackbar_handler_);
 
-  // Once dismissed via `completionHandler`, a subsequent tap presents again.
+  // Once dismissed via `completionHandler`, a subsequent request presents
+  // again.
   captured_message.completionHandler(NO);
   OCMExpect([mock_snackbar_handler_ showSnackbarMessage:[OCMArg any]]);
-  [overlay_vc.delegate actorOverlayViewControllerDidTapScrim:overlay_vc];
+  [coordinator showInteractionLimitedSnackbar];
   EXPECT_OCMOCK_VERIFY(mock_snackbar_handler_);
 
-  // Stopping the coordinator while visible dismisses the snackbar and clears
-  // `overlay_vc.delegate`.
+  // Stopping the coordinator while visible dismisses the snackbar, clears
+  // `overlay_vc.delegate`, and ignores further requests after `stop`.
   OCMExpect([mock_snackbar_handler_ dismissSnackbarWithMessage:expected_title
                                                       animated:YES]);
   [coordinator stop];
   EXPECT_EQ(overlay_vc.delegate, nil);
+  [coordinator showInteractionLimitedSnackbar];
   EXPECT_OCMOCK_VERIFY(mock_snackbar_handler_);
 }
 
@@ -192,11 +188,9 @@ TEST_F(ActorOverlayCoordinatorTest,
 // `-start`, and ignores scrim taps while hidden.
 TEST_F(ActorOverlayCoordinatorTest,
        ScrimVisibleDefaultsToYesAndCanBeConfiguredBeforeStart) {
-  web::FakeWebState fake_web_state;
   ActorOverlayCoordinator* coordinator = [[ActorOverlayCoordinator alloc]
       initWithBaseViewController:base_view_controller_
-                         browser:browser_.get()
-                        webState:&fake_web_state];
+                         browser:browser_.get()];
   EXPECT_TRUE(coordinator.scrimVisible);
 
   coordinator.scrimVisible = NO;
@@ -208,8 +202,10 @@ TEST_F(ActorOverlayCoordinatorTest,
   ASSERT_NE(overlay_vc, nil);
   EXPECT_FALSE(overlay_vc.scrimVisible);
 
-  // Scrim taps are ignored when `scrimVisible` is `NO`.
+  // Scrim taps and direct snackbar requests are ignored when `scrimVisible` is
+  // `NO`.
   [overlay_vc.delegate actorOverlayViewControllerDidTapScrim:overlay_vc];
+  [coordinator showInteractionLimitedSnackbar];
   EXPECT_OCMOCK_VERIFY(mock_snackbar_handler_);
 
   [coordinator stop];
@@ -220,11 +216,9 @@ TEST_F(ActorOverlayCoordinatorTest,
 // tap handling when set back to `YES`.
 TEST_F(ActorOverlayCoordinatorTest,
        SetScrimVisibleUpdatesViewControllerAndDismissesSnackbar) {
-  web::FakeWebState fake_web_state;
   ActorOverlayCoordinator* coordinator = [[ActorOverlayCoordinator alloc]
       initWithBaseViewController:base_view_controller_
-                         browser:browser_.get()
-                        webState:&fake_web_state];
+                         browser:browser_.get()];
   [coordinator start];
 
   ActorOverlayViewController* overlay_vc =

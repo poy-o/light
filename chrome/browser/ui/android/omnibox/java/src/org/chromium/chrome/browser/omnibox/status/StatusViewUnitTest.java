@@ -213,4 +213,27 @@ public class StatusViewUnitTest {
                 mActivity.getResources().getDimensionPixelSize(R.dimen.status_view_width_narrow),
                 mStatusView.getMinimumWidth());
     }
+
+    @Test
+    public void testGetStatusIconWidth_zeroWhenStatusViewGone() {
+        mStatusModel.set(StatusProperties.USE_WIDE_STATUS_ICON, /* value= */ true);
+        mStatusModel.set(StatusProperties.SHOW_STATUS_VIEW, /* value= */ true);
+        performLayout();
+        assertTrue(mStatusView.getStatusIconWidth() > 0);
+
+        mStatusModel.set(StatusProperties.SHOW_STATUS_VIEW, /* value= */ false);
+        performLayout();
+        assertEquals(0, mStatusView.getStatusIconWidth());
+    }
+
+    @Test
+    public void testStatusIconResource_usesResourceProviderCache() {
+        assertNull(mResourceProvider.getDrawableCacheForTesting().get(R.drawable.ic_search_24dp));
+        mStatusModel.set(
+                StatusProperties.STATUS_ICON_RESOURCE,
+                new StatusIconResource(
+                        R.drawable.ic_search_24dp, R.color.default_icon_color_tint_list));
+        assertNotNull(
+                mResourceProvider.getDrawableCacheForTesting().get(R.drawable.ic_search_24dp));
+    }
 }

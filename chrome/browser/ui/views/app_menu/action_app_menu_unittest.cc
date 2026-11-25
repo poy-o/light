@@ -1762,7 +1762,7 @@ TEST_F(ActionAppMenuTest, PopulatesFooterElementsWithManagedAction) {
   ASSERT_NE(footer_view->separator_for_testing(), nullptr);
   EXPECT_TRUE(footer_view->separator_for_testing()->GetVisible());
   EXPECT_EQ(footer_view->separator_for_testing()->GetColorId(),
-            ui::kColorMenuSeparator);
+            kColorAppMenuSeparator);
   const gfx::Insets* separator_margins =
       footer_view->separator_for_testing()->GetProperty(views::kMarginsKey);
   ASSERT_TRUE(separator_margins);
@@ -2496,6 +2496,31 @@ TEST_F(ActionAppMenuTest, SearchBarDisabledByDefault) {
   menu.CloseMenu();
 }
 
+TEST_F(ActionAppMenuTest, FindAndEditSubmenuAtTopLevelWithoutSearch) {
+  base::MockCallback<base::RepeatingClosure> on_menu_closed;
+  ActionAppMenu menu(&mock_window_interface_, on_menu_closed.Get());
+
+  menu.RunMenu(button_->button_controller(), views::MenuRunner::NO_FLAGS);
+  ASSERT_TRUE(menu.IsShowing());
+
+  views::MenuItemView* root = menu.root_menu_item_for_testing();
+  ASSERT_TRUE(root);
+  ASSERT_TRUE(root->HasSubmenu());
+
+  views::MenuItemView* find_and_edit =
+      root->GetMenuItemByID(kActionFindAndEditSubmenu);
+  ASSERT_NE(find_and_edit, nullptr);
+  EXPECT_EQ(find_and_edit->GetParentMenuItem(), root);
+
+  views::MenuItemView* more_tools =
+      root->GetMenuItemByID(kActionDeveloperSubmenu);
+  ASSERT_NE(more_tools, nullptr);
+  EXPECT_EQ(more_tools->GetMenuItemByID(kActionFindAndEditSubmenu), nullptr);
+
+  EXPECT_CALL(on_menu_closed, Run()).Times(1);
+  menu.CloseMenu();
+}
+
 class ActionAppMenuWithSearchTest : public ActionAppMenuTest {
  public:
   ActionAppMenuWithSearchTest() {
@@ -2567,6 +2592,72 @@ class ActionAppMenuWithSearchTest : public ActionAppMenuTest {
   base::test::ScopedFeatureList feature_list_;
 };
 
+TEST_F(ActionAppMenuWithSearchTest, FindAndEditItemsInMoreToolsWithSearch) {
+  base::MockCallback<base::RepeatingClosure> on_menu_closed;
+  ActionAppMenu menu(&mock_window_interface_, on_menu_closed.Get());
+
+  menu.RunMenu(button_->button_controller(), views::MenuRunner::NO_FLAGS);
+  ASSERT_TRUE(menu.IsShowing());
+
+  views::MenuItemView* root = menu.root_menu_item_for_testing();
+  ASSERT_TRUE(root);
+  ASSERT_TRUE(root->HasSubmenu());
+
+  // "Find and edit" is no longer a submenu when kChroMenuSearch is enabled.
+  EXPECT_EQ(root->GetMenuItemByID(kActionFindAndEditSubmenu), nullptr);
+
+  views::MenuItemView* more_tools =
+      root->GetMenuItemByID(kActionDeveloperSubmenu);
+  ASSERT_NE(more_tools, nullptr);
+  ASSERT_TRUE(more_tools->HasSubmenu());
+  EXPECT_EQ(more_tools->title(),
+            l10n_util::GetStringUTF16(IDS_FIND_EDIT_AND_MORE_TOOLS_MENU));
+
+  // Verify order at the top of the submenu:
+  // Find, divider, Cut, Copy, Paste, divider, "More tools" header, then
+  // existing items.
+  views::SubmenuView* submenu = more_tools->GetSubmenu();
+  ASSERT_GE(submenu->children().size(), 8u);
+
+  auto* find_item =
+      views::AsViewClass<views::MenuItemView>(submenu->children()[0]);
+  ASSERT_NE(find_item, nullptr);
+  EXPECT_EQ(find_item->GetCommand(), kActionFind);
+
+  EXPECT_NE(views::AsViewClass<views::MenuSeparator>(submenu->children()[1]),
+            nullptr);
+
+  auto* cut_item =
+      views::AsViewClass<views::MenuItemView>(submenu->children()[2]);
+  ASSERT_NE(cut_item, nullptr);
+  EXPECT_EQ(cut_item->GetCommand(), actions::kActionCut);
+
+  auto* copy_item =
+      views::AsViewClass<views::MenuItemView>(submenu->children()[3]);
+  ASSERT_NE(copy_item, nullptr);
+  EXPECT_EQ(copy_item->GetCommand(), actions::kActionCopy);
+
+  auto* paste_item =
+      views::AsViewClass<views::MenuItemView>(submenu->children()[4]);
+  ASSERT_NE(paste_item, nullptr);
+  EXPECT_EQ(paste_item->GetCommand(), actions::kActionPaste);
+
+  EXPECT_NE(views::AsViewClass<views::MenuSeparator>(submenu->children()[5]),
+            nullptr);
+
+  auto* more_tools_header =
+      views::AsViewClass<views::MenuItemView>(submenu->children()[6]);
+  ASSERT_NE(more_tools_header, nullptr);
+  EXPECT_EQ(more_tools_header->title(),
+            l10n_util::GetStringUTF16(IDS_APP_MENU_MORE_TOOLS_HEADER));
+
+  // Existing items follow the "More tools" header.
+  EXPECT_NE(more_tools->GetMenuItemByID(kActionDevTools), nullptr);
+
+  EXPECT_CALL(on_menu_closed, Run()).Times(1);
+  menu.CloseMenu();
+}
+
 TEST_F(ActionAppMenuWithSearchTest, SearchBarEnabledWithFeatureFlag) {
   base::MockCallback<base::RepeatingClosure> on_menu_closed;
   ActionAppMenu menu(&mock_window_interface_, on_menu_closed.Get());
@@ -2606,7 +2697,7 @@ TEST_F(ActionAppMenuWithSearchTest, SearchBarEnabledWithFeatureFlag) {
   ASSERT_TRUE(separator);
   EXPECT_EQ(separator->GetOrientation(),
             views::Separator::Orientation::kHorizontal);
-  EXPECT_EQ(separator->GetColorId(), ui::kColorMenuSeparator);
+  EXPECT_EQ(separator->GetColorId(), kColorAppMenuSeparator);
   const gfx::Insets* separator_margins =
       separator->GetProperty(views::kMarginsKey);
   ASSERT_TRUE(separator_margins);
@@ -2681,6 +2772,70 @@ TEST_F(ActionAppMenuWithSearchTest, SearchBarEnabledWithFeatureFlag) {
 
   EXPECT_CALL(on_menu_closed, Run()).Times(1);
   menu.CloseMenu();
+}
+
+TEST_F(ActionAppMenuWithSearchTest,
+       FullWidthDividersMatchTonalOutlineInLightAndDarkModes) {
+#if !BUILDFLAG(IS_CHROMEOS)
+  policy::ScopedManagementServiceOverrideForTesting profile_management(
+      policy::ManagementServiceFactory::GetForProfile(profile_.get()),
+      policy::EnterpriseManagementAuthority::DOMAIN_LOCAL);
+#endif
+
+  for (const auto color_mode : {ui::ColorProviderKey::ColorMode::kLight,
+                                ui::ColorProviderKey::ColorMode::kDark}) {
+    SCOPED_TRACE(color_mode == ui::ColorProviderKey::ColorMode::kDark
+                     ? "dark"
+                     : "light");
+    widget_->SetColorModeOverride(color_mode);
+
+    base::MockCallback<base::RepeatingClosure> on_menu_closed;
+    ActionAppMenu menu(&mock_window_interface_, on_menu_closed.Get());
+    menu.RunMenu(button_->button_controller(), views::MenuRunner::NO_FLAGS);
+    ASSERT_TRUE(menu.IsShowing());
+
+    views::MenuItemView* root = menu.root_menu_item_for_testing();
+    ASSERT_TRUE(root);
+    views::SubmenuView* submenu = root->GetSubmenu();
+    ASSERT_TRUE(submenu);
+    const ui::ColorProvider* color_provider = submenu->GetColorProvider();
+    ASSERT_TRUE(color_provider);
+
+    const SkColor tonal_outline =
+        color_provider->GetColor(ui::kColorSysTonalOutline);
+    EXPECT_NE(tonal_outline, gfx::kPlaceholderColor);
+    EXPECT_EQ(color_provider->GetColor(kColorAppMenuBlockButtonBorder),
+              tonal_outline);
+
+    views::Separator* search_separator =
+        GetSeparator(menu.search_bar_for_testing());
+    ASSERT_TRUE(search_separator);
+    EXPECT_EQ(search_separator->GetColorId(), kColorAppMenuSeparator);
+    EXPECT_EQ(color_provider->GetColor(search_separator->GetColorId()),
+              tonal_outline);
+
+#if !BUILDFLAG(IS_CHROMEOS)
+    views::MenuItemView* footer_item =
+        submenu->GetMenuItemAt(submenu->GetMenuItems().size() - 1);
+    ASSERT_TRUE(footer_item);
+    auto* footer_view =
+        views::AsViewClass<AppMenuFooterView>(footer_item->children()[0]);
+    ASSERT_TRUE(footer_view);
+    views::Separator* footer_separator = footer_view->separator_for_testing();
+    ASSERT_TRUE(footer_separator);
+    EXPECT_EQ(footer_separator->GetColorId(), kColorAppMenuSeparator);
+    EXPECT_EQ(color_provider->GetColor(footer_separator->GetColorId()),
+              tonal_outline);
+#endif
+
+    if (color_mode == ui::ColorProviderKey::ColorMode::kDark) {
+      EXPECT_NE(color_provider->GetColor(search_separator->GetColorId()),
+                color_provider->GetColor(ui::kColorMenuSeparator));
+    }
+
+    EXPECT_CALL(on_menu_closed, Run()).Times(1);
+    menu.CloseMenu();
+  }
 }
 
 TEST_F(ActionAppMenuWithSearchTest,
@@ -2845,13 +3000,15 @@ TEST_F(ActionAppMenuWithSearchTest, SearchQueryShowsOnlyResults) {
 
   // The matched text is highlighted and not treated as a mnemonic.
   EXPECT_EQ(result->title(), u"Downloads");
-  EXPECT_EQ(result->highlight_range(), gfx::Range(0, 9));
+  EXPECT_THAT(result->highlight_ranges(),
+              testing::ElementsAre(gfx::Range(0, 9)));
   EXPECT_FALSE(result->may_have_mnemonics());
 
   // The title and highlight overrides are kept when the bound action changes.
   downloads_action->SetText(u"Changed");
   EXPECT_EQ(result->title(), u"Downloads");
-  EXPECT_EQ(result->highlight_range(), gfx::Range(0, 9));
+  EXPECT_THAT(result->highlight_ranges(),
+              testing::ElementsAre(gfx::Range(0, 9)));
 
   // Clicking a result runs its action.
   EXPECT_CALL(mock_action_invoked_,
@@ -3363,6 +3520,82 @@ TEST_F(ActionAppMenuWithSearchTest, ClearButtonRestoresNormalMenu) {
   EXPECT_EQ(block_view->GetBoundsInScreen().y() -
                 separator->GetBoundsInScreen().bottom(),
             16);
+
+  EXPECT_CALL(on_menu_closed, Run()).Times(1);
+  menu.CloseMenu();
+}
+
+// Regression test for crbug.com/582788980: canceling search rebuilds the menu
+// while it is open, so disabled items must keep their disabled icon color.
+TEST_F(ActionAppMenuWithSearchTest,
+       CancelSearchPreservesDisabledItemIconColor) {
+  actions::ActionItem* translate_action =
+      actions::ActionManager::Get().FindAction(
+          kActionShowTranslate, browser_actions_->root_action_item());
+  ASSERT_NE(translate_action, nullptr);
+  translate_action->SetImage(
+      ui::ImageModel::FromVectorIcon(kRocketLaunchIcon, ui::kColorIcon));
+  translate_action->SetEnabled(false);
+
+  actions::ActionItem* print_action = actions::ActionManager::Get().FindAction(
+      kActionPrint, browser_actions_->root_action_item());
+  ASSERT_NE(print_action, nullptr);
+  print_action->SetImage(
+      ui::ImageModel::FromVectorIcon(kRocketLaunchIcon, ui::kColorIcon));
+
+  base::MockCallback<base::RepeatingClosure> on_menu_closed;
+  ActionAppMenu menu(&mock_window_interface_, on_menu_closed.Get());
+
+  menu.RunMenu(button_->button_controller(), views::MenuRunner::NO_FLAGS);
+  ASSERT_TRUE(menu.IsShowing());
+
+  views::MenuItemView* root = menu.root_menu_item_for_testing();
+  ASSERT_NE(root, nullptr);
+  const ui::ColorProvider* color_provider =
+      root->GetSubmenu()->GetColorProvider();
+  ASSERT_NE(color_provider, nullptr);
+  const SkColor disabled_icon_color =
+      color_provider->GetColor(ui::kColorMenuIconDisabled);
+  const SkColor enabled_section_color =
+      color_provider->GetColor(kColorAppMenuToolsAndActionsForeground);
+  ASSERT_NE(disabled_icon_color, enabled_section_color);
+
+  views::MenuItemView* translate_item =
+      root->GetMenuItemByID(kActionShowTranslate);
+  ASSERT_NE(translate_item, nullptr);
+  ASSERT_FALSE(translate_item->GetEnabled());
+  ASSERT_TRUE(translate_item->GetIcon().IsVectorIcon());
+  EXPECT_EQ(translate_item->GetIcon().GetVectorIcon().color().ResolveToSkColor(
+                color_provider),
+            disabled_icon_color);
+
+  AppMenuSearchBarView* search_bar = menu.search_bar_for_testing();
+  ASSERT_NE(search_bar, nullptr);
+  views::Textfield* search_field = GetSearchField(search_bar);
+  ASSERT_NE(search_field, nullptr);
+  search_field->RequestFocus();
+  search_bar->SetText(u"Print");
+  ASSERT_EQ(root->GetMenuItemByID(kActionShowTranslate), nullptr);
+  ASSERT_NE(root->GetMenuItemByID(kActionPrint), nullptr);
+
+  views::test::ButtonTestApi(GetClearButton(search_bar))
+      .NotifyDefaultMouseClick();
+
+  translate_item = root->GetMenuItemByID(kActionShowTranslate);
+  ASSERT_NE(translate_item, nullptr);
+  EXPECT_FALSE(translate_item->GetEnabled());
+  EXPECT_EQ(menu.GetLabelColor(translate_item->GetCommand()), std::nullopt);
+  ASSERT_TRUE(translate_item->GetIcon().IsVectorIcon());
+  EXPECT_EQ(translate_item->GetIcon().GetVectorIcon().color().ResolveToSkColor(
+                color_provider),
+            disabled_icon_color);
+
+  views::MenuItemView* print_item = root->GetMenuItemByID(kActionPrint);
+  ASSERT_NE(print_item, nullptr);
+  EXPECT_TRUE(print_item->GetEnabled());
+  ASSERT_TRUE(print_item->GetIcon().IsVectorIcon());
+  EXPECT_EQ(print_item->GetIcon().GetVectorIcon().color(),
+            ui::ColorVariant(kColorAppMenuToolsAndActionsForeground));
 
   EXPECT_CALL(on_menu_closed, Run()).Times(1);
   menu.CloseMenu();

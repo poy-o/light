@@ -31,6 +31,7 @@
 
 /// BEGIN_GENERATED - DO NOT MODIFY BELOW
 import * as generated from './glic_api_generated.js';
+export import ActionFirstSuggestions = generated.ActionFirstSuggestions;
 export import ActivateTabOptions = generated.ActivateTabOptions;
 export import AdditionalContext = generated.AdditionalContext;
 export import AnnotatedPageData = generated.AnnotatedPageData;
@@ -61,6 +62,8 @@ export import ExperimentalTriggeringUpdate =
 export import FormFillingRequest = generated.FormFillingRequest;
 export import FormFillingResponse = generated.FormFillingResponse;
 export import FrameMetadata = generated.FrameMetadata;
+export import GeicRolloutStage = generated.GeicRolloutStage;
+export import GeicRolloutStagesInfo = generated.GeicRolloutStagesInfo;
 export import GeminiEnterpriseSettings = generated.GeminiEnterpriseSettings;
 export import GetPinCandidatesOptions = generated.GetPinCandidatesOptions;
 export import GmailOtpConfirmationRequest =
@@ -92,6 +95,9 @@ export import SafeBrowsingVerdict = generated.SafeBrowsingVerdict;
 export import Screenshot = generated.Screenshot;
 export import ScreenshotCollectionOptions =
     generated.ScreenshotCollectionOptions;
+export import ScriptToolRejection = generated.ScriptToolRejection;
+export import ScriptToolRejectionDocument =
+    generated.ScriptToolRejectionDocument;
 export import ScrollToNodeSelector = generated.ScrollToNodeSelector;
 export import ScrollToParams = generated.ScrollToParams;
 export import ScrollToSelector = generated.ScrollToSelector;
@@ -104,6 +110,8 @@ export import SelectCredentialDialogRequest =
     generated.SelectCredentialDialogRequest;
 export import SelectCredentialDialogResponse =
     generated.SelectCredentialDialogResponse;
+export import SelectRolloutStageOptions = generated.SelectRolloutStageOptions;
+export import SelectRolloutStageResponse = generated.SelectRolloutStageResponse;
 export import SendTabToSelfDevice = generated.SendTabToSelfDevice;
 export import Skill = generated.Skill;
 export import SkillPreview = generated.SkillPreview;
@@ -171,7 +179,9 @@ export import ScreenshotCompressionQuality =
     generated.ScreenshotCompressionQuality;
 export import ScreenshotEncryptionScheme = generated.ScreenshotEncryptionScheme;
 export import ScreenshotImageFormat = generated.ScreenshotImageFormat;
+export import ScriptToolRejectionReason = generated.ScriptToolRejectionReason;
 export import ScrollToErrorReason = generated.ScrollToErrorReason;
+export import SelectRolloutStageResult = generated.SelectRolloutStageResult;
 export import SettingsPageField = generated.SettingsPageField;
 export import SkillSource = generated.SkillSource;
 export import SkillsWebClientEvent = generated.SkillsWebClientEvent;
@@ -1451,6 +1461,13 @@ export declare interface GlicBrowserHost {
       (tabId: string, verdict: CounterAbuseVerdict): void;
 
   /**
+   * Notifies the host that one or more WebMCP script tool sets declared by page
+   * documents were withheld for a query, along with the coarse rejection
+   * reason.
+   */
+  reportScriptToolRejections?(rejections: ScriptToolRejection[]): void;
+
+  /**
    * Returns an object providing synchronous persistent key-value storage for
    * the web client, backed by Chrome preferences.
    */
@@ -1485,6 +1502,18 @@ export declare interface GlicBrowserHost {
    */
   switchAssistant?
       (options: SwitchAssistantOptions): Promise<SwitchAssistantResponse>;
+
+  /**
+   * Returns an observable of pre-consent Action First FRE suggestions for the
+   * tab the panel targets. Chrome only evaluates tabs while this has
+   * subscribers. An undefined value means there are no suggestions for the
+   * current tab, because it is not evaluated yet or not eligible. Empty
+   * `chipIds` means the client should show generic chips.
+   *
+   * This method is undefined if the browser does not support it.
+   */
+  getActionFirstSuggestions?
+      (): ObservableValue<ActionFirstSuggestions|undefined>;
 }
 
 /**

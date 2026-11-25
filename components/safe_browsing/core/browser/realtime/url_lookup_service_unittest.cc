@@ -38,6 +38,7 @@
 #include "services/network/test/test_url_loader_factory.h"
 #include "services/network/test/test_utils.h"
 #include "testing/platform_test.h"
+#include "url/scheme_host_port.h"
 
 using ::testing::_;
 using testing::DoAll;
@@ -179,6 +180,7 @@ class MockDnsNetworkContext : public network::TestNetworkContext {
       mojo::PendingRemote<network::mojom::ResolveHostClient> response_client)
       override {
     resolve_host_called_count_++;
+    last_resolved_host_ = std::move(host);
     mojo::Remote<network::mojom::ResolveHostClient> client(
         std::move(response_client));
 
@@ -211,12 +213,19 @@ class MockDnsNetworkContext : public network::TestNetworkContext {
   }
 
   int resolve_host_called_count() const { return resolve_host_called_count_; }
-  void reset_called_count() { resolve_host_called_count_ = 0; }
+  const network::mojom::HostResolverHost* last_resolved_host() const {
+    return last_resolved_host_.get();
+  }
+  void ResetRecordedCalls() {
+    resolve_host_called_count_ = 0;
+    last_resolved_host_.reset();
+  }
   void set_simulate_timeout(bool timeout) { simulate_timeout_ = timeout; }
   void set_simulated_error(net::Error error) { simulated_error_ = error; }
 
  private:
   int resolve_host_called_count_ = 0;
+  network::mojom::HostResolverHostPtr last_resolved_host_;
   bool simulate_timeout_ = false;
   net::Error simulated_error_ = net::OK;
   std::vector<mojo::Remote<network::mojom::ResolveHostClient>> pending_clients_;
@@ -333,7 +342,10 @@ class RealTimeUrlLookupServiceTest : public PlatformTest {
       int cache_duration_sec,
       const std::string& cache_expression,
       RTLookupResponse::ThreatInfo::CacheExpressionMatchType
-          cache_expression_match_type) {
+          cache_expression_match_type,
+      std::optional<ClientSideDetectionType> client_side_detection_type =
+          std::nullopt,
+      std::vector<int> llama_trigger_rule_ids = {}) {
     RTLookupResponse response;
     RTLookupResponse::ThreatInfo* new_threat_info = response.add_threat_info();
     new_threat_info->set_verdict_type(verdict_type);
@@ -342,6 +354,14 @@ class RealTimeUrlLookupServiceTest : public PlatformTest {
     new_threat_info->set_cache_expression_using_match_type(cache_expression);
     new_threat_info->set_cache_expression_match_type(
         cache_expression_match_type);
+    if (client_side_detection_type.has_value()) {
+      response.set_client_side_detection_type(*client_side_detection_type);
+    }
+    for (int rule_id : llama_trigger_rule_ids) {
+      response.mutable_llama_forced_trigger_info()
+          ->add_llama_trigger_rule_infos()
+          ->set_llama_trigger_rule_id(rule_id);
+    }
     rt_service_->MayBeCacheRealTimeUrlVerdict(response);
 
     // Call RunUntilIdle() in order to execute task which was posted by
@@ -355,7 +375,10 @@ class RealTimeUrlLookupServiceTest : public PlatformTest {
       int cache_duration_sec,
       const std::string& cache_expression,
       RTLookupResponse::ThreatInfo::CacheExpressionMatchType
-          cache_expression_match_type) {
+          cache_expression_match_type,
+      std::optional<ClientSideDetectionType> client_side_detection_type =
+          std::nullopt,
+      std::vector<int> llama_trigger_rule_ids = {}) {
     RTLookupResponse response;
     RTLookupResponse::ThreatInfo* new_threat_info = response.add_threat_info();
     RTLookupResponse::ThreatInfo threat_info;
@@ -365,6 +388,14 @@ class RealTimeUrlLookupServiceTest : public PlatformTest {
     threat_info.set_cache_expression_using_match_type(cache_expression);
     threat_info.set_cache_expression_match_type(cache_expression_match_type);
     *new_threat_info = threat_info;
+    if (client_side_detection_type.has_value()) {
+      response.set_client_side_detection_type(*client_side_detection_type);
+    }
+    for (int rule_id : llama_trigger_rule_ids) {
+      response.mutable_llama_forced_trigger_info()
+          ->add_llama_trigger_rule_infos()
+          ->set_llama_trigger_rule_id(rule_id);
+    }
     std::string expected_response_str;
     response.SerializeToString(&expected_response_str);
     test_url_loader_factory_.AddResponse(kRealTimeLookupUrlPrefix,
@@ -540,7 +571,7 @@ TEST_P(RealTimeUrlLookupServiceStartFillingRequestProtoTest,
       });
 
   for (size_t i = 0; i < 2; i++) {
-    mock_network_context_.reset_called_count();
+    mock_network_context_.ResetRecordedCalls();
     auto result =
         StartFillingRequestProto(url, /*is_sampled_report=*/i % 2 == 0);
     ASSERT_TRUE(result);
@@ -549,6 +580,12 @@ TEST_P(RealTimeUrlLookupServiceStartFillingRequestProtoTest,
     // kSafeBrowsingWaitForDnsForRealTimeLookup path
     if (GetParam()) {
       EXPECT_EQ(mock_network_context_.resolve_host_called_count(), 1);
+      ASSERT_TRUE(mock_network_context_.last_resolved_host());
+      ASSERT_TRUE(
+          mock_network_context_.last_resolved_host()->is_scheme_host_port());
+      EXPECT_EQ(
+          mock_network_context_.last_resolved_host()->get_scheme_host_port(),
+          url::SchemeHostPort(url));
       ASSERT_EQ(result->referrer_chain_size(), 1);
       ASSERT_EQ(result->referrer_chain(0).ip_addresses_size(), 1);
       EXPECT_EQ(result->referrer_chain(0).ip_addresses(0), "192.168.1.1");
@@ -575,6 +612,12 @@ TEST_P(RealTimeUrlLookupServiceStartFillingRequestProtoTest,
     EXPECT_TRUE(result->population().is_under_advanced_protection());
 #endif
   }
+
+  // Non-HTTP(S) URLs (such as chrome:// in enterprise lookups) should skip DNS.
+  mock_network_context_.ResetRecordedCalls();
+  ASSERT_TRUE(StartFillingRequestProto(GURL("chrome://settings"),
+                                       /*is_sampled_report=*/false));
+  EXPECT_EQ(mock_network_context_.resolve_host_called_count(), 0);
 }
 
 TEST_F(RealTimeUrlLookupServiceTest, DnsResolutionFails) {
@@ -1033,7 +1076,9 @@ TEST_F(RealTimeUrlLookupServiceTest, TestStartLookup_ResponseIsAlreadyCached) {
   MayBeCacheRealTimeUrlVerdictSync(
       RTLookupResponse::ThreatInfo::DANGEROUS,
       RTLookupResponse::ThreatInfo::SOCIAL_ENGINEERING, 60, "example.test/",
-      RTLookupResponse::ThreatInfo::COVERING_MATCH);
+      RTLookupResponse::ThreatInfo::COVERING_MATCH,
+      ClientSideDetectionType::FORCE_REQUEST,
+      /*llama_trigger_rule_ids=*/{12});
 
   base::MockCallback<network::TestURLLoaderFactory::Interceptor>
       request_callback;
@@ -1056,6 +1101,7 @@ TEST_F(RealTimeUrlLookupServiceTest, TestStartLookup_ResponseIsAlreadyCached) {
   histograms.ExpectUniqueSample("SafeBrowsing.RT.ThreatInfoSize",
                                 /* sample */ 0,
                                 /* expected_count */ 0);
+  histograms.ExpectTotalCount("SafeBrowsing.RT.Response.LlamaTriggerRuleId", 0);
 
   // No requests were sent.
   histograms.ExpectTotalCount("SafeBrowsing.RT.Request.Concurrent", 0);
@@ -1229,7 +1275,9 @@ TEST_F(RealTimeUrlLookupServiceTest,
   SetUpRTLookupResponse(RTLookupResponse::ThreatInfo::DANGEROUS,
                         RTLookupResponse::ThreatInfo::SOCIAL_ENGINEERING, 60,
                         "example.test/",
-                        RTLookupResponse::ThreatInfo::COVERING_MATCH);
+                        RTLookupResponse::ThreatInfo::COVERING_MATCH,
+                        ClientSideDetectionType::FORCE_REQUEST,
+                        /*llama_trigger_rule_ids=*/{12, 13});
 
   WaitableMockRTLookupResponseCallback response_callback;
   EXPECT_CALL(response_callback, Run(/* is_rt_lookup_successful */ true,
@@ -1273,6 +1321,11 @@ TEST_F(RealTimeUrlLookupServiceTest,
   histograms.ExpectUniqueSample("SafeBrowsing.RT.ThreatInfoSize",
                                 /* sample */ 1,
                                 /* expected_count */ 1);
+  histograms.ExpectTotalCount("SafeBrowsing.RT.Response.LlamaTriggerRuleId", 2);
+  histograms.ExpectBucketCount("SafeBrowsing.RT.Response.LlamaTriggerRuleId",
+                               12, 1);
+  histograms.ExpectBucketCount("SafeBrowsing.RT.Response.LlamaTriggerRuleId",
+                               13, 1);
   histograms.ExpectUniqueSample("SafeBrowsing.RT.HasAccessTokenFromFetcher",
                                 /*sample=*/true, /*expected_bucket_count=*/1);
   histograms.ExpectUniqueSample(
@@ -1293,7 +1346,9 @@ TEST_F(RealTimeUrlLookupServiceTest,
   SetUpRTLookupResponse(RTLookupResponse::ThreatInfo::DANGEROUS,
                         RTLookupResponse::ThreatInfo::SOCIAL_ENGINEERING, 60,
                         "example.test/",
-                        RTLookupResponse::ThreatInfo::COVERING_MATCH);
+                        RTLookupResponse::ThreatInfo::COVERING_MATCH,
+                        /*client_side_detection_type=*/std::nullopt,
+                        /*llama_trigger_rule_ids=*/{13});
 
   WaitableMockRTLookupResponseCallback response_callback;
   EXPECT_CALL(response_callback, Run(/* is_rt_lookup_successful */ true,
@@ -1329,6 +1384,8 @@ TEST_F(RealTimeUrlLookupServiceTest,
   histograms.ExpectUniqueSample("SafeBrowsing.RT.HasTokenInRequest",
                                 /* sample */ 0,
                                 /* expected_count */ 1);
+  // Not logged because `client_side_detection_type` is not `FORCE_REQUEST`.
+  histograms.ExpectTotalCount("SafeBrowsing.RT.Response.LlamaTriggerRuleId", 0);
 }
 
 TEST_F(RealTimeUrlLookupServiceTest,
@@ -2216,6 +2273,5 @@ TEST_F(RealTimeUrlLookupServiceTest, TestVerdictCacheBypass) {
       std::nullopt, false);
   response_callback.Wait();
 }
-
 
 }  // namespace safe_browsing

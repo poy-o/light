@@ -7,17 +7,21 @@ import {assert} from '//resources/js/assert.js';
 import {enumFromClient, enumToClient} from '../../enum_conversions.js';
 import {AuthTabPurpose as AuthTabPurposeMojo, GeminiEnterpriseHandlerRemote} from '../../gemini_enterprise.mojom-webui.js';
 import type {WebClientHandlerRemote, WebClientInitialState} from '../../glic.mojom-webui.js';
-import type {                       //
-             CloseAuthTabOptions,   //
-             CloseAuthTabResponse,  //
-             CloseSignInTabOptions, //
-             CloseSignInTabResult,  //
-             GeicBrowserHost,       //
-             OpenAuthTabOptions,    //
-             OpenAuthTabResponse,   //
-             OpenSignInTabOptions,  //
-             OpenSignInTabResult,   //
+import type {                            //
+             CloseAuthTabOptions,        //
+             CloseAuthTabResponse,       //
+             CloseSignInTabOptions,      //
+             CloseSignInTabResult,       //
+             GeicBrowserHost,            //
+             GeicRolloutStagesInfo,      //
+             OpenAuthTabOptions,         //
+             OpenAuthTabResponse,        //
+             OpenSignInTabOptions,       //
+             OpenSignInTabResult,        //
+             SelectRolloutStageOptions,  //
+             SelectRolloutStageResponse, //
 } from '../../glic_api/glic_api.js';
+import {wrapMojoRemote} from '../mojo_remote.js';
 
 export class GlicBrowserHostGeic implements GeicBrowserHost {
   private handler?: WebClientHandlerRemote;
@@ -75,10 +79,31 @@ export class GlicBrowserHostGeic implements GeicBrowserHost {
     return {result: enumToClient(response.result)};
   }
 
+  async getRolloutStages(): Promise<GeicRolloutStagesInfo> {
+    const {info} = await this.getGeicHandler().getRolloutStages();
+    const result: GeicRolloutStagesInfo = {
+      stages: info.stages.map((stage) => ({id: stage.id, label: stage.label})),
+    };
+    if (info.currentStageId !== null) {
+      result.currentStageId = info.currentStageId;
+    }
+    return result;
+  }
+
+  async selectRolloutStage(options: SelectRolloutStageOptions):
+      Promise<SelectRolloutStageResponse> {
+    const {response} = await this.getGeicHandler().selectRolloutStage({
+      stageId: options?.stageId ?? '',
+    });
+    return {result: enumToClient(response.result)};
+  }
+
   private getGeicHandler(): GeminiEnterpriseHandlerRemote {
     assert(this.handler);
     if (!this.handlerRemote) {
-      this.handlerRemote = new GeminiEnterpriseHandlerRemote();
+      this.handlerRemote = wrapMojoRemote(
+          new GeminiEnterpriseHandlerRemote(),
+          {prefix: 'GeminiEnterpriseHandler', hangOnDisconnect: true});
       this.handler.createGeminiEnterpriseHandler(
           this.handlerRemote.$.bindNewPipeAndPassReceiver());
     }

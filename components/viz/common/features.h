@@ -78,6 +78,8 @@ VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kAndroidFrameIntervalContinuousRange);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kCalculateDeadlineDerivedInterval);
 VIZ_COMMON_EXPORT extern const base::FeatureParam<double>
     kCalculateDeadlineDerivedIntervalSnapToleranceParam;
+VIZ_COMMON_EXPORT extern const base::FeatureParam<bool>
+    kCalculateDeadlineDerivedIntervalSnapToOsProvidedParam;
 #endif
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kUseMultipleOverlays);
 VIZ_COMMON_EXPORT extern const char kMaxOverlaysParam[];
@@ -144,9 +146,6 @@ VIZ_COMMON_EXPORT extern const base::FeatureParam<base::TimeDelta>
     kAndroidCustomFrameDeadlineMaxInteractionIdleDuration;
 #endif
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kUseDisplaySDRMaxLuminanceNits);
-#if BUILDFLAG(IS_OZONE)
-VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kHdrVideoMetadataPassthrough);
-#endif
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kHideDelegatedFrameHostMac);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kEvictionUnlocksResources);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kSingleVideoFrameRateThrottling);

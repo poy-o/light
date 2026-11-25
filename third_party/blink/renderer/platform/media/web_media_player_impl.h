@@ -322,6 +322,8 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
   // media::MediaObserverClient implementation.
   void SwitchToRemoteRenderer(
       const std::string& remote_device_friendly_name) override;
+  void SetMediaRedirectionTargetId(
+      const base::Token& tracked_element_id) override;
   void SwitchToLocalRenderer(
       media::MediaObserverClient::ReasonToSwitchToLocal reason) override;
   void UpdateRemotePlaybackCompatibility(bool is_compatible) override;
@@ -454,7 +456,6 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
   bool CouldPlayIfEnoughData() override;
   void StopForDemuxerReset() override;
   void RestartForDemuxerChange(bool is_hls) override;
-  void UpdateLoadedUrl(const GURL& url) override;
   void DemuxerRequestsSeek(base::TimeDelta seek_time) override;
   void AddTrack(const media::MediaTrack&) override;
   void RemoveTrack(const media::MediaTrack&) override;

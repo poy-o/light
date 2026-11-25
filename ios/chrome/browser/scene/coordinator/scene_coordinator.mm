@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/scene/coordinator/scene_coordinator.h"
 
+#import <cstdint>
 #import <string>
 #import <utility>
 
@@ -111,6 +112,7 @@
 #import "ios/chrome/browser/shared/public/commands/scene_commands.h"
 #import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
+#import "ios/chrome/browser/shared/public/commands/voice_search_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
@@ -250,6 +252,14 @@ inline LayoutStateScenePassKey PassKey() {
   // Coordinator for the Remote Actor credential bottom sheet.
   RemoteActorCredentialBottomSheetCoordinator*
       _remoteActorCredentialBottomSheetCoordinator;
+  // Monotonically increasing identifier used to cancel in-flight Remote Actor
+  // modal-dismissal callbacks when the flow is stopped, views are closed, or a
+  // newer request arrives.
+  uint64_t _remoteActorRequestID;
+  // YES while `-showRemoteActorCredentialBottomSheetWithRequest:` is initiating
+  // its own synchronous `-closePresentedViews:completion:` pass via
+  // `-dismissModalDialogsWithCompletion:`.
+  BOOL _preservingPendingRemoteActorRequest;
   // YES if the Settings view is being dismissed.
   BOOL _dismissingSettings;
   // The view controller to use as a the rootViewController for this scene's
@@ -547,22 +557,14 @@ inline LayoutStateScenePassKey PassKey() {
   [self dismissModalDialogsWithCompletion:completion
                            dismissOmnibox:YES
                          dismissSnackbars:YES
-                            dismissGemini:YES];
-}
-
-- (void)dismissModalDialogsWithCompletion:(ProceduralBlock)completion
-                           dismissOmnibox:(BOOL)dismissOmnibox
-                         dismissSnackbars:(BOOL)dismissSnackbars {
-  [self dismissModalDialogsWithCompletion:completion
-                           dismissOmnibox:dismissOmnibox
-                         dismissSnackbars:dismissSnackbars
-                            dismissGemini:YES];
+                  geminiDismissalBehavior:GeminiDismissalBehavior::kDefault];
 }
 
 - (void)dismissModalDialogsWithCompletion:(ProceduralBlock)completion
                            dismissOmnibox:(BOOL)dismissOmnibox
                          dismissSnackbars:(BOOL)dismissSnackbars
-                            dismissGemini:(BOOL)dismissGemini {
+                  geminiDismissalBehavior:
+                      (GeminiDismissalBehavior)geminiDismissalBehavior {
   // Disconnected scenes should no-op, since browser objects may not exist.
   // See crbug.com/371847600.
   if (self.sceneState.activationLevel == SceneActivationLevelDisconnected) {
@@ -634,10 +636,21 @@ inline LayoutStateScenePassKey PassKey() {
 
   [self closePresentedViews:NO completion:closePresentedViewsCompletion];
 
-  if (dismissGemini) {
-    id<GeminiCommands> geminiHandler = HandlerForProtocol(
-        _regularBrowser->GetCommandDispatcher(), GeminiCommands);
-    [geminiHandler dismissGeminiFlowWithCompletion:nil];
+  id<GeminiCommands> geminiHandler = HandlerForProtocol(
+      _regularBrowser->GetCommandDispatcher(), GeminiCommands);
+  switch (geminiDismissalBehavior) {
+    case GeminiDismissalBehavior::kDefault:
+      if (IsIOSGeminiBottomSheetMigrationEnabled()) {
+        [geminiHandler minimizeGeminiIfInvoked];
+      } else {
+        [geminiHandler dismissGeminiFlowWithCompletion:nil];
+      }
+      break;
+    case GeminiDismissalBehavior::kNone:
+      break;
+    case GeminiDismissalBehavior::kDismiss:
+      [geminiHandler dismissGeminiFlowWithCompletion:nil];
+      break;
   }
 
   // Verify that no modal views are left presented.
@@ -764,13 +777,13 @@ inline LayoutStateScenePassKey PassKey() {
 
 - (void)stopAllVoiceSearch {
   // Stop voice search on the regular browser.
-  id<BrowserCoordinatorCommands> handler = HandlerForProtocol(
-      _regularBrowser->GetCommandDispatcher(), BrowserCoordinatorCommands);
+  id<VoiceSearchCommands> handler = HandlerForProtocol(
+      _regularBrowser->GetCommandDispatcher(), VoiceSearchCommands);
   [handler stopVoiceSearch];
 
   // Stop voice search on the incognito browser.
   handler = HandlerForProtocol(_incognitoBrowser->GetCommandDispatcher(),
-                               BrowserCoordinatorCommands);
+                               VoiceSearchCommands);
   [handler stopVoiceSearch];
 }
 
@@ -1080,7 +1093,8 @@ inline LayoutStateScenePassKey PassKey() {
   }
   [self dismissModalDialogsWithCompletion:ensureNTP
                            dismissOmnibox:YES
-                         dismissSnackbars:dismissSnackbars];
+                         dismissSnackbars:dismissSnackbars
+                  geminiDismissalBehavior:GeminiDismissalBehavior::kDefault];
 }
 
 - (void)openAIMenu {
@@ -1250,13 +1264,11 @@ inline LayoutStateScenePassKey PassKey() {
   }
 
   _settingsNavigationController = [SettingsNavigationController
-             accountsControllerForBrowser:_regularBrowser.get()
-                       baseViewController:baseViewController
-                                 delegate:self
-                closeSettingsOnAddAccount:YES
-                        showSignoutButton:YES
-                           showDoneButton:NO
-      signoutDismissalByParentCoordinator:NO];
+      accountsControllerForBrowser:_regularBrowser.get()
+                          delegate:self
+         closeSettingsOnAddAccount:YES
+                 showSignoutButton:YES
+                    showDoneButton:NO];
 
   [baseViewController presentViewController:_settingsNavigationController
                                    animated:YES
@@ -1734,32 +1746,27 @@ inline LayoutStateScenePassKey PassKey() {
     (const remote_actor::proto::RemoteActorPasswordUploadRequest&)request {
   [self stopRemoteActorCredentialBottomSheetCoordinator];
 
-  UIViewController* baseViewController = self.activeViewController;
-  if (self.sceneState.activationLevel == SceneActivationLevelDisconnected ||
-      !self.currentBrowser || !baseViewController ||
-      !baseViewController.view.window ||
-      baseViewController.presentedViewController ||
-      baseViewController.isBeingDismissed) {
+  if (!_regularBrowser ||
+      self.sceneState.activationLevel == SceneActivationLevelDisconnected ||
+      self.currentBrowser != _regularBrowser.get()) {
     OpenGeminiCallbackURL(request.task_id(), RemoteActorCallbackStatus::kFailed,
                           RemoteActorCallbackReason::kUploadFailed,
                           base::DoNothing());
     return;
   }
 
-  std::string taskID = request.task_id();
+  uint64_t requestID = ++_remoteActorRequestID;
+  remote_actor::proto::RemoteActorPasswordUploadRequest requestCopy = request;
   __weak __typeof(self) weakSelf = self;
-  RemoteActorCredentialBottomSheetCompletion completion =
-      ^(password_manager::RemoteActorCredentialSharingResult result) {
-        [weakSelf remoteActorCredentialBottomSheetDidFinishWithResult:result
-                                                               taskID:taskID];
-      };
-  _remoteActorCredentialBottomSheetCoordinator =
-      [[RemoteActorCredentialBottomSheetCoordinator alloc]
-          initWithBaseViewController:baseViewController
-                             browser:self.currentBrowser
-                             request:request
-                          completion:completion];
-  [_remoteActorCredentialBottomSheetCoordinator start];
+  _preservingPendingRemoteActorRequest = YES;
+  [self dismissModalDialogsWithCompletion:^{
+    [weakSelf
+        showRemoteActorCredentialBottomSheetAfterModalDismissWithRequest:
+            requestCopy
+                                                               requestID:
+                                                                   requestID];
+  }];
+  _preservingPendingRemoteActorRequest = NO;
 }
 
 #pragma mark - Properties
@@ -2336,12 +2343,63 @@ inline LayoutStateScenePassKey PassKey() {
 }
 
 // Stops `_remoteActorCredentialBottomSheetCoordinator` without triggering a
-// callback URL when torn down externally.
+// callback URL when torn down externally, and cancels any in-flight modal
+// dismissal continuation unless initiated by the current request.
 - (void)stopRemoteActorCredentialBottomSheetCoordinator {
+  if (_preservingPendingRemoteActorRequest) {
+    _preservingPendingRemoteActorRequest = NO;
+  } else {
+    ++_remoteActorRequestID;
+  }
   RemoteActorCredentialBottomSheetCoordinator* coordinator =
       _remoteActorCredentialBottomSheetCoordinator;
   _remoteActorCredentialBottomSheetCoordinator = nil;
   [coordinator stop];
+}
+
+// Presents the Remote Actor credential bottom sheet for `request` if
+// `requestID` still matches `_remoteActorRequestID` after modal dialogs have
+// been dismissed, or reports a failure callback if the scene or active view
+// controller cannot present UI.
+- (void)
+    showRemoteActorCredentialBottomSheetAfterModalDismissWithRequest:
+        (const remote_actor::proto::RemoteActorPasswordUploadRequest&)request
+                                                           requestID:
+                                                               (uint64_t)
+                                                                   requestID {
+  if (requestID != _remoteActorRequestID) {
+    return;
+  }
+  [self stopRemoteActorCredentialBottomSheetCoordinator];
+
+  UIViewController* baseViewController = self.activeViewController;
+  Browser* currentBrowser = _regularBrowser ? self.currentBrowser : nullptr;
+  if (!_regularBrowser ||
+      self.sceneState.activationLevel == SceneActivationLevelDisconnected ||
+      currentBrowser != _regularBrowser.get() ||
+      !baseViewController.view.window ||
+      baseViewController.presentedViewController ||
+      baseViewController.beingDismissed) {
+    OpenGeminiCallbackURL(request.task_id(), RemoteActorCallbackStatus::kFailed,
+                          RemoteActorCallbackReason::kUploadFailed,
+                          base::DoNothing());
+    return;
+  }
+
+  std::string taskID = request.task_id();
+  __weak __typeof(self) weakSelf = self;
+  RemoteActorCredentialBottomSheetCompletion completion =
+      ^(password_manager::RemoteActorCredentialSharingResult result) {
+        [weakSelf remoteActorCredentialBottomSheetDidFinishWithResult:result
+                                                               taskID:taskID];
+      };
+  _remoteActorCredentialBottomSheetCoordinator =
+      [[RemoteActorCredentialBottomSheetCoordinator alloc]
+          initWithBaseViewController:baseViewController
+                             browser:currentBrowser
+                             request:request
+                          completion:completion];
+  [_remoteActorCredentialBottomSheetCoordinator start];
 }
 
 // Handles completion of `_remoteActorCredentialBottomSheetCoordinator` and
@@ -2460,6 +2518,11 @@ inline LayoutStateScenePassKey PassKey() {
 
   // If the guided tour is active, stop it.
   [self hideGuidedTour];
+
+  // If the Gemini entry flow or Live FRE is active, stop it so its modal sheet
+  // is cleaned up before presented-state teardown or completion runs.
+  [self stopGeminiEntryFlowCoordinator];
+  [self stopGeminiLiveFirstRunCoordinator];
 
   __weak __typeof(self) weakSelf = self;
   ProceduralBlock resetAndDismiss = ^{
@@ -2792,6 +2855,20 @@ inline LayoutStateScenePassKey PassKey() {
   }
 
   geminiBrowserAgent->StartGeminiFlow(baseViewController, startupState);
+}
+
+// Stops `_geminiEntryFlowCoordinator`.
+- (void)stopGeminiEntryFlowCoordinator {
+  GeminiEntryFlowCoordinator* coordinator = _geminiEntryFlowCoordinator;
+  _geminiEntryFlowCoordinator = nil;
+  [coordinator stop];
+}
+
+// Stops `_geminiLiveFirstRunCoordinator`.
+- (void)stopGeminiLiveFirstRunCoordinator {
+  GeminiFirstRunCoordinator* coordinator = _geminiLiveFirstRunCoordinator;
+  _geminiLiveFirstRunCoordinator = nil;
+  [coordinator stopWithCompletion:nil];
 }
 
 // Stops the existing first run coordinator (if any) and runs `startBlock`.

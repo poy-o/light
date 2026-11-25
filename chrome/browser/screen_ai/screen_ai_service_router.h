@@ -8,11 +8,9 @@
 #include <memory>
 #include <optional>
 
-#include "base/scoped_observation.h"
-#include "base/time/time.h"
-#include "chrome/browser/screen_ai/screen_ai_install_state.h"
-#include "chrome/browser/screen_ai/screen_ai_service_handler_main_content_extraction.h"
-#include "chrome/browser/screen_ai/screen_ai_service_handler_ocr.h"
+#include "base/memory/raw_ptr.h"
+#include "chrome/browser/screen_ai/main_content_extraction_service_handler.h"
+#include "chrome/browser/screen_ai/ocr_service_handler.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/screen_ai/public/mojom/screen_ai_service.mojom.h"
@@ -23,8 +21,7 @@ class ScreenAILibraryProvider;
 
 // TODO(crbug.com/417378344): Split this class and its factory to two separate
 // classes for OCR and main content extraction.
-class ScreenAIServiceRouter : public KeyedService,
-                              ScreenAIInstallState::Observer {
+class ScreenAIServiceRouter : public KeyedService {
  public:
   enum class Service {
     kMainContentExtraction,
@@ -34,10 +31,6 @@ class ScreenAIServiceRouter : public KeyedService,
   ScreenAIServiceRouter(const ScreenAIServiceRouter&) = delete;
   ScreenAIServiceRouter& operator=(const ScreenAIServiceRouter&) = delete;
   ~ScreenAIServiceRouter() override;
-
-  // Static method to return suggested wait time before next reconnect attempt.
-  static base::TimeDelta SuggestedWaitTimeBeforeReAttempt(
-      uint32_t reattempt_number);
 
   void BindScreenAIAnnotator(
       mojo::PendingReceiver<mojom::ScreenAIAnnotator> receiver);
@@ -50,10 +43,6 @@ class ScreenAIServiceRouter : public KeyedService,
   // failed to initialize.
   void GetServiceStateAsync(Service service, ServiceStateCallback callback);
 
-  // ScreenAIInstallState::Observer:
-  void StateChanged(ScreenAIInstallState::State state) override;
-  void OnScreenAIInstallStateDestroying() override;
-
   // Returns true if the connection for `service` is bound.
   bool IsConnectionBoundForTesting(Service service);
 
@@ -63,20 +52,17 @@ class ScreenAIServiceRouter : public KeyedService,
  private:
   friend class ScreenAIServiceRouterFactory;
 
-  explicit ScreenAIServiceRouter(
-      std::unique_ptr<ScreenAILibraryProvider> library_provider);
+  // `library_provider` must not be null and must outlive this object.
+  explicit ScreenAIServiceRouter(ScreenAILibraryProvider* library_provider);
 
   ScreenAIServiceHandlerBase* GetHandler(Service service);
 
-  // Gives the handlers access to the library. Outlives them.
-  std::unique_ptr<ScreenAILibraryProvider> library_provider_;
+  // Gives the handlers access to the library. Not owned: the provider outlives
+  // this object. In production it is a singleton that is never destroyed.
+  const raw_ptr<ScreenAILibraryProvider> library_provider_;
 
-  std::unique_ptr<ScreenAIServiceHandlerOCR> ocr_handler_;
-  std::unique_ptr<ScreenAIServiceHandlerMainContentExtraction> mce_handler_;
-
-  // Observes changes in Screen AI component download state.
-  base::ScopedObservation<ScreenAIInstallState, ScreenAIInstallState::Observer>
-      component_ready_observer_{this};
+  std::unique_ptr<OcrServiceHandler> ocr_handler_;
+  std::unique_ptr<MainContentExtractionServiceHandler> mce_handler_;
 };
 
 }  // namespace screen_ai

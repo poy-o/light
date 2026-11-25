@@ -112,12 +112,6 @@ BASE_FEATURE(kDetectSpaceChangeViaOcclusion, base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_MAC)
 
 #if BUILDFLAG(IS_CHROMEOS)
-// Integrate input method specific settings to Chrome OS settings page.
-// https://crbug.com/895886.
-BASE_FEATURE(kSettingsShowsPerKeyboardSettings,
-             "InputMethodIntegratedSettings",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kDeprecateAltClick, base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsDeprecateAltClickEnabled() {
@@ -145,6 +139,10 @@ BASE_FEATURE(kWaylandSessionManagement, base::FEATURE_DISABLED_BY_DEFAULT);
 // Controls whether external begin frames are driven by Wayland frame callbacks.
 BASE_FEATURE(kWaylandExternalBeginFrameSource,
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When enabled, the toolkit's text scaling factor (eg. GNOME's Large Text)
+// only scales UI text on Wayland, instead of scaling the whole UI.
+BASE_FEATURE(kWaylandTextScaleTextOnly, base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_OZONE)
 
 #if BUILDFLAG(IS_LINUX)
@@ -521,7 +519,7 @@ BASE_FEATURE(kGlassFrame, base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE_PARAM(bool, kGlassExpandOnHoverEnabled, &kGlassFrame, true);
 BASE_FEATURE_PARAM(bool, kGlassFrameEnabledByDefault, &kGlassFrame, true);
 
-BASE_FEATURE(kRoundedIcons, base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kRoundedIcons, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kWebUIRoundedIcons, base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Updates the default dark neutrals for the theme palette.
@@ -548,6 +546,15 @@ BASE_FEATURE(kColorIdCssStyleSheetOptimization,
 BASE_FEATURE(kColorIdCssStyleSheetCache, base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kOmitNativeFrameOnShadowlessMenus,
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When enabled, DesktopNativeWidgetTopLevelHandler observes the hosting
+// top-level Widget via WidgetObserver (realigning the owned child window to
+// (0, 0) on both moves and resizes, and clearing its Widget pointer in
+// OnWidgetDestroying) instead of observing the Widget's aura::Window via
+// WindowObserver (which only fires on resizes and clears the Widget pointer in
+// OnWindowDestroying).
+BASE_FEATURE(kChildWindowRealignedOnWidgetMove,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsGlassFrameEnabled() {

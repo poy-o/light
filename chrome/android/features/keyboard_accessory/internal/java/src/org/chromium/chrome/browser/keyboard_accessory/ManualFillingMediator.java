@@ -8,7 +8,6 @@ import static org.chromium.build.NullUtil.assertNonNull;
 import static org.chromium.build.NullUtil.assumeNonNull;
 import static org.chromium.chrome.browser.keyboard_accessory.ManualFillingProperties.FIELD_BOUNDS;
 import static org.chromium.chrome.browser.keyboard_accessory.ManualFillingProperties.IS_FULLSCREEN;
-import static org.chromium.chrome.browser.keyboard_accessory.ManualFillingProperties.IS_UNSTRUCTURED_FIELD;
 import static org.chromium.chrome.browser.keyboard_accessory.ManualFillingProperties.KEYBOARD_EXTENSION_STATE;
 import static org.chromium.chrome.browser.keyboard_accessory.ManualFillingProperties.KeyboardExtensionState.EXTENDING_KEYBOARD;
 import static org.chromium.chrome.browser.keyboard_accessory.ManualFillingProperties.KeyboardExtensionState.FLOATING_BAR;
@@ -53,14 +52,12 @@ import org.chromium.chrome.browser.autofill.autofill_ai.AutofillAiSourceAttribut
 import org.chromium.chrome.browser.autofill.settings.SettingsNavigationHelper;
 import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
-import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
 import org.chromium.chrome.browser.keyboard_accessory.ManualFillingProperties.KeyboardExtensionState;
 import org.chromium.chrome.browser.keyboard_accessory.ManualFillingProperties.StateProperty;
 import org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryCoordinator;
-import org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryIphUtils;
 import org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryStyle;
 import org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryStyle.NotchPosition;
 import org.chromium.chrome.browser.keyboard_accessory.data.KeyboardAccessoryData;
@@ -71,7 +68,6 @@ import org.chromium.chrome.browser.keyboard_accessory.sheet_tabs.AccessorySheetT
 import org.chromium.chrome.browser.keyboard_accessory.sheet_tabs.AddressAccessorySheetCoordinator;
 import org.chromium.chrome.browser.keyboard_accessory.sheet_tabs.CreditCardAccessorySheetCoordinator;
 import org.chromium.chrome.browser.keyboard_accessory.sheet_tabs.PasswordAccessorySheetCoordinator;
-import org.chromium.chrome.browser.keyboard_accessory.utils.ManualFillingMetricsRecorder;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabHidingType;
@@ -96,7 +92,6 @@ import org.chromium.components.browser_ui.widget.ActionConfirmationDialog.Dialog
 import org.chromium.components.browser_ui.widget.ActionConfirmationDialog.DialogHandle;
 import org.chromium.components.browser_ui.widget.StrictButtonPressController.ButtonClickResult;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
-import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsAccessibility;
@@ -259,7 +254,6 @@ class ManualFillingMediator
         mActivity = (ChromeActivity) assertNonNull(windowAndroid.getActivity().get());
         mWindowAndroid = windowAndroid;
         mKeyboardAccessory = keyboardAccessory;
-        mKeyboardAccessory.setAtMemoryCallback(this::onAtMemoryClicked);
         mBottomSheetController = sheetController;
         mIsContextualSearchOpened = isContextualSearchOpened;
         mSoftKeyboardDelegate = keyboardDelegate;
@@ -513,12 +507,8 @@ class ManualFillingMediator
         hideSoftKeyboard();
     }
 
-    void show(
-            boolean waitForKeyboard,
-            boolean shouldShowOnLargeFormFactor,
-            boolean isUnstructuredField) {
+    void show(boolean waitForKeyboard, boolean shouldShowOnLargeFormFactor) {
         mModel.set(SHOULD_SHOW_ON_LARGE_FORM_FACTOR, shouldShowOnLargeFormFactor);
-        mModel.set(IS_UNSTRUCTURED_FIELD, isUnstructuredField);
         showWithKeyboardExtensionState(waitForKeyboard);
     }
 
@@ -562,42 +552,6 @@ class ManualFillingMediator
         // Autofill suggestions are invalidated on rotation. Dismissing all filling UI forces
         // the user to interact with the field they want to edit. This refreshes Autofill.
         hideSoftKeyboard();
-    }
-
-    private void onAtMemoryClicked() {
-        assert isInitialized();
-        WebContents webContents = mActivity.getCurrentWebContents();
-        if (webContents != null && !webContents.isDestroyed()) {
-            ManualFillingMetricsRecorder.recordActionSelected(
-                    AccessoryAction.SHOW_AT_MEMORY_BOTTOMSHEET);
-            Profile profile = Profile.fromWebContents(webContents);
-            if (profile != null) {
-                KeyboardAccessoryIphUtils.emitFillingEvent(
-                        TrackerFactory.getTrackerForProfile(profile),
-                        FeatureConstants.KEYBOARD_ACCESSORY_AT_MEMORY_FEATURE);
-            }
-            ManualFillingComponentBridge.onOptionSelectedForWebContents(
-                    webContents, AccessoryAction.SHOW_AT_MEMORY_BOTTOMSHEET);
-        }
-    }
-
-    private void updateAtMemoryEnablement() {
-        assert isInitialized();
-        WebContents webContents = mActivity.getCurrentWebContents();
-        boolean enabled = false;
-        if (webContents != null && !webContents.isDestroyed()) {
-            enabled = ManualFillingComponentBridge.isAtMemoryEnabled(webContents);
-            if (!enabled) {
-                // Hide the AtMemory bottom sheet if not enabled.
-                ManualFillingComponentBridge.hideAtMemoryBottomSheet(webContents);
-            }
-        }
-        mKeyboardAccessory.setAtMemoryEnabled(enabled);
-        // If AtMemory becomes disabled while focused on a contenteditable or textarea
-        // element, hide the accessory to avoid displaying an empty bar.
-        if (mModel.get(IS_UNSTRUCTURED_FIELD) && !enabled) {
-            hide();
-        }
     }
 
     void resume() {
@@ -669,11 +623,6 @@ class ManualFillingMediator
         } else if (property == SHOULD_SHOW_ON_LARGE_FORM_FACTOR) {
             // Do nothing. SHOULD_SHOW_ON_LARGE_FORM_FACTOR is used with
             // KEYBOARD_EXTENSION_STATE.
-            return;
-        } else if (property == IS_UNSTRUCTURED_FIELD) {
-            // Unstructured field state dictates whether fallback tabs should be hidden on the
-            // bar.
-            refreshTabs();
             return;
         } else if (property == FIELD_BOUNDS) {
             // For password fields, the accessory is shown before the FIELD_BOUNDS property is set.
@@ -1417,13 +1366,7 @@ class ManualFillingMediator
         TraceEvent.begin("ManualFillingMediator#refreshTabs");
         ManualFillingState state = mStateCache.getStateFor(mActivity.getCurrentWebContents());
         state.notifyObservers();
-        updateAtMemoryEnablement();
-        // For unstructured fields (e.g., contenteditable and textarea), provide empty tabs so that
-        // only the AtMemory button is displayed without clearing cached tabs in ManualFillingState.
-        KeyboardAccessoryData.Tab[] tabs =
-                mModel.get(IS_UNSTRUCTURED_FIELD)
-                        ? new KeyboardAccessoryData.Tab[0]
-                        : state.getTabs();
+        KeyboardAccessoryData.Tab[] tabs = state.getTabs();
         mAccessorySheet.setTabs(tabs); // Set the sheet tabs first to invalidate the tabs properly.
         mKeyboardAccessory.setTabs(tabs);
         state.requestRecentSheets();

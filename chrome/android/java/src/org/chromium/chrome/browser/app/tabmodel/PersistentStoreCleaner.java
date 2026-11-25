@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.app.tabmodel;
 
 import static org.chromium.base.ThreadUtils.assertOnUiThread;
+import static org.chromium.chrome.browser.app.tabmodel.CustomTabsTabModelOrchestrator.getCustomTabsWindowTag;
 import static org.chromium.chrome.browser.tabwindow.TabWindowManager.ARCHIVED_WINDOW_TAG;
 
 import org.chromium.base.lifetime.Destroyable;
@@ -226,16 +227,22 @@ public class PersistentStoreCleaner implements Destroyable {
         TabWindowManager tabWindowManager = TabWindowManagerSingleton.getInstance();
         if (tabWindowManager.isAllTabStateInitialized()) {
             maybeCleanUnusedWindows();
-        } else if (unusedDataDeps.mTabWindowManagerObserver == null) {
-            unusedDataDeps.mTabWindowManagerObserver =
-                    new TabWindowManager.Observer() {
-                        @Override
-                        public void onAllTabModelStateInitialized() {
-                            maybeCleanUnusedWindows();
-                        }
-                    };
-            tabWindowManager.addObserver(unusedDataDeps.mTabWindowManagerObserver);
+        } else {
+            observeAllTabStateInitialized(unusedDataDeps, tabWindowManager);
         }
+    }
+
+    private void observeAllTabStateInitialized(
+            UnusedDataDeps deps, TabWindowManager tabWindowManager) {
+        if (deps.mTabWindowManagerObserver != null) return;
+        deps.mTabWindowManagerObserver =
+                new TabWindowManager.Observer() {
+                    @Override
+                    public void onAllTabModelStateInitialized() {
+                        maybeCleanUnusedWindows();
+                    }
+                };
+        tabWindowManager.addObserver(deps.mTabWindowManagerObserver);
     }
 
     /**
@@ -297,6 +304,11 @@ public class PersistentStoreCleaner implements Destroyable {
             cleanUnusedDeps();
             return;
         }
+        if (!tabWindowManager.isAllTabStateInitialized()) {
+            deps.mCleanupRunnable = null;
+            observeAllTabStateInitialized(deps, tabWindowManager);
+            return;
+        }
 
         List<String> windowTags = new ArrayList<>();
         List<TabModelSelector> selectors = new ArrayList<>();
@@ -321,7 +333,7 @@ public class PersistentStoreCleaner implements Destroyable {
 
             selectors.add(selector);
             int taskId = tabWindowManager.getTaskIdForCustomTab(selector);
-            windowTags.add(String.valueOf(taskId));
+            windowTags.add(getCustomTabsWindowTag(taskId));
         }
 
         // If there are no selectors available (e.g. during activity teardown or window detachment),

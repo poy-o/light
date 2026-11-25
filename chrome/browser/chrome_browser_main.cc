@@ -35,6 +35,7 @@
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_impl.h"
+#include "chrome/browser/chrome_browser_field_trials.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
 #include "chrome/browser/component_updater/registration.h"
 #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
@@ -81,6 +82,7 @@
 #include "chrome/browser/ui/webui/chrome_untrusted_web_ui_configs.h"
 #include "chrome/browser/ui/webui/chrome_web_ui_configs.h"
 #include "chrome/browser/ui/webui/chrome_web_ui_controller_factory.h"
+#include "chrome/browser/ui/webui/top_chrome/top_chrome_webui_metrics_mapping.h"
 #include "chrome/browser/updater/updater.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
@@ -247,7 +249,6 @@
 #endif
 
 #if BUILDFLAG(IS_WIN)
-#include "base/win/win_util.h"
 #include "chrome/browser/first_run/upgrade_util_win.h"
 #include "chrome/browser/notifications/win/notification_launch_id.h"
 #include "chrome/browser/startup/startup_launch_manager.h"
@@ -479,7 +480,7 @@ StartupProfileInfo CreateInitialProfile(
   base::FilePath last_used_profile;
   if (!last_used_profile_set) {
     last_used_profile = profiles::GetProfileDirFromCommandLine(
-        parsed_command_line, user_data_dir, *g_browser_process->local_state());
+        parsed_command_line, user_data_dir);
   }
   if (!last_used_profile.empty()) {
     profiles::SetLastUsedProfile(last_used_profile);
@@ -907,6 +908,7 @@ ChromeBrowserMainParts::~ChromeBrowserMainParts() {
 
 void ChromeBrowserMainParts::SetupMetrics() {
   TRACE_EVENT0("startup", "ChromeBrowserMainParts::SetupMetrics");
+  RegisterTopChromeWebUIMetricsMappingDefaults();
   CHECK(metrics::SubprocessMetricsProvider::CreateInstance());
   metrics::MetricsService* metrics = browser_process_->metrics_service();
   metrics->GetSyntheticTrialRegistry()->AddObserver(
@@ -918,9 +920,7 @@ void ChromeBrowserMainParts::SetupMetrics() {
   // Now that field trials have been created, initializes metrics recording.
   metrics->InitializeMetricsRecordingState();
 
-  startup_data_->chrome_feature_list_creator()
-      ->browser_field_trials()
-      ->RegisterSyntheticTrials();
+  ChromeBrowserFieldTrials::RegisterSyntheticTrials();
 }
 
 // static
@@ -982,16 +982,6 @@ void ChromeBrowserMainParts::StartMetricsRecording() {
       break;
     case startup_metric_utils::PrereadExperimentGroup::kUnknown:
       break;
-  }
-
-  if (const std::string_view pin_user32_and_gdi32_group =
-          base::win::GetPinUser32AndGdi32TrialGroup();
-      !pin_user32_and_gdi32_group.empty()) {
-    // Register which arm of the PinUser32AndGdi32InAvailabilityCheck study this
-    // client was enrolled into; see crbug.com/577860802.
-    ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
-        "PinUser32AndGdi32InAvailabilityCheck", pin_user32_and_gdi32_group,
-        variations::SyntheticTrialAnnotationMode::kCurrentLog);
   }
 
 #endif  // BUILDFLAG(IS_WIN)

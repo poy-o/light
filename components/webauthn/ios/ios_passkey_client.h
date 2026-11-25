@@ -60,16 +60,22 @@ class IOSPasskeyClient {
       id<IOSPasskeyClientCommands> handler) = 0;
 
   // Fetches the trusted vault keys for the provided `purpose` and calls
-  // `callback` with the fetched keys as input.
+  // `callback` with the fetched keys as input. When `allow_ui` is `false`, no
+  // UI is presented (nor should `user_verification_status` be `kRequired`),
+  // and `callback` is invoked with an empty list if keys cannot be retrieved
+  // silently.
   virtual void FetchTrustedVaultKeys(
       ReauthenticatePurpose purpose,
       PasskeyUserVerificationStatus user_verification_status,
+      bool allow_ui,
       FetchTrustedVaultKeysCallback callback) = 0;
 
-  // Fetches the device authorization keys, which are needed to decrypt
-  // passkeys stored in the `security_domain_encrypted` format, and calls
-  // `callback` with the result.
+  // Fetches the device authorization keys, which are needed to encrypt and
+  // decrypt passkeys stored in the `security_domain_encrypted` format, and
+  // calls `callback` with the result. When `allow_reauth` is `true`, embedded
+  // ReAuth UI may be presented if required to fetch the keys.
   virtual void FetchDeviceAuthorizationKeys(
+      bool allow_reauth,
       FetchDeviceAuthKeysCallback callback) = 0;
 
   // Shows the bottom sheet with passkey suggestions.

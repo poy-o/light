@@ -40,18 +40,14 @@ class MockFormSaver : public StubFormSaver {
   ~MockFormSaver() override = default;
 
   // FormSaver:
-  MOCK_METHOD3(
-      Save,
-      void(PasswordForm pending,
-           const std::vector<raw_ptr<const PasswordForm, VectorExperimental>>&
-               matches,
-           const std::u16string& old_password));
-  MOCK_METHOD3(
-      Update,
-      void(PasswordForm pending,
-           const std::vector<raw_ptr<const PasswordForm, VectorExperimental>>&
-               matches,
-           const std::u16string& old_password));
+  MOCK_METHOD3(Save,
+               void(PasswordForm pending,
+                    const std::vector<raw_ptr<const PasswordForm>>& matches,
+                    const std::u16string& old_password));
+  MOCK_METHOD3(Update,
+               void(PasswordForm pending,
+                    const std::vector<raw_ptr<const PasswordForm>>& matches,
+                    const std::u16string& old_password));
   MOCK_METHOD1(UpdateWithoutPostProcessing, void(PasswordForm pending));
 
   // Convenience downcasting method.
@@ -94,7 +90,8 @@ class CredentialManagerPasswordFormManagerTest : public testing::Test {
     std::unique_ptr<MockFormSaver> saver(new MockFormSaver());
     return std::make_unique<CredentialManagerPasswordFormManager>(
         &client_, std::make_unique<PasswordForm>(form_to_save), &delegate_,
-        std::make_unique<MockFormSaver>(), std::make_unique<FakeFormFetcher>());
+        std::make_unique<MockFormSaver>(), std::make_unique<FakeFormFetcher>(),
+        /*was_returned_by_get=*/false);
   }
 
   void SetNonFederatedAndNotifyFetchCompleted(
@@ -123,7 +120,8 @@ TEST_F(CredentialManagerPasswordFormManagerTest, GetCredentialSource) {
   MockDelegate delegate;
   auto form_manager = std::make_unique<CredentialManagerPasswordFormManager>(
       &client_, std::make_unique<PasswordForm>(), &delegate,
-      std::make_unique<StubFormSaver>(), std::make_unique<FakeFormFetcher>());
+      std::make_unique<StubFormSaver>(), std::make_unique<FakeFormFetcher>(),
+      /*was_returned_by_get=*/false);
   ASSERT_EQ(metrics_util::CredentialSourceType::kCredentialManagementAPI,
             form_manager->GetCredentialSource());
 }

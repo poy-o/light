@@ -33,10 +33,19 @@
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/test/browser_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkColor.h"
+#include "ui/compositor/canvas_painter.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/animation/animation_test_api.h"
+#include "ui/gfx/geometry/point_f.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/geometry/rect_f.h"
+#include "ui/gfx/geometry/transform.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/scroll_view.h"
+#include "ui/views/paint_info.h"
 #include "ui/views/view.h"
 #include "ui/views/view_utils.h"
 #include "ui/views/widget/widget.h"
@@ -177,10 +186,10 @@ IN_PROC_BROWSER_TEST_F(HorizontalTabStripViewLayoutBrowserTest,
   ASSERT_NE(pinned_right_indicator, nullptr);
   ASSERT_NE(unpinned_left_indicator, nullptr);
   auto expect_seam_hit_targets = [&]() {
-    const int seam_x = pinned_scroll->bounds().right() -
-                       pinned_right_indicator->opaque_thickness();
+    const int seam_x =
+        pinned_scroll->bounds().right() - pinned_right_indicator->overlap();
     EXPECT_EQ(seam_x, unpinned_scroll->bounds().x() +
-                          unpinned_left_indicator->opaque_thickness());
+                          unpinned_left_indicator->overlap());
     EXPECT_TRUE(pinned_scroll->Contains(
         tab_strip_view->GetEventHandlerForPoint(gfx::Point(seam_x - 3, 20))));
     EXPECT_TRUE(unpinned_scroll->Contains(
@@ -202,7 +211,7 @@ IN_PROC_BROWSER_TEST_F(HorizontalTabStripViewLayoutBrowserTest,
   // When the unpinned container overflows and its leading overflow indicator
   // is visible, the containers still overlap by `tab_overlap`, the overflowing
   // unpinned container is drawn under the pinned container, and its leading
-  // indicator opaque region spans the full `tab_overlap` so its shadow starts
+  // indicator overlap spans the full `tab_overlap` so its shadow starts
   // after the last pinned tab.
   SetWindowWidth(500);
   AddTabsUntilScrollable();
@@ -214,14 +223,13 @@ IN_PROC_BROWSER_TEST_F(HorizontalTabStripViewLayoutBrowserTest,
   EXPECT_TRUE(unpinned_left_indicator->GetVisible());
   EXPECT_EQ(pinned_scroll->bounds().right() - unpinned_scroll->bounds().x(),
             tab_overlap);
-  EXPECT_EQ(unpinned_left_indicator->opaque_thickness(), tab_overlap);
-  EXPECT_EQ(pinned_right_indicator->opaque_thickness(), 0);
+  EXPECT_EQ(unpinned_left_indicator->overlap(), tab_overlap);
+  EXPECT_EQ(pinned_right_indicator->overlap(), 0);
   EXPECT_EQ(
       views::View::ConvertRectToTarget(
           GetTabViewAt(0)->parent(), tab_strip_view, GetTabViewAt(0)->bounds())
           .right(),
-      unpinned_scroll->bounds().x() +
-          unpinned_left_indicator->opaque_thickness());
+      unpinned_scroll->bounds().x() + unpinned_left_indicator->overlap());
   EXPECT_TRUE(is_drawn_under(unpinned_scroll, pinned_scroll));
   expect_seam_hit_targets();
   EXPECT_EQ(tab_strip_view->GetScrollViewUnmaskedBounds(unpinned_scroll).x(),
@@ -244,7 +252,7 @@ IN_PROC_BROWSER_TEST_F(HorizontalTabStripViewLayoutBrowserTest,
   // When the pinned container overflows (and the unpinned container does not),
   // the containers overlap by `tab_overlap / 2`, the overflowing pinned
   // container is drawn under the unpinned container, and its trailing indicator
-  // opaque region ends at the unpinned scroll view's leading edge so the shadow
+  // overlap ends at the unpinned scroll view's leading edge so the shadow
   // ends before the first unpinned tab.
   SetWindowWidth(500);
   AddPinnedTabsUntilScrollable();
@@ -257,21 +265,20 @@ IN_PROC_BROWSER_TEST_F(HorizontalTabStripViewLayoutBrowserTest,
   EXPECT_FALSE(unpinned_left_indicator->GetVisible());
   EXPECT_EQ(pinned_scroll->bounds().right() - unpinned_scroll->bounds().x(),
             tab_overlap / 2);
-  EXPECT_EQ(pinned_right_indicator->opaque_thickness(), tab_overlap / 2);
-  EXPECT_EQ(unpinned_left_indicator->opaque_thickness(), 0);
+  EXPECT_EQ(pinned_right_indicator->overlap(), tab_overlap / 2);
+  EXPECT_EQ(unpinned_left_indicator->overlap(), 0);
   const int first_unpinned_index =
       GetTabStripModel()->IndexOfFirstNonPinnedTab();
-  EXPECT_EQ(views::View::ConvertRectToTarget(
-                GetTabViewAt(first_unpinned_index)->parent(), tab_strip_view,
-                GetTabViewAt(first_unpinned_index)->bounds())
-                .x(),
-            pinned_scroll->bounds().right() -
-                pinned_right_indicator->opaque_thickness());
+  EXPECT_EQ(
+      views::View::ConvertRectToTarget(
+          GetTabViewAt(first_unpinned_index)->parent(), tab_strip_view,
+          GetTabViewAt(first_unpinned_index)->bounds())
+          .x(),
+      pinned_scroll->bounds().right() - pinned_right_indicator->overlap());
   EXPECT_TRUE(is_drawn_under(pinned_scroll, unpinned_scroll));
   expect_seam_hit_targets();
-  EXPECT_EQ(
-      tab_strip_view->GetScrollViewUnmaskedBounds(pinned_scroll).right(),
-      pinned_scroll->width() - pinned_right_indicator->opaque_thickness());
+  EXPECT_EQ(tab_strip_view->GetScrollViewUnmaskedBounds(pinned_scroll).right(),
+            pinned_scroll->width() - pinned_right_indicator->overlap());
   EXPECT_EQ(tab_strip_view->GetScrollViewUnmaskedBounds(unpinned_scroll).x(),
             0);
 
@@ -290,17 +297,14 @@ IN_PROC_BROWSER_TEST_F(HorizontalTabStripViewLayoutBrowserTest,
   EXPECT_TRUE(unpinned_left_indicator->GetVisible());
   EXPECT_EQ(pinned_scroll->bounds().right() - unpinned_scroll->bounds().x(),
             tab_overlap / 2);
-  EXPECT_EQ(unpinned_left_indicator->opaque_thickness(), 0);
-  EXPECT_EQ(pinned_right_indicator->opaque_thickness(), tab_overlap / 2);
-  EXPECT_EQ(pinned_scroll->bounds().right() -
-                pinned_right_indicator->opaque_thickness(),
-            unpinned_scroll->bounds().x() +
-                unpinned_left_indicator->opaque_thickness());
+  EXPECT_EQ(unpinned_left_indicator->overlap(), 0);
+  EXPECT_EQ(pinned_right_indicator->overlap(), tab_overlap / 2);
+  EXPECT_EQ(pinned_scroll->bounds().right() - pinned_right_indicator->overlap(),
+            unpinned_scroll->bounds().x() + unpinned_left_indicator->overlap());
   EXPECT_TRUE(is_drawn_under(pinned_scroll, unpinned_scroll));
   expect_seam_hit_targets();
-  EXPECT_EQ(
-      tab_strip_view->GetScrollViewUnmaskedBounds(pinned_scroll).right(),
-      pinned_scroll->width() - pinned_right_indicator->opaque_thickness());
+  EXPECT_EQ(tab_strip_view->GetScrollViewUnmaskedBounds(pinned_scroll).right(),
+            pinned_scroll->width() - pinned_right_indicator->overlap());
   EXPECT_EQ(tab_strip_view->GetScrollViewUnmaskedBounds(unpinned_scroll).x(),
             0);
 
@@ -309,14 +313,14 @@ IN_PROC_BROWSER_TEST_F(HorizontalTabStripViewLayoutBrowserTest,
   unpinned_scroll->ScrollToOffset(gfx::PointF(0, 0));
   EXPECT_TRUE(pinned_right_indicator->GetVisible());
   EXPECT_FALSE(unpinned_left_indicator->GetVisible());
-  EXPECT_EQ(pinned_right_indicator->opaque_thickness(), tab_overlap / 2);
-  EXPECT_EQ(unpinned_left_indicator->opaque_thickness(), 0);
-  EXPECT_EQ(views::View::ConvertRectToTarget(
-                GetTabViewAt(first_unpinned_index)->parent(), tab_strip_view,
-                GetTabViewAt(first_unpinned_index)->bounds())
-                .x(),
-            pinned_scroll->bounds().right() -
-                pinned_right_indicator->opaque_thickness());
+  EXPECT_EQ(pinned_right_indicator->overlap(), tab_overlap / 2);
+  EXPECT_EQ(unpinned_left_indicator->overlap(), 0);
+  EXPECT_EQ(
+      views::View::ConvertRectToTarget(
+          GetTabViewAt(first_unpinned_index)->parent(), tab_strip_view,
+          GetTabViewAt(first_unpinned_index)->bounds())
+          .x(),
+      pinned_scroll->bounds().right() - pinned_right_indicator->overlap());
   expect_seam_hit_targets();
 
   // Scrolling the pinned container to the end while the unpinned container is
@@ -327,15 +331,14 @@ IN_PROC_BROWSER_TEST_F(HorizontalTabStripViewLayoutBrowserTest,
       pinned_scroll->contents()->width() - pinned_scroll->width(), 0));
   EXPECT_FALSE(pinned_right_indicator->GetVisible());
   EXPECT_TRUE(unpinned_left_indicator->GetVisible());
-  EXPECT_EQ(pinned_right_indicator->opaque_thickness(), tab_overlap / 2);
-  EXPECT_EQ(unpinned_left_indicator->opaque_thickness(), 0);
+  EXPECT_EQ(pinned_right_indicator->overlap(), tab_overlap / 2);
+  EXPECT_EQ(unpinned_left_indicator->overlap(), 0);
   const int last_pinned_index = first_unpinned_index - 1;
   EXPECT_EQ(views::View::ConvertRectToTarget(
                 GetTabViewAt(last_pinned_index)->parent(), tab_strip_view,
                 GetTabViewAt(last_pinned_index)->bounds())
                 .right(),
-            unpinned_scroll->bounds().x() +
-                unpinned_left_indicator->opaque_thickness());
+            unpinned_scroll->bounds().x() + unpinned_left_indicator->overlap());
   expect_seam_hit_targets();
 
   // Restore mid-scroll on both containers and verify RTL unmasked bounds and
@@ -348,10 +351,9 @@ IN_PROC_BROWSER_TEST_F(HorizontalTabStripViewLayoutBrowserTest,
     tab_strip_view->GetWidget()->LayoutRootViewIfNecessary();
 
     EXPECT_EQ(tab_strip_view->GetScrollViewUnmaskedBounds(pinned_scroll).x(),
-              pinned_right_indicator->opaque_thickness());
+              pinned_right_indicator->overlap());
     const int rtl_seam_x = tab_strip_view->GetMirroredXInView(
-        pinned_scroll->bounds().right() -
-        pinned_right_indicator->opaque_thickness());
+        pinned_scroll->bounds().right() - pinned_right_indicator->overlap());
     EXPECT_TRUE(pinned_scroll->Contains(tab_strip_view->GetEventHandlerForPoint(
         gfx::Point(rtl_seam_x + 3, 20))));
     EXPECT_TRUE(
@@ -384,18 +386,18 @@ IN_PROC_BROWSER_TEST_F(HorizontalTabStripViewLayoutBrowserTest,
   AddTabsUntilScrollable();
 
   // When overflowing without pinned tabs, the unpinned container remains at
-  // x = 0 while its left overflow indicator uses an opaque region equal to the
+  // x = 0 while its left overflow indicator uses an overlap equal to the
   // bottom extension width so its shadow starts past the tab search button.
   EXPECT_TRUE(unpinned_scroll->GetDrawOverflowIndicator());
   auto* unpinned_left_indicator =
       tab_strip_view->GetUnpinnedLeftOverflowIndicatorForTesting();
   ASSERT_NE(unpinned_left_indicator, nullptr);
   EXPECT_EQ(unpinned_scroll->bounds().x(), 0);
-  EXPECT_EQ(unpinned_left_indicator->opaque_thickness(),
+  EXPECT_EQ(unpinned_left_indicator->overlap(),
             TabStyle::Get()->GetBottomExtensionWidth());
   EXPECT_LE(combo_button->GetBoundsInScreen().right(),
             unpinned_scroll->GetBoundsInScreen().x() +
-                unpinned_left_indicator->opaque_thickness());
+                unpinned_left_indicator->overlap());
 
   const gfx::Size pinned_size = pinned_scroll->size();
 
@@ -434,18 +436,18 @@ IN_PROC_BROWSER_TEST_F(HorizontalTabStripViewLayoutBrowserTest,
   AddPinnedTabsUntilScrollable();
 
   // When overflowing, the pinned container remains at x = 0 while its left
-  // overflow indicator uses an opaque region equal to the bottom extension
+  // overflow indicator uses an overlap equal to the bottom extension
   // width so its shadow starts past the tab search button.
   EXPECT_TRUE(pinned_scroll->GetDrawOverflowIndicator());
   auto* pinned_left_indicator =
       tab_strip_view->GetPinnedLeftOverflowIndicatorForTesting();
   ASSERT_NE(pinned_left_indicator, nullptr);
   EXPECT_EQ(pinned_scroll->bounds().x(), 0);
-  EXPECT_EQ(pinned_left_indicator->opaque_thickness(),
+  EXPECT_EQ(pinned_left_indicator->overlap(),
             TabStyle::Get()->GetBottomExtensionWidth());
   EXPECT_LE(combo_button->GetBoundsInScreen().right(),
             pinned_scroll->GetBoundsInScreen().x() +
-                pinned_left_indicator->opaque_thickness());
+                pinned_left_indicator->overlap());
   const int last_pinned_with_unpinned =
       GetTabStripModel()->IndexOfFirstNonPinnedTab() - 1;
   EXPECT_EQ(pinned_scroll->contents()->width(),
@@ -494,7 +496,7 @@ IN_PROC_BROWSER_TEST_F(HorizontalTabStripViewLayoutBrowserTest,
   ASSERT_NE(unpinned_left_indicator, nullptr);
 
   // Without leading buttons, the unpinned container remains at x = 0 with zero
-  // leading opaque thickness even when overflowing.
+  // leading overlap even when overflowing.
   EXPECT_EQ(unpinned_scroll->bounds().x(), 0);
   EXPECT_FALSE(unpinned_scroll->GetDrawOverflowIndicator());
 
@@ -503,7 +505,7 @@ IN_PROC_BROWSER_TEST_F(HorizontalTabStripViewLayoutBrowserTest,
 
   EXPECT_TRUE(unpinned_scroll->GetDrawOverflowIndicator());
   EXPECT_EQ(unpinned_scroll->bounds().x(), 0);
-  EXPECT_EQ(unpinned_left_indicator->opaque_thickness(), 0);
+  EXPECT_EQ(unpinned_left_indicator->overlap(), 0);
 
   while (GetTabStripModel()->count() > 1) {
     GetTabStripModel()->CloseWebContentsAt(GetTabStripModel()->count() - 1,
@@ -514,7 +516,7 @@ IN_PROC_BROWSER_TEST_F(HorizontalTabStripViewLayoutBrowserTest,
   EXPECT_FALSE(unpinned_scroll->GetDrawOverflowIndicator());
 
   // With pinned tabs and no leading buttons, the pinned container also remains
-  // at x = 0 with zero leading opaque thickness when overflowing.
+  // at x = 0 with zero leading overlap when overflowing.
   AppendPinnedTab();
   SetWindowWidth(800);
   EXPECT_EQ(pinned_scroll->bounds().x(), 0);
@@ -525,7 +527,7 @@ IN_PROC_BROWSER_TEST_F(HorizontalTabStripViewLayoutBrowserTest,
 
   EXPECT_TRUE(pinned_scroll->GetDrawOverflowIndicator());
   EXPECT_EQ(pinned_scroll->bounds().x(), 0);
-  EXPECT_EQ(pinned_left_indicator->opaque_thickness(), 0);
+  EXPECT_EQ(pinned_left_indicator->overlap(), 0);
 
   while (GetTabStripModel()->IndexOfFirstNonPinnedTab() > 1) {
     GetTabStripModel()->CloseWebContentsAt(0,
@@ -766,4 +768,104 @@ IN_PROC_BROWSER_TEST_F(HorizontalTabStripViewLayoutBrowserTest,
 
   EXPECT_EQ(unpinned_scroll->GetVisibleRect().x(), 0);
   EXPECT_FALSE(unpinned_left_indicator->GetVisible());
+}
+
+IN_PROC_BROWSER_TEST_F(HorizontalTabStripViewLayoutBrowserTest,
+                       OverflowViewportClipAndTransparentIndicatorSeam) {
+  SetWindowWidth(560);
+  AddTabsUntilScrollable();
+  auto* region_view = GetTabStripRegionView();
+  auto* tab_strip_view = GetTabStripView();
+  auto* pinned_scroll = tab_strip_view->pinned_tabs_scroll_view();
+  auto* unpinned_scroll = tab_strip_view->unpinned_tabs_scroll_view();
+  auto* unpinned_left_indicator =
+      tab_strip_view->GetUnpinnedLeftOverflowIndicatorForTesting();
+  ui::Layer* pinned_viewport_layer =
+      pinned_scroll->contents()->parent()->layer();
+  ui::Layer* unpinned_viewport_layer =
+      unpinned_scroll->contents()->parent()->layer();
+
+  unpinned_scroll->ScrollToOffset(gfx::PointF(50, 0));
+  tab_strip_view->GetWidget()->LayoutRootViewIfNecessary();
+  const gfx::Rect initial_region_bounds = region_view->bounds();
+  const int leading_overlap = tab_strip_view->leading_overlap();
+  ASSERT_GT(leading_overlap, 0);
+  gfx::Rect narrow_region_bounds = initial_region_bounds;
+  narrow_region_bounds.set_width(
+      initial_region_bounds.width() -
+      (unpinned_scroll->width() - leading_overlap / 2));
+  region_view->SetBoundsRect(narrow_region_bounds);
+
+  ASSERT_GT(unpinned_scroll->width(), 0);
+  ASSERT_LE(unpinned_scroll->width(), leading_overlap);
+  EXPECT_FALSE(unpinned_viewport_layer->clip_rect().IsEmpty());
+  EXPECT_TRUE(gfx::IntersectRects(unpinned_scroll->GetLocalBounds(),
+                                  unpinned_viewport_layer->clip_rect())
+                  .IsEmpty());
+
+  region_view->SetBoundsRect(initial_region_bounds);
+  AppendPinnedTab();
+  AppendPinnedTab();
+  tab_strip_view->GetWidget()->LayoutRootViewIfNecessary();
+  unpinned_scroll->ScrollToOffset(gfx::PointF(50, 0));
+  tab_strip_view->GetWidget()->LayoutRootViewIfNecessary();
+  SkBitmap indicator_bitmap;
+  {
+    ui::CanvasPainter painter(&indicator_bitmap,
+                              unpinned_left_indicator->size(), 1.0f,
+                              SK_ColorTRANSPARENT, /*is_pixel_canvas=*/true);
+    unpinned_left_indicator->Paint(views::PaintInfo::CreateRootPaintInfo(
+        painter.context(), unpinned_left_indicator->size()));
+  }
+
+  const int seam_width = TabStyle::Get()->GetTabOverlap();
+  ASSERT_TRUE(unpinned_left_indicator->GetVisible());
+  ASSERT_EQ(unpinned_left_indicator->overlap(), seam_width);
+  const int y = unpinned_left_indicator->GetContentsBounds().CenterPoint().y();
+  for (int x = 0; x < seam_width; ++x) {
+    EXPECT_EQ(SkColorGetA(indicator_bitmap.getColor(x, y)),
+              SK_AlphaTRANSPARENT);
+  }
+  EXPECT_GT(SkColorGetA(indicator_bitmap.getColor(seam_width, y)),
+            SK_AlphaTRANSPARENT);
+  EXPECT_EQ(unpinned_viewport_layer->clip_rect(),
+            gfx::Rect(seam_width, 0, unpinned_scroll->width() - seam_width,
+                      unpinned_scroll->height()));
+  EXPECT_TRUE(pinned_viewport_layer->clip_rect().IsEmpty());
+
+  unpinned_scroll->ScrollToOffset(gfx::PointF(0, 0));
+  EXPECT_TRUE(unpinned_viewport_layer->clip_rect().IsEmpty());
+}
+
+IN_PROC_BROWSER_TEST_F(HorizontalTabStripViewLayoutBrowserTest,
+                       PinnedOverflowViewportClipMatchesUnmaskedBoundsInRTL) {
+  SetWindowWidth(560);
+  AddTabsUntilScrollable();
+  AddPinnedTabsUntilScrollable();
+  auto* tab_strip_view = GetTabStripView();
+  auto* pinned_scroll = tab_strip_view->pinned_tabs_scroll_view();
+  auto* unpinned_scroll = tab_strip_view->unpinned_tabs_scroll_view();
+  ui::Layer* pinned_viewport_layer =
+      pinned_scroll->contents()->parent()->layer();
+  ui::Layer* unpinned_viewport_layer =
+      unpinned_scroll->contents()->parent()->layer();
+
+  base::i18n::ScopedRTLForTesting rtl(true);
+  pinned_scroll->ScrollToOffset(gfx::PointF(20, 0));
+  unpinned_scroll->ScrollToOffset(gfx::PointF(50, 0));
+  pinned_scroll->InvalidateLayout();
+  unpinned_scroll->InvalidateLayout();
+  tab_strip_view->InvalidateLayout();
+  tab_strip_view->GetWidget()->LayoutRootViewIfNecessary();
+
+  const int leading_inset = TabStyle::Get()->GetBottomExtensionWidth();
+  const int trailing_inset = TabStyle::Get()->GetTabOverlap() / 2;
+  EXPECT_EQ(pinned_viewport_layer->clip_rect(),
+            gfx::Rect(leading_inset, 0,
+                      pinned_scroll->width() - leading_inset - trailing_inset,
+                      pinned_scroll->height()));
+  EXPECT_EQ(gfx::ToRoundedRect(pinned_viewport_layer->transform().MapRect(
+                gfx::RectF(pinned_viewport_layer->clip_rect()))),
+            tab_strip_view->GetScrollViewUnmaskedBounds(pinned_scroll));
+  EXPECT_TRUE(unpinned_viewport_layer->clip_rect().IsEmpty());
 }

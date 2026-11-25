@@ -63,13 +63,13 @@ class MockObserver : public GCMClient::Observer {
 
   MOCK_METHOD(void,
               OnRegisterFinished,
-              (scoped_refptr<RegistrationInfo> registration_info,
+              (scoped_refptr<GCMRegistrationInfo> gcm_registration_info,
                const std::string& registration_id,
                GCMClient::Result result),
               (override));
   MOCK_METHOD(void,
               OnUnregisterFinished,
-              (scoped_refptr<RegistrationInfo> registration_info,
+              (scoped_refptr<GCMRegistrationInfo> gcm_registration_info,
                GCMClient::Result result),
               (override));
   MOCK_METHOD(void,
@@ -97,7 +97,9 @@ enum LastEvent {
   NONE,
   LOADING_COMPLETED,
   REGISTRATION_COMPLETED,
+  GET_TOKEN_COMPLETED,
   UNREGISTRATION_COMPLETED,
+  DELETE_TOKEN_COMPLETED,
   MESSAGE_SEND_ERROR,
   MESSAGE_RECEIVED,
   MESSAGES_DELETED,
@@ -351,11 +353,18 @@ class GCMClientImplTest : public testing::Test, public GCMClient::Observer {
                        const std::string& registration_id);
 
   // GCMClient::Observer overrides (for verification).
-  void OnRegisterFinished(scoped_refptr<RegistrationInfo> registration_info,
-                          const std::string& registration_id,
-                          GCMClient::Result result) override;
-  void OnUnregisterFinished(scoped_refptr<RegistrationInfo> registration_info,
-                            GCMClient::Result result) override;
+  void OnRegisterFinished(
+      scoped_refptr<GCMRegistrationInfo> gcm_registration_info,
+      const std::string& registration_id,
+      GCMClient::Result result) override;
+  void OnGetTokenCompleted(const std::string& app_id,
+                           const std::string& token,
+                           GCMClient::Result result);
+  void OnUnregisterFinished(
+      scoped_refptr<GCMRegistrationInfo> gcm_registration_info,
+      GCMClient::Result result) override;
+  void OnDeleteTokenCompleted(const std::string& app_id,
+                              GCMClient::Result result);
   void OnSendFinished(const std::string& app_id,
                       const std::string& message_id,
                       GCMClient::Result result) override {}
@@ -654,20 +663,36 @@ void GCMClientImplTest::OnMessageReceived(const std::string& registration_id,
 }
 
 void GCMClientImplTest::OnRegisterFinished(
-    scoped_refptr<RegistrationInfo> registration_info,
+    scoped_refptr<GCMRegistrationInfo> gcm_registration_info,
     const std::string& registration_id,
     GCMClient::Result result) {
   last_event_ = REGISTRATION_COMPLETED;
-  last_app_id_ = registration_info->app_id;
+  last_app_id_ = gcm_registration_info->app_id;
   last_registration_id_ = registration_id;
   last_result_ = result;
 }
 
+void GCMClientImplTest::OnGetTokenCompleted(const std::string& app_id,
+                                            const std::string& token,
+                                            GCMClient::Result result) {
+  last_event_ = GET_TOKEN_COMPLETED;
+  last_app_id_ = app_id;
+  last_registration_id_ = token;
+  last_result_ = result;
+}
+
 void GCMClientImplTest::OnUnregisterFinished(
-    scoped_refptr<RegistrationInfo> registration_info,
+    scoped_refptr<GCMRegistrationInfo> gcm_registration_info,
     GCMClient::Result result) {
   last_event_ = UNREGISTRATION_COMPLETED;
-  last_app_id_ = registration_info->app_id;
+  last_app_id_ = gcm_registration_info->app_id;
+  last_result_ = result;
+}
+
+void GCMClientImplTest::OnDeleteTokenCompleted(const std::string& app_id,
+                                               GCMClient::Result result) {
+  last_event_ = DELETE_TOKEN_COMPLETED;
+  last_app_id_ = app_id;
   last_result_ = result;
 }
 
@@ -1603,6 +1628,15 @@ class GCMClientInstanceIDTest : public GCMClientImplTest {
   GCMClientInstanceIDTest();
   ~GCMClientInstanceIDTest() override;
 
+  // GCMClient::Observer overrides:
+  void OnRegisterFinished(
+      scoped_refptr<GCMRegistrationInfo> gcm_registration_info,
+      const std::string& registration_id,
+      GCMClient::Result result) override;
+  void OnUnregisterFinished(
+      scoped_refptr<GCMRegistrationInfo> gcm_registration_info,
+      GCMClient::Result result) override;
+
   void AddInstanceID(const std::string& app_id, const std::string& instance_id);
   void RemoveInstanceID(const std::string& app_id);
   void GetToken(const std::string& app_id,
@@ -1621,6 +1655,19 @@ GCMClientInstanceIDTest::GCMClientInstanceIDTest() = default;
 
 GCMClientInstanceIDTest::~GCMClientInstanceIDTest() = default;
 
+void GCMClientInstanceIDTest::OnRegisterFinished(
+    scoped_refptr<GCMRegistrationInfo> gcm_registration_info,
+    const std::string& registration_id,
+    GCMClient::Result result) {
+  ADD_FAILURE() << "Unexpected Observer::OnRegisterFinished call.";
+}
+
+void GCMClientInstanceIDTest::OnUnregisterFinished(
+    scoped_refptr<GCMRegistrationInfo> gcm_registration_info,
+    GCMClient::Result result) {
+  ADD_FAILURE() << "Unexpected Observer::OnUnregisterFinished call.";
+}
+
 void GCMClientInstanceIDTest::AddInstanceID(const std::string& app_id,
                                             const std::string& instance_id) {
   gcm_client()->AddInstanceIDData(app_id, instance_id, "123");
@@ -1637,7 +1684,9 @@ void GCMClientInstanceIDTest::GetToken(const std::string& app_id,
   instance_id_info->app_id = app_id;
   instance_id_info->authorized_entity = authorized_entity;
   instance_id_info->scope = scope;
-  gcm_client()->Register(std::move(instance_id_info));
+  gcm_client()->GetToken(std::move(instance_id_info),
+                         base::BindOnce(&GCMClientImplTest::OnGetTokenCompleted,
+                                        base::Unretained(this), app_id));
 }
 
 void GCMClientInstanceIDTest::DeleteToken(const std::string& app_id,
@@ -1647,7 +1696,10 @@ void GCMClientInstanceIDTest::DeleteToken(const std::string& app_id,
   instance_id_info->app_id = app_id;
   instance_id_info->authorized_entity = authorized_entity;
   instance_id_info->scope = scope;
-  gcm_client()->Unregister(std::move(instance_id_info));
+  gcm_client()->DeleteToken(
+      std::move(instance_id_info),
+      base::BindOnce(&GCMClientImplTest::OnDeleteTokenCompleted,
+                     base::Unretained(this), app_id));
 }
 
 void GCMClientInstanceIDTest::CompleteDeleteToken() {
@@ -1680,7 +1732,7 @@ TEST_F(GCMClientInstanceIDTest, GetToken) {
   GetToken(kExtensionAppId, kSender, kScope);
   ASSERT_NO_FATAL_FAILURE(CompleteRegistration("token1"));
 
-  EXPECT_EQ(REGISTRATION_COMPLETED, last_event());
+  EXPECT_EQ(GET_TOKEN_COMPLETED, last_event());
   EXPECT_EQ(kExtensionAppId, last_app_id());
   EXPECT_EQ("token1", last_registration_id());
   EXPECT_EQ(GCMClient::SUCCESS, last_result());
@@ -1691,13 +1743,59 @@ TEST_F(GCMClientInstanceIDTest, GetToken) {
   GetToken(kExtensionAppId, kSender2, kScope);
   ASSERT_NO_FATAL_FAILURE(CompleteRegistration("token2"));
 
-  EXPECT_EQ(REGISTRATION_COMPLETED, last_event());
+  EXPECT_EQ(GET_TOKEN_COMPLETED, last_event());
   EXPECT_EQ(kExtensionAppId, last_app_id());
   EXPECT_EQ("token2", last_registration_id());
   EXPECT_EQ(GCMClient::SUCCESS, last_result());
   EXPECT_TRUE(ExistsToken(kExtensionAppId, kSender2, kScope));
   // The 1st token still exists.
   EXPECT_TRUE(ExistsToken(kExtensionAppId, kSender, kScope));
+}
+
+TEST_F(GCMClientInstanceIDTest, GetTokenFromCache) {
+  AddInstanceID(kExtensionAppId, kInstanceID);
+  GetToken(kExtensionAppId, kSender, kScope);
+  ASSERT_NO_FATAL_FAILURE(CompleteRegistration("token1"));
+  ASSERT_EQ(GET_TOKEN_COMPLETED, last_event());
+  reset_last_event();
+
+  // Requesting the same token before it becomes stale returns the cached token
+  // synchronously without issuing a network request.
+  clock()->Advance(kTokenInvalidationPeriod / 2);
+  GetToken(kExtensionAppId, kSender, kScope);
+
+  EXPECT_EQ(0, url_loader_factory()->NumPending());
+  EXPECT_EQ(GET_TOKEN_COMPLETED, last_event());
+  EXPECT_EQ(kExtensionAppId, last_app_id());
+  EXPECT_EQ("token1", last_registration_id());
+  EXPECT_EQ(GCMClient::SUCCESS, last_result());
+}
+
+TEST_F(GCMClientInstanceIDTest, GetTokenError) {
+  AddInstanceID(kExtensionAppId, kInstanceID);
+
+  GetToken(kExtensionAppId, kSender, kScope);
+  ASSERT_TRUE(url_loader_factory()->SimulateResponseForPendingRequest(
+      kRegisterUrl, "Error=INVALID_SENDER"));
+
+  EXPECT_EQ(GET_TOKEN_COMPLETED, last_event());
+  EXPECT_EQ(kExtensionAppId, last_app_id());
+  EXPECT_EQ("", last_registration_id());
+  EXPECT_EQ(GCMClient::INVALID_PARAMETER, last_result());
+  EXPECT_FALSE(ExistsToken(kExtensionAppId, kSender, kScope));
+}
+
+TEST_F(GCMClientInstanceIDTest, GetTokenCancelledOnStop) {
+  AddInstanceID(kExtensionAppId, kInstanceID);
+  reset_last_event();
+
+  GetToken(kExtensionAppId, kSender, kScope);
+  ASSERT_EQ(1, url_loader_factory()->NumPending());
+
+  gcm_client()->Stop();
+
+  EXPECT_EQ(0, url_loader_factory()->NumPending());
+  EXPECT_EQ(NONE, last_event());
 }
 
 // Most tests in this file use kExtensionAppId which is special-cased by
@@ -1713,15 +1811,20 @@ TEST_F(GCMClientInstanceIDTest, GetTokenWithSubtype) {
   // Get a token.
   GetToken(kSubtypeAppId, kSender, kScope);
   ASSERT_NO_FATAL_FAILURE(CompleteRegistration("token1"));
-  EXPECT_EQ(REGISTRATION_COMPLETED, last_event());
+  EXPECT_EQ(GET_TOKEN_COMPLETED, last_event());
   EXPECT_EQ(kSubtypeAppId, last_app_id());
   EXPECT_EQ("token1", last_registration_id());
   EXPECT_EQ(GCMClient::SUCCESS, last_result());
   EXPECT_TRUE(ExistsToken(kSubtypeAppId, kSender, kScope));
 
+  reset_last_event();
+
   // Delete the token.
   DeleteToken(kSubtypeAppId, kSender, kScope);
   ASSERT_NO_FATAL_FAILURE(CompleteDeleteToken());
+  EXPECT_EQ(DELETE_TOKEN_COMPLETED, last_event());
+  EXPECT_EQ(kSubtypeAppId, last_app_id());
+  EXPECT_EQ(GCMClient::SUCCESS, last_result());
   EXPECT_FALSE(ExistsToken(kSubtypeAppId, kSender, kScope));
 }
 
@@ -1732,7 +1835,7 @@ TEST_F(GCMClientInstanceIDTest, DeleteInvalidToken) {
   DeleteToken(kExtensionAppId, "Foo@#$", kScope);
   PumpLoopUntilIdle();
 
-  EXPECT_EQ(UNREGISTRATION_COMPLETED, last_event());
+  EXPECT_EQ(DELETE_TOKEN_COMPLETED, last_event());
   EXPECT_EQ(kExtensionAppId, last_app_id());
   EXPECT_EQ(GCMClient::INVALID_PARAMETER, last_result());
 
@@ -1742,7 +1845,7 @@ TEST_F(GCMClientInstanceIDTest, DeleteInvalidToken) {
   DeleteToken(kExtensionAppId, kSender, kScope);
   PumpLoopUntilIdle();
 
-  EXPECT_EQ(UNREGISTRATION_COMPLETED, last_event());
+  EXPECT_EQ(DELETE_TOKEN_COMPLETED, last_event());
   EXPECT_EQ(kExtensionAppId, last_app_id());
   EXPECT_EQ(GCMClient::INVALID_PARAMETER, last_result());
 }
@@ -1755,7 +1858,7 @@ TEST_F(GCMClientInstanceIDTest, DeleteSingleToken) {
   GetToken(kExtensionAppId, kSender, kScope);
   ASSERT_NO_FATAL_FAILURE(CompleteRegistration("token1"));
 
-  EXPECT_EQ(REGISTRATION_COMPLETED, last_event());
+  EXPECT_EQ(GET_TOKEN_COMPLETED, last_event());
   EXPECT_EQ(kExtensionAppId, last_app_id());
   EXPECT_EQ("token1", last_registration_id());
   EXPECT_EQ(GCMClient::SUCCESS, last_result());
@@ -1768,7 +1871,7 @@ TEST_F(GCMClientInstanceIDTest, DeleteSingleToken) {
   GetToken(kExtensionAppId, kSender2, kScope);
   ASSERT_NO_FATAL_FAILURE(CompleteRegistration("token2"));
 
-  EXPECT_EQ(REGISTRATION_COMPLETED, last_event());
+  EXPECT_EQ(GET_TOKEN_COMPLETED, last_event());
   EXPECT_EQ(kExtensionAppId, last_app_id());
   EXPECT_EQ("token2", last_registration_id());
   EXPECT_EQ(GCMClient::SUCCESS, last_result());
@@ -1782,7 +1885,7 @@ TEST_F(GCMClientInstanceIDTest, DeleteSingleToken) {
   DeleteToken(kExtensionAppId, kSender2, kScope);
   ASSERT_NO_FATAL_FAILURE(CompleteDeleteToken());
 
-  EXPECT_EQ(UNREGISTRATION_COMPLETED, last_event());
+  EXPECT_EQ(DELETE_TOKEN_COMPLETED, last_event());
   EXPECT_EQ(kExtensionAppId, last_app_id());
   EXPECT_EQ(GCMClient::SUCCESS, last_result());
   // The 2nd token is gone while the 1st token still exists.
@@ -1795,7 +1898,7 @@ TEST_F(GCMClientInstanceIDTest, DeleteSingleToken) {
   DeleteToken(kExtensionAppId, kSender, kScope);
   ASSERT_NO_FATAL_FAILURE(CompleteDeleteToken());
 
-  EXPECT_EQ(UNREGISTRATION_COMPLETED, last_event());
+  EXPECT_EQ(DELETE_TOKEN_COMPLETED, last_event());
   EXPECT_EQ(kExtensionAppId, last_app_id());
   EXPECT_EQ(GCMClient::SUCCESS, last_result());
   // Both tokens are gone now.
@@ -1808,7 +1911,7 @@ TEST_F(GCMClientInstanceIDTest, DeleteSingleToken) {
   DeleteToken(kExtensionAppId, kSender, kScope);
   PumpLoopUntilIdle();
 
-  EXPECT_EQ(UNREGISTRATION_COMPLETED, last_event());
+  EXPECT_EQ(DELETE_TOKEN_COMPLETED, last_event());
   EXPECT_EQ(kExtensionAppId, last_app_id());
   EXPECT_EQ(GCMClient::INVALID_PARAMETER, last_result());
 }
@@ -1821,7 +1924,7 @@ TEST_F(GCMClientInstanceIDTest, DeleteAllTokens) {
   GetToken(kExtensionAppId, kSender, kScope);
   ASSERT_NO_FATAL_FAILURE(CompleteRegistration("token1"));
 
-  EXPECT_EQ(REGISTRATION_COMPLETED, last_event());
+  EXPECT_EQ(GET_TOKEN_COMPLETED, last_event());
   EXPECT_EQ(kExtensionAppId, last_app_id());
   EXPECT_EQ("token1", last_registration_id());
   EXPECT_EQ(GCMClient::SUCCESS, last_result());
@@ -1834,7 +1937,7 @@ TEST_F(GCMClientInstanceIDTest, DeleteAllTokens) {
   GetToken(kExtensionAppId, kSender2, kScope);
   ASSERT_NO_FATAL_FAILURE(CompleteRegistration("token2"));
 
-  EXPECT_EQ(REGISTRATION_COMPLETED, last_event());
+  EXPECT_EQ(GET_TOKEN_COMPLETED, last_event());
   EXPECT_EQ(kExtensionAppId, last_app_id());
   EXPECT_EQ("token2", last_registration_id());
   EXPECT_EQ(GCMClient::SUCCESS, last_result());
@@ -1848,7 +1951,7 @@ TEST_F(GCMClientInstanceIDTest, DeleteAllTokens) {
   DeleteToken(kExtensionAppId, "*", "*");
   ASSERT_NO_FATAL_FAILURE(CompleteDeleteToken());
 
-  EXPECT_EQ(UNREGISTRATION_COMPLETED, last_event());
+  EXPECT_EQ(DELETE_TOKEN_COMPLETED, last_event());
   EXPECT_EQ(kExtensionAppId, last_app_id());
   EXPECT_EQ(GCMClient::SUCCESS, last_result());
   // All tokens are gone now.
@@ -1865,7 +1968,7 @@ TEST_F(GCMClientInstanceIDTest, DeleteAllTokensBeforeGetAnyToken) {
   // not be triggered.
   PumpLoopUntilIdle();
 
-  EXPECT_EQ(UNREGISTRATION_COMPLETED, last_event());
+  EXPECT_EQ(DELETE_TOKEN_COMPLETED, last_event());
   EXPECT_EQ(kExtensionAppId, last_app_id());
   EXPECT_EQ(GCMClient::SUCCESS, last_result());
 }

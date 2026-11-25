@@ -53,6 +53,7 @@
 #include "components/commerce/core/commerce_constants.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/feed/feed_feature_list.h"
+#include "components/omnibox/browser/searchbox_utils.h"
 #include "components/split_tabs/split_tab_visual_data.h"
 #include "components/tabs/public/split_tab_data.h"
 #include "components/tabs/public/tab_context_menu_command.h"
@@ -295,25 +296,22 @@ void TabMenuModel::AppendAiModeItems(tabs::TabHandle context_tab,
     return;
   }
 
-  const ui::ImageModel ai_mode_icon = ui::ImageModel::FromVectorIcon(
-      glic::GlicVectorIconManager::GetVectorIcon(IDR_GLIC_BUTTON_VECTOR_ICON),
-      ui::kColorMenuIcon, kTabMenuIconSize);
-
   if (show_share) {
     contextual_tasks_tab_sub_menu_model_ =
         std::make_unique<contextual_tasks::ContextualTasksTabSubMenuModel>(
             tab_strip_, context_tab);
-    AddSubMenuWithIcon(TabStripModel::CommandAiModeShare,
-                       l10n_util::GetPluralStringFUTF16(
-                           IDS_TAB_CXMENU_AI_MODE_SHARE, tabs.size()),
-                       contextual_tasks_tab_sub_menu_model_.get(),
-                       ai_mode_icon);
+    AddSubMenuWithIcon(
+        TabStripModel::CommandAiModeShare,
+        l10n_util::GetPluralStringFUTF16(IDS_TAB_CXMENU_AI_MODE_SHARE,
+                                         tabs.size()),
+        contextual_tasks_tab_sub_menu_model_.get(),
+        ui::ImageModel::FromVectorIcon(searchbox::GetSearchSparkIcon(),
+                                       ui::kColorMenuIcon, kTabMenuIconSize));
   }
 
   if (show_unshare) {
-    AddItemWithIcon(TabStripModel::CommandAiModeUnshare,
-                    l10n_util::GetStringUTF16(IDS_TAB_CXMENU_AI_MODE_UNSHARE),
-                    ai_mode_icon);
+    AddItem(TabStripModel::CommandAiModeUnshare,
+            l10n_util::GetStringUTF16(IDS_TAB_CXMENU_AI_MODE_UNSHARE));
   }
 }
 

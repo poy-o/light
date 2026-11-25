@@ -5,7 +5,6 @@
 #import "ios/chrome/browser/intelligence/actor/ui/actuation_worklog_view_controller.h"
 
 #import "base/notreached.h"
-#import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/intelligence/actor/ui/actuation_intervention_view.h"
 #import "ios/chrome/browser/intelligence/actor/ui/actuation_suggestions_presenter.h"
 #import "ios/chrome/browser/intelligence/actor/ui/actuation_worklog_compact_view.h"
@@ -14,25 +13,13 @@
 #import "ios/chrome/browser/intelligence/actor/ui/actuation_worklog_mutator.h"
 #import "ios/chrome/browser/intelligence/actor/ui/actuation_worklog_view.h"
 #import "ios/chrome/browser/intelligence/actor/ui/actuation_worklog_view_data.h"
-#import "ios/chrome/browser/intelligence/ui/intelligence_header_item.h"
+#import "ios/chrome/browser/intelligence/actor/ui/actuation_worklog_view_data_builders.h"
+#import "ios/chrome/browser/intelligence/ui/intelligence_header_configuration.h"
 #import "ios/chrome/browser/intelligence/ui/intelligence_header_view.h"
-#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
-#import "ui/base/l10n/l10n_util.h"
 
 namespace {
-
-// Point size for the header button symbols.
-constexpr CGFloat kHeaderButtonPointSize = 14.0;
-
-// Accessibility label of the header pause button.
-// TODO(crbug.com/573515833): Localize the string.
-NSString* const kPauseButtonTitle = @"Pause";
-
-// Identifiers of the accessory items in `_headerView`.
-NSString* const kCloseHeaderItemIdentifier = @"close";
-NSString* const kPauseHeaderItemIdentifier = @"pause";
 
 // Text used to measure the header as if it displayed a title and a subtitle.
 NSString* const kHeaderSizingPlaceholderText = @"Placeholder";
@@ -80,8 +67,6 @@ using intelligence::actor::kSpacingLarge;
   ActuationHeaderContentVariants* _headerContentVariants;
   // Offscreen header for content-independent height calculation.
   IntelligenceHeaderView* _sizingHeaderView;
-  // Action of the header's primary button.
-  ActuationHeaderPrimaryAction _headerPrimaryAction;
   // Intervention displayed by `_interventionView`, if any.
   ActuationInterventionData* _intervention;
 
@@ -94,7 +79,6 @@ using intelligence::actor::kSpacingLarge;
   self = [super initWithNibName:nil bundle:nil];
   if (self) {
     _displayMode = ActuationWorklogDisplayModeCompact;
-    _headerPrimaryAction = ActuationHeaderPrimaryAction::kStop;
     _actuationActive = NO;
   }
   return self;
@@ -105,7 +89,7 @@ using intelligence::actor::kSpacingLarge;
     return;
   }
   _displayMode = displayMode;
-  [self updateHeaderContent];
+  [self updateHeader];
   [self updateVisibility];
 }
 
@@ -138,7 +122,7 @@ using intelligence::actor::kSpacingLarge;
   self.view.backgroundColor = [UIColor colorNamed:kPrimaryBackgroundColor];
   [self setupSubviews];
   [self setupConstraints];
-  [self updateHeaderContent];
+  [self updateHeader];
   [self updateVisibility];
   [self updateIntervention];
 }
@@ -151,22 +135,13 @@ using intelligence::actor::kSpacingLarge;
   }
   _actuationActive = active;
   _fullView.actuating = active;
-  _headerView.activity = active ? IntelligenceHeaderActivity::kActive
-                                : IntelligenceHeaderActivity::kIdle;
+  [self updateHeader];
   [self updateVisibility];
-}
-
-- (void)setHeaderPrimaryAction:(ActuationHeaderPrimaryAction)action {
-  if (_headerPrimaryAction == action) {
-    return;
-  }
-  _headerPrimaryAction = action;
-  _headerView.primaryItem = [self createPrimaryItem];
 }
 
 - (void)setHeaderContentVariants:(ActuationHeaderContentVariants*)variants {
   _headerContentVariants = variants;
-  [self updateHeaderContent];
+  [self updateHeader];
 }
 
 - (void)updateWorklogWithItem:(ActuationWorklogItem*)item
@@ -201,9 +176,7 @@ using intelligence::actor::kSpacingLarge;
 
 - (void)reset {
   _headerContentVariants = nil;
-  [_headerView reset];
-  _headerPrimaryAction = ActuationHeaderPrimaryAction::kStop;
-  _headerView.primaryItem = [self createPrimaryItem];
+  [self updateHeader];
   [_compactView reset];
   [_fullView reset];
   [_scrollView setContentOffset:CGPointZero animated:NO];
@@ -242,48 +215,11 @@ using intelligence::actor::kSpacingLarge;
 
 #pragma mark - Private
 
-// Creates the primary button accessory of `_headerView` for
-// `_headerPrimaryAction`.
-- (IntelligenceHeaderItem*)createPrimaryItem {
-  switch (_headerPrimaryAction) {
-    case ActuationHeaderPrimaryAction::kPause:
-      return [self createPauseItem];
-    case ActuationHeaderPrimaryAction::kStop:
-      return [self createCloseItem];
-  }
-}
-
-// Creates the pause button accessory for `_headerView`.
-- (IntelligenceHeaderItem*)createPauseItem {
-  // The mocks use the stop symbol for the pause button.
-  return [IntelligenceHeaderItem
-           itemWithIdentifier:kPauseHeaderItemIdentifier
-                         icon:SymbolWithPointSize(SymbolStopFill,
-                                                  kHeaderButtonPointSize)
-                        title:kPauseButtonTitle
-      accessibilityIdentifier:
-          kActuationHeaderPauseButtonAccessibilityIdentifier];
-}
-
-// Creates the close button accessory for `_headerView`.
-- (IntelligenceHeaderItem*)createCloseItem {
-  return [IntelligenceHeaderItem
-           itemWithIdentifier:kCloseHeaderItemIdentifier
-                         icon:SymbolWithPointSize(SymbolXMark,
-                                                  kHeaderButtonPointSize)
-                        title:l10n_util::GetNSString(IDS_CLOSE)
-      accessibilityIdentifier:
-          kActuationHeaderCloseButtonAccessibilityIdentifier];
-}
-
 // Creates the view hierarchy.
 - (void)setupSubviews {
   _headerView = [[IntelligenceHeaderView alloc] initWithFrame:CGRectZero];
   _headerView.accessibilityIdentifier = kActuationHeaderAccessibilityIdentifier;
   _headerView.delegate = self;
-  _headerView.activity = _actuationActive ? IntelligenceHeaderActivity::kActive
-                                          : IntelligenceHeaderActivity::kIdle;
-  _headerView.primaryItem = [self createPrimaryItem];
   _headerView.translatesAutoresizingMaskIntoConstraints = NO;
   [self.view addSubview:_headerView];
 
@@ -339,13 +275,33 @@ using intelligence::actor::kSpacingLarge;
   ]];
 }
 
-// Updates `_headerView` content and density for `_displayMode`.
-- (void)updateHeaderContent {
+// Applies the current header configuration for `displayMode` to `_headerView`.
+- (void)updateHeader {
+  if (!_headerView) {
+    return;
+  }
+  [_headerView applyConfiguration:
+                   [self headerConfigurationForDisplayMode:self.displayMode]];
+}
+
+// Builds the header configuration for `mode`, showing the close button when no
+// content is available.
+- (IntelligenceHeaderConfiguration*)headerConfigurationForDisplayMode:
+    (ActuationWorklogDisplayMode)mode {
   ActuationHeaderContent* content =
-      [_headerContentVariants contentForDisplayMode:_displayMode];
-  _headerView.title = content.title;
-  _headerView.subtitle = content.subtitle;
-  _headerView.density = HeaderDensityForDisplayMode(_displayMode);
+      [_headerContentVariants contentForDisplayMode:mode];
+  IntelligenceHeaderActivity activity =
+      _actuationActive ? IntelligenceHeaderActivity::kActive
+                       : IntelligenceHeaderActivity::kIdle;
+  return [[IntelligenceHeaderConfiguration alloc]
+      initWithLeadingIcon:nil
+                    title:content.title
+                 subtitle:content.subtitle
+                 activity:activity
+                  density:HeaderDensityForDisplayMode(mode)
+              primaryItem:content ? content.primaryItem
+                                  : ActuationHeaderCloseItem()
+           secondaryItems:nil];
 }
 
 // Updates visibility of the view and its subviews for `_displayMode`.
@@ -383,16 +339,13 @@ using intelligence::actor::kSpacingLarge;
     _sizingHeaderView =
         [[IntelligenceHeaderView alloc] initWithFrame:CGRectZero];
   }
-  ActuationHeaderContent* content =
-      [_headerContentVariants contentForDisplayMode:mode];
-  BOOL minimized = mode == ActuationWorklogDisplayModeMinimized;
-  _sizingHeaderView.title =
-      minimized ? kHeaderSizingPlaceholderText : content.title;
-  _sizingHeaderView.subtitle =
-      minimized ? kHeaderSizingPlaceholderText : content.subtitle;
-  _sizingHeaderView.density = HeaderDensityForDisplayMode(mode);
-  _sizingHeaderView.primaryItem = _headerView.primaryItem;
-  _sizingHeaderView.secondaryItems = _headerView.secondaryItems;
+  [_sizingHeaderView
+      applyConfiguration:[self headerConfigurationForDisplayMode:mode]];
+  _sizingHeaderView.activity = IntelligenceHeaderActivity::kIdle;
+  if (mode == ActuationWorklogDisplayModeMinimized) {
+    _sizingHeaderView.title = kHeaderSizingPlaceholderText;
+    _sizingHeaderView.subtitle = kHeaderSizingPlaceholderText;
+  }
   return [self fittingHeightForView:_sizingHeaderView
                         targetWidth:self.view.bounds.size.width];
 }
@@ -434,13 +387,15 @@ using intelligence::actor::kSpacingLarge;
 
 - (void)headerView:(IntelligenceHeaderView*)headerView
     didTriggerItemWithIdentifier:(NSString*)identifier {
-  if ([identifier isEqualToString:kCloseHeaderItemIdentifier]) {
-    [self.mutator stopActuation];
-  } else if ([identifier isEqualToString:kPauseHeaderItemIdentifier]) {
+  if ([identifier isEqualToString:kActuationHeaderPauseItemIdentifier]) {
     [self.mutator pauseActuation];
-  } else {
-    NOTREACHED();
+    return;
   }
+  if ([identifier isEqualToString:kActuationHeaderCloseItemIdentifier]) {
+    [self.mutator stopActuation];
+    return;
+  }
+  NOTREACHED();
 }
 
 @end

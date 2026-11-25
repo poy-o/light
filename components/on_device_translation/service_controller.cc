@@ -5,6 +5,7 @@
 #include "components/on_device_translation/service_controller.h"
 
 #include <algorithm>
+#include <set>
 #include <string>
 #include <utility>
 
@@ -18,6 +19,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_runner.h"
 #include "base/task/thread_pool.h"
+#include "base/time/time.h"
 #include "base/types/expected.h"
 #include "base/types/pass_key.h"
 #include "build/build_config.h"
@@ -55,6 +57,10 @@ constexpr std::string_view kCreateTranslatorMetricActionName =
 constexpr std::string_view kCanTranslateMetricActionName = "CanTranslate";
 constexpr std::string_view kCreateFailedLanguagePairMetricName =
     "Translate.OnDeviceTranslation.CreateFailed.LanguagePair";
+// Time from sending `CreateTranslator()` to the service, including starting
+// the service if needed, to its successful reply.
+constexpr std::string_view kCreateTranslatorEngineLatencyMetricName =
+    "Translate.OnDeviceTranslation.CreateTranslator.EngineLatency";
 
 constexpr std::string_view
     kCreateTranslatorSourceLanguageIsSupportedMetricName =
@@ -94,6 +100,28 @@ OnDeviceTranslationController::CreateTranslatorError ToCreateTranslatorError(
   }
 }
 
+// Converts an install error to the error of the `create()` calls that wait for
+// the install. `failed_error` is the error for `InstallError::kFailed`.
+OnDeviceTranslationController::CreateTranslatorError ToCreateTranslatorError(
+    InstallError error,
+    OnDeviceTranslationController::CreateTranslatorError failed_error) {
+  switch (error) {
+    case InstallError::kFailed:
+      return failed_error;
+    case InstallError::kNotEnoughDiskSpace:
+      return OnDeviceTranslationController::CreateTranslatorError::
+          kNotEnoughDiskSpace;
+    case InstallError::kOffline:
+      return OnDeviceTranslationController::CreateTranslatorError::kOffline;
+    case InstallError::kDataSaverEnabled:
+      return OnDeviceTranslationController::CreateTranslatorError::
+          kDataSaverEnabled;
+    case InstallError::kMeteredConnectionBlocked:
+      return OnDeviceTranslationController::CreateTranslatorError::
+          kMeteredConnectionBlocked;
+  }
+}
+
 }  // namespace
 
 OnDeviceTranslationServiceController::PendingTask::PendingTask(
@@ -125,6 +153,10 @@ OnDeviceTranslationServiceController::OnDeviceTranslationServiceController(
 
 OnDeviceTranslationServiceController::~OnDeviceTranslationServiceController() {
   installer_->RemoveObserver(this);
+
+  // Settle the requests that still wait, so that their promises don't hang.
+  RejectPendingTasks([](const PendingTask&) { return true; },
+                     CreateTranslatorError::kExceedsServiceCountLimitation);
 }
 
 LanguagePackRequirements
@@ -180,14 +212,33 @@ void OnDeviceTranslationServiceController::CreateTranslator(
       kCreateTranslatorMetricActionName, *best_fit_source_language,
       *best_fit_target_language);
 
+  if (!installer_->IsSupported()) {
+    // Don't download language packs that can't be used.
+    std::move(callback).Run(
+        base::unexpected(CreateTranslatorError::kUnsupportedDevice));
+    return;
+  }
+
   LanguagePackRequirements language_pack_requirements =
       GetLanguagePackRequirements(*best_fit_source_language,
                                   *best_fit_target_language);
-  for (const auto& language_pack :
-       language_pack_requirements.to_be_registered_packs) {
-    RecordLanguagePairUma("Translate.OnDeviceTranslation.Download.LanguagePair",
-                          GetSourceLanguageCode(language_pack),
-                          GetTargetLanguageCode(language_pack));
+  if (!language_pack_requirements.to_be_registered_packs.empty()) {
+    const int max_packs = kTranslationAPIMaxInstalledLanguagePacks.Get();
+    if (max_packs > 0) {
+      std::set<LanguagePackKey> existing_packs =
+          installer_->InstalledLanguagePacks();
+      existing_packs.merge(installer_->RegisteredLanguagePacks());
+      if (existing_packs.size() +
+              language_pack_requirements.to_be_registered_packs.size() >
+          static_cast<size_t>(max_packs)) {
+        RecordLanguagePairUma(
+            "Translate.OnDeviceTranslation.DownloadExceedLimit.LanguagePair",
+            *best_fit_source_language, *best_fit_target_language);
+        std::move(callback).Run(base::unexpected(
+            CreateTranslatorError::kExceedsLanguagePackCountLimitation));
+        return;
+      }
+    }
   }
   // Ask for every missing language pack, including the ones that were
   // registered before, so that a download that failed earlier is retried and
@@ -240,6 +291,10 @@ void OnDeviceTranslationServiceController::CreateTranslatorImpl(
   mojo::PendingRemote<mojom::OnDeviceTranslator> pending_remote;
   auto pending_receiver = pending_remote.InitWithNewPipeAndPassReceiver();
 
+  // Whether this request reuses a running service, or pays for a process
+  // launch, the library load and the pack config.
+  const bool service_was_running = IsServiceRunning();
+  const base::TimeTicks start_time = base::TimeTicks::Now();
   if (!MaybeStartService()) {
     // If the service can't be started, returns
     // `kExceedsServiceCountLimitation` error.
@@ -254,6 +309,7 @@ void OnDeviceTranslationServiceController::CreateTranslatorImpl(
       mojo::WrapCallbackWithDropHandler(
           base::BindOnce(
               [](const std::string& source_lang, const std::string& target_lang,
+                 bool service_was_running, base::TimeTicks start_time,
                  base::OnceCallback<void(
                      base::expected<
                          mojo::PendingRemote<mojom::OnDeviceTranslator>,
@@ -261,6 +317,11 @@ void OnDeviceTranslationServiceController::CreateTranslatorImpl(
                  mojo::PendingRemote<mojom::OnDeviceTranslator> pending_remote,
                  CreateTranslatorResult result) {
                 if (result == CreateTranslatorResult::kSuccess) {
+                  base::UmaHistogramMediumTimes(
+                      base::StrCat({kCreateTranslatorEngineLatencyMetricName,
+                                    service_was_running ? ".ServiceRunning"
+                                                        : ".ServiceStarted"}),
+                      base::TimeTicks::Now() - start_time);
                   std::move(callback).Run(std::move(pending_remote));
                 } else {
                   RecordLanguagePairUma(kCreateFailedLanguagePairMetricName,
@@ -269,8 +330,8 @@ void OnDeviceTranslationServiceController::CreateTranslatorImpl(
                       base::unexpected(ToCreateTranslatorError(result)));
                 }
               },
-              source_lang, target_lang, std::move(callbacks.first),
-              std::move(pending_remote)),
+              source_lang, target_lang, service_was_running, start_time,
+              std::move(callbacks.first), std::move(pending_remote)),
           base::BindOnce(
               std::move(callbacks.second),
               base::unexpected(CreateTranslatorError::kServiceCrashed))));
@@ -317,6 +378,10 @@ OnDeviceTranslationServiceController::CanTranslateImpl(
     return CanTranslateResult::kNoNotSupportedLanguage;
   }
 
+  if (!installer_->IsSupported()) {
+    return CanTranslateResult::kNoUnsupportedDevice;
+  }
+
   if (language_pack_requirements.required_not_installed_packs.empty()) {
     // All required language packages are installed.
     if (!installer_->IsInit()) {
@@ -355,10 +420,13 @@ void OnDeviceTranslationServiceController::OnLibraryInstallFailed(
     return;
   }
   // Every pending task waits for the library, so none of them can complete.
-  RejectPendingTasks([](const PendingTask&) { return true; },
-                     error == InstallError::kNotEnoughDiskSpace
-                         ? CreateTranslatorError::kNotEnoughDiskSpace
-                         : CreateTranslatorError::kLibraryInstallFailed);
+  // If the device has no usable library, report `kUnsupportedDevice`.
+  const CreateTranslatorError translator_error =
+      !installer_->IsSupported()
+          ? CreateTranslatorError::kUnsupportedDevice
+          : ToCreateTranslatorError(
+                error, CreateTranslatorError::kLibraryInstallFailed);
+  RejectPendingTasks([](const PendingTask&) { return true; }, translator_error);
 }
 
 void OnDeviceTranslationServiceController::OnLanguagePackInstallFailed(
@@ -371,9 +439,8 @@ void OnDeviceTranslationServiceController::OnLanguagePackInstallFailed(
       [language_pack](const PendingTask& task) {
         return task.required_packs.contains(language_pack);
       },
-      error == InstallError::kNotEnoughDiskSpace
-          ? CreateTranslatorError::kNotEnoughDiskSpace
-          : CreateTranslatorError::kLanguagePackDownloadFailed);
+      ToCreateTranslatorError(
+          error, CreateTranslatorError::kLanguagePackDownloadFailed));
 }
 
 void OnDeviceTranslationServiceController::RejectPendingTasks(

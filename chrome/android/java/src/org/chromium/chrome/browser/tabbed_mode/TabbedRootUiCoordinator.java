@@ -337,6 +337,7 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
+import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
 /** A {@link RootUiCoordinator} variant that controls tabbed-mode specific UI. */
@@ -361,6 +362,9 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
     private @Nullable TabGroupSyncController mTabGroupSyncController;
     private final OneshotSupplierImpl<TabGroupUiActionHandler> mTabGroupUiActionHandlerSupplier =
             new OneshotSupplierImpl<>();
+    private final OneshotSupplierImpl<Boolean> mTabGroupSyncReadySupplier =
+            new OneshotSupplierImpl<>();
+
     private @Nullable StatusIndicatorCoordinator mStatusIndicatorCoordinator;
     private @Nullable StatusIndicatorObserver mStatusIndicatorObserver;
     private @Nullable OfflineIndicatorControllerV2 mOfflineIndicatorController;
@@ -633,6 +637,7 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
      * @param urlBarVisibleSupplier Supplier indicating if the omnibox URL bar is visible.
      * @param onTabLayoutAvailable Runnable to invoke when the tab layout UI is ready.
      * @param isWarmOnResumeSupplier Supplier indicating whether the activity is warm on resume.
+     * @param launchCauseSupplier Supplier for the current {@code LaunchCause}.
      */
     public TabbedRootUiCoordinator(
             AppCompatActivity activity,
@@ -694,7 +699,8 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
             VerticalTabsActionDelegate verticalTabsActionDelegate,
             Supplier<Boolean> urlBarVisibleSupplier,
             Runnable onTabLayoutAvailable,
-            BooleanSupplier isWarmOnResumeSupplier) {
+            BooleanSupplier isWarmOnResumeSupplier,
+            IntSupplier launchCauseSupplier) {
         super(
                 activity,
                 onOmniboxFocusChangedListener,
@@ -880,7 +886,9 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
                         mInactivityTrackerSupplier,
                         mTrackerInitializedOneshotSupplier,
                         getBottomSheetControllerSupplier(),
-                        mSnackbarManagerSupplier);
+                        mSnackbarManagerSupplier,
+                        mActivityLifecycleDispatcher,
+                        launchCauseSupplier);
 
         new OneShotCallback<>(mProfileSupplier, this::waitForTrackerInit);
 
@@ -1613,24 +1621,7 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
             ExtensionsUrlOverrideRegistryManagerFactory.getForProfile(originalProfile);
         }
 
-        TabModelSelector tabModelSelector = mTabModelSelectorSupplier.asNonNull().get();
-        if (!(tabModelSelector.getModel(false) instanceof StubTabModel)
-                && TabGroupSyncFeatures.isTabGroupSyncEnabled(originalProfile)) {
-            var tabGroupSyncService = TabGroupSyncServiceFactory.getForProfile(originalProfile);
-            assert tabGroupSyncService != null;
-            mTabGroupSyncController =
-                    new TabGroupSyncControllerImpl(
-                            tabModelSelector,
-                            tabGroupSyncService,
-                            UserPrefs.get(originalProfile),
-                            () -> {
-                                return MultiWindowUtils.getInstanceCount(PersistedInstanceType.ANY)
-                                                <= 1
-                                        || ApplicationStatus.getLastTrackedFocusedActivity()
-                                                == mActivity;
-                            });
-            mTabGroupUiActionHandlerSupplier.set(mTabGroupSyncController);
-        }
+        initTabGroupSyncController(originalProfile);
 
         boolean isTablet = DeviceFormFactor.isNonMultiDisplayContextOnTablet(mActivity);
         boolean isNtpThemeCustomizationEnabled =
@@ -1687,6 +1678,35 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
                             AiOverlayDialogBridge::new);
         }
         maybeInitIncognitoHistoryDisclaimerCoordinator();
+    }
+
+    @VisibleForTesting
+    void initTabGroupSyncController(Profile originalProfile) {
+        TabModelSelector tabModelSelector = mTabModelSelectorSupplier.asNonNull().get();
+        if (!(tabModelSelector.getModel(false) instanceof StubTabModel)
+                && TabGroupSyncFeatures.isTabGroupSyncEnabled(originalProfile)) {
+            var tabGroupSyncService = TabGroupSyncServiceFactory.getForProfile(originalProfile);
+            assert tabGroupSyncService != null;
+            mTabGroupSyncController =
+                    new TabGroupSyncControllerImpl(
+                            tabModelSelector,
+                            tabGroupSyncService,
+                            UserPrefs.get(originalProfile),
+                            () -> {
+                                return MultiWindowUtils.getInstanceCount(PersistedInstanceType.ANY)
+                                                <= 1
+                                        || ApplicationStatus.getLastTrackedFocusedActivity()
+                                                == mActivity;
+                            });
+            mTabGroupUiActionHandlerSupplier.set(mTabGroupSyncController);
+            mTabGroupSyncController
+                    .getStartupSyncInitializedSupplier()
+                    .runSyncOrOnAvailable(
+                            mCallbackController.makeCancelable(
+                                    ignored -> mTabGroupSyncReadySupplier.set(true)));
+            return;
+        }
+        mTabGroupSyncReadySupplier.set(true);
     }
 
     /** Creates an instance of {@link IncognitoReauthCoordinatorFactory} for tabbed activity. */
@@ -2395,7 +2415,9 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
                 }
 
                 if (TabSwitcherUtils.isGridTabSwitcherDisabled()) {
-                    Tab tab = TabGroupUtils.getSelectedOrFirstTabInGroup(tabModel, tabGroupId);
+                    Tab tab =
+                            TabGroupUtils.getSelectedOrFirstTabInGroup(
+                                    tabModel, TabGroupId.fromOptionalToken(tabGroupId));
                     if (tab != null) {
                         tabModel.setIndex(tabModel.indexOf(tab), TabSelectionType.FROM_USER);
                     }
@@ -2471,7 +2493,8 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
             @Override
             public @WindowId int findWindowIdForTabGroup(@Nullable Token tabGroupId) {
                 assert tabGroupId != null;
-                return TabWindowManagerSingleton.getInstance().findWindowIdForTabGroup(tabGroupId);
+                return TabWindowManagerSingleton.getInstance()
+                        .findWindowIdForTabGroup(TabGroupId.fromRawToken(tabGroupId));
             }
 
             @Override
@@ -2526,7 +2549,6 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
                             mModalDialogManagerSupplier,
                             mActivityLifecycleDispatcher,
                             mTabModelSelectorSupplier,
-                            mEdgeToEdgeManager.getEdgeToEdgeSystemBarColorHelper(),
                             mBackPressManager,
                             mCompositorViewHolderSupplier,
                             mTabGroupUiActionHandlerSupplier,
@@ -2739,7 +2761,7 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
             // Need to pass originalProfile here for the glic button to show in incognito at all.
             if (originalProfile != null
                     && originalProfile.isNativeInitialized()
-                    && GlicEnabling.isEnabledForProfile(originalProfile)) {
+                    && GlicUtils.isTabStripGlicSupported(mActivity, originalProfile)) {
 
                 mIsGlicPinnedSupplier.set(GlicUtils.isButtonPinnedToTabStrip(originalProfile));
 
@@ -2968,6 +2990,15 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
         return mTabGroupSyncController;
     }
 
+    /**
+     * Returns a supplier fulfilled with {@code true} once tab group sync initialization and startup
+     * group reconciliation have completed for this activity, or once setup finishes if tab group
+     * sync is disabled or not used.
+     */
+    public OneshotSupplier<Boolean> getTabGroupSyncReadySupplier() {
+        return mTabGroupSyncReadySupplier;
+    }
+
     @Override
     protected boolean supportsEdgeToEdge() {
         // EdgeToEdgeController is needed either for the bottom chin (gesture nav) or for top
@@ -3021,6 +3052,15 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
     public void onPendingActorTaskTrigger() {
         if (mGlicUiCoordinator != null) {
             mGlicUiCoordinator.onPendingActorTaskTrigger();
+        }
+    }
+
+    /**
+     * Evaluates foreground promos after {@link ChromeTabbedActivity#onResumeWithNative} completes.
+     */
+    public void onResumeWithNativeCompleted() {
+        if (mForegroundPromoController != null) {
+            mForegroundPromoController.onResumeWithNativeCompleted();
         }
     }
 
@@ -3202,7 +3242,7 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
         if (mBookmarkOpener == null) {
             mBookmarkOpener =
                     new BookmarkOpenerImpl(
-                            mBookmarkModelSupplier,
+                            mProfileSupplier,
                             mActivity,
                             mActivity.getComponentName(),
                             mMultiInstanceManager,

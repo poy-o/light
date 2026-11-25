@@ -43,7 +43,6 @@
 #include "components/stream_transport/public/transport_session_registry.h"
 #include "components/stream_transport/test_support/mock_transport_service.h"
 #include "components/stream_transport/test_support/proto_stream/wait_for.h"
-#include "components/sync_device_info/fake_device_info_tracker.h"
 #include "content/public/test/browser_task_environment.h"
 #include "net/http/http_status_code.h"
 #include "services/network/public/cpp/data_element.h"
@@ -354,6 +353,27 @@ TEST_F(BrowserActuatorMessageHandlerTest,
   EXPECT_EQ(done_future.Get(), nullptr);
 }
 
+TEST_F(BrowserActuatorMessageHandlerTest, IgnoresNonZeroSequenceNumber) {
+  EXPECT_CALL(*mock_service_, CreateSession(testing::_, testing::_)).Times(0);
+  EXPECT_CALL(*mock_service_, GetSession(testing::_)).Times(0);
+
+  components_sharing_message::SharingMessage message;
+  browser_actuator::ActuatorDownstreamMessage* bundled =
+      message.mutable_actuator_downstream_message();
+  bundled->set_session_id("bundled_session_123");
+  bundled->set_sequence_number(1);
+  browser_actuator::ControlCommand start_command;
+  start_command.mutable_start_session();
+  AddControlPayload(bundled, start_command);
+
+  base::test::TestFuture<
+      std::unique_ptr<components_sharing_message::ResponseMessage>>
+      done_future;
+  handler_->OnMessage(std::move(message), done_future.GetCallback());
+  EXPECT_TRUE(done_future.Wait());
+  EXPECT_EQ(done_future.Get(), nullptr);
+}
+
 // End-to-end integration test: verifies that when an FCM
 // `gcm::IncomingMessage` carrying a `SharingMessage` arrives at
 // `SharingFCMHandler`, `BrowserActuatorMessageHandler` provisions the real
@@ -390,8 +410,7 @@ class BrowserActuatorFcmIntegrationTest : public testing::Test {
         components_sharing_message::SharingMessage::kActuatorDownstreamMessage,
         handler_.get());
     fcm_handler_ = std::make_unique<SharingFCMHandler>(
-        /*gcm_driver=*/nullptr, &device_info_tracker_,
-        /*sharing_channel_sender=*/nullptr, &handler_registry_);
+        /*gcm_driver=*/nullptr, /*message_sender=*/nullptr, &handler_registry_);
   }
 
   void TearDown() override {
@@ -447,7 +466,6 @@ class BrowserActuatorFcmIntegrationTest : public testing::Test {
   network::TestURLLoaderFactory test_url_loader_factory_;
   std::unique_ptr<TestingProfile> profile_;
   std::unique_ptr<IdentityTestEnvironmentProfileAdaptor> identity_adaptor_;
-  syncer::FakeDeviceInfoTracker device_info_tracker_;
   FakeSharingHandlerRegistry handler_registry_;
   std::unique_ptr<BrowserActuatorMessageHandler> handler_;
   std::unique_ptr<SharingFCMHandler> fcm_handler_;

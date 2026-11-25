@@ -147,23 +147,16 @@ _manifest_merger_jar_path =
 # the error message about why non-existent dependencies are there.
 build_config_target_suffix = "__build_config_crbug_908819"
 
-# Paths for Java location rewriter
-_asm_deps = [
-  "//third_party/android_deps:org_ow2_asm_asm_commons_java",
-  "//third_party/android_deps:org_ow2_asm_asm_java",
-]
-
-rebased_asm_params_path = []
-foreach(_asm_dep, _asm_deps) {
-  _asm_dep_gen_dir = get_label_info(_asm_dep, "target_gen_dir")
-  _asm_dep_name = get_label_info(_asm_dep, "name")
-  rebased_asm_params_path +=
-      [ rebase_path("$_asm_dep_gen_dir/$_asm_dep_name.params.json",
-                    root_build_dir) ]
-}
-
-rebased_location_rewriter_path =
-    rebase_path("$root_build_dir/bin/helper/location_rewriter", root_build_dir)
+# Unified fat jar bundling location_rewriter, trace_event_adder, and
+# system_load_library_remover.
+_bytecode_rewriter_target =
+    "//build/android/bytecode:bytecode_rewriter($default_toolchain)"
+bytecode_rewriter_jar_path =
+    get_label_info(_bytecode_rewriter_target, "target_out_dir") +
+    "/bytecode_rewriter.jar"
+bytecode_rewriter_inputs =
+    java_paths_for_inputs + [ bytecode_rewriter_jar_path ]
+bytecode_rewriter_deps = [ _bytecode_rewriter_target ]
 
 # Write the target's .build_config.json file. This is a json file that contains
 # a dictionary of information about how to build this target (things that
@@ -236,14 +229,6 @@ template("write_build_config") {
     _outputs += [ string_replace(invoker.build_config,
                                  ".build_config.json",
                                  ".res.build_config.json") ]
-  }
-
-  # ParamsJson.needs_transitive_rtxt()
-  if (_type == "dist_aar" || (_type == "java_library" && !invoker.is_prebuilt &&
-                              defined(invoker.custom_package))) {
-    _outputs += [ string_replace(invoker.build_config,
-                                 ".build_config.json",
-                                 ".rtxt.build_config.json") ]
   }
 
   if (defined(invoker.enable_bytecode_checks) &&
@@ -397,6 +382,14 @@ template("write_build_config") {
     if (defined(invoker.android_manifest)) {
       _inputs += [ invoker.android_manifest ]
     }
+    if (defined(invoker.shared_libraries_runtime_deps_file)) {
+      _inputs += [ invoker.shared_libraries_runtime_deps_file ]
+      _deps += [ invoker.shared_libraries_runtime_deps_target ]
+    }
+    if (defined(invoker.secondary_abi_shared_libraries_runtime_deps_file)) {
+      _inputs += [ invoker.secondary_abi_shared_libraries_runtime_deps_file ]
+      _deps += [ invoker.secondary_abi_shared_libraries_runtime_deps_target ]
+    }
     if (defined(invoker.suffix_apk_assets_used_by)) {
       _dep_label = invoker.suffix_apk_assets_used_by
       _dep_gen_dir = get_label_info(_dep_label, "target_gen_dir")
@@ -473,7 +466,6 @@ template("write_build_config") {
                              [
                                "assets",
                                "bypass_platform_checks",
-                               "bytecode_rewriter_target",
                                "chromium_code",
                                "create_locales_java_list",
                                "dex_needs_classpath",
@@ -599,9 +591,6 @@ template("write_build_config") {
         assets.sources = _rebased_asset_sources
       }
       if (defined(invoker.shared_libraries_runtime_deps_file)) {
-        # Don't list shared_libraries_runtime_deps_file as an input in order to
-        # avoid having to depend on the runtime_deps target. See comment in
-        # rules.gni for why we do this.
         shared_libraries_runtime_deps_file =
             rebase_path(invoker.shared_libraries_runtime_deps_file,
                         root_build_dir)
@@ -707,20 +696,37 @@ template("generate_android_wrapper") {
 }
 
 template("generate_r_java") {
+  # Lists the R.txt files of android_resources() visible to this target: direct
+  # deps, their resource deps, and those exposed via public_deps of java deps.
+  # Uses walk_deps so that this does not depend on the targets that it walks,
+  # and dep_keys so that it depends on only the prepare_resources() actions.
+  _rtxts_target_name = "${target_name}__rtxts"
+  _rtxts_file = "$target_gen_dir/$target_name.rtxts.json"
+
+  generated_file(_rtxts_target_name) {
+    forward_variables_from(invoker, [ "testonly" ])
+    walk_deps = invoker.walk_deps
+    outputs = [ _rtxts_file ]
+    data_keys = [ "android_resources_rtxt" ]
+    dep_keys = [ "android_resources_rtxt_deps" ]
+    walk_keys = [ "android_resources_walk_keys" ]
+    output_conversion = "json"
+  }
+
   python_action(target_name) {
-    forward_variables_from(invoker, TESTONLY_AND_VISIBILITY + [ "deps" ])
+    forward_variables_from(invoker, TESTONLY_AND_VISIBILITY)
+    deps = [ ":$_rtxts_target_name" ]
     depfile = "$target_gen_dir/${invoker.target_name}.d"
-    inputs = [ invoker.rtxt_build_config ]
+    inputs = [ _rtxts_file ]
     outputs = [ invoker.srcjar_path ]
-    _rebased_rtxt_build_config =
-        rebase_path(invoker.rtxt_build_config, root_build_dir)
+    _rebased_rtxts_file = rebase_path(_rtxts_file, root_build_dir)
     python_binary = "//build/android:create_r_java"
     args = [
       "--depfile",
       rebase_path(depfile, root_build_dir),
       "--srcjar-out",
       rebase_path(invoker.srcjar_path, root_build_dir),
-      "--deps-rtxts=@FileArg($_rebased_rtxt_build_config:dependency_rtxt_files)",
+      "--deps-rtxts=@FileArg($_rebased_rtxts_file)",
       "--r-package=${invoker.package}",
     ]
   }
@@ -1109,6 +1115,10 @@ if (enable_java_templates) {
       _non_lib_deps = filter_exclude(invoker.deps, _lib_deps)
       _deps += _non_lib_deps
     }
+    if (defined(invoker.manifest_dep)) {
+      _non_lib_deps += [ invoker.manifest_dep ]
+      _deps += [ invoker.manifest_dep ]
+    }
     _deps += [ invoker.build_config_dep ]
 
     if (defined(invoker.lint_jar_path)) {
@@ -1166,7 +1176,7 @@ if (enable_java_templates) {
 
     # Analyzes the app module and writes its partial results. Reports no
     # issues and does not read the baseline.
-    action_with_pydeps(_analysis_target_name) {
+    python_action(_analysis_target_name) {
       forward_variables_from(invoker, [ "testonly" ])
       visibility = [ ":$_report_target_name" ]
       pool = _pool
@@ -1176,9 +1186,12 @@ if (enable_java_templates) {
       } else {
         not_needed([ "_lib_annotations_deps" ])
       }
-      script = "//build/android/gyp/lint.py"
+      python_binary = "//build/android:lint"
       depfile = "$target_gen_dir/$target_name.d"
-      inputs = _common_inputs + [ invoker.manifest ]
+      inputs = _common_inputs + [
+                 invoker.manifest,
+                 invoker.merged_manifest,
+               ]
       _stamp_path = "$target_out_dir/$target_name/build.lint.stamp"
       outputs = [ _stamp_path ]
 
@@ -1194,6 +1207,8 @@ if (enable_java_templates) {
             "--android-sdk-version=${lint_android_sdk_version}",
             "--manifest",
             rebase_path(invoker.manifest, root_build_dir),
+            "--merged-manifest",
+            rebase_path(invoker.merged_manifest, root_build_dir),
 
             # Lint requires all resource files to be passed in the same
             # invocation for checks like UnusedResources. Sources of analyzed
@@ -1214,7 +1229,7 @@ if (enable_java_templates) {
     # Merges the partial results of the app module and of analyzed libraries,
     # and fails on issues that are not in the baseline. Takes about 1 second,
     # and is the only lint step that re-runs for a changed baseline.
-    action_with_pydeps(target_name) {
+    python_action(target_name) {
       forward_variables_from(invoker, TESTONLY_AND_VISIBILITY)
       pool = _pool
       deps = _non_lib_deps + [
@@ -1226,13 +1241,16 @@ if (enable_java_templates) {
       } else {
         not_needed([ "_lib_partials_deps" ])
       }
-      script = "//build/android/gyp/lint.py"
+      python_binary = "//build/android:lint"
       depfile = "$target_gen_dir/$target_name.d"
 
-      # The report reads the merged manifest (e.g. for MissingPermission in
-      # library partial results), which may change without changing the
-      # app's partial results.
-      inputs = _common_inputs + [ invoker.manifest ]
+      # The report reads the manifests named in project.xml (e.g. merged
+      # manifest for MissingPermission in library partial results), which may
+      # change without changing the app's partial results.
+      inputs = _common_inputs + [
+                 invoker.manifest,
+                 invoker.merged_manifest,
+               ]
       _stamp_path = "$target_out_dir/$target_name/build.lint.stamp"
       outputs = [ _stamp_path ]
       args = _common_args + [
@@ -1334,8 +1352,8 @@ if (enable_java_templates) {
 
     # Not in the java_cmd_pool: the native extractor takes 0.2 s and
     # 200 MB for most libraries, and analyses of dependents wait on it.
-    action_with_pydeps(invoker.annotations_target_name) {
-      script = "//build/android/gyp/lint.py"
+    python_action(invoker.annotations_target_name) {
+      python_binary = "//build/android:lint"
       depfile = "$target_gen_dir/$target_name.d"
       outputs = [ invoker.annotations_zip ]
       inputs = _common_inputs
@@ -1356,13 +1374,13 @@ if (enable_java_templates) {
              ]
     }
 
-    action_with_pydeps(target_name) {
+    python_action(target_name) {
       if (defined(java_cmd_pool_size)) {
         pool = "//build/config/android:java_cmd_pool($default_toolchain)"
       } else {
         pool = "//build/toolchain:link_pool($default_toolchain)"
       }
-      script = "//build/android/gyp/lint.py"
+      python_binary = "//build/android:lint"
       depfile = "$target_gen_dir/$target_name.d"
 
       _stamp = "${invoker.lint_gen_dir}.stamp"
@@ -1421,9 +1439,9 @@ if (enable_java_templates) {
   }
 
   template("trace_references") {
-    action_with_pydeps(target_name) {
+    python_action(target_name) {
       forward_variables_from(invoker, TESTONLY_AND_VISIBILITY + [ "deps" ])
-      script = "//build/android/gyp/tracereferences.py"
+      python_binary = "//build/android:tracereferences"
       inputs = java_paths_for_inputs + [
                  _r8_path,
                  _chrome_r8_binary_path,
@@ -1454,7 +1472,7 @@ if (enable_java_templates) {
 
   template("proguard") {
     forward_variables_from(invoker, TESTONLY_AND_VISIBILITY)
-    _script = "//build/android/gyp/proguard.py"
+    _python_binary = "//build/android:proguard"
     _deps = invoker.deps
 
     _inputs = java_paths_for_inputs + [
@@ -1666,8 +1684,8 @@ if (enable_java_templates) {
       _expectations_target =
           "${invoker.top_target_name}_validate_proguard_config"
 
-      action_with_pydeps(_expectations_target) {
-        script = _script
+      python_action(_expectations_target) {
+        python_binary = _python_binary
 
         # Need to depend on all deps so that proguard.txt within .aar files get
         # extracted.
@@ -1727,14 +1745,14 @@ if (enable_java_templates) {
       not_needed(invoker, [ "disallowed_library_classes" ])
     }
 
-    action_with_pydeps(target_name) {
+    python_action(target_name) {
       forward_variables_from(invoker,
                              [
                                "data",
                                "data_deps",
                                "public_deps",
                              ])
-      script = _script
+      python_binary = _python_binary
       deps = _deps
       inputs = _inputs
       outputs = _outputs
@@ -1771,7 +1789,7 @@ if (enable_java_templates) {
   #   tiered_stop_at_level_one: Whether to pass --tiered-stop-at-level-one
   #
   template("java_binary_script") {
-    action_with_pydeps(target_name) {
+    python_action(target_name) {
       forward_variables_from(invoker, TESTONLY_AND_VISIBILITY)
 
       _main_class = invoker.main_class
@@ -1783,7 +1801,7 @@ if (enable_java_templates) {
         _max_heap_size = "1G"
       }
 
-      script = "//build/android/gyp/create_java_binary_script.py"
+      python_binary = "//build/android:create_java_binary_script"
       inputs = [ _build_config ]
       _java_script = "$root_build_dir/bin/$_script_name"
       outputs = [ _java_script ]
@@ -2072,7 +2090,7 @@ if (enable_java_templates) {
   }
 
   template("jacoco_instr") {
-    action_with_pydeps(target_name) {
+    python_action(target_name) {
       forward_variables_from(invoker,
                              TESTONLY_AND_VISIBILITY + [
                                    "deps",
@@ -2084,7 +2102,7 @@ if (enable_java_templates) {
       _sources_json_file = "$target_out_dir/${target_name}__jacoco_sources.json"
       _jacococli_jar = "//third_party/jacoco/cipd/lib/jacococli.jar"
 
-      script = "//build/android/gyp/jacoco_instr.py"
+      python_binary = "//build/android:jacoco_instr"
       inputs = invoker.source_files + java_paths_for_inputs + [
                  _jacococli_jar,
                  invoker.input_jar_path,
@@ -2117,8 +2135,8 @@ if (enable_java_templates) {
   }
 
   template("filter_jar") {
-    action_with_pydeps(target_name) {
-      script = "//build/android/gyp/filter_zip.py"
+    python_action(target_name) {
+      python_binary = "//build/android:filter_zip"
       forward_variables_from(invoker,
                              TESTONLY_AND_VISIBILITY + [
                                    "deps",
@@ -2151,13 +2169,13 @@ if (enable_java_templates) {
   }
 
   template("check_for_missing_direct_deps") {
-    action_with_pydeps(target_name) {
+    python_action(target_name) {
       forward_variables_from(invoker,
                              TESTONLY_AND_VISIBILITY + [
                                    "data_deps",
                                    "deps",
                                  ])
-      script = "//build/android/gyp/check_for_missing_direct_deps.py"
+      python_binary = "//build/android:check_for_missing_direct_deps"
       inputs = jdk_tools_paths_for_inputs + [
                  invoker.input_jar,
                  invoker.javac_build_config,
@@ -2203,12 +2221,27 @@ if (enable_java_templates) {
   }
 
   template("merge_manifests") {
-    action_with_pydeps(target_name) {
+    # Produces a dep-only target for merge_manifests() by walking __assetres
+    # deps without depending on them and depending only on targets that produce
+    # generated mergeable manifests (e.g. unpacked AARs), so unrelated resource
+    # changes do not trigger manifest merging.
+    _manifest_deps_target = "${target_name}__deps"
+
+    generated_file(_manifest_deps_target) {
+      forward_variables_from(invoker, [ "testonly" ])
+      walk_deps = invoker.manifest_walk_deps
+      outputs = [ "$target_gen_dir/${_manifest_deps_target}.txt" ]
+      data_keys = [ "mergeable_android_manifest_deps" ]
+      dep_keys = [ "mergeable_android_manifest_deps" ]
+    }
+
+    python_action(target_name) {
       assert(
           invoker.min_sdk_version >= min_supported_sdk_version,
           get_label_info(":$target_name", "label_no_toolchain") + " has an unsupported min_sdk_version of ${invoker.min_sdk_version} (min is $min_supported_sdk_version)")
       forward_variables_from(invoker, TESTONLY_AND_VISIBILITY + [ "deps" ])
-      script = "//build/android/gyp/merge_manifest.py"
+      deps += [ ":$_manifest_deps_target" ]
+      python_binary = "//build/android:merge_manifest"
       depfile = "$target_gen_dir/$target_name.d"
 
       inputs = java_paths_for_inputs + [
@@ -2286,16 +2319,14 @@ if (enable_java_templates) {
   #   rtxt_out_path: Path for the generated R.txt file.
   #
   template("prepare_resources") {
-    # TODO(crbug.com/582287459): Switch to python_action once
-    # components/cronet/gn2bp/gn_utils.py recognizes prepare_resources.pyz.
-    action_with_pydeps(target_name) {
+    python_action(target_name) {
       forward_variables_from(invoker,
                              TESTONLY_AND_VISIBILITY + [
                                    "deps",
                                    "public_deps",
                                    "sources",
                                  ])
-      script = "//build/android/gyp/prepare_resources.py"
+      python_binary = "//build/android:prepare_resources"
 
       outputs = [
         invoker.resources_zip,
@@ -2437,7 +2468,7 @@ if (enable_java_templates) {
     }
     _final_srcjar_path = "${target_gen_dir}/${target_name}.srcjar"
 
-    _script = "//build/android/gyp/compile_resources.py"
+    _python_binary = "//build/android:compile_resources"
 
     _target_sdk_version = invoker.target_sdk_version
     if (defined(invoker.override_target_sdk)) {
@@ -2448,67 +2479,6 @@ if (enable_java_templates) {
       invoker.build_config,
       android_sdk_tools_bundle_aapt2,
       android_sdk_jar,
-
-      # TODO(b/315080809#comment4): remove these files after fixing
-      # build/print_python_deps.py.
-      "//third_party/protobuf/python/google/__init__.py",
-      "//third_party/protobuf/python/google/protobuf/__init__.py",
-      "//third_party/protobuf/python/google/protobuf/compiler/__init__.py",
-      "//third_party/protobuf/python/google/protobuf/compiler/plugin_pb2.py",
-      "//third_party/protobuf/python/google/protobuf/descriptor.py",
-      "//third_party/protobuf/python/google/protobuf/descriptor_database.py",
-      "//third_party/protobuf/python/google/protobuf/descriptor_pb2.py",
-      "//third_party/protobuf/python/google/protobuf/descriptor_pool.py",
-      "//third_party/protobuf/python/google/protobuf/internal/__init__.py",
-      "//third_party/protobuf/python/google/protobuf/internal/api_implementation.py",
-      "//third_party/protobuf/python/google/protobuf/internal/builder.py",
-      "//third_party/protobuf/python/google/protobuf/internal/containers.py",
-      "//third_party/protobuf/python/google/protobuf/internal/decoder.py",
-      "//third_party/protobuf/python/google/protobuf/internal/descriptor_database_test.py",
-      "//third_party/protobuf/python/google/protobuf/internal/descriptor_pool_test.py",
-      "//third_party/protobuf/python/google/protobuf/internal/descriptor_test.py",
-      "//third_party/protobuf/python/google/protobuf/internal/encoder.py",
-      "//third_party/protobuf/python/google/protobuf/internal/enum_type_wrapper.py",
-      "//third_party/protobuf/python/google/protobuf/internal/extension_dict.py",
-      "//third_party/protobuf/python/google/protobuf/internal/field_mask.py",
-      "//third_party/protobuf/python/google/protobuf/internal/generator_test.py",
-      "//third_party/protobuf/python/google/protobuf/internal/import_test.py",
-      "//third_party/protobuf/python/google/protobuf/internal/import_test_package/__init__.py",
-      "//third_party/protobuf/python/google/protobuf/internal/json_format_test.py",
-      "//third_party/protobuf/python/google/protobuf/internal/keywords_test.py",
-      "//third_party/protobuf/python/google/protobuf/internal/message_factory_test.py",
-      "//third_party/protobuf/python/google/protobuf/internal/message_listener.py",
-      "//third_party/protobuf/python/google/protobuf/internal/message_test.py",
-      "//third_party/protobuf/python/google/protobuf/internal/proto_builder_test.py",
-      "//third_party/protobuf/python/google/protobuf/internal/python_edition_defaults.py",
-      "//third_party/protobuf/python/google/protobuf/internal/python_message.py",
-      "//third_party/protobuf/python/google/protobuf/internal/reflection_test.py",
-      "//third_party/protobuf/python/google/protobuf/internal/service_reflection_test.py",
-      "//third_party/protobuf/python/google/protobuf/internal/symbol_database_test.py",
-      "//third_party/protobuf/python/google/protobuf/internal/test_util.py",
-      "//third_party/protobuf/python/google/protobuf/internal/testing_refleaks.py",
-      "//third_party/protobuf/python/google/protobuf/internal/text_encoding_test.py",
-      "//third_party/protobuf/python/google/protobuf/internal/text_format_test.py",
-      "//third_party/protobuf/python/google/protobuf/internal/type_checkers.py",
-      "//third_party/protobuf/python/google/protobuf/internal/unknown_fields_test.py",
-      "//third_party/protobuf/python/google/protobuf/internal/well_known_types.py",
-      "//third_party/protobuf/python/google/protobuf/internal/well_known_types_test.py",
-      "//third_party/protobuf/python/google/protobuf/internal/wire_format.py",
-      "//third_party/protobuf/python/google/protobuf/internal/wire_format_test.py",
-      "//third_party/protobuf/python/google/protobuf/json_format.py",
-      "//third_party/protobuf/python/google/protobuf/message.py",
-      "//third_party/protobuf/python/google/protobuf/message_factory.py",
-      "//third_party/protobuf/python/google/protobuf/proto_builder.py",
-      "//third_party/protobuf/python/google/protobuf/pyext/__init__.py",
-      "//third_party/protobuf/python/google/protobuf/pyext/cpp_message.py",
-      "//third_party/protobuf/python/google/protobuf/reflection.py",
-      "//third_party/protobuf/python/google/protobuf/runtime_version.py",
-      "//third_party/protobuf/python/google/protobuf/service_reflection.py",
-      "//third_party/protobuf/python/google/protobuf/symbol_database.py",
-      "//third_party/protobuf/python/google/protobuf/text_encoding.py",
-      "//third_party/protobuf/python/google/protobuf/text_format.py",
-      "//third_party/protobuf/python/google/protobuf/unknown_fields.py",
-      "//third_party/protobuf/python/google/protobuf/util/__init__.py",
     ]
 
     # Remote resource compilation runs on Linux workers, which need the Linux
@@ -2733,7 +2703,7 @@ if (enable_java_templates) {
       _expectations_target =
           "${invoker.top_target_name}_validate_android_manifest"
 
-      action_with_pydeps(_expectations_target) {
+      python_action(_expectations_target) {
         _actual_file = "${invoker.android_manifest}.normalized"
         _failure_file =
             "$expectations_failure_dir/" +
@@ -2750,7 +2720,7 @@ if (enable_java_templates) {
           invoker.android_manifest_dep,
           invoker.build_config_dep,
         ]
-        script = _script
+        python_binary = _python_binary
         args = _args + [
                  "--expected-file",
                  rebase_path(invoker.expected_android_manifest, root_build_dir),
@@ -2780,8 +2750,8 @@ if (enable_java_templates) {
       _deps += [ ":$_expectations_target" ]
     }
 
-    action_with_pydeps(target_name) {
-      script = _script
+    python_action(target_name) {
+      python_binary = _python_binary
       depfile = "$target_gen_dir/${target_name}.d"
       inputs = _inputs
       outputs = _outputs
@@ -2810,9 +2780,9 @@ if (enable_java_templates) {
   template("optimize_resources") {
     forward_variables_from(invoker, TESTONLY_AND_VISIBILITY)
 
-    action_with_pydeps(target_name) {
+    python_action(target_name) {
       forward_variables_from(invoker, [ "deps" ])
-      script = "//build/android/gyp/optimize_resources.py"
+      python_binary = "//build/android:optimize_resources"
       inputs = [
         android_sdk_tools_bundle_aapt2,
         invoker.rtxt_path,
@@ -2869,9 +2839,9 @@ if (enable_java_templates) {
   #   res_size_info_path: Path to input .ap_.info file (for apks).
   #
   template("create_size_info_files") {
-    action_with_pydeps(target_name) {
+    python_action(target_name) {
       forward_variables_from(invoker, TESTONLY_AND_VISIBILITY + [ "deps" ])
-      script = "//build/android/gyp/create_size_info_files.py"
+      python_binary = "//build/android:create_size_info_files"
       _jar_info_path = "$root_build_dir/size-info/${invoker.name}.jar.info"
       outputs = [ _jar_info_path ]
       depfile = "$target_gen_dir/$target_name.d"
@@ -2979,7 +2949,7 @@ if (enable_java_templates) {
           invoker.secondary_native_lib_placeholders
     }
 
-    _script = "//build/android/gyp/apkbuilder.py"
+    _python_binary = "//build/android:apkbuilder"
 
     _inputs = [ invoker.packaged_resources_path ] + signflinger_inputs
 
@@ -3105,7 +3075,7 @@ if (enable_java_templates) {
       _expectations_target =
           "${invoker.top_target_name}_validate_libs_and_assets"
 
-      action_with_pydeps(_expectations_target) {
+      python_action(_expectations_target) {
         _actual_file = "$target_gen_dir/$target_name.libs_and_assets"
         _failure_file =
             "$expectations_failure_dir/" +
@@ -3119,7 +3089,7 @@ if (enable_java_templates) {
           _actual_file,
           _failure_file,
         ]
-        script = _script
+        python_binary = _python_binary
         args = _args + [
                  "--expected-file",
                  rebase_path(invoker.expected_libs_and_assets, root_build_dir),
@@ -3143,13 +3113,13 @@ if (enable_java_templates) {
       _deps += [ ":$_expectations_target" ]
     }
 
-    action_with_pydeps(target_name) {
+    python_action(target_name) {
       depfile = "$target_gen_dir/$target_name.d"
       inputs = _inputs
       deps = _deps
       data = _data
       outputs = _outputs
-      script = _script
+      python_binary = _python_binary
       args = _args + [
                "--depfile",
                rebase_path(depfile, root_build_dir),
@@ -3628,7 +3598,7 @@ if (enable_java_templates) {
   #   output_jar: Path to output .ijar.
   #
   template("generate_interface_jar") {
-    action_with_pydeps(target_name) {
+    python_action(target_name) {
       _ijar_executable =
           "//third_party/android_build_tools/bazel_tools/cipd/ijar"
       forward_variables_from(invoker,
@@ -3638,7 +3608,7 @@ if (enable_java_templates) {
                                    "deps",
                                    "public_deps",
                                  ])
-      script = "//build/android/gyp/ijar.py"
+      python_binary = "//build/android:ijar"
       inputs = [
         invoker.input_jar,
         _ijar_executable,
@@ -3751,7 +3721,11 @@ if (enable_java_templates) {
   #  proguard_mapping_path: Path to .mapping file produced from ProGuard step.
   #  shared_libraries_runtime_deps_file: Optional. Path to a file listing the
   #    native shared libraries required at runtime by the APK.
+  #  shared_libraries_runtime_deps_target: Target that writes
+  #    shared_libraries_runtime_deps_file.
   #  secondary_abi_shared_libraries_runtime_deps_file:
+  #  secondary_abi_shared_libraries_runtime_deps_target: Target that writes
+  #    secondary_abi_shared_libraries_runtime_deps_file.
   #  secondary_native_lib_placeholders: Optional. List of placeholder filenames
   #    to add to the APK for the secondary ABI.
   #  loadable_modules: Optional list of extra native libraries to
@@ -3977,14 +3951,14 @@ if (enable_java_templates) {
           }
         }
       } else if (_is_prebuilt && _build_host_jar) {
-        if (defined(invoker.bytecode_rewriter_target)) {
+        if (defined(invoker.bytecode_rewriter)) {
           _processed_jar_path = "$target_out_dir/$target_name.rewritten.jar"
         } else {
           # Skip "process device" step if the step would be just a copy.
           _processed_jar_path = invoker.jar_path
         }
       } else if (_has_sources) {
-        if (defined(invoker.bytecode_rewriter_target)) {
+        if (defined(invoker.bytecode_rewriter)) {
           _processed_jar_path = "$target_out_dir/$target_name.rewritten.jar"
         } else {
           # Filter directly in compile_java.py when no other processing is
@@ -4026,28 +4000,30 @@ if (enable_java_templates) {
       }
     }
 
-    _java_assetres_deps = filter_include(_invoker_deps, java_resource_patterns)
-
-    # Cannot use minus operator because it does not work when the operand has
-    # repeated entries.
-    _invoker_deps_minus_assetres =
-        filter_exclude(_invoker_deps, _java_assetres_deps)
-    _lib_deps =
-        filter_include(_invoker_deps_minus_assetres, java_library_patterns)
-    _non_java_deps = filter_exclude(_invoker_deps_minus_assetres, _lib_deps)
-
+    _java_assetres_deps = []
     _java_header_deps = []  # Turbine / ijar
 
     # It would be more ideal to split this into __host and __javac, but we
     # combine the two concepts to save on a group() target.
     _java_host_deps = []  # Processed host .jar + javac .jar.
-
-    foreach(_lib_dep, _lib_deps) {
-      # Expand //foo/java -> //foo/java:java
-      _lib_dep = get_label_info(_lib_dep, "label_no_toolchain")
-      _java_assetres_deps += [ "${_lib_dep}__assetres" ]
-      _java_header_deps += [ "${_lib_dep}__header" ]
-      _java_host_deps += [ "${_lib_dep}__host" ]
+    _lib_deps = []
+    _non_java_deps = []
+    foreach(_dep, _invoker_deps) {
+      # Expand labels before matching patterns like "*android*:resources"
+      # (e.g., ":resources" in //android_webview) and "//foo/java" ->
+      # "//foo/java:java". Keep original _dep for non-Java deps to preserve
+      # toolchains.
+      _dep_label = get_label_info(_dep, "label_no_toolchain")
+      if (filter_include([ _dep_label ], java_resource_patterns) != []) {
+        _java_assetres_deps += [ _dep ]
+      } else if (filter_include([ _dep_label ], java_library_patterns) != []) {
+        _lib_deps += [ _dep_label ]
+        _java_assetres_deps += [ "${_dep_label}__assetres" ]
+        _java_header_deps += [ "${_dep_label}__header" ]
+        _java_host_deps += [ "${_dep_label}__host" ]
+      } else {
+        _non_java_deps += [ _dep ]
+      }
     }
 
     # APK and base module targets are special because:
@@ -4108,7 +4084,9 @@ if (enable_java_templates) {
     # Often needed, but too hard to figure out when ahead of time.
     not_needed([
                  "_header_classpath_deps",
+                 "_java_assetres_deps",
                  "_javac_classpath_deps",
+                 "_lib_deps",
                  "_non_java_deps",
                  "_rjava_srcjar_deps",
                  "_supports_host",
@@ -4146,7 +4124,6 @@ if (enable_java_templates) {
                              [
                                "aar_path",
                                "annotation_processor_deps",
-                               "bytecode_rewriter_target",
                                "create_locales_java_list",
                                "direct_deps_only",
                                "enable_lint",
@@ -4185,8 +4162,10 @@ if (enable_java_templates) {
               "res_size_info_path",
               "secondary_abi_loadable_modules",
               "secondary_abi_shared_libraries_runtime_deps_file",
+              "secondary_abi_shared_libraries_runtime_deps_target",
               "secondary_native_lib_placeholders",
               "shared_libraries_runtime_deps_file",
+              "shared_libraries_runtime_deps_target",
               "uses_split",
             ])
       }
@@ -4216,7 +4195,7 @@ if (enable_java_templates) {
       }
       if (defined(_dex_needs_classpath)) {
         dex_needs_classpath = _dex_needs_classpath
-      } else if (defined(invoker.bytecode_rewriter_target)) {
+      } else if (defined(invoker.bytecode_rewriter)) {
         needs_full_javac_classpath = true
       }
       if (defined(_enable_bytecode_checks) && _enable_bytecode_checks) {
@@ -4344,11 +4323,7 @@ if (enable_java_templates) {
         _rjava_target = "${target_name}__rjava"
 
         generate_r_java(_rjava_target) {
-          deps = [ ":$_build_config_target_name" ] + _java_assetres_deps +
-                 _non_java_deps
-          _rtxt_build_config =
-              "$target_gen_dir/$_main_target_name.rtxt.build_config.json"
-          rtxt_build_config = _rtxt_build_config
+          walk_deps = _java_assetres_deps
 
           # Filepath has to be exactly this because compile_java looks for the
           # srcjar of srcjar_deps at $target_gen_dir/$_rjava_target.srcjar.
@@ -4626,20 +4601,17 @@ if (enable_java_templates) {
       }
     }
 
-    if (defined(invoker.bytecode_rewriter_target)) {
+    if (defined(invoker.bytecode_rewriter)) {
       assert(_build_host_jar || _build_device_jar,
              "A host or device jar must be created to use bytecode rewriting")
 
       _rewritten_jar = "$target_out_dir/${target_name}.rewritten.jar"
       _rewritten_jar_target_name = "${target_name}__rewritten"
-      _rewriter_path = root_build_dir + "/bin/helper/" +
-                       get_label_info(invoker.bytecode_rewriter_target, "name")
       _rebased_build_config = rebase_path(_build_config, root_build_dir)
 
-      action_with_pydeps(_rewritten_jar_target_name) {
-        script = "//build/android/gyp/bytecode_rewriter.py"
-        inputs = java_paths_for_inputs + [
-                   _rewriter_path,
+      python_action(_rewritten_jar_target_name) {
+        python_binary = "//build/android:bytecode_rewriter"
+        inputs = bytecode_rewriter_inputs + [
                    _build_config,
                    _unprocessed_jar_path,
                  ]
@@ -4648,8 +4620,10 @@ if (enable_java_templates) {
         args = [
           "--depfile",
           rebase_path(depfile, root_build_dir),
-          "--script",
-          rebase_path(_rewriter_path, root_build_dir),
+          "--jar-path",
+          rebase_path(bytecode_rewriter_jar_path, root_build_dir),
+          "--tool",
+          invoker.bytecode_rewriter,
           "--classpath",
           "@FileArg($_rebased_build_config:javac_full_classpath)",
           "--classpath",
@@ -4663,7 +4637,7 @@ if (enable_java_templates) {
           args += invoker.bytecode_rewriter_args
         }
         deps = _unprocessed_jar_deps + _javac_classpath_deps +
-               [ invoker.bytecode_rewriter_target ]
+               bytecode_rewriter_deps
       }
 
       _unprocessed_jar_deps += [ ":$_rewritten_jar_target_name" ]
@@ -4878,6 +4852,44 @@ if (enable_java_templates) {
         if (_supports_android || _requires_robolectric ||
             _bypass_platform_checks) {
           deps = _java_assetres_deps
+
+          # Emit deps only if any mergeable manifest is generated (under
+          # root_build_dir).
+          _has_generated_manifest_deps =
+              _non_java_deps != [] &&
+              defined(invoker.mergeable_android_manifests) &&
+              filter_exclude(rebase_path(invoker.mergeable_android_manifests,
+                                         root_build_dir),
+                             [ "../*" ]) != []
+          if (_has_generated_manifest_deps) {
+            deps += _non_java_deps
+          }
+
+          # Only android_resources() reachable through public_deps are visible
+          # to targets that depend on this one.
+          _walk_keys = []
+          if (defined(invoker.public_deps)) {
+            foreach(_dep, invoker.public_deps) {
+              _dep_label = get_label_info(_dep, "label_no_toolchain")
+              if (filter_include([ _dep_label ], java_resource_patterns) !=
+                  []) {
+                _walk_keys += [ _dep ]
+              } else if (filter_include([ _dep_label ],
+                                        java_library_patterns) != []) {
+                _walk_keys += [ "${_dep_label}__assetres" ]
+              }
+            }
+          }
+          metadata = {
+            # Consumed by generate_r_java() to restrict its R.txt metadata walk
+            # to public_deps.
+            android_resources_walk_keys = _walk_keys
+            if (_has_generated_manifest_deps) {
+              # Consumed by merge_manifests() so it depends on targets
+              # generating mergeable_android_manifests.
+              mergeable_android_manifest_deps = _non_java_deps
+            }
+          }
         }
       }
     }
@@ -4889,7 +4901,6 @@ if (enable_java_templates) {
       group("${target_name}__lint_partials") {
         deps = []
         foreach(_lib_dep, _lib_deps) {
-          _lib_dep = get_label_info(_lib_dep, "label_no_toolchain")
           deps += [ "${_lib_dep}__lint_partials" ]
         }
         if (_enable_lint_analysis) {
@@ -4902,7 +4913,6 @@ if (enable_java_templates) {
       group("${target_name}__lint_annotations") {
         deps = []
         foreach(_lib_dep, _lib_deps) {
-          _lib_dep = get_label_info(_lib_dep, "label_no_toolchain")
           deps += [ "${_lib_dep}__lint_annotations" ]
         }
         if (_enable_lint_analysis) {
@@ -5060,7 +5070,7 @@ template("create_android_app_bundle_module") {
 
   forward_variables_from(invoker, TESTONLY_AND_VISIBILITY)
   _deps = invoker.deps
-  _script = "//build/android/gyp/apkbuilder.py"
+  _python_binary = "//build/android:apkbuilder"
 
   # NOTE: Compared to the inputs of the "package_apk" template action,
   #       this list is much smaller, since apkbuilder.py --format=bundle-module
@@ -5142,7 +5152,7 @@ template("create_android_app_bundle_module") {
   if (defined(invoker.expected_libs_and_assets)) {
     _expectations_target = "${invoker.top_target_name}_validate_libs_and_assets"
 
-    action_with_pydeps(_expectations_target) {
+    python_action(_expectations_target) {
       _actual_file = "$target_gen_dir/$target_name.libs_and_assets"
       _failure_file = "$expectations_failure_dir/" +
                       string_replace(invoker.expected_libs_and_assets, "/", "_")
@@ -5158,7 +5168,7 @@ template("create_android_app_bundle_module") {
         _actual_file,
         _failure_file,
       ]
-      script = _script
+      python_binary = _python_binary
       args = _args + [
                "--expected-file",
                rebase_path(invoker.expected_libs_and_assets, root_build_dir),
@@ -5182,11 +5192,11 @@ template("create_android_app_bundle_module") {
     _deps += [ ":$_expectations_target" ]
   }
 
-  action_with_pydeps(target_name) {
+  python_action(target_name) {
     deps = _deps
     inputs = _inputs
     outputs = _outputs
-    script = _script
+    python_binary = _python_binary
     depfile = "$target_gen_dir/$target_name.d"
     args = _args + [
              "--depfile",
@@ -5196,14 +5206,14 @@ template("create_android_app_bundle_module") {
 }
 
 template("rename_jar_classes") {
-  action_with_pydeps(target_name) {
+  python_action(target_name) {
     forward_variables_from(invoker, TESTONLY_AND_VISIBILITY)
     forward_variables_from(invoker,
                            [
                              "deps",
                              "public_deps",
                            ])
-    script = "//build/android/gyp/rename_java_classes.py"
+    python_binary = "//build/android:rename_java_classes"
     inputs = [
       _r8_path,
       invoker.input,

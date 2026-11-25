@@ -7,6 +7,7 @@
 #include <optional>
 #include <vector>
 
+#include "base/i18n/language_tag.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/values_test_util.h"
@@ -751,10 +752,11 @@ TEST_F(ChromePaymentsAutofillClientTest, ShowTouchToFillBnplIssuers) {
               ShowBnplIssuers(ElementsAre(EqualsBnplIssuerContext(
                                   issuer_context[0].issuer.issuer_id(),
                                   issuer_context[0].eligibility)),
-                              /*app_locale=*/"en-US", _, _));
+                              /*app_locale=*/
+                              base::i18n::GetKnownLanguageTag("en-US"), _, _));
 
   chrome_payments_client()->ShowTouchToFillBnplIssuers(
-      issuer_context, /*app_locale=*/"en-US",
+      issuer_context, /*app_locale=*/base::i18n::GetKnownLanguageTag("en-US"),
       /*selected_issuer_callback=*/base::DoNothing(),
       /*cancel_callback=*/base::DoNothing());
 }
@@ -763,7 +765,8 @@ TEST_F(ChromePaymentsAutofillClientTest, OnPurchaseAmountExtracted) {
   MockTouchToFillPaymentMethodController* ttf_payment_method_controller =
       InjectMockTouchToFillPaymentMethodController();
   std::optional<int64_t> extracted_amount = 12345;
-  std::optional<std::string> app_locale = "en-US";
+  std::optional<base::i18n::LanguageTag> app_locale =
+      base::i18n::GetKnownLanguageTag("en-US");
   const std::vector<payments::BnplIssuerContext> issuer_context = {
       payments::BnplIssuerContext(
           test::GetTestLinkedBnplIssuer(),

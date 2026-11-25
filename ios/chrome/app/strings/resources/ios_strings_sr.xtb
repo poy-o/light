@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">Делите лозинке</translation>
 <translation id="1554043146674176775">Искључи AI режим</translation>
 <translation id="1554477036522844996">Нови прозор</translation>
+<translation id="1555014818414775661">Додај слике</translation>
 <translation id="1557806604681757705">рачунара</translation>
 <translation id="1558391695376153246">Затвори картице без архив.</translation>
 <translation id="1560153516220021659">Скупљено дугме секундарне траке с алаткама</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">Отворите <ph name="BEGIN_BOLD" />Safari Settings<ph name="END_BOLD" /> (Подешавања Safari-ја)</translation>
 <translation id="3858860766373142691">Назив</translation>
 <translation id="386224966259596343">Моћи ћете да сачувате ове информације у Новчанику следећи пут када попуните одговарајући образац.</translation>
-<translation id="3868495844258915202">Прегледајте комплетан URL</translation>
 <translation id="3870931306085184145">Нема сачуваних лозинки за <ph name="DOMAIN" /></translation>
 <translation id="3875783148670536197">Покажи ми како</translation>
 <translation id="3878657761594430423">Алатка за померање листа</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">Да бисте добијали обавештења о праћењу цена, укључите обавештења у подешавањима iOS-а.</translation>
 <translation id="528857768909044842">Групе картица се чувају овде</translation>
 <translation id="5294624619177114121">Мобилна обавештења</translation>
-<translation id="5295239312320826323">Желите да уклоните налог <ph name="USER_EMAIL" />?</translation>
 <translation id="5300589172476337783">Прикажи</translation>
 <translation id="5311061401280561833">Приступ камери и микрофону је дозвољен</translation>
 <translation id="5313967007315987356">Додајте сајт</translation>
@@ -2148,7 +2147,6 @@ Handoff треба да се омогући у одељку General (Опште)
 <translation id="7603852183842204213">Блокирани искачући прозори (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Синхронизација не функционише</translation>
 <translation id="760667371114328991">Искључи обавештења за Проверу безбедности</translation>
-<translation id="7612619742409846846">Пријављени сте у Google као</translation>
 <translation id="7612849887607288481">Отвори мени за AI прототип</translation>
 <translation id="7618220760967055820">Изаберите дугме које ће се приказивати на траци с алаткама</translation>
 <translation id="7620522820075868385">Откажи</translation>

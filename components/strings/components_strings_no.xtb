@@ -78,6 +78,7 @@
 <translation id="112840717907525620">Bufferen for enhetsinnstillinger er OK</translation>
 <translation id="1131264053432022307">Bildet du kopierte</translation>
 <translation id="1132735979845538847"><ph name="ORIGIN" /> – For å gå ut av fullskjerm, dra fra toppen og trykk på tilbakeknappen</translation>
+<translation id="11370190534773372">Kortinformasjon er fylt ut</translation>
 <translation id="1138458427267715730">Få varsler om avslag hvor som helst på nettet</translation>
 <translation id="1142713751288681188">Papirtype</translation>
 <translation id="1142965388643537393">Reiseinformasjon</translation>
@@ -583,6 +584,7 @@ I motsatt fall blir dette blokkert av personverninnstillingene. Dette gjør at i
 <translation id="1988881251331415125">Hvis stavemåten er korrekt, kan du <ph name="BEGIN_LINK" />prøve å kjøre Tilkoblingsdiagnostikk<ph name="END_LINK" />.</translation>
 <translation id="1991370806334788445">Prøv å tillate informasjonskapsler fra tredjeparter. Det innebærer mindre beskyttelse under surfing, men øker sannsynligheten for at nettstedsfunksjoner virker som forventet.</translation>
 <translation id="1992331125980284532">JIS B3</translation>
+<translation id="1995173078718234136">Skanner innhold ...</translation>
 <translation id="1996557034791506430">Vil du fjerne tillatelsen?</translation>
 <translation id="1997484222658892567"><ph name="URL" /> ber om å lagre store mengder data permanent på datamaskinen din</translation>
 <translation id="1997774360448418989">Papir (lett)</translation>
@@ -666,7 +668,6 @@ I motsatt fall blir dette blokkert av personverninnstillingene. Dette gjør at i
 <translation id="2126374524350484896">PDF-produsent:</translation>
 <translation id="2127090458081644412">Passordet er lagret på denne enheten</translation>
 <translation id="2127747486437921899">Kursiv</translation>
-<translation id="2129163794581571479">Drevet av Gemini med personlig tilpasset intelligens. Forespørslene, sidetitlene og nettadressene dine kan bli gjennomgått for å bidra til å gjøre forbedret autofyll bedre. <ph name="BEGIN_LINK" />Administrer innstillingene<ph name="END_LINK" /></translation>
 <translation id="2130448033692577677">Malene du har angitt, kan ikke tas i bruk fordi DnsOverHttpsMode-regelen ikke er angitt.</translation>
 <translation id="2130699163006053678">A3x7</translation>
 <translation id="2131006834960167560">«Slå på autofyll for betalinger» er åpnet i full høyde.</translation>
@@ -1216,7 +1217,6 @@ I motsatt fall blir dette blokkert av personverninnstillingene. Dette gjør at i
 <translation id="3041584414879052436">Listen over utstedere av «Kjøp nå, betal senere» er lukket.</translation>
 <translation id="3041612393474885105">Sertifikatinformasjon</translation>
 <translation id="3041835740069544003">Nå kan Chrome gjenkjenne og fylle ut flere skjemaer med smartere skjemaforståelse. For å gjøre dette kan sideinnhold og nettadresser behandles i et privat område i skyen. Administrer dette i innstillingene.</translation>
-<translation id="3047054686095898948">Lagre informasjonen din i <ph name="IDS_AUTOFILL_GOOGLE_WALLET_TITLE_1" /> for å få ting gjort raskere, for eksempel å fylle ut skjemaer i ulike Google-produkter. Du kan <ph name="BEGIN_LINK" />administrere informasjonen din<ph name="END_LINK" /> i <ph name="IDS_AUTOFILL_GOOGLE_WALLET_TITLE_2" /> for <ph name="ACCOUNT" /></translation>
 <translation id="305162504811187366">loggen for Chrome Eksternt skrivebord, inkludert tidsstempler, verter og klientøkt-ID-er</translation>
 <translation id="3052868890529250114">Du pleier å ha en sikker tilkobling til nettsteder, men Chrome kunne ikke bruke en sikker tilkobling denne gangen. Det kan hende at angripere prøver å tyvlytte på eller modifisere nettverkstilkoblingen din. <ph name="BEGIN_LEARN_MORE_LINK" />Finn ut mer om denne advarselen<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="3052964831964880138"><ph name="PRICE_DROP" /> avslag på <ph name="PRODUCT_NAME" /></translation>
@@ -1587,7 +1587,6 @@ Gå til <ph name="BEGIN_LINK" />betalingsinnstillingene<ph name="END_LINK" /> fo
 <translation id="3655670868607891010">Hvis du ser denne meldingen ofte, kan du prøve disse <ph name="HELP_LINK" />.</translation>
 <translation id="3658742229777143148">Versjon</translation>
 <translation id="3659521826520353662">Hvilke administratordefinerte nettsteder som besøkes, og når: <ph name="ALLOWLISTED_WEBSITES" /></translation>
-<translation id="3663760610864720538">Drevet av Gemini med personlig tilpasset intelligens. <ph name="BEGIN_LINK" />Administrer innstillingene<ph name="END_LINK" /></translation>
 <translation id="3664479564786885722">Søk etter flere kjøpsalternativer fra andre butikker som selger dette produktet.</translation>
 <translation id="3664782872746246217">Nøkkelord:</translation>
 <translation id="3670030362669914947">Nummer</translation>
@@ -1866,7 +1865,6 @@ Gå til <ph name="BEGIN_LINK" />betalingsinnstillingene<ph name="END_LINK" /> fo
 <translation id="4112140312785995938">Spol bakover</translation>
 <translation id="4114007503059268298">Vil du lagre dette kortet i Google-kontoen din og på denne enheten?</translation>
 <translation id="4114146879518089587">Gå videre til nettstedet</translation>
-<translation id="4115378294792113321">Magenta</translation>
 <translation id="4116701314593212016">JIS B7</translation>
 <translation id="4116798170070772848">RA2</translation>
 <translation id="4117700440116928470">Omfanget for innstillingen støttes ikke.</translation>
@@ -3335,6 +3333,7 @@ Gå til <ph name="BEGIN_LINK" />betalingsinnstillingene<ph name="END_LINK" /> fo
 <translation id="6520509611422418552"><ph name="MEMBER_FIRST_NAME" /> ble med i fanegruppen «<ph name="GROUP_NAME" />»</translation>
 <translation id="6521745193039995384">Ikke aktiv</translation>
 <translation id="6524830701589638230">Knappen «Administrer tilgjengelighetsinnstillinger» – aktiver for å gi tilgjengelighetsverktøyene dine personlig preg i Chrome-innstillingene</translation>
+<translation id="652643331002043144">Dette nettstedet ligner på andre nettsteder som er forbundet med nettfisking, skadelig programvare og svindel.</translation>
 <translation id="6529173248185917884">Sjuende rull</translation>
 <translation id="6529602333819889595">&amp;Slett likevel</translation>
 <translation id="6532101170117367231">Lagre i Google Disk</translation>
@@ -3449,6 +3448,7 @@ Gå til <ph name="BEGIN_LINK" />betalingsinnstillingene<ph name="END_LINK" /> fo
 <translation id="6727094998759448074">SRA4</translation>
 <translation id="672853333773293432">Logget på med konto</translation>
 <translation id="6732087373923685049">kamera</translation>
+<translation id="6736243959894955139">Adresse</translation>
 <translation id="6738516213925468394">Dataene dine ble kryptert med <ph name="BEGIN_LINK" />passordfrasen for synkronisering<ph name="END_LINK" /> <ph name="TIME" />. Skriv den inn for å starte synkroniseringen.</translation>
 <translation id="6740851646645036700">Du har nådd grensen for skrivehjelp inntil videre. Prøv igjen senere.</translation>
 <translation id="674375294223700098">Ukjent feil med tjenersertifikat.</translation>
@@ -4547,6 +4547,7 @@ Mer informasjon:
 <translation id="8577348305244205642">Virtuelt kort er ikke tilgjengelig</translation>
 <translation id="8579000896558714521">Tastaturoverstyring</translation>
 <translation id="8579561564816585231">Logget på med en Google-tjeneste, for eksempel Passordlagring</translation>
+<translation id="8580478010934016252">Gå til betalingsmåter</translation>
 <translation id="8581064022803799721">Denne siden er lagret i <ph name="LAST_BOOKMARKS_FOLDER" />.</translation>
 <translation id="858637041960032120">Legg til telefonnummer</translation>
 <translation id="8587100480629037893">Håndsporing er ikke tillatt</translation>

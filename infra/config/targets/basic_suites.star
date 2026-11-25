@@ -1470,6 +1470,20 @@ targets.legacy_basic_suite(
 )
 
 targets.legacy_basic_suite(
+    name = "litert_conversation_e2e_tests_gpu_suite",
+    tests = {
+        "litert_conversation_e2e_tests_gpu": targets.legacy_test_config(),
+    },
+)
+
+targets.legacy_basic_suite(
+    name = "litert_conversation_e2e_tests_cpu_suite",
+    tests = {
+        "litert_conversation_e2e_tests_cpu": targets.legacy_test_config(),
+    },
+)
+
+targets.legacy_basic_suite(
     name = "litert_lm_advanced_main_legacy_tests_cpu_suite",
     tests = {
         "litert_lm_advanced_main_legacy_tests_cpu": targets.legacy_test_config(),
@@ -1480,20 +1494,6 @@ targets.legacy_basic_suite(
     name = "litert_lm_advanced_main_legacy_tests_gpu_suite",
     tests = {
         "litert_lm_advanced_main_legacy_tests_gpu": targets.legacy_test_config(),
-    },
-)
-
-targets.legacy_basic_suite(
-    name = "openscreen_chromium_gtests",
-    tests = {
-        "cast_unittests": targets.legacy_test_config(),
-        "components_unittests": targets.legacy_test_config(
-            swarming = targets.swarming(
-                shards = 2,
-            ),
-        ),
-        "media_unittests": targets.legacy_test_config(),
-        "openscreen_unittests": targets.legacy_test_config(),
     },
 )
 

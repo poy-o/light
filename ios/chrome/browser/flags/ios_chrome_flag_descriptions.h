@@ -181,11 +181,6 @@ inline constexpr char kAssistantSidePanelName[] = "AssistantSidePanel";
 inline constexpr char kAssistantSidePanelDescription[] =
     "Enables the AssistantSidePanel feature.";
 
-inline constexpr char kAtMemoryContextMenuEntryPointName[] =
-    "AtMemory context menu entry point";
-inline constexpr char kAtMemoryContextMenuEntryPointDescription[] =
-    "Enables an entry point in the edit context menu for the AtMemory feature.";
-
 inline constexpr char kAutofillAiAlwaysShowPrivateAiNoticeName[] =
     "Autofill AI always show Private AI notice";
 inline constexpr char kAutofillAiAlwaysShowPrivateAiNoticeDescription[] =
@@ -325,6 +320,13 @@ inline constexpr char
     kAutofillEnableWalletReminderNoticePublicPassDescription[] =
         "When enabled, shows the Wallet Reminder Notice after submitting a "
         "form with a public pass.";
+
+inline constexpr char kAutofillFixVcnStrikeDatabaseFallbackName[] =
+    "Fix Autofill virtual card enrollment strike database fallback";
+inline constexpr char kAutofillFixVcnStrikeDatabaseFallbackDescription[] =
+    "When enabled, the virtual card enrollment strike database is checked "
+    "when deciding whether to offer virtual card enrollment, allowing other "
+    "flows to be offered if enrollment is blocked by strikes.";
 
 inline constexpr char kAutofillPaymentsFieldSwappingName[] =
     "Swap credit card suggestions";
@@ -705,6 +707,11 @@ inline constexpr char kDownloadServiceForegroundSessionName[] =
 inline constexpr char kDownloadServiceForegroundSessionDescription[] =
     "Enable download service to download in app foreground only";
 
+inline constexpr char kDynamicAimFulfillmentName[] = "Dynamic AIM Fulfillment";
+inline constexpr char kDynamicAimFulfillmentDescription[] =
+    "Routes Composebox queries to the Search results page unless active "
+    "tools, models, or inputs require AI Mode.";
+
 inline constexpr char kEditPasswordsInSettingsName[] =
     "Edit passwords in settings";
 inline constexpr char kEditPasswordsInSettingsDescription[] =
@@ -797,6 +804,12 @@ inline constexpr char kEnableFuseboxKeyboardAccessoryName[] =
     "Enable Omnibox Keyboard Accessory in Fusebox";
 inline constexpr char kEnableFuseboxKeyboardAccessoryDescription[] =
     "Enables parts or all of omnibox keyboard accessory.";
+
+inline constexpr char kEnableGeminiLiveInBottomSheetName[] =
+    "Enable Gemini Live in Bottom Sheet";
+inline constexpr char kEnableGeminiLiveInBottomSheetDescription[] =
+    "When enabled, allows Gemini Live when the iOS Gemini bottom sheet "
+    "migration is enabled.";
 
 inline constexpr char kEnableIosLiveActivityManagerName[] =
     "Enable iOS Live Activity Manager";
@@ -995,6 +1008,12 @@ inline constexpr char kGeminiLiveDescription[] = "Enables Gemini Live.";
 inline constexpr char kGeminiLuminousName[] = "Gemini Luminous";
 inline constexpr char kGeminiLuminousDescription[] =
     "Enables Gemini Luminous UI.";
+
+inline constexpr char kGeminiModelQualityClientIDName[] =
+    "Gemini Feedback Data Donation";
+inline constexpr char kGeminiModelQualityClientIDDescription[] =
+    "When enabled, Gemini feedback offers an option to donate conversation "
+    "data to help improve Gemini.";
 
 inline constexpr char kGeminiMultiTabContextName[] = "Gemini Multi Tab Context";
 inline constexpr char kGeminiMultiTabContextDescription[] =
@@ -1238,12 +1257,6 @@ inline constexpr char kIOSUnifiedManualFallbackSheetName[] =
 inline constexpr char kIOSUnifiedManualFallbackSheetDescription[] =
     "Enables the unified manual fallback bottom sheet with a single entry "
     "point, all Autofill entity categories, and entity detail views on iOS.";
-
-inline constexpr char kIOSWebContextMenuNewTitleName[] =
-    "Use the new title for the Web context menu";
-inline constexpr char kIOSWebContextMenuNewTitleDescription[] =
-    "Enables actions in context menu title instead of customized action for "
-    "web context menu.";
 
 inline constexpr char kIdentityConfirmationSnackbarName[] =
     "Identity Confirmation Snackbar";
@@ -1783,13 +1796,6 @@ inline constexpr char kPriceTrackingPromoName[] =
     "Enables price tracking notification promo card";
 inline constexpr char kPriceTrackingPromoDescription[] =
     "Enables being able to show the card in the Magic Stack";
-
-inline constexpr char kProactiveSuggestionsFrameworkName[] =
-    "Proactive Suggestions Framework";
-inline constexpr char kProactiveSuggestionsFrameworkDescription[] =
-    "When enabled, consolidates omnibox proactive suggestions (Reader Mode, "
-    "Translate, Price History, etc.) into a unified badge system with "
-    "centralized settings access through the AI Hub Page Tools.";
 
 inline constexpr char kRecoverTabsOfLastClosedWindowName[] =
     "Recover Tabs of last closed window";

@@ -22,6 +22,7 @@
 #include "cc/base/devtools_instrumentation.h"
 #include "cc/raster/tile_task.h"
 #include "cc/tiles/mipmap_util.h"
+#include "third_party/skia/include/core/SkImageInfo.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 
 using base::trace_event::MemoryAllocatorDump;
@@ -378,7 +379,8 @@ SoftwareImageDecodeCache::DecodeImageIfNecessary(const CacheKey& key,
   } else {
     // Attempt to find a cached decode to generate a scaled/subrected decode
     // from.
-    std::optional<CacheKey> candidate_key = FindCachedCandidate(key);
+    std::optional<CacheKey> candidate_key =
+        FindCachedCandidate(key, paint_image);
 
     SkISize desired_size = gfx::SizeToSkISize(key.target_size());
     const bool should_decode_to_scale =
@@ -463,6 +465,14 @@ SoftwareImageDecodeCache::DecodeImageIfNecessary(const CacheKey& key,
   }
 
   if (!local_cache_entry) {
+    // If someone else decoded this image while `lock_` was released, use their
+    // decode rather than marking the entry as failed. A failed entry is never
+    // locked again, but its memory would still be handed out for draws. As
+    // below, the memory has to be locked because we hold a ref on the entry.
+    if (entry->memory) {
+      DCHECK(entry->is_locked);
+      return TaskProcessingResult::kLockOnly;
+    }
     entry->decode_failed = true;
     return TaskProcessingResult::kCancelled;
   }
@@ -487,13 +497,17 @@ SoftwareImageDecodeCache::DecodeImageIfNecessary(const CacheKey& key,
 }
 
 std::optional<SoftwareImageDecodeCache::CacheKey>
-SoftwareImageDecodeCache::FindCachedCandidate(const CacheKey& key) {
+SoftwareImageDecodeCache::FindCachedCandidate(const CacheKey& key,
+                                              const PaintImage& paint_image) {
   auto image_keys_it = frame_key_to_image_keys_.find(key.frame_key());
   // We know that we must have at least our own |entry| in this list, so it
   // won't be empty.
   CHECK(image_keys_it != frame_key_to_image_keys_.end());
 
   auto& available_keys = image_keys_it->second;
+
+  const int key_bpp = SkColorTypeBytesPerPixel(
+      GetColorTypeForPaintImage(key.target_color_params(), paint_image));
 
   // Sort by width first, then height to maintain strict weak ordering.
   std::sort(available_keys.begin(), available_keys.end(),
@@ -515,6 +529,15 @@ SoftwareImageDecodeCache::FindCachedCandidate(const CacheKey& key) {
         available_key.target_size().height() < key.target_size().height()) {
       continue;
     }
+
+    // That are not stored at a lower precision than the required |key|.
+    const int available_key_bpp =
+        SkColorTypeBytesPerPixel(GetColorTypeForPaintImage(
+            available_key.target_color_params(), paint_image));
+    if (available_key_bpp < key_bpp) {
+      continue;
+    }
+
     auto image_it = decoded_images_.Peek(available_key);
     CHECK(image_it != decoded_images_.end());
     auto* available_entry = image_it->second.get();
@@ -726,17 +749,33 @@ size_t SoftwareImageDecodeCache::GetMaxNumCacheEntriesForTesting() {
 SkColorType SoftwareImageDecodeCache::GetColorTypeForPaintImage(
     const TargetColorParams& target_color_params,
     const PaintImage& paint_image) {
-  const gfx::ColorSpace& target_color_space = target_color_params.color_space;
-  // TODO(crbug.com/40128725): Once we have access to the display's buffer
-  // format via gfx::DisplayColorSpaces, we should also do this for HBD images.
+  // The color type that most naturally represents the image.
+  const SkColorType natural_color_type =
+      paint_image.GetColorType() == kRGBA_F16_SkColorType
+          ? kRGBA_F16_SkColorType
+          : kN32_SkColorType;
+  const int natural_bpp = SkColorTypeBytesPerPixel(natural_color_type);
+  const int cache_bpp = SkColorTypeBytesPerPixel(color_type_);
+
+  // Never store the image at a higher precision than its natural color type.
   // Do not decode an image to F16 unless the PaintImage reports that its type
   // is F16. Otherwise, image decode will fail.
   // https://crbug.com/1488786
-  if (paint_image.GetColorType() == kRGBA_F16_SkColorType &&
-      paint_image.GetContentColorUsage() == gfx::ContentColorUsage::kHDR &&
-      target_color_space.IsHDR()) {
-    return kRGBA_F16_SkColorType;
+  if (cache_bpp > natural_bpp) {
+    return natural_color_type;
   }
+
+  // Do not reduce the precision of the image if the target requests that
+  // precision be preserved, or if reducing the precision of the image would be
+  // destructive.
+  const bool preserve_precision =
+      target_color_params.preserve_image_precision ||
+      paint_image.DecodeCacheColorConversionIsDestructive();
+  if (preserve_precision && cache_bpp < natural_bpp) {
+    return natural_color_type;
+  }
+
+  // Otherwise, use the cache's color type.
   return color_type_;
 }
 

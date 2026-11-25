@@ -5,7 +5,9 @@
 #include "chrome/browser/metrics/chrome_metrics_services_manager_client.h"
 
 #include <map>
+#include <memory>
 #include <string>
+#include <utility>
 
 #include "base/check_op.h"
 #include "base/command_line.h"
@@ -34,6 +36,7 @@
 #include "components/metrics/metrics_state_manager.h"
 #include "components/metrics/startup_visibility.h"
 #include "components/prefs/pref_service.h"
+#include "components/variations/pref_names.h"
 #include "components/variations/service/variations_service.h"
 #include "components/variations/synthetic_trial_registry.h"
 #include "components/variations/variations_associated_data.h"
@@ -56,11 +59,6 @@
 #include "components/crash/core/app/crash_export_thunks.h"
 #include "components/crash/core/app/crashpad.h"
 #endif  // BUILDFLAG(IS_WIN)
-
-#if BUILDFLAG(IS_CHROMEOS)
-#include "chrome/browser/ash/settings/stats_reporting_controller.h"
-#include "components/metrics/structured/recorder.h"
-#endif  // BUILDFLAG(IS_CHROMEOS)
 
 namespace metrics {
 namespace internal {
@@ -125,16 +123,6 @@ bool IsClientInSampleImpl(PrefService* local_state) {
   return false;
 }
 
-#if BUILDFLAG(IS_CHROMEOS)
-// Callback to update the metrics reporting state when the Chrome OS metrics
-// reporting setting changes.
-void OnCrosMetricsReportingSettingChange(
-    metrics::ChangeMetricsReportingStateCalledFrom called_from) {
-  bool enable_metrics = ash::StatsReportingController::Get()->IsEnabled();
-  metrics::ChangeMetricsReportingState(enable_metrics, called_from);
-}
-#endif
-
 // Returns the name of a key under HKEY_CURRENT_USER that can be used to store
 // backups of metrics data. Unused except on Windows.
 std::wstring GetRegistryBackupKey() {
@@ -168,10 +156,12 @@ class ChromeMetricsServicesManagerClient::ChromeEnabledStateProvider
 };
 
 ChromeMetricsServicesManagerClient::ChromeMetricsServicesManagerClient(
-    PrefService* local_state)
+    PrefService* local_state,
+    std::unique_ptr<variations::SeedResponse> initial_seed)
     : enabled_state_provider_(
           std::make_unique<ChromeEnabledStateProvider>(local_state)),
-      local_state_(local_state) {
+      local_state_(local_state),
+      initial_seed_(std::move(initial_seed)) {
   CHECK(local_state, base::NotFatalUntil::M161);
 }
 
@@ -256,27 +246,19 @@ bool ChromeMetricsServicesManagerClient::GetSamplingRatePerMille(int* rate) {
   return true;
 }
 
-#if BUILDFLAG(IS_CHROMEOS)
-void ChromeMetricsServicesManagerClient::OnCrosSettingsCreated() {
-  // Listen for changes to metrics reporting state.
-  reporting_setting_subscription_ =
-      ash::StatsReportingController::Get()->AddObserver(
-          base::BindRepeating(&OnCrosMetricsReportingSettingChange,
-                              metrics::ChangeMetricsReportingStateCalledFrom::
-                                  kCrosMetricsSettingsChange));
-  // Invoke the callback once initially to set the metrics reporting state.
-  OnCrosMetricsReportingSettingChange(
-      metrics::ChangeMetricsReportingStateCalledFrom::
-          kCrosMetricsSettingsCreated);
-}
-#endif
-
 std::unique_ptr<variations::VariationsService>
 ChromeMetricsServicesManagerClient::CreateVariationsService() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  // `variations::MaybeImportFirstRunSeed()` skips the first-run seed when Local
+  // State already has a seed. Drop it so `VariationsService` does not keep it.
+  if (local_state_->HasPrefPath(variations::prefs::kVariationsSeedDate)) {
+    initial_seed_.reset();
+  }
+  auto service_client =
+      std::make_unique<ChromeVariationsServiceClient>(std::move(initial_seed_));
   return variations::VariationsService::Create(
-      std::make_unique<ChromeVariationsServiceClient>(), local_state_,
-      GetMetricsStateManager(), switches::kDisableBackgroundNetworking,
+      std::move(service_client), local_state_, GetMetricsStateManager(),
+      switches::kDisableBackgroundNetworking,
       base::BindOnce(&content::GetNetworkConnectionTracker));
 }
 
@@ -353,18 +335,6 @@ bool ChromeMetricsServicesManagerClient::IsOffTheRecordSessionActive() {
 #else
   return ::IsOffTheRecordSessionActive();
 #endif
-}
-
-void ChromeMetricsServicesManagerClient::OnFieldTrialsInitialized() {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-#if BUILDFLAG(IS_WIN)
-  // Set the registry value so that Crashpad will have the sampling state now
-  // and for subsequent runs. Note that Crashpad uses *both* the registry value
-  // and the value sent from SetUploadConsent() below.
-  // We use IsClientInSampleForCrashes() which checks the feature for whether
-  // crash reports should be sent.
-  install_static::SetCollectStatsInSample(IsClientInSampleForCrashes());
-#endif  // BUILDFLAG(IS_WIN)
 }
 
 #if BUILDFLAG(IS_WIN)

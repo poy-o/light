@@ -130,6 +130,7 @@
 #include "content/browser/site_instance_impl.h"
 #include "content/browser/surface_embed/surface_embed_connector_impl.h"
 #include "content/browser/wake_lock/wake_lock_context_host.h"
+#include "content/browser/web_contents/background_execution_booster.h"
 #include "content/browser/web_contents/file_chooser_impl.h"
 #include "content/browser/web_contents/java_script_dialog_commit_deferring_condition.h"
 #include "content/browser/web_contents/slow_web_preference_cache.h"
@@ -486,14 +487,12 @@ class FullscreenUserData : public base::SupportsUserData::Data {
   FullscreenUserData(const FullscreenUserData&) = delete;
   FullscreenUserData& operator=(const FullscreenUserData&) = delete;
 
-  base::flat_set<raw_ptr<WebContentsImpl, DanglingUntriaged>>* set() {
-    return &set_;
-  }
+  base::flat_set<raw_ptr<WebContentsImpl>>* set() { return &set_; }
 
   std::map<url::Origin, base::TimeTicks>* last_exits() { return &last_exits_; }
 
  private:
-  base::flat_set<raw_ptr<WebContentsImpl, DanglingUntriaged>> set_;
+  base::flat_set<raw_ptr<WebContentsImpl>> set_;
   // Track latest exits by origin to briefly block re-entry without a gesture.
   std::map<url::Origin, base::TimeTicks> last_exits_;
 };
@@ -511,8 +510,8 @@ FullscreenUserData* GetFullscreenUserData(BrowserContext* browser_context) {
   return set_holder;
 }
 
-base::flat_set<raw_ptr<WebContentsImpl, DanglingUntriaged>>*
-FullscreenContentsSet(BrowserContext* browser_context) {
+base::flat_set<raw_ptr<WebContentsImpl>>* FullscreenContentsSet(
+    BrowserContext* browser_context) {
   return GetFullscreenUserData(browser_context)->set();
 }
 
@@ -9163,6 +9162,12 @@ void WebContentsImpl::ScriptToolsReadyStateChanged(
                              render_frame_host);
 }
 
+void WebContentsImpl::OnDocumentUsedWebOtp(
+    RenderFrameHostImpl* render_frame_host) {
+  observers_.NotifyObservers(&WebContentsObserver::OnDocumentUsedWebOtp,
+                             render_frame_host);
+}
+
 void WebContentsImpl::OnDidFinishLoad(RenderFrameHostImpl* render_frame_host,
                                       const GURL& url) {
   OPTIONAL_TRACE_EVENT2("content", "WebContentsImpl::OnDidFinishLoad",
@@ -11303,6 +11308,10 @@ std::optional<int64_t> WebContentsImpl::GetPrivilegedContentsFeatureId() {
 
 bool WebContentsImpl::IsPrivileged() {
   return privileged_params_.has_value();
+}
+
+void WebContentsImpl::BoostBackgroundExecution() {
+  BackgroundExecutionBooster::CreateForWebContents(this);
 }
 
 bool WebContentsImpl::DoesWebContentsDisallowServiceWorkerControl() {

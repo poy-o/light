@@ -104,6 +104,7 @@ import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.fullscreen.ImmersiveModeMetrics;
 import org.chromium.chrome.browser.fullscreen.ImmersiveModeMetrics.ImmersiveModeEntryMethod;
+import org.chromium.chrome.browser.fullscreen.ImmersiveModeMetrics.ImmersiveModeExitReason;
 import org.chromium.chrome.browser.glic.GlicKeyedService.GlicInvocationSource;
 import org.chromium.chrome.browser.handoff.HandoffController;
 import org.chromium.chrome.browser.host_zoom.HostZoomListenerFactory;
@@ -2076,17 +2077,25 @@ public class RootUiCoordinator
             return;
         }
 
-        // Entry Method Split: Record whether Browser immersive mode was entered via the 3-dot app
-        // menu fullscreen button or via keyboard shortcut (F11).
-        if (!mFullscreenManager.getPersistentFullscreenMode()) {
+        // Entry Method Split and Exit Reason Breakdown: Record whether Browser immersive mode was
+        // entered via the 3-dot app menu fullscreen button or keyboard shortcut (F11). Also
+        // attribute an exit triggered via the keyboard shortcut.
+        boolean isExitingImmersiveMode = mFullscreenManager.getPersistentFullscreenMode();
+        if (!isExitingImmersiveMode) {
             ImmersiveModeMetrics.recordEntryMethod(
                     fromMenu
                             ? ImmersiveModeEntryMethod.APP_MENU_FULLSCREEN_BUTTON
                             : ImmersiveModeEntryMethod.KEYBOARD_SHORTCUT);
+        } else if (!fromMenu) {
+            mFullscreenManager.setPendingBrowserImmersiveExitReasonIfUnset(
+                    ImmersiveModeExitReason.KEYBOARD_SHORTCUT);
         }
 
         assumeNonNull(mExclusiveAccessManager);
         mExclusiveAccessManager.toggleBrowserFullscreenMode(/* userInitiated= */ true);
+        if (isExitingImmersiveMode && !fromMenu) {
+            mFullscreenManager.clearPendingBrowserImmersiveExitReason();
+        }
         if (mAppMenuCoordinator != null) {
             mAppMenuCoordinator.getAppMenuHandler().hideAppMenu();
         }
@@ -2223,12 +2232,7 @@ public class RootUiCoordinator
                     /* onShareRunnable= */ () -> {
                         assertNonNull(mToolbarManager).endFuseboxInput();
                     },
-                    /* onSigninTapped= */ () -> {
-                        assertNonNull(mToolbarManager).endFuseboxInput();
-                    },
                     mWindowAndroid,
-                    mActivityResultTracker,
-                    assertNonNull(mDeviceLockActivityLauncherSupplier.get()),
                     trackerSupplier,
                     mScrimManagerSupplier.asNonNull(),
                     mReaderModeIphControllerSupplier,
@@ -2779,7 +2783,8 @@ public class RootUiCoordinator
                             mEdgeToEdgeManager,
                             mBrowserControlsManager,
                             mLayoutManagerSupplier,
-                            mFullscreenManager);
+                            mFullscreenManager,
+                            getSideUiStateProviderSupplier());
             mEdgeToEdgeControllerSupplier.set(mEdgeToEdgeController);
             // TODO(crbug.com/498302496): Pass mEdgeToEdgeController directly to downstream
             // consumers (e.g. ToolbarManager, NewTabAnimationLayout) instead of using

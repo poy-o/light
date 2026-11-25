@@ -52,6 +52,10 @@ enum CanCreateTranslatorResult {
   // The translator cannot be created, because the API was accessed from an
   // invalid storage partition.
   kNoInvalidStoragePartition = 9,
+
+  // The translator cannot be created, because the translation library can't
+  // be installed or run on this device.
+  kNoUnsupportedDevice = 10,
 };
 
 // The error of TranslationManager's CreateTranslator IPC.
@@ -110,6 +114,26 @@ enum CreateTranslatorError {
   // The translator cannot be created, because there is not enough free disk
   // space to download the translation model.
   kNotEnoughDiskSpace = 14,
+
+  // The translator cannot be created, because the translation model must be
+  // downloaded and the device is offline.
+  kOffline = 15,
+
+  // The translator cannot be created, because the translation library can't
+  // be installed or run on this device.
+  kUnsupportedDevice = 16,
+
+  // The translator cannot be created, because the translation model must be
+  // downloaded and Data Saver is enabled.
+  kDataSaverEnabled = 17,
+
+  // The translator cannot be created, because installing the required language
+  // packs would exceed the installed language pack count limitation.
+  kExceedsLanguagePackCountLimitation = 18,
+
+  // The translator cannot be created, because the translation model must be
+  // downloaded and downloads on metered connections are disabled.
+  kMeteredConnectionBlocked = 19,
 };
 // LINT.ThenChange(//tools/metrics/histograms/metadata/translate/enums.xml:TranslatorApiCreateTranslatorError)
 
@@ -126,9 +150,12 @@ interface TranslationManagerCreateTranslatorClient {
   // Called with a created Translator's mojo interface as a result for the
   // CreateTranslator() method of the TranslationManager. When failed to create
   // a Translator, this method is called with an error result.
+  // input_quota is the maximum UTF-8 byte length accepted per translation
+  // call, or null when there is no per-call input limit.
   OnResult(CreateTranslatorResult result,
            TranslatorLanguageCode? source_lang,
-           TranslatorLanguageCode? target_lang);
+           TranslatorLanguageCode? target_lang,
+           uint64? input_quota);
 };
 
 // This is used when creating a new Translator for Translator API.

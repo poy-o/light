@@ -110,8 +110,6 @@ import org.chromium.components.browser_ui.styles.IncognitoColors;
 import org.chromium.components.browser_ui.widget.animation.CancelAwareAnimatorListener;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.feature_engagement.Tracker;
-import org.chromium.components.omnibox.OmniboxFeatures;
-import org.chromium.components.signin.SigninFeatureMap;
 import org.chromium.ui.accessibility.KeyboardFocusUtil;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.base.ViewUtils;
@@ -1330,7 +1328,7 @@ public class ToolbarPhone extends ToolbarLayout
         var profile = getToolbarDataProvider().getProfile();
         if (profile == null
                 || SearchEngineService.getForProfile(profile).shouldShowSearchEngineLogo()) {
-            locationBarBaseTranslationX += getLocationBarOffsetForFocusAnimation(hasFocus());
+            locationBarBaseTranslationX += getLocationBarOffsetForFocusAnimation(urlHasFocus());
         }
 
         boolean isLocationBarRtl = isLocationBarRtl();
@@ -2471,20 +2469,6 @@ public class ToolbarPhone extends ToolbarLayout
         // If the refactored animations are enabled, this will instead be set when the transition
         // actually starts (in the next update cycle).
         mUrlFocusChangeInProgress = !ChromeFeatureList.sToolbarPhoneAnimationRefactor.isEnabled();
-        // Hide the optional button immediately when animating in the suggestions list (since other
-        // toolbar buttons are also hidden immediately) or restore it when omnibox focus is lost.
-        // If the animation refactor is enabled, this will instead be handled by the refactored
-        // flow's transitions.
-        // If fusebox is enabled, do not hide the optional button because it causes button alignment
-        // issues.
-        if (animatingSuggestionsListOnNtp()
-                && !ChromeFeatureList.sToolbarPhoneAnimationRefactor.isEnabled()
-                && !OmniboxFeatures.isMultimodalInputEnabled(getContext())) {
-            ButtonData copy = mButtonData;
-            updateOptionalButton(hasFocus ? null : mButtonData);
-            mButtonData = copy;
-        }
-
         if (ChromeFeatureList.sToolbarPhoneAnimationRefactor.isEnabled()) {
             createAndRunFocusAnimatorRefactored(hasFocus);
         } else {
@@ -3423,10 +3407,9 @@ public class ToolbarPhone extends ToolbarLayout
     }
 
     private void initializeOptionalButton() {
-        // TODO(crbug.com/506984216): Once ToolbarVariationUtils.isNewToolbarUiEnabled() is launched
-        // it should be safe to remove the optional button from the NTP if the identity disc is
-        // ported to a dedicated button. SigninFeatureMap.sSigninLevelUpButton.isEnabled() already
-        // does this, so it is free if both features are enabled.
+        // TODO(crbug.com/506984216): Once ToolbarVariationUtils.isNewToolbarUiEnabled() is
+        // launched, the optional button is no longer shown in the toolbar (it lives in the location
+        // bar), so it can be removed from ToolbarPhone.
 
         if (mOptionalButtonCoordinator == null) {
             ViewStub optionalButtonStub = findViewById(R.id.optional_button_stub);
@@ -3588,7 +3571,7 @@ public class ToolbarPhone extends ToolbarLayout
         }
 
         // Update toolbar.
-        if (shouldShowOptionalButtonInToolbar(buttonData)) {
+        if (shouldShowOptionalButtonInToolbar()) {
             if (mOptionalButtonCoordinator == null) {
                 initializeOptionalButton();
             }
@@ -3690,8 +3673,7 @@ public class ToolbarPhone extends ToolbarLayout
             return 0;
         }
 
-        // On non-NTP pages, there will always be an icon when unfocused.
-        if (!getToolbarDataProvider().getNewTabPageDelegate().isCurrentlyVisible()) return 0;
+        if (!isLocationBarShownInNtp()) return 0;
 
         // This offset is only required when the focus animation is running.
         if (!hasFocus) return 0;
@@ -3833,15 +3815,9 @@ public class ToolbarPhone extends ToolbarLayout
         return !isNtp && mIsToolbarUiRefactorEnabled;
     }
 
-    private boolean shouldShowOptionalButtonInToolbar(@Nullable ButtonData buttonData) {
-        boolean isNtp = isNtpVisualState(mVisualState);
-        boolean isSignInLevelUp = SigninFeatureMap.sSigninLevelUpButton.isEnabled();
-        if (mIsToolbarUiRefactorEnabled) {
-            // New IA: Only show the button on the NTP for the identity disk if needed.
-            return isNtp && !isSignInLevelUp && buttonData != null && buttonData.isIdentityDisc();
-        } else {
-            // Old IA: Show in toolbar except for NTP + SignInLevelUpButton which should hide it.
-            return !(isNtp && isSignInLevelUp);
-        }
+    private boolean shouldShowOptionalButtonInToolbar() {
+        // The NTP uses the dedicated signin button, so the optional button is never shown in the
+        // toolbar on the NTP. In the new IA, the optional button lives in the location bar.
+        return !mIsToolbarUiRefactorEnabled && !isNtpVisualState(mVisualState);
     }
 }

@@ -67,6 +67,14 @@ BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE_PARAM(
     AsyncTouchMoveThrottlingPolicy,
     kAsyncTouchMoveThrottlingPolicyParam);
 
+// Controls the minimum interval at which async touchmove events are throttled
+// during scroll. When enabled, uses the configured `interval` param; when
+// disabled, falls back to the legacy throttling interval.
+BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kConfigurableAsyncTouchMoveInterval);
+BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE_PARAM(
+    base::TimeDelta,
+    kConfigurableAsyncTouchMoveIntervalParam);
+
 BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kLowerHighResolutionTimerThreshold);
 
 // Gates navigator.clipboard on extension service workers. Checked only where
@@ -590,6 +598,26 @@ BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE_PARAM(
 BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE_PARAM(size_t,
                                                kHTMLParserYieldTimeoutInMs);
 
+// If enabled, uses Highway SIMD bulk scanning in HTMLTokenizer for states such
+// as kScriptDataState and kRAWTEXTState.
+BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kHTMLTokenizerSimdScan);
+// Enables SIMD bulk scanning in kScriptDataState (e.g. inside <script>).
+BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE_PARAM(
+    bool,
+    kHTMLTokenizerSimdScanScriptData);
+// Enables SIMD bulk scanning in kRAWTEXTState (e.g. inside <style>).
+BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE_PARAM(bool,
+                                               kHTMLTokenizerSimdScanRawtext);
+// Enables SIMD bulk scanning in quoted attribute value states
+// (kAttributeValueDoubleQuotedState and kAttributeValueSingleQuotedState).
+BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE_PARAM(
+    bool,
+    kHTMLTokenizerSimdScanAttributeValue);
+// Minimum remaining length of the current input buffer (SegmentedSubstring)
+// required to enter the SIMD scanning fast path.
+BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE_PARAM(size_t,
+                                               kHTMLTokenizerSimdScanMinLength);
+
 // Whether blink::HeapVector promptly frees its backing store via
 // Allocator::FreeVectorBacking(). When disabled, the backing store is left to
 // be reclaimed by garbage collection.
@@ -652,11 +680,9 @@ BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE_PARAM(
 // RenderFrameMetadata.
 BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kInputCursorAnchorInfoMigration);
 
-// This flag is used to set field parameters to choose predictor we use when
-// kResamplingInputEvents is disabled. It's used for gathering accuracy metrics
-// on finch and also for choosing predictor type for predictedEvents API without
-// enabling resampling. It does not have any effect when the resampling flag is
-// enabled.
+// This flag is used to set field parameters to choose predictor we use. It's
+// used for gathering accuracy metrics on finch and also for choosing predictor
+// type for predictedEvents API.
 BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kInputPredictorTypeChoice);
 
 BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kIntensiveWakeUpThrottling);
@@ -1462,8 +1488,6 @@ BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(
 // https://github.com/WICG/turtledove/blob/main/FLEDGE.md#23-scoring-bids
 BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kRenderSizeInScoreAdBrowserSignals);
 
-// Enables resampling input events on main thread.
-BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kResamplingInputEvents);
 // Enables resampling GestureScroll events on compositor thread.
 // Uses the kPredictorName* values in ui_base_features.h as the 'predictor'
 // feature param.
@@ -1677,11 +1701,6 @@ BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kStreamlineRendererInit);
 // Subsample a very chatty UKM metric.
 BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kSubSampleWindowProxyUsageMetrics);
 
-// When enabled, task state traces are emitted for microtasks when the
-// "task_attribution" trace category is enabled.
-BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(
-    kTaskAttributionTraceMicrotaskTaskState);
-
 // If enabled, reads and decodes navigation body data off the main thread.
 BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kThreadedBodyLoader);
 
@@ -1790,7 +1809,6 @@ BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(
 BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kWebAppEnableScopeExtensionsBySite);
 BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(
     kWebAppEnableScopeExtensionsForIsolatedWebApps);
-BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kWebAppManifestLockScreen);
 
 BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kWebAudioDeferPullStatusUpdate);
 

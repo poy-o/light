@@ -67,7 +67,6 @@ chrome/browser/ui/views/search_engines
 chrome/browser/ui/webui/settings
 chrome/browser/win
 chrome/common
-chrome/common/chromeos/extensions
 chrome/common/extensions
 chrome/common/extensions/api
 chrome/docs
@@ -102,6 +101,7 @@ chromeos/ash/components/network/onc
 chromeos/ash/components/telemetry_extension
 chromeos/ash/experiences/arc
 chromeos/ash/experiences/arc/mojom
+chromeos/ash/experiences/extensions/common/telemetry
 chromeos/ash/services/ime/public/cpp/shared_lib/proto
 chromeos/ash/services/ime/public/mojom
 chromeos/process_proxy
@@ -271,7 +271,6 @@ third_party/abseil-cpp/absl/random
 third_party/abseil-cpp/absl/random/internal
 third_party/abseil-cpp/absl/status
 third_party/abseil-cpp/ci
-third_party/android_build_tools/bazel_java_builder
 third_party/android_build_tools/json
 third_party/android_deps/buildSrc/src/main/groovy
 third_party/android_deps/libs
@@ -786,8 +785,6 @@ third_party/rust/chromium_crates_io/vendor/typeid-v1/.github/workflows
 third_party/rust/chromium_crates_io/vendor/unicode-ident-v1
 third_party/rust/chromium_crates_io/vendor/unicode-ident-v1/.github/workflows
 third_party/rust/chromium_crates_io/vendor/unicode-xid-v0_2
-third_party/rust/chromium_crates_io/vendor/utf16_iter-v1
-third_party/rust/chromium_crates_io/vendor/utf8_iter-v1
 third_party/rust/chromium_crates_io/vendor/wait-timeout-v0_2
 third_party/rust/chromium_crates_io/vendor/wait-timeout-v0_2/.github/workflows
 third_party/rust/chromium_crates_io/vendor/wide-v1/.github/workflows

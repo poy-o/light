@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">Dijelite lozinke</translation>
 <translation id="1554043146674176775">Isključivanje AI načina rada</translation>
 <translation id="1554477036522844996">Novi prozor</translation>
+<translation id="1555014818414775661">Dodajte slike</translation>
 <translation id="1557806604681757705">svog računara</translation>
 <translation id="1558391695376153246">Zatvori anonimne kartice</translation>
 <translation id="1560153516220021659">Suženo dugme na sekundarnoj alatnoj traci</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">Otvorite <ph name="BEGIN_BOLD" />Postavke Safarija<ph name="END_BOLD" /></translation>
 <translation id="3858860766373142691">Naziv</translation>
 <translation id="386224966259596343">Imat ćete priliku da sačuvate ove informacije u Novčaniku sljedeći put kada budete popunjavali relevantan obrazac.</translation>
-<translation id="3868495844258915202">Prikaz cijelog URL-a</translation>
 <translation id="3870931306085184145">Nema sačuvanih lozinki za web lokaciju <ph name="DOMAIN" /></translation>
 <translation id="3875783148670536197">Pokaži mi kako</translation>
 <translation id="3878657761594430423">Hvatač lista</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">Da primate obavještenja o praćenju cijena, uključite obavještenja u Postavkama iOS-a.</translation>
 <translation id="528857768909044842">Grupe kartica se pohranjuju ovdje</translation>
 <translation id="5294624619177114121">Obavještenja na mobilnom uređaju</translation>
-<translation id="5295239312320826323">Ukloniti račun <ph name="USER_EMAIL" />?</translation>
 <translation id="5300589172476337783">Prikaži</translation>
 <translation id="5311061401280561833">Pristup kameri i mikrofonu je dozvoljen</translation>
 <translation id="5313967007315987356">Dodajte web lokaciju</translation>
@@ -1788,6 +1787,7 @@ Također, Handoff mora biti omogućen u odjeljku Opće u Postavkama, a vaši ure
 <translation id="6504541289630702018">Lako pristupajte grupama kartica na računaru</translation>
 <translation id="6505334220040167806">Sužavanje grupe kartica.</translation>
 <translation id="6506996418997555004">Podijelite grupu kartica "<ph name="GROUP_NAME" />"</translation>
+<translation id="650770261448122895">Pretražujte ono što vidite putem Objektiva</translation>
 <translation id="6507973708545996744">Prijavite se da dohvatite listu za čitanje na svim svojim uređajima.</translation>
 <translation id="6518133107902771759">Potvrdi</translation>
 <translation id="6523575793810663688">Pokaži mi kako</translation>
@@ -2147,7 +2147,6 @@ Možete ponovo pokrenuti bilo kada.</translation>
 <translation id="7603852183842204213">Skočni prozori su blokirani (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Sinhronizacija ne funkcionira</translation>
 <translation id="760667371114328991">Isključite obavještenja za sigurnosnu provjeru</translation>
-<translation id="7612619742409846846">Prijavljeni ste na Google kao</translation>
 <translation id="7612849887607288481">Otvori meni AI prototipa</translation>
 <translation id="7618220760967055820">Odaberite koje će se dugme prikazivati na alatnoj traci</translation>
 <translation id="7620522820075868385">Otkaži</translation>
@@ -2430,6 +2429,7 @@ Možete ponovo pokrenuti bilo kada.</translation>
 <translation id="8439758443371991593">Sakrij dodavanje na Listu za čitanje</translation>
 <translation id="8443986842926457191">URL sadržava više od 2048 znakova</translation>
 <translation id="8449869326050867919">Lozinka je podijeljena</translation>
+<translation id="8473367210869452063">Da stupite u interakciju s ovom web lokacijom, zaustavite trenutni zadatak ili pričekajte da Gemini završi rad</translation>
 <translation id="8473815223723723001">Uredite sliku putem Geminija</translation>
 <translation id="8473863474539038330">Adrese i još mnogo toga</translation>
 <translation id="8474378002946546633">Dopusti obavijesti</translation>

@@ -16,6 +16,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import android.graphics.Paint;
+import android.graphics.drawable.Drawable;
 import android.text.SpannableString;
 import android.text.style.ClickableSpan;
 import android.view.Gravity;
@@ -34,7 +35,7 @@ import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
-import org.robolectric.RuntimeEnvironment;
+import org.robolectric.Shadows;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features.DisableFeatures;
@@ -44,6 +45,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.components.autofill.autofill_ai.AutofillAiWalletNoticeFunnelEvents;
 import org.chromium.components.autofill.autofill_ai.EntityAttributeUpdateType;
+import org.chromium.components.autofill.autofill_ai.utils.TestUtils;
 import org.chromium.components.autofill.payments.LegalMessageLine;
 import org.chromium.ui.base.TestActivity;
 import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogType;
@@ -56,6 +58,7 @@ import java.util.List;
 
 /** Unit tests for {@link AutofillAiSaveUpdateEntityPrompt}. */
 @RunWith(BaseRobolectricTestRunner.class)
+@EnableFeatures({ChromeFeatureList.AUTOFILL_ENABLE_GRADIENT_GOOGLE_LOGOS})
 public class AutofillAiSaveUpdateEntityPromptTest {
     private static final long NATIVE_AUTOFILL_AI_SAVE_UPDATE_ENTITY_PROMPT_CONTROLLER = 100L;
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
@@ -101,6 +104,7 @@ public class AutofillAiSaveUpdateEntityPromptTest {
         mPromptController.onUserDeclined();
         mPromptController.onPromptDismissed();
         mPromptController.onWalletLinkClicked();
+        mPromptController.onPrivacyPolicyLinkClicked();
 
         verifyNoInteractions(mPromptControllerJni);
     }
@@ -151,7 +155,10 @@ public class AutofillAiSaveUpdateEntityPromptTest {
     }
 
     @Test
-    @DisableFeatures(ChromeFeatureList.AUTOFILL_AI_WALLET_PASS_BRANDING_2026)
+    @DisableFeatures({
+        ChromeFeatureList.AUTOFILL_AI_WALLET_PASS_BRANDING_2026,
+        ChromeFeatureList.AUTOFILL_ENABLE_GRADIENT_GOOGLE_LOGOS,
+    })
     public void dialogStrings() {
         mPrompt.setDialogDetails(
                 "title",
@@ -168,7 +175,11 @@ public class AutofillAiSaveUpdateEntityPromptTest {
         assertEquals(
                 "negative button text",
                 propertyModel.get(ModalDialogProperties.NEGATIVE_BUTTON_TEXT));
-        assertNotNull(propertyModel.get(ModalDialogProperties.TITLE_END_ICON));
+        Drawable titleEndIcon = propertyModel.get(ModalDialogProperties.TITLE_END_ICON);
+        assertNotNull(titleEndIcon);
+        assertEquals(
+                R.drawable.google_wallet_24dp,
+                Shadows.shadowOf(titleEndIcon).getCreatedFromResId());
         assertEquals(
                 Gravity.NO_GRAVITY,
                 propertyModel.get(ModalDialogProperties.TITLE_END_ICON_GRAVITY));
@@ -189,6 +200,27 @@ public class AutofillAiSaveUpdateEntityPromptTest {
         assertEquals(
                 Gravity.TOP,
                 propertyModel.get(ModalDialogProperties.TITLE_END_ICON_GRAVITY));
+    }
+
+    @Test
+    @EnableFeatures({
+        ChromeFeatureList.AUTOFILL_AI_WALLET_PASS_BRANDING_2026,
+        ChromeFeatureList.AUTOFILL_ENABLE_GRADIENT_GOOGLE_LOGOS,
+    })
+    public void dialogStrings_gradientGoogleLogosEnabled() {
+        mPrompt.setDialogDetails(
+                "title",
+                "positive button text",
+                "negative button text",
+                /* isWalletableEntity= */ true);
+        mPrompt.show();
+        PropertyModel propertyModel = mModalDialogManager.getShownDialogModel();
+
+        Drawable titleEndIcon = propertyModel.get(ModalDialogProperties.TITLE_END_ICON);
+        assertNotNull(titleEndIcon);
+        assertEquals(
+                R.drawable.googlewallet_icon_with_gradient,
+                Shadows.shadowOf(titleEndIcon).getCreatedFromResId());
     }
 
     @Test
@@ -213,16 +245,9 @@ public class AutofillAiSaveUpdateEntityPromptTest {
 
     @Test
     public void walletNotice() {
-        String walletTitle =
-                RuntimeEnvironment.getApplication()
-                        .getString(R.string.autofill_google_wallet_title);
-        String email = "alexpark@gmail.com";
+        String walletTitle = mActivity.getString(R.string.autofill_google_wallet_title);
         String sourceNotice =
-                RuntimeEnvironment.getApplication()
-                        .getString(R.string.autofill_ai_save_entity_in_wallet_source_notice)
-                        .replace("$1", walletTitle)
-                        .replace("$2", walletTitle)
-                        .replace("$3", email);
+                TestUtils.getSaveWalletSourceNotice(walletTitle, "alexpark@gmail.com");
 
         mPrompt.setSourceNotice(sourceNotice, /* insertWalletLink= */ true);
         mPrompt.show();
@@ -240,6 +265,37 @@ public class AutofillAiSaveUpdateEntityPromptTest {
         assertThat(spans.length, is(1));
         spans[0].onClick(sourceNoticeView);
         verify(mPromptControllerJni).onWalletLinkClicked(eq(mNativeController));
+    }
+
+    // Tests that the private pass notice renders two clickable links.
+    @Test
+    public void walletPrivatePassNotice() {
+        String walletTitle = mActivity.getString(R.string.autofill_google_wallet_title);
+        String sourceNotice =
+                TestUtils.getPrivatePassSaveWalletSourceNotice(walletTitle, "alexpark@gmail.com");
+
+        mPrompt.setSourceNotice(sourceNotice, /* insertWalletLink= */ true);
+        mPrompt.show();
+
+        View dialogView = mPrompt.getDialogViewForTesting();
+        TextView sourceNoticeView = dialogView.findViewById(R.id.autofill_ai_entity_source_notice);
+        assertEquals(View.VISIBLE, sourceNoticeView.getVisibility());
+        assertEquals(
+                sourceNotice
+                        .replace("<link>", "")
+                        .replace("</link>", "")
+                        .replace("<privacy_link>", "")
+                        .replace("</privacy_link>", ""),
+                sourceNoticeView.getText().toString());
+
+        SpannableString spannableString = (SpannableString) sourceNoticeView.getText();
+        ClickableSpan[] spans =
+                spannableString.getSpans(0, spannableString.length(), ClickableSpan.class);
+        assertThat(spans.length, is(2));
+        spans[0].onClick(sourceNoticeView);
+        verify(mPromptControllerJni).onWalletLinkClicked(eq(mNativeController));
+        spans[1].onClick(sourceNoticeView);
+        verify(mPromptControllerJni).onPrivacyPolicyLinkClicked(eq(mNativeController));
     }
 
     @Test

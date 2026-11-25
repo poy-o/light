@@ -922,13 +922,12 @@ void BackgroundTracingManager::CleanDatabase() {
       FROM_HERE,
       base::BindOnce(
           [](TraceReportDatabase* trace_database) {
-            // Trace payload is cleared on a more frequent basis.
-            trace_database->DeleteOldTraceContent(kMaxTraceContent);
-            // The reports entries are kept (without the payload) for longer to
-            // track upload quotas.
-            trace_database->DeleteTraceReportsOlderThan(kTraceReportTimeToLive);
-            trace_database->DeleteUploadedTraceContentOlderThan(
-                kUploadedTraceContentTimeToLive);
+            // Trace payload is cleared on a more frequent basis. The reports
+            // entries are kept (without the payload) for longer to track upload
+            // quotas.
+            trace_database->CleanDatabase(kMaxTraceContent,
+                                          kTraceReportTimeToLive,
+                                          kUploadedTraceContentTimeToLive);
             return trace_database->GetScenarioCountsSince(
                 base::Time::Now() - kMaxTracesPerScenarioDuration);
           },
@@ -944,7 +943,7 @@ void BackgroundTracingManager::DeleteTracesInDateRange(base::Time start,
   std::optional<base::FilePath> database_dir;
   if (!trace_database_) {
     database_dir = GetLocalTracesDirectory();
-    if (database_dir.has_value()) {
+    if (!database_dir.has_value()) {
       return;
     }
     trace_database_ = {new TraceReportDatabase,

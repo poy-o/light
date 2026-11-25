@@ -15,6 +15,7 @@ import("//components/compose/features.gni")
 import("//components/enterprise/buildflags/buildflags.gni")
 import("//components/lens/features.gni")
 import("//components/offline_pages/buildflags/features.gni")
+import("//components/signin/features.gni")
 import("//content/browser/devtools/features.gni")
 import("//content/public/common/features.gni")
 import("//crypto/features.gni")
@@ -1689,6 +1690,7 @@ if (!is_android) {
       "//chrome/browser/ui/waap:window_creation",
       "//chrome/browser/ui/webui/bookmarks",
       "//chrome/browser/ui/webui/settings",
+      "//chrome/browser/ui/webui/signin:signin_utils",
       "//chrome/browser/ui/window_feature_controller",
       "//chrome/browser/user_education",
       "//chrome/common",
@@ -1773,6 +1775,7 @@ if (!is_android) {
       ":browser_tabstrip",
       ":browser_ui_prefs",
       ":browser_window_header",
+      ":chrome_pages",
       ":confirm_bubble",
       ":managed_ui",
       ":sad_tab",
@@ -1813,6 +1816,7 @@ if (!is_android) {
       "//chrome/browser/ui/fullscreen",
       "//chrome/browser/ui/performance_controls/test_support",
       "//chrome/browser/ui/search",
+      "//chrome/browser/ui/signin",
       "//chrome/browser/ui/startup",
       "//chrome/browser/ui/tabs:tab_strip",
       "//chrome/browser/ui/tabs/saved_tab_groups:test_support",
@@ -1820,6 +1824,7 @@ if (!is_android) {
       "//chrome/browser/ui/views/site_data",
       "//chrome/browser/ui/web_applications/test:test_support_ui",
       "//chrome/browser/ui/webui/management",
+      "//chrome/browser/ui/webui/signin:signin_utils",
       "//chrome/browser/ui/window_feature_controller",
       "//chrome/browser/ui/window_metadata",
       "//chrome/browser/ui/zoom",
@@ -1828,7 +1833,6 @@ if (!is_android) {
       "//chrome/common:constants",
       "//chrome/test:test_support",
       "//chrome/test/base:browser_test_waiters",
-      "//chrome/test/base:chrome_test_scoped_utils",
       "//chrome/test/base:testing_browser_process",
       "//components/bookmarks/browser",
       "//components/bookmarks/test",
@@ -1836,6 +1840,7 @@ if (!is_android) {
       "//components/breadcrumbs/core:status",
       "//components/commerce/core:pref_names",
       "//components/embedder_support",
+      "//components/enterprise/isolated_mode:test_support",
       "//components/favicon/core",
       "//components/favicon_base",
       "//components/history/core/browser",
@@ -1865,6 +1870,10 @@ if (!is_android) {
       sources += [ "overscroll_pref_manager_browsertest.cc" ]
     }
 
+    if (enable_dice_support) {
+      sources += [ "chrome_pages_browsertest.cc" ]
+    }
+
     if (is_chromeos) {
       sources += [
         "browser_finder_chromeos_browsertest.cc",
@@ -1872,7 +1881,6 @@ if (!is_android) {
         "settings_window_manager_browsertest_chromeos.cc",
       ]
       deps += [
-        ":chrome_pages",
         ":settings_window_manager_chromeos",
         "//chrome/browser/ash/boca/on_task",
         "//chrome/browser/ash/policy/core:test_support",
@@ -2091,10 +2099,15 @@ source_set("unit_tests") {
       "//base:i18n",
       "//chrome/browser/apps/intent_helper:intent_chip_display_prefs",
       "//chrome/browser/apps/link_capturing:test_support",
+      "//chrome/browser/profiles:profile",
+      "//chrome/browser/profiles:profile_util",
+      "//chrome/browser/signin",
       "//chrome/browser/supervised_user",
       "//chrome/browser/ui/actions:actions_headers",
+      "//chrome/browser/ui/browser_window:create_browser_window",
       "//chrome/browser/ui/web_applications/test:test_support_ui",
       "//chrome/browser/web_applications:web_applications_test_support",
+      "//chrome/test/base:testing_browser_process",
       "//components/apps/link_capturing",
       "//components/supervised_user/core/browser:test_support",
       "//components/webapps/isolated_web_apps/test_support",
@@ -2187,6 +2200,8 @@ if (!is_android && !is_chromeos_device) {
       "//chrome/browser",
       "//chrome/browser/sharing_hub",
       "//chrome/browser/ui/frame",
+      "//chrome/browser/ui/tabs:tab_enums",
+      "//chrome/browser/ui/tabs:tab_strip",
       "//chrome/browser/ui/views:find_bar_views",
       "//chrome/browser/ui/views/frame:browser_view_header",
       "//chrome/browser/ui/views/frame:contents_web_view",
@@ -2195,6 +2210,8 @@ if (!is_android && !is_chromeos_device) {
       "//chrome/test:test_support",
       "//chrome/test/base:chrome_test_path_utils",
       "//chrome/test/base:chrome_test_utils",
+      "//components/web_modal",
+      "//content/public/browser",
       "//content/test:test_support",
       "//testing/gtest",
     ]

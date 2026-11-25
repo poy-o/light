@@ -77,19 +77,18 @@ void DefaultBrowserSurfaceManager::Show(bool can_pin_to_taskbar) {
   has_accepted_ = false;
   retry_count_.reset();
 
-  controller_ = default_browser::DefaultBrowserManager::CreateControllerFor(
-      GetEntrypointType());
+  auto* manager =
+      default_browser::DefaultBrowserManager::From(g_browser_process);
+  CHECK(manager);
+  controller_ = manager->CreateControllerFor(GetEntrypointType());
   CHECK(controller_);
   controller_->OnShown();
 
   if (IsStickyModalEntrypoint(GetEntrypointType())) {
-    if (auto* manager =
-            default_browser::DefaultBrowserManager::From(g_browser_process)) {
-      default_browser_subscription_ =
-          manager->RegisterDefaultBrowserChanged(base::BindRepeating(
-              &DefaultBrowserSurfaceManager::OnDefaultBrowserStateChanged,
-              base::Unretained(this)));
-    }
+    default_browser_subscription_ =
+        manager->RegisterDefaultBrowserChanged(base::BindRepeating(
+            &DefaultBrowserSurfaceManager::OnDefaultBrowserStateChanged,
+            base::Unretained(this)));
   }
 
   auto* global_browser_collection = GlobalBrowserCollection::GetInstance();
@@ -203,6 +202,12 @@ void DefaultBrowserSurfaceManager::HandleRetry() {
 }
 
 void DefaultBrowserSurfaceManager::HandleDismiss() {
+  // Closing a sticky modal after accepting isn't a decline, so it neither
+  // starts the reprompt cooldown nor records a second interaction.
+  if (has_accepted_) {
+    return;
+  }
+
   PrefService* local_state = g_browser_process->local_state();
 
   int declined_count =
@@ -215,10 +220,6 @@ void DefaultBrowserSurfaceManager::HandleDismiss() {
   if (controller_) {
     controller_->OnDismissed();
     controller_.reset();
-  } else if (has_accepted_) {
-    default_browser::DefaultBrowserManager::CreateControllerFor(
-        GetEntrypointType())
-        ->OnDismissed();
   }
 }
 

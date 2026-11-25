@@ -716,8 +716,16 @@ IN_PROC_BROWSER_TEST_F(SendTabToSelfIphInteractiveUiTest,
       CheckHelpBubbleBodyText(IDS_TUTORIAL_SEND_TAB_TO_SELF_SUCCESS_BODY));
 }
 
+// TODO(crbug.com/588726901): Consistently failing on Linux Tests.
+#if BUILDFLAG(IS_LINUX)
+#define MAYBE_TutorialFlowCompletesWhenNonFirstTabIsActive \
+  DISABLED_TutorialFlowCompletesWhenNonFirstTabIsActive
+#else
+#define MAYBE_TutorialFlowCompletesWhenNonFirstTabIsActive \
+  TutorialFlowCompletesWhenNonFirstTabIsActive
+#endif
 IN_PROC_BROWSER_TEST_F(SendTabToSelfIphInteractiveUiTest,
-                       TutorialFlowCompletesWhenNonFirstTabIsActive) {
+                       MAYBE_TutorialFlowCompletesWhenNonFirstTabIsActive) {
   const GURL eligible_url =
       embedded_https_test_server().GetURL("example.com", "/title1.html");
 
@@ -793,8 +801,16 @@ IN_PROC_BROWSER_TEST_F(SendTabToSelfIphInteractiveUiTest,
           /*baseline_cl=*/kScreenshotBaselineCL)));
 }
 
+// TODO(crbug.com/589750391): Flaky on Linux.
+#if BUILDFLAG(IS_LINUX)
+#define MAYBE_Step2HelpBubbleAnchoredToContextMenuItem \
+  DISABLED_Step2HelpBubbleAnchoredToContextMenuItem
+#else
+#define MAYBE_Step2HelpBubbleAnchoredToContextMenuItem \
+  Step2HelpBubbleAnchoredToContextMenuItem
+#endif
 IN_PROC_BROWSER_TEST_F(SendTabToSelfIphInteractiveUiTest,
-                       Step2HelpBubbleAnchoredToContextMenuItem) {
+                       MAYBE_Step2HelpBubbleAnchoredToContextMenuItem) {
   const GURL eligible_url =
       embedded_https_test_server().GetURL("example.com", "/title1.html");
   gfx::Rect menu_item_bounds;

@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">पासवर्डहरू सेयर गर्नुहोस्</translation>
 <translation id="1554043146674176775">AI मोड अफ गर्नुहोस्</translation>
 <translation id="1554477036522844996">नयाँ विन्डो</translation>
+<translation id="1555014818414775661">फोटोहरू हाल्नुहोस्</translation>
 <translation id="1557806604681757705">तपाईंको कम्प्युटर</translation>
 <translation id="1558391695376153246">इन्कोग्निटो ट्याबहरू बन्द गर्नुहोस्</translation>
 <translation id="1560153516220021659">सहायक टुलबार बटन कोल्याप्स गरिएको छ</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832"><ph name="BEGIN_BOLD" />Safari का सेटिङ<ph name="END_BOLD" /> खोल्नुहोस्</translation>
 <translation id="3858860766373142691">नाम</translation>
 <translation id="386224966259596343">तपाईंले अर्को पटक कुनै सम्बन्धित फाराम भर्दा तपाईं यो जानकारी Wallet मा सेभ गर्न सक्नु हुने छ।</translation>
-<translation id="3868495844258915202">पूरै URL देखाउनुहोस्</translation>
 <translation id="3870931306085184145"><ph name="DOMAIN" /> को कुनै पनि पासवर्ड सुरक्षित गरिएको छैन</translation>
 <translation id="3875783148670536197">यसो गर्ने तरिका देखाउनुहोस्</translation>
 <translation id="3878657761594430423">पाना ग्र्याबर</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">मूल्यको ट्र्याकिङसम्बन्धी नोटिफिकेसन प्राप्त गर्न iOS को सेटिङमा गई नोटिफिकेसन प्राप्त गर्ने सुविधा अन गर्नुहोस्।</translation>
 <translation id="528857768909044842">ट्याब समूहहरू यहाँ सेभ गरिन्छन्</translation>
 <translation id="5294624619177114121">मोबाइलमा प्राप्त नोटिफिकेसनहरू</translation>
-<translation id="5295239312320826323">खाता <ph name="USER_EMAIL" /> हटाउने हो?</translation>
 <translation id="5300589172476337783">देखाउनुहोस्</translation>
 <translation id="5311061401280561833">क्यामेरा र माइक्रोफोन प्रयोग गर्ने अनुमति दिइएको छ</translation>
 <translation id="5313967007315987356">साइट थप्नुहोस्</translation>
@@ -1788,6 +1787,7 @@
 <translation id="6504541289630702018">आफ्ना डेस्कटपमा भएका ट्याब समूहहरू सजिलै एक्सेस गर्नुहोस्</translation>
 <translation id="6505334220040167806">ट्याब समूह कोल्याप्स गर्नुहोस्।</translation>
 <translation id="6506996418997555004">"<ph name="GROUP_NAME" />" ट्याब समूह सेयर गर्नुहोस्</translation>
+<translation id="650770261448122895">लेन्स प्रयोग गरी आफूले देखेका कुरा खोज्नुहोस्</translation>
 <translation id="6507973708545996744">आफ्ना सबै डिभाइसहरूमा "पछि पढ्न सेभ गरिएका वेबपेजको सूची" प्राप्त गर्न साइन इन गर्नुहोस्।</translation>
 <translation id="6518133107902771759">रुजू गर्नुहोस्</translation>
 <translation id="6523575793810663688">तरिका देखाउनुहोस्</translation>
@@ -2147,7 +2147,6 @@
 <translation id="7603852183842204213">पप-अपहरु ब्लक गरियो (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">सिंकले काम गरिरहेको छैन</translation>
 <translation id="760667371114328991">सुरक्षा जाँच गर्ने सुविधासम्बन्धी नोटिफिकेसनहरू अफ गर्नुहोस्</translation>
-<translation id="7612619742409846846">यस रूपमा Google मा साइन इन गरियो</translation>
 <translation id="7612849887607288481">AI प्रोटोटाइपिङ मेनु खोल्नुहोस्</translation>
 <translation id="7618220760967055820">टुलबारमा कुन बटन देखाउने भन्ने कुरा छनौट गर्नुहोस्</translation>
 <translation id="7620522820075868385">रद्द गर्नुहोस्</translation>
@@ -2430,6 +2429,7 @@
 <translation id="8439758443371991593">"रिडिङ लिस्टमा हाल्नुहोस्" लुकाउनुहोस्</translation>
 <translation id="8443986842926457191">URL मा २०४८ भन्दा बढी वर्ण प्रयोग गरिएको छ</translation>
 <translation id="8449869326050867919">पासवर्ड सेयर गरिएको छ</translation>
+<translation id="8473367210869452063">यो साइटसँग अन्तर्क्रिया गर्न हालको कार्य रोक्नुहोस् वा Gemini ले यो कार्य पूरा नगरुन्जेल पर्खनुहोस्</translation>
 <translation id="8473815223723723001">Gemini प्रयोग गरी फोटो सम्पादन गर्नुहोस्</translation>
 <translation id="8473863474539038330">ठेगाना र थप कुराहरू</translation>
 <translation id="8474378002946546633">सूचना प्राप्त गर्ने सुविधा अन गर्नुहोस्</translation>

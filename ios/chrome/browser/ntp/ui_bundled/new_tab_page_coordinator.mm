@@ -163,6 +163,7 @@
 #import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/public/commands/show_signin_command.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
+#import "ios/chrome/browser/shared/public/commands/voice_search_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/public/snackbar/snackbar_message.h"
 #import "ios/chrome/browser/shared/public/snackbar/snackbar_message_action.h"
@@ -1554,6 +1555,9 @@
   }
   OmniboxFocusBrowserAgent* omniboxFocusAgent =
       OmniboxFocusBrowserAgent::FromBrowser(self.browser);
+  // TODO(crbug.com/493816082): Adapt for the new startup flow, where
+  // `startupParameters` is always nil, so the post-opening action of external
+  // intents isn't considered.
   AppStartupParameters* startupParameters =
       self.browser->GetSceneState().controller.startupParameters;
   return self.willFocusOmniboxAfterNewTabAnimation || _isBrowserViewObscured ||
@@ -2727,9 +2731,9 @@
 }
 
 - (void)preloadVoiceSearch {
-  id<BrowserCoordinatorCommands> browserCoordinatorHandler = HandlerForProtocol(
-      self.browser->GetCommandDispatcher(), BrowserCoordinatorCommands);
-  [browserCoordinatorHandler preloadVoiceSearch];
+  id<VoiceSearchCommands> voiceSearchHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), VoiceSearchCommands);
+  [voiceSearchHandler preloadVoiceSearch];
 }
 
 - (void)loadVoiceSearchFromView:(UIView*)voiceSearchSourceView {
@@ -2742,8 +2746,8 @@
   [layoutGuideCenter referenceView:voiceSearchSourceView
                          underName:kVoiceSearchButtonGuide];
 
-  id<BrowserCoordinatorCommands> handler = HandlerForProtocol(
-      self.browser->GetCommandDispatcher(), BrowserCoordinatorCommands);
+  id<VoiceSearchCommands> handler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), VoiceSearchCommands);
   [handler startVoiceSearch];
 }
 
@@ -2760,7 +2764,9 @@
   command.shouldFocusOmnibox = YES;
   id<SceneCommands> sceneHandler =
       HandlerForProtocol(self.browser->GetCommandDispatcher(), SceneCommands);
-  [sceneHandler openURLInNewTab:command];
+  [UIView performWithoutAnimation:^{
+    [sceneHandler openURLInNewTab:command];
+  }];
 }
 
 - (void)openMultimodalActionsMenu {

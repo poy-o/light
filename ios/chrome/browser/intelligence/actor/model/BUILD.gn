@@ -44,6 +44,7 @@ source_set("model") {
     "//components/origin_gating/core",
     "//components/policy/core/browser",
     "//components/prefs",
+    "//components/url_formatter",
 
     # TODO(crbug.com/496196467): Invert dependencies on //ios/chrome/app/.
     "//ios/chrome/app/background_task",
@@ -82,7 +83,6 @@ source_set("tab_helper") {
     "actor_tab_helper.h",
     "actor_tab_helper.mm",
     "actor_tab_helper_observer.h",
-    "actor_tab_helper_observer.mm",
   ]
   public_deps = [
     "//components/actor/core",

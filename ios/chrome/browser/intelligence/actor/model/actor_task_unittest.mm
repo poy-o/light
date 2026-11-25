@@ -257,11 +257,11 @@ TaskSourceInfo TestSource() {
 
 // Receives the task state when an interrupt response runs, and the response.
 using ResponseFuture =
-    base::test::TestFuture<ActorTaskState, ActorTaskResult<InterruptResponse>>;
+    base::test::TestFuture<ActorTaskState, InterventionResult<InterruptReply>>;
 
 // Receives the terminal result of an interrupt.
 using InterruptFuture =
-    base::test::TestFuture<ActorTaskResult<InterruptResponse>>;
+    base::test::TestFuture<InterventionResult<InterruptReply>>;
 
 // Returns all raw log entries in the journal for testing.
 std::vector<mojom::JournalEntryPtr> GetLogsForTesting(
@@ -363,12 +363,17 @@ class ActorTaskTest : public PlatformTest {
     return confirmation;
   }
 
+  // Returns a request asking the user `message`.
+  static InterruptRequest MakeClarification(std::string_view message) {
+    return ClarificationInterrupt{.message = std::string(message)};
+  }
+
   // Returns an `on_response` that records the task state and response.
-  ActorTaskResultCallback<InterruptResponse> RecordStateOnResponse(
+  InterventionResultCallback<InterruptReply> RecordStateOnResponse(
       ResponseFuture& future) {
     return base::BindLambdaForTesting(
         [&future,
-         task = task_.get()](ActorTaskResult<InterruptResponse> result) {
+         task = task_.get()](InterventionResult<InterruptReply> result) {
           future.SetValue(task->GetState(), std::move(result));
         });
   }
@@ -1113,7 +1118,7 @@ TEST_F(ActorTaskTest, InterruptWhileActPendingIsRejected) {
   InterruptFuture result;
   task_->Interrupt(MakeConfirmation("Please confirm"), result.GetCallback());
   ASSERT_FALSE(result.Get().has_value());
-  EXPECT_EQ(ActorTaskError::kRejected, result.Get().error());
+  EXPECT_EQ(InterventionError::kTaskRejected, result.Get().error());
   FlushCurrentSequence();
   EXPECT_FALSE(delegate.requestConfirmationCalled);
   EXPECT_EQ(ActorTaskState::kActing, task_->GetState());
@@ -1148,7 +1153,8 @@ TEST_F(ActorTaskTest, ActWhileInterruptPendingIsRejected) {
 
   [delegate runUserInterventionCompletion];
   ASSERT_TRUE(interrupt_result.Get().has_value());
-  EXPECT_EQ(InterruptResponse::kConfirmed, interrupt_result.Get().value());
+  EXPECT_EQ(InterruptResponse::kConfirmed,
+            interrupt_result.Get().value().response());
 
   std::vector<std::unique_ptr<ActorToolRequest>> actions;
   actions.push_back(MakeSuccessfulActorToolRequest());
@@ -1825,7 +1831,7 @@ TEST_F(ActorTaskTest, InterruptRejectedWhenNotExecuting) {
   task_->Interrupt(MakeConfirmation("Ignored message"),
                    paused_result.GetCallback());
   ASSERT_FALSE(paused_result.Get().has_value());
-  EXPECT_EQ(paused_result.Get().error(), ActorTaskError::kRejected);
+  EXPECT_EQ(paused_result.Get().error(), InterventionError::kTaskRejected);
   FlushCurrentSequence();
   EXPECT_EQ(task_->GetState(), ActorTaskState::kPausedByActor);
   EXPECT_FALSE(delegate.requestConfirmationCalled);
@@ -1835,7 +1841,7 @@ TEST_F(ActorTaskTest, InterruptRejectedWhenNotExecuting) {
   task_->Interrupt(MakeConfirmation("Ignored message"),
                    cancelled_result.GetCallback());
   ASSERT_FALSE(cancelled_result.Get().has_value());
-  EXPECT_EQ(cancelled_result.Get().error(), ActorTaskError::kRejected);
+  EXPECT_EQ(cancelled_result.Get().error(), InterventionError::kTaskRejected);
   FlushCurrentSequence();
   EXPECT_EQ(task_->GetState(), ActorTaskState::kCancelled);
   EXPECT_FALSE(delegate.requestConfirmationCalled);
@@ -1861,7 +1867,8 @@ TEST_F(ActorTaskTest, ResolveConfirmationResumesToReflecting) {
 
   EXPECT_EQ(response.Get<0>(), ActorTaskState::kReflecting);
   ASSERT_TRUE(response.Get<1>().has_value());
-  EXPECT_EQ(response.Get<1>().value(), InterruptResponse::kConfirmed);
+  EXPECT_EQ(response.Get<1>().value().response(),
+            InterruptResponse::kConfirmed);
 }
 
 // Tests that stopping an interrupted task transitions it to `kCancelled`,
@@ -1872,7 +1879,7 @@ TEST_F(ActorTaskTest, StopWhileInterruptedIgnoresSubsequentCompletion) {
   task_->SetInterventionDelegate(delegate);
 
   SetTaskState(ActorTaskState::kActing);
-  base::test::TestFuture<ActorTaskResult<InterruptResponse>> response;
+  base::test::TestFuture<InterventionResult<InterruptReply>> response;
   task_->Interrupt(MakeConfirmation("Please confirm"), response.GetCallback());
   ASSERT_TRUE(base::test::RunUntil(
       [&]() { return delegate.hasPendingUserIntervention; }));
@@ -1881,7 +1888,7 @@ TEST_F(ActorTaskTest, StopWhileInterruptedIgnoresSubsequentCompletion) {
   task_->Stop(ActorTaskStoppedReason::kStoppedByUser);
   EXPECT_EQ(task_->GetState(), ActorTaskState::kCancelled);
   ASSERT_FALSE(response.Get().has_value());
-  EXPECT_EQ(response.Get().error(), ActorTaskError::kTaskWentAway);
+  EXPECT_EQ(response.Get().error(), InterventionError::kTaskWentAway);
 
   // Invoke completion block after task was stopped.
   [delegate runUserInterventionCompletion];
@@ -2012,7 +2019,8 @@ TEST_F(ActorTaskTest, PauseWhileConfirmingRepliesUserPausedOnResume) {
   task_->Resume();
   EXPECT_EQ(ActorTaskState::kReflecting, response.Get<0>());
   ASSERT_TRUE(response.Get<1>().has_value());
-  EXPECT_EQ(InterruptResponse::kUserPaused, response.Get<1>().value());
+  EXPECT_EQ(InterruptResponse::kUserPaused,
+            response.Get<1>().value().response());
 }
 
 // Tests that an `Interrupt` received while paused is held without prompting,
@@ -2032,7 +2040,7 @@ TEST_F(ActorTaskTest, InterruptWhilePausedIsHeldUntilResume) {
 
   task_->Resume();
   ASSERT_TRUE(result.Get().has_value());
-  EXPECT_EQ(InterruptResponse::kUserPaused, result.Get().value());
+  EXPECT_EQ(InterruptResponse::kUserPaused, result.Get().value().response());
   EXPECT_FALSE(delegate.requestConfirmationCalled);
 
   // The held reply carried the pause notice, so the next `Interrupt` prompts.
@@ -2141,7 +2149,8 @@ TEST_F(ActorTaskTest, InterruptAfterPauseAndResumeRepliesUserPausedOnce) {
   task_->Interrupt(MakeConfirmation("Please confirm"),
                    first_result.GetCallback());
   ASSERT_TRUE(first_result.Get().has_value());
-  EXPECT_EQ(InterruptResponse::kUserPaused, first_result.Get().value());
+  EXPECT_EQ(InterruptResponse::kUserPaused,
+            first_result.Get().value().response());
   EXPECT_FALSE(delegate.requestConfirmationCalled);
 
   task_->Interrupt(MakeConfirmation("Please confirm"), base::DoNothing());
@@ -2161,7 +2170,7 @@ TEST_F(ActorTaskTest, StopWhilePausedRepliesTaskWentAwayToHeldInterrupt) {
 
   task_->Stop(ActorTaskStoppedReason::kStoppedByUser);
   ASSERT_FALSE(result.Get().has_value());
-  EXPECT_EQ(ActorTaskError::kTaskWentAway, result.Get().error());
+  EXPECT_EQ(InterventionError::kTaskWentAway, result.Get().error());
 }
 
 // Tests that interrupting for user confirmation without an intervention
@@ -2179,7 +2188,7 @@ TEST_F(ActorTaskTest, InterruptWithoutDelegateIsRejected) {
   // The rejection is posted, never run from within `Interrupt()`.
   EXPECT_FALSE(result.IsReady());
   ASSERT_FALSE(result.Get().has_value());
-  EXPECT_EQ(result.Get().error(), ActorTaskError::kRejected);
+  EXPECT_EQ(result.Get().error(), InterventionError::kTaskRejected);
   FlushCurrentSequence();
 
   EXPECT_EQ(task_->GetState(), ActorTaskState::kActing);
@@ -2202,7 +2211,7 @@ TEST_F(ActorTaskTest, InterruptWithEmptyConfirmationTitleIsRejected) {
   InterruptFuture result;
   task_->Interrupt(MakeConfirmation(""), result.GetCallback());
   ASSERT_FALSE(result.Get().has_value());
-  EXPECT_EQ(result.Get().error(), ActorTaskError::kRejected);
+  EXPECT_EQ(result.Get().error(), InterventionError::kTaskRejected);
   FlushCurrentSequence();
 
   EXPECT_EQ(task_->GetState(), ActorTaskState::kActing);
@@ -2229,6 +2238,185 @@ TEST_F(ActorTaskTest, InterruptPassesConfirmationSubtitle) {
   EXPECT_NSEQ(delegate.confirmationTitle, @"Title");
   EXPECT_NSEQ(delegate.confirmationSubtitle, @"Subtitle");
   EXPECT_NSEQ(delegate.confirmationButtonText, @"Buy");
+}
+
+// Tests that interrupting an acting task for clarification transitions it to
+// `kWaitingOnUser` and asks the question via the intervention delegate.
+TEST_F(ActorTaskTest, InterruptWaitingUserClarificationFromActing) {
+  FakeActorTaskInterventionDelegate* delegate =
+      [[FakeActorTaskInterventionDelegate alloc] init];
+  task_->SetInterventionDelegate(delegate);
+  SetTaskState(ActorTaskState::kActing);
+
+  task_->Interrupt(MakeClarification("Which size?"), base::DoNothing());
+
+  EXPECT_EQ(task_->GetState(), ActorTaskState::kWaitingOnUser);
+  EXPECT_TRUE(delegate.hasPendingClarification);
+  EXPECT_NSEQ(delegate.clarificationMessage, @"Which size?");
+  EXPECT_FALSE(delegate.requestConfirmationCalled);
+}
+
+// Tests that answering a clarification transitions the task back to
+// `kReflecting` and replies `kAnswered` with the answer.
+TEST_F(ActorTaskTest, AnswerClarificationRepliesAnswerAndResumesToReflecting) {
+  FakeActorTaskInterventionDelegate* delegate =
+      [[FakeActorTaskInterventionDelegate alloc] init];
+  task_->SetInterventionDelegate(delegate);
+  SetTaskState(ActorTaskState::kActing);
+  ResponseFuture response;
+  task_->Interrupt(MakeClarification("Which size?"),
+                   RecordStateOnResponse(response));
+  ASSERT_TRUE(delegate.hasPendingClarification);
+
+  [delegate runClarificationCompletionWithAnswer:@"Medium"];
+  // The answer is posted, never handled from within the delegate's call.
+  EXPECT_FALSE(response.IsReady());
+  EXPECT_EQ(task_->GetState(), ActorTaskState::kWaitingOnUser);
+
+  EXPECT_EQ(response.Get<0>(), ActorTaskState::kReflecting);
+  ASSERT_TRUE(response.Get<1>().has_value());
+  EXPECT_EQ(response.Get<1>().value().response(), InterruptResponse::kAnswered);
+  EXPECT_EQ(response.Get<1>().value().answer(), "Medium");
+}
+
+// Tests that a clarification with an empty message, or without an intervention
+// delegate, is rejected and leaves the task running.
+TEST_F(ActorTaskTest, InvalidClarificationIsRejected) {
+  SetTaskState(ActorTaskState::kActing);
+  InterruptFuture without_delegate;
+  task_->Interrupt(MakeClarification("Which size?"),
+                   without_delegate.GetCallback());
+  ASSERT_FALSE(without_delegate.Get().has_value());
+  EXPECT_EQ(without_delegate.Get().error(), InterventionError::kTaskRejected);
+
+  FakeActorTaskInterventionDelegate* delegate =
+      [[FakeActorTaskInterventionDelegate alloc] init];
+  task_->SetInterventionDelegate(delegate);
+  InterruptFuture empty_message;
+  task_->Interrupt(MakeClarification(""), empty_message.GetCallback());
+  ASSERT_FALSE(empty_message.Get().has_value());
+  EXPECT_EQ(empty_message.Get().error(), InterventionError::kTaskRejected);
+  FlushCurrentSequence();
+
+  EXPECT_EQ(task_->GetState(), ActorTaskState::kActing);
+  EXPECT_FALSE(delegate.hasPendingClarification);
+}
+
+// Tests that a clarification failed by the intervention delegate replies its
+// error once the task resumes to `kReflecting`.
+TEST_F(ActorTaskTest, ClarificationDelegateErrorRepliesErrorAndResumes) {
+  FakeActorTaskInterventionDelegate* delegate =
+      [[FakeActorTaskInterventionDelegate alloc] init];
+  task_->SetInterventionDelegate(delegate);
+  SetTaskState(ActorTaskState::kActing);
+  ResponseFuture response;
+  task_->Interrupt(MakeClarification("Which size?"),
+                   RecordStateOnResponse(response));
+  ASSERT_TRUE(delegate.hasPendingClarification);
+
+  [delegate failClarificationWithError:InterventionDelegateError::kUnsupported];
+  // The error is posted, never handled from within the delegate's call.
+  EXPECT_FALSE(response.IsReady());
+
+  EXPECT_EQ(response.Get<0>(), ActorTaskState::kReflecting);
+  ASSERT_FALSE(response.Get<1>().has_value());
+  EXPECT_EQ(response.Get<1>().error(), InterventionError::kDelegateUnsupported);
+}
+
+// Tests that a confirmation failed by the intervention delegate replies its
+// error once the task resumes to `kReflecting`.
+TEST_F(ActorTaskTest, ConfirmationDelegateErrorRepliesErrorAndResumes) {
+  FakeActorTaskInterventionDelegate* delegate =
+      [[FakeActorTaskInterventionDelegate alloc] init];
+  task_->SetInterventionDelegate(delegate);
+  SetTaskState(ActorTaskState::kActing);
+  ResponseFuture response;
+  task_->Interrupt(MakeConfirmation("Please confirm"),
+                   RecordStateOnResponse(response));
+  ASSERT_TRUE(delegate.hasPendingUserIntervention);
+
+  [delegate
+      failUserInterventionWithError:InterventionDelegateError::kUnsupported];
+  // The error is posted, never handled from within the delegate's call.
+  EXPECT_FALSE(response.IsReady());
+
+  EXPECT_EQ(response.Get<0>(), ActorTaskState::kReflecting);
+  ASSERT_FALSE(response.Get<1>().has_value());
+  EXPECT_EQ(response.Get<1>().error(), InterventionError::kDelegateUnsupported);
+}
+
+// Tests that pausing while a clarification is asked holds its reply, ignores a
+// late answer, and replies `kUserPaused` once the user resumes.
+TEST_F(ActorTaskTest, PauseWhileClarifyingRepliesUserPausedOnResume) {
+  FakeActorTaskInterventionDelegate* delegate =
+      [[FakeActorTaskInterventionDelegate alloc] init];
+  task_->SetInterventionDelegate(delegate);
+  SetTaskState(ActorTaskState::kActing);
+  ResponseFuture response;
+  task_->Interrupt(MakeClarification("Which size?"),
+                   RecordStateOnResponse(response));
+  ASSERT_TRUE(delegate.hasPendingClarification);
+
+  task_->Pause();
+  EXPECT_EQ(ActorTaskState::kPausedByUser, task_->GetState());
+
+  // An answer given after the pause is ignored.
+  [delegate runClarificationCompletionWithAnswer:@"Medium"];
+  FlushCurrentSequence();
+  EXPECT_FALSE(response.IsReady());
+  EXPECT_EQ(ActorTaskState::kPausedByUser, task_->GetState());
+
+  task_->Resume();
+  EXPECT_EQ(ActorTaskState::kReflecting, response.Get<0>());
+  ASSERT_TRUE(response.Get<1>().has_value());
+  EXPECT_EQ(InterruptResponse::kUserPaused,
+            response.Get<1>().value().response());
+  EXPECT_TRUE(response.Get<1>().value().answer().empty());
+}
+
+// Tests that stopping a task waiting on a clarification replies
+// `kTaskWentAway` and ignores a later answer.
+TEST_F(ActorTaskTest, StopWhileClarifyingIgnoresSubsequentAnswer) {
+  FakeActorTaskInterventionDelegate* delegate =
+      [[FakeActorTaskInterventionDelegate alloc] init];
+  task_->SetInterventionDelegate(delegate);
+  SetTaskState(ActorTaskState::kActing);
+  InterruptFuture result;
+  task_->Interrupt(MakeClarification("Which size?"), result.GetCallback());
+  ASSERT_TRUE(delegate.hasPendingClarification);
+
+  task_->Stop(ActorTaskStoppedReason::kStoppedByUser);
+  ASSERT_FALSE(result.Get().has_value());
+  EXPECT_EQ(InterventionError::kTaskWentAway, result.Get().error());
+
+  [delegate runClarificationCompletionWithAnswer:@"Medium"];
+  FlushCurrentSequence();
+  EXPECT_EQ(ActorTaskState::kCancelled, task_->GetState());
+}
+
+// Tests that a clarification answered synchronously does not re-enter the
+// task, and later resumes it and replies.
+TEST_F(ActorTaskTest, InterruptWaitingUserClarificationSyncResolution) {
+  FakeActorTaskInterventionDelegate* delegate =
+      [[FakeActorTaskInterventionDelegate alloc] init];
+  delegate.autoClarificationAnswer = @"Medium";
+  ActorTask* task = task_.get();
+  __block std::optional<ActorTaskState> state_after_completion;
+  delegate.onClarificationCompleted = ^{
+    state_after_completion = task->GetState();
+  };
+  task_->SetInterventionDelegate(delegate);
+
+  SetTaskState(ActorTaskState::kActing);
+  ResponseFuture response;
+  task_->Interrupt(MakeClarification("Which size?"),
+                   RecordStateOnResponse(response));
+
+  EXPECT_EQ(response.Get<0>(), ActorTaskState::kReflecting);
+  ASSERT_TRUE(response.Get<1>().has_value());
+  EXPECT_EQ(response.Get<1>().value().response(), InterruptResponse::kAnswered);
+  EXPECT_EQ(response.Get<1>().value().answer(), "Medium");
+  EXPECT_EQ(state_after_completion, ActorTaskState::kWaitingOnUser);
 }
 
 // Tests that a confirmation answered synchronously does not re-enter the task,
@@ -2398,7 +2586,7 @@ TEST_F(ActorTaskTest, InterruptRejectedWhenAlreadyWaitingOnUser) {
   InterruptFuture second;
   task_->Interrupt(MakeConfirmation("Second prompt"), second.GetCallback());
   ASSERT_FALSE(second.Get().has_value());
-  EXPECT_EQ(second.Get().error(), ActorTaskError::kRejected);
+  EXPECT_EQ(second.Get().error(), InterventionError::kTaskRejected);
   FlushCurrentSequence();
 
   EXPECT_EQ(task_->GetState(), ActorTaskState::kWaitingOnUser);
@@ -2876,4 +3064,331 @@ TEST_F(ActorTaskTest,
 
   EXPECT_FALSE(decision_future.Get());
 }
+
+// Tests that `RequestUserConfirmationForNavigation` transitions the task from
+// `kActing` to `kWaitingOnUser`, formats the origin for display, and resumes
+// `kActing` with `true` when the user confirms.
+TEST_F(ActorTaskTest,
+       RequestUserConfirmationForNavigation_PromptsDelegateAndResumesActing) {
+  FakeActorTaskInterventionDelegate* intervention_delegate =
+      [[FakeActorTaskInterventionDelegate alloc] init];
+  task_->SetInterventionDelegate(intervention_delegate);
+  SetTaskState(ActorTaskState::kActing);
+
+  const url::Origin target_origin =
+      url::Origin::Create(GURL("https://www.airline.com:8443/path"));
+  base::test::TestFuture<bool> decision_future;
+  task_->RequestUserConfirmationForNavigation(target_origin,
+                                              decision_future.GetCallback());
+
+  EXPECT_EQ(ActorTaskState::kWaitingOnUser, task_->GetState());
+
+  EXPECT_TRUE(intervention_delegate.requestNavigationConfirmationCalled);
+  EXPECT_NSEQ(@"www.airline.com:8443",
+              intervention_delegate.promptedNavigationDomain);
+
+  EXPECT_TRUE(intervention_delegate.hasPendingNavigationConfirmation);
+  EXPECT_FALSE(decision_future.IsReady());
+
+  // Simulate the user tapping "Continue".
+  [intervention_delegate runNavigationConfirmationCompletion:YES];
+
+  EXPECT_TRUE(decision_future.Get());
+  EXPECT_EQ(ActorTaskState::kActing, task_->GetState());
+}
+
+// Tests that `RequestUserConfirmationForNavigation` resolves the decision
+// callback with `false` and fails the ongoing action with
+// `kTriggeredNavigationBlocked` when the user declines ("Don't use this site").
+TEST_F(ActorTaskTest,
+       RequestUserConfirmationForNavigation_Declined_BlocksNavigation) {
+  FakeActorTaskInterventionDelegate* intervention_delegate =
+      [[FakeActorTaskInterventionDelegate alloc] init];
+  task_->SetInterventionDelegate(intervention_delegate);
+
+  auto web_state = std::make_unique<web::FakeWebState>();
+  web_state->SetLoading(true);
+  task_->AddControlledWebState(web_state.get());
+
+  std::vector<std::unique_ptr<ActorToolRequest>> actions;
+  actions.push_back(MakeSuccessfulActorToolRequest());
+  base::test::TestFuture<std::vector<ActionResult>> act_future;
+  task_->Act(std::move(actions), "Clicking cross-origin link",
+             act_future.GetCallback());
+
+  // Let the tool finish into `DeferActCompletion` while `web_state` is loading.
+  task_environment_.FastForwardBy(base::TimeDelta());
+  ASSERT_FALSE(act_future.IsReady());
+  base::test::TestFuture<bool> decision_future;
+  task_->RequestUserConfirmationForNavigation(
+      url::Origin::Create(GURL("https://www.airline.com:8443/path")),
+      decision_future.GetCallback());
+
+  EXPECT_EQ(ActorTaskState::kWaitingOnUser, task_->GetState());
+  EXPECT_TRUE(intervention_delegate.requestNavigationConfirmationCalled);
+  EXPECT_NSEQ(@"www.airline.com:8443",
+              intervention_delegate.promptedNavigationDomain);
+
+  // Simulate the user tapping "Don't use this site."
+  [intervention_delegate runNavigationConfirmationCompletion:NO];
+  EXPECT_FALSE(decision_future.Get());
+  EXPECT_EQ(ActorTaskState::kActing, task_->GetState());
+  // Simulate the cancelled navigation finishing loading.
+  web_state->SetLoading(false);
+  const std::vector<ActionResult>& results = act_future.Get();
+  ASSERT_EQ(1u, results.size());
+  EXPECT_EQ(mojom::ActionResultCode::kTriggeredNavigationBlocked,
+            results[0].tool_result.code());
+  EXPECT_EQ(ActorTaskState::kReflecting, task_->GetState());
+}
+
+// Tests that `RequestUserConfirmationForNavigation` fails closed immediately
+// when no `intervention_delegate_` is set.
+TEST_F(ActorTaskTest,
+       RequestUserConfirmationForNavigation_WithoutDelegate_FailsClosed) {
+  SetTaskState(ActorTaskState::kActing);
+
+  base::test::TestFuture<bool> decision_future;
+  task_->RequestUserConfirmationForNavigation(
+      url::Origin::Create(GURL("https://www.airline.com")),
+      decision_future.GetCallback());
+
+  EXPECT_TRUE(decision_future.IsReady());
+  EXPECT_FALSE(decision_future.Get());
+  EXPECT_EQ(ActorTaskState::kActing, task_->GetState());
+}
+
+// Tests that stopping the task while waiting on navigation user confirmation
+// resolves the pending decision callback with `false`.
+TEST_F(ActorTaskTest,
+       RequestUserConfirmationForNavigation_StopWhileWaiting_FailsClosed) {
+  FakeActorTaskInterventionDelegate* intervention_delegate =
+      [[FakeActorTaskInterventionDelegate alloc] init];
+  task_->SetInterventionDelegate(intervention_delegate);
+  SetTaskState(ActorTaskState::kActing);
+
+  base::test::TestFuture<bool> decision_future;
+  task_->RequestUserConfirmationForNavigation(
+      url::Origin::Create(GURL("https://www.airline.com")),
+      decision_future.GetCallback());
+  ASSERT_EQ(ActorTaskState::kWaitingOnUser, task_->GetState());
+  EXPECT_FALSE(decision_future.IsReady());
+
+  task_->Stop(ActorTaskStoppedReason::kStoppedByUser);
+
+  EXPECT_TRUE(decision_future.IsReady());
+  EXPECT_FALSE(decision_future.Get());
+}
+
+// Tests that entering `kWaitingOnUser` during a deferred `Act()` pauses the
+// page-load timeout timer, and that exiting back to `kActing` restarts it
+// while a page is still loading.
+TEST_F(ActorTaskTest,
+       RequestUserConfirmationForNavigation_PausesAndRestartsPageLoadTimeout) {
+  FakeActorTaskInterventionDelegate* intervention_delegate =
+      [[FakeActorTaskInterventionDelegate alloc] init];
+  task_->SetInterventionDelegate(intervention_delegate);
+
+  auto web_state = std::make_unique<web::FakeWebState>();
+  web_state->SetLoading(true);
+  task_->AddControlledWebState(web_state.get());
+
+  std::vector<std::unique_ptr<ActorToolRequest>> actions;
+  actions.push_back(MakeSuccessfulActorToolRequest());
+  base::test::TestFuture<std::vector<ActionResult>> act_future;
+  task_->Act(std::move(actions), "Clicking cross-origin link",
+             act_future.GetCallback());
+
+  // Let the engine complete into `DeferActCompletion()` while `web_state` is
+  // loading.
+  FlushCurrentSequence();
+  ASSERT_FALSE(act_future.IsReady());
+  ASSERT_EQ(ActorTaskState::kActing, task_->GetState());
+
+  base::test::TestFuture<bool> decision_future;
+  task_->RequestUserConfirmationForNavigation(
+      url::Origin::Create(GURL("https://www.airline.com")),
+      decision_future.GetCallback());
+  ASSERT_EQ(ActorTaskState::kWaitingOnUser, task_->GetState());
+
+  // Advancing past the page-load timeout while waiting on the user must not
+  // complete `Act()` or leave `kWaitingOnUser`.
+  task_environment_.FastForwardBy(kPastPageLoadTimeout);
+  EXPECT_FALSE(act_future.IsReady());
+  EXPECT_EQ(ActorTaskState::kWaitingOnUser, task_->GetState());
+
+  // User confirms: task returns to `kActing` and restarts the timeout timer.
+  [intervention_delegate runNavigationConfirmationCompletion:YES];
+  EXPECT_TRUE(decision_future.Get());
+  EXPECT_EQ(ActorTaskState::kActing, task_->GetState());
+  EXPECT_FALSE(act_future.IsReady());
+
+  // Advancing past the timeout again now completes the deferred `Act()`.
+  task_environment_.FastForwardBy(kPastPageLoadTimeout);
+  ASSERT_EQ(1u, act_future.Get().size());
+  EXPECT_TRUE(act_future.Get()[0].tool_result.IsOk());
+  EXPECT_EQ(ActorTaskState::kReflecting, task_->GetState());
+}
+
+// Tests that if all observed pages finish loading while waiting on user
+// confirmation, the deferred `Act()` stays pending until the user responds
+// and finishes when exiting `kWaitingOnUser`.
+TEST_F(
+    ActorTaskTest,
+    RequestUserConfirmationForNavigation_PageFinishesWhileWaiting_CompletesOnExit) {
+  FakeActorTaskInterventionDelegate* intervention_delegate =
+      [[FakeActorTaskInterventionDelegate alloc] init];
+  task_->SetInterventionDelegate(intervention_delegate);
+
+  auto web_state = std::make_unique<web::FakeWebState>();
+  web_state->SetLoading(true);
+  task_->AddControlledWebState(web_state.get());
+
+  std::vector<std::unique_ptr<ActorToolRequest>> actions;
+  actions.push_back(MakeSuccessfulActorToolRequest());
+  base::test::TestFuture<std::vector<ActionResult>> act_future;
+  task_->Act(std::move(actions), "Clicking cross-origin link",
+             act_future.GetCallback());
+
+  FlushCurrentSequence();
+  ASSERT_FALSE(act_future.IsReady());
+
+  base::test::TestFuture<bool> decision_future;
+  task_->RequestUserConfirmationForNavigation(
+      url::Origin::Create(GURL("https://www.airline.com")),
+      decision_future.GetCallback());
+  ASSERT_EQ(ActorTaskState::kWaitingOnUser, task_->GetState());
+
+  // Page finishes loading while the user prompt is open; `Act()` must stay
+  // deferred and the task must remain in `kWaitingOnUser`.
+  web_state->SetLoading(false);
+  FlushCurrentSequence();
+  EXPECT_FALSE(act_future.IsReady());
+  EXPECT_EQ(ActorTaskState::kWaitingOnUser, task_->GetState());
+
+  // Once the user declines, exiting `kWaitingOnUser` finishes the deferred
+  // `Act()` with `kTriggeredNavigationBlocked`.
+  [intervention_delegate runNavigationConfirmationCompletion:NO];
+  EXPECT_FALSE(decision_future.Get());
+  const std::vector<ActionResult>& results = act_future.Get();
+  ASSERT_EQ(1u, results.size());
+  EXPECT_EQ(mojom::ActionResultCode::kTriggeredNavigationBlocked,
+            results[0].tool_result.code());
+  EXPECT_EQ(ActorTaskState::kReflecting, task_->GetState());
+}
+
+// Tests that pausing the task while waiting on navigation user confirmation
+// fails the pending decision closed, ignores any late completion from the
+// discarded prompt, and allows a subsequent `Act()` after resuming to request
+// navigation confirmation again cleanly.
+TEST_F(ActorTaskTest,
+       RequestUserConfirmationForNavigation_PauseWhileWaiting_FailsClosed) {
+  FakeActorTaskInterventionDelegate* intervention_delegate =
+      [[FakeActorTaskInterventionDelegate alloc] init];
+  task_->SetInterventionDelegate(intervention_delegate);
+
+  auto web_state = std::make_unique<web::FakeWebState>();
+  web_state->SetLoading(true);
+  task_->AddControlledWebState(web_state.get());
+
+  std::vector<std::unique_ptr<ActorToolRequest>> first_actions;
+  first_actions.push_back(MakeSuccessfulActorToolRequest());
+  base::test::TestFuture<std::vector<ActionResult>> first_act_future;
+  task_->Act(std::move(first_actions), "First navigation",
+             first_act_future.GetCallback());
+  FlushCurrentSequence();
+  ASSERT_FALSE(first_act_future.IsReady());
+  ASSERT_EQ(ActorTaskState::kActing, task_->GetState());
+
+  base::test::TestFuture<bool> decision_future;
+  task_->RequestUserConfirmationForNavigation(
+      url::Origin::Create(GURL("https://www.airline.com")),
+      decision_future.GetCallback());
+  ASSERT_EQ(ActorTaskState::kWaitingOnUser, task_->GetState());
+  EXPECT_FALSE(decision_future.IsReady());
+
+  task_->Pause();
+  EXPECT_EQ(ActorTaskState::kPausedByUser, task_->GetState());
+  EXPECT_TRUE(decision_future.IsReady());
+  EXPECT_FALSE(decision_future.Get());
+  EXPECT_FALSE(first_act_future.IsReady());
+
+  // A late completion from the discarded prompt must be ignored rather than
+  // crashing.
+  [intervention_delegate runNavigationConfirmationCompletion:YES];
+  FlushCurrentSequence();
+  EXPECT_EQ(ActorTaskState::kPausedByUser, task_->GetState());
+
+  // Resuming answers the paused `Act()` with `kTaskPaused`, allowing a
+  // subsequent `Act()` to request navigation confirmation cleanly.
+  task_->Resume();
+  ASSERT_EQ(1u, first_act_future.Get().size());
+  EXPECT_EQ(mojom::ActionResultCode::kTaskPaused,
+            first_act_future.Get()[0].tool_result.code());
+  ASSERT_EQ(ActorTaskState::kReflecting, task_->GetState());
+
+  std::vector<std::unique_ptr<ActorToolRequest>> second_actions;
+  second_actions.push_back(MakeSuccessfulActorToolRequest());
+  base::test::TestFuture<std::vector<ActionResult>> second_act_future;
+  task_->Act(std::move(second_actions), "Second navigation",
+             second_act_future.GetCallback());
+  FlushCurrentSequence();
+  ASSERT_FALSE(second_act_future.IsReady());
+  ASSERT_EQ(ActorTaskState::kActing, task_->GetState());
+
+  base::test::TestFuture<bool> second_decision_future;
+  task_->RequestUserConfirmationForNavigation(
+      url::Origin::Create(GURL("https://www.hotel.com")),
+      second_decision_future.GetCallback());
+  EXPECT_EQ(ActorTaskState::kWaitingOnUser, task_->GetState());
+
+  [intervention_delegate runNavigationConfirmationCompletion:YES];
+  EXPECT_TRUE(second_decision_future.Get());
+  EXPECT_EQ(ActorTaskState::kActing, task_->GetState());
+
+  web_state->SetLoading(false);
+  ASSERT_EQ(1u, second_act_future.Get().size());
+  EXPECT_TRUE(second_act_future.Get()[0].tool_result.IsOk());
+  EXPECT_EQ(ActorTaskState::kReflecting, task_->GetState());
+}
+
+// Tests that a delegate error for navigation confirmation fails closed,
+// resumes `kActing`, and marks the navigation blocked.
+TEST_F(ActorTaskTest,
+       RequestUserConfirmationForNavigation_DelegateError_FailsClosed) {
+  FakeActorTaskInterventionDelegate* intervention_delegate =
+      [[FakeActorTaskInterventionDelegate alloc] init];
+  task_->SetInterventionDelegate(intervention_delegate);
+
+  auto web_state = std::make_unique<web::FakeWebState>();
+  web_state->SetLoading(true);
+  task_->AddControlledWebState(web_state.get());
+
+  std::vector<std::unique_ptr<ActorToolRequest>> actions;
+  actions.push_back(MakeSuccessfulActorToolRequest());
+  base::test::TestFuture<std::vector<ActionResult>> act_future;
+  task_->Act(std::move(actions), "Clicking cross-origin link",
+             act_future.GetCallback());
+  FlushCurrentSequence();
+  ASSERT_FALSE(act_future.IsReady());
+
+  base::test::TestFuture<bool> decision_future;
+  task_->RequestUserConfirmationForNavigation(
+      url::Origin::Create(GURL("https://www.airline.com")),
+      decision_future.GetCallback());
+  ASSERT_EQ(ActorTaskState::kWaitingOnUser, task_->GetState());
+
+  [intervention_delegate failNavigationConfirmationWithError:
+                             InterventionDelegateError::kUnsupported];
+  EXPECT_FALSE(decision_future.Get());
+  EXPECT_EQ(ActorTaskState::kActing, task_->GetState());
+
+  web_state->SetLoading(false);
+  const std::vector<ActionResult>& results = act_future.Get();
+  ASSERT_EQ(1u, results.size());
+  EXPECT_EQ(mojom::ActionResultCode::kTriggeredNavigationBlocked,
+            results[0].tool_result.code());
+  EXPECT_EQ(ActorTaskState::kReflecting, task_->GetState());
+}
+
 }  // namespace actor

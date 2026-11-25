@@ -5,10 +5,13 @@
 #include "gpu/command_buffer/service/scheduler.h"
 
 #include <algorithm>
+#include <memory>
 
 #include "base/functional/bind.h"
+#include "base/rand_util.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
 #include "base/test/with_feature_override.h"
 #include "base/time/time.h"
@@ -34,15 +37,14 @@ class SchedulerTest : public base::test::WithFeatureOverride,
  public:
   SchedulerTest()
       : base::test::WithFeatureOverride(features::kSyncPointGraphValidation),
-        task_environment_(base::test::TaskEnvironment::TimeSource::MOCK_TIME),
-        scheduler_(&sync_point_manager_) {
+        task_environment_(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
     CHECK_EQ(GetParam(), sync_point_manager_.graph_validation_enabled());
   }
 
  protected:
   SyncPointManager* sync_point_manager() { return &sync_point_manager_; }
 
-  Scheduler* scheduler() { return &scheduler_; }
+  Scheduler* scheduler() { return scheduler_.get(); }
 
   const scoped_refptr<base::SingleThreadTaskRunner>& task_runner() {
     return base::SingleThreadTaskRunner::GetCurrentDefault();
@@ -56,8 +58,7 @@ class SchedulerTest : public base::test::WithFeatureOverride,
     base::RunLoop run_loop;
     SequenceId sequence_id =
         scheduler()->CreateSequence(SchedulingPriority::kLow, task_runner());
-    scheduler()->ScheduleTask(Scheduler::Task(
-        sequence_id, run_loop.QuitClosure(), std::vector<SyncToken>()));
+    scheduler()->ScheduleTask(sequence_id, run_loop.QuitClosure());
     run_loop.Run();
     scheduler()->DestroySequence(sequence_id);
   }
@@ -66,7 +67,8 @@ class SchedulerTest : public base::test::WithFeatureOverride,
 
  private:
   SyncPointManager sync_point_manager_;
-  Scheduler scheduler_;
+  std::unique_ptr<Scheduler> scheduler_ =
+      Scheduler::Create(&sync_point_manager_);
 };
 
 TEST_P(SchedulerTest, ScheduledTasksRunInOrder) {
@@ -75,18 +77,14 @@ TEST_P(SchedulerTest, ScheduledTasksRunInOrder) {
 
   int count = 0;
   int ran1 = 0;
-  scheduler()->ScheduleTask(Scheduler::Task(sequence_id,
-                                            GetClosure([&] { ran1 = ++count; }),
-                                            std::vector<SyncToken>()));
+  scheduler()->ScheduleTask(sequence_id, GetClosure([&] { ran1 = ++count; }));
 
   int ran2 = 0;
-  scheduler()->ScheduleTask(Scheduler::Task(sequence_id,
-                                            GetClosure([&] { ran2 = ++count; }),
-                                            std::vector<SyncToken>()));
+  scheduler()->ScheduleTask(
+      Scheduler::Task(sequence_id, GetClosure([&] { ran2 = ++count; })));
 
   base::RunLoop run_loop;
-  scheduler()->ScheduleTask(Scheduler::Task(sequence_id, run_loop.QuitClosure(),
-                                            std::vector<SyncToken>()));
+  scheduler()->ScheduleTask(sequence_id, run_loop.QuitClosure());
   run_loop.Run();
 
   EXPECT_EQ(ran1, 1);
@@ -150,6 +148,45 @@ TEST_P(SchedulerTest, ContinuedTasksRunFirst) {
   EXPECT_EQ(ran1, 1);
   EXPECT_EQ(continued1, 2);
   EXPECT_EQ(ran2, 3);
+
+  scheduler()->DestroySequence(sequence_id);
+}
+
+TEST_P(SchedulerTest, RecordsSchedulerHistograms) {
+  base::MetricsSubSampler::ScopedAlwaysSampleForTesting always_sample;
+  base::HistogramTester histogram_tester;
+
+  CommandBufferNamespace namespace_id = CommandBufferNamespace::GPU_IO;
+  CommandBufferId command_buffer_id = CommandBufferId::FromUnsafeValue(1);
+  SequenceId sequence_id =
+      scheduler()->CreateSequence(SchedulingPriority::kHigh, task_runner(),
+                                  namespace_id, command_buffer_id);
+
+  base::RunLoop run_loop;
+  scheduler()->ScheduleTask(Scheduler::Task(
+      sequence_id, run_loop.QuitClosure(), /*sync_token_fences=*/{},
+      SyncToken(namespace_id, command_buffer_id, 1)));
+  run_loop.Run();
+
+  if (base::TimeTicks::IsHighResolution()) {
+    histogram_tester.ExpectTotalCount("GPU.Scheduler.ThreadSuspendedTime", 1);
+    histogram_tester.ExpectTotalCount(
+        "GPU.Scheduler.ThreadSuspendedTime.HighPriority", 1);
+    histogram_tester.ExpectTotalCount("GPU.Scheduler.TaskDependencyTime", 1);
+    histogram_tester.ExpectTotalCount(
+        "GPU.Scheduler.TaskDependencyTime.HighPriority", 1);
+    histogram_tester.ExpectTotalCount("GPU.Scheduler.TaskSchedulingDelayTime",
+                                      1);
+    histogram_tester.ExpectTotalCount(
+        "GPU.Scheduler.TaskSchedulingDelayTime.HighPriority", 1);
+    histogram_tester.ExpectTotalCount("GPU.Scheduler.TaskTotalDelayTime", 1);
+    histogram_tester.ExpectTotalCount(
+        "GPU.Scheduler.TaskTotalDelayTime.HighPriority", 1);
+  }
+  histogram_tester.ExpectTotalCount(
+      "GPU.Scheduler.PercentConcurrentTaskExecution", 1);
+  histogram_tester.ExpectTotalCount(
+      "GPU.Scheduler.PercentConcurrentTaskExecution.HighPriority", 1);
 
   scheduler()->DestroySequence(sequence_id);
 }
@@ -289,14 +326,6 @@ class SchedulerTaskRunOrderTest : public SchedulerTest {
 
   const std::vector<int>& tasks_executed() { return tasks_executed_; }
 
-  base::SingleThreadTaskRunner* GetTaskRunnerFromSequence(int sequence_key) {
-    auto info_it = sequence_info_.find(sequence_key);
-    if (info_it == sequence_info_.end())
-      return nullptr;
-
-    return scheduler()->GetTaskRunnerForTesting(info_it->second.sequence_id);
-  }
-
  private:
   const CommandBufferNamespace kNamespaceId = CommandBufferNamespace::GPU_IO;
 
@@ -383,9 +412,7 @@ TEST_P(SchedulerTaskRunOrderTest, SequenceWaitsForFenceExternal) {
 
   ScheduleTask(0, 0, -1);  // task 1: seq 0, wait 0, no release
 
-  // task runner for all the sequences created here from same thread is same.
-  // only sequences created on different threads have different task runner.
-  GetTaskRunnerFromSequence(0)->PostTask(FROM_HERE, std::move(external_task));
+  task_runner()->PostTask(FROM_HERE, std::move(external_task));
 
   RunAllPendingTasks();
 
@@ -808,9 +835,9 @@ TEST_P(SchedulerTest, StreamPriorities) {
     EXPECT_EQ(SchedulingPriority::kNormal, seq2->current_priority());
     EXPECT_EQ(SchedulingPriority::kHigh, seq3->current_priority());
   }
-    scheduler()->DestroySequence(seq_id1);
-    scheduler()->DestroySequence(seq_id2);
-    scheduler()->DestroySequence(seq_id3);
+  scheduler()->DestroySequence(seq_id1);
+  scheduler()->DestroySequence(seq_id2);
+  scheduler()->DestroySequence(seq_id3);
 }
 
 // Tests Scheduler behavior when graph validation of sync points is enabled.

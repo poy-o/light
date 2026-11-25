@@ -25,9 +25,9 @@
 #import "ios/chrome/browser/passwords/model/password_check_observer_bridge.h"
 #import "ios/chrome/browser/passwords/model/password_checkup_utils.h"
 #import "ios/chrome/browser/passwords/model/password_manager_util_ios.h"
+#import "ios/chrome/browser/settings/password/model/account_storage_utils.h"
 #import "ios/chrome/browser/settings/password/public/password_manager_ui_features.h"
 #import "ios/chrome/browser/settings/password/public/passwords_table_view_constants.h"
-#import "ios/chrome/browser/settings/ui_bundled/password/account_storage_utils.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/passwords_consumer.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/passwords_mediator+Testing.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/saved_passwords_presenter_observer.h"
@@ -268,7 +268,7 @@ bool AllowsAddPassword(PrefService* pref_service) {
 
 - (BOOL)shouldShowLocalOnlyIconForGroup:
     (const password_manager::AffiliatedGroup&)group {
-  return password_manager::ShouldShowLocalOnlyIconForGroup(group, _syncService);
+  return ShouldShowLocalOnlyIconForGroup(group, _syncService);
 }
 
 - (void)notifyFETOfPasswordManagerWidgetPromoDismissal {

@@ -18,21 +18,17 @@ import '../controls/settings_toggle_button.js';
 // </if>
 
 import {PrefServiceObserverMixinLit} from '/shared/settings/prefs2/pref_service_observer_mixin_lit.js';
-import {getCss as getCrSharedStyle} from 'chrome://resources/cr_elements/cr_shared_style_lit.css.js';
 import {WebUiListenerMixinLit} from 'chrome://resources/cr_elements/web_ui_listener_mixin_lit.js';
-// <if expr="is_win">
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
-// </if>
 import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 
 import {getSearchManager} from '../search_settings.js';
 import type {SettingsPlugin} from '../settings_main/settings_plugin.js';
-import {getCss as getSettingsSharedLit} from '../settings_shared_lit.css.js';
 
 import type {NtpExtension} from './on_startup_browser_proxy.js';
 import {OnStartupBrowserProxyImpl} from './on_startup_browser_proxy.js';
+import {getCss} from './on_startup_page.css.js';
 import {getHtml} from './on_startup_page.html.js';
-
 
 /** Enum values for the 'session.restore_on_startup' preference. */
 export enum PrefValues {
@@ -52,7 +48,7 @@ export class SettingsOnStartupPageElement extends
   }
 
   static override get styles() {
-    return [getCrSharedStyle(), getSettingsSharedLit()];
+    return getCss();
   }
 
   override render() {
@@ -63,21 +59,20 @@ export class SettingsOnStartupPageElement extends
     return {
       restoreOnStartupPref_: {type: Object},
 
-      // <if expr="is_win">
-      isForegroundLaunchFeatureEnabled_: {type: Boolean},
-      // </if>
-
       ntpExtension_: {type: Object},
+      settingsRefresh2026Enabled_: {type: Boolean},
     };
   }
 
   private accessor restoreOnStartupPref_:
       chrome.settingsPrivate.PrefObject<PrefValues>|undefined;
   // <if expr="is_win">
-  protected accessor isForegroundLaunchFeatureEnabled_: boolean =
+  protected readonly isForegroundLaunchFeatureEnabled_: boolean =
       loadTimeData.getBoolean('isForegroundLaunchFeatureEnabled');
   // </if>
   protected accessor ntpExtension_: NtpExtension|null = null;
+  protected accessor settingsRefresh2026Enabled_: boolean =
+      loadTimeData.getString('settingsRefresh2026') !== '';
 
   override connectedCallback() {
     super.connectedCallback();

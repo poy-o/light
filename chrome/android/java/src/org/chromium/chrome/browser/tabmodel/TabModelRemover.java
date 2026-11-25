@@ -12,7 +12,6 @@ import static org.chromium.components.browser_ui.widget.ActionConfirmationResult
 import android.content.Context;
 
 import org.chromium.base.Callback;
-import org.chromium.base.Token;
 import org.chromium.build.annotations.MonotonicNonNull;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
@@ -125,8 +124,7 @@ class TabModelRemover {
     /*package*/ ActionConfirmationManager getActionConfirmationManager() {
         if (mActionConfirmationManager == null) {
             mActionConfirmationManager =
-                    new ActionConfirmationManager(
-                            getProfile(), mContext, mModalDialogManager);
+                    new ActionConfirmationManager(getProfile(), mContext, mModalDialogManager);
         }
         return mActionConfirmationManager;
     }
@@ -313,8 +311,8 @@ class TabModelRemover {
         }
 
         TabModel tabModel = getTabModelInternal();
-        Token tabGroupId = savedTabGroup.localId.tabGroupId;
-        if (!tabModel.containsTabGroup(TabGroupId.fromOptionalToken(tabGroupId))) {
+        TabGroupId tabGroupId = savedTabGroup.localId.tabGroupId;
+        if (!tabModel.containsTabGroup(tabGroupId)) {
             return new CollaborationInfo();
         }
         String title = TabGroupTitleUtils.getDisplayableTitle(mContext, tabModel, tabGroupId);

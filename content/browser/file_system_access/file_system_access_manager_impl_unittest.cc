@@ -27,6 +27,7 @@
 #include "base/test/test_file_util.h"
 #include "base/test/test_future.h"
 #include "base/unguessable_token.h"
+#include "build/build_config.h"
 #include "components/services/storage/public/cpp/buckets/bucket_id.h"
 #include "components/services/storage/public/cpp/buckets/bucket_locator.h"
 #include "components/services/storage/public/cpp/buckets/constants.h"
@@ -242,9 +243,10 @@ class FileSystemAccessManagerImplTest : public testing::Test {
     // This maps the virtual path a native local path to make sure an external
     // path round trips as an external path, even if the path resolves to a
     // local path.
-    storage::ExternalMountPoints::GetSystemInstance()->RegisterFileSystem(
-        kTestMountPoint, storage::kFileSystemTypeLocal,
-        storage::FileSystemMountOption(), dir_.GetPath());
+    ASSERT_TRUE(
+        storage::ExternalMountPoints::GetSystemInstance()->RegisterFileSystem(
+            kTestMountPoint, storage::kFileSystemTypeLocal,
+            storage::FileSystemMountOption(), dir_.GetPath()));
 
     chrome_blob_context_ = base::MakeRefCounted<ChromeBlobStorageContext>();
     chrome_blob_context_->InitializeOnIOThread(base::FilePath(),

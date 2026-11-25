@@ -19,6 +19,7 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/ui/edge_to_edge/NoOpTopInsetProvider.java",
     "java/src/org/chromium/chrome/browser/ui/edge_to_edge/SimpleEdgeToEdgeController.java",
     "java/src/org/chromium/chrome/browser/ui/edge_to_edge/TopInsetProvider.java",
+    "java/src/org/chromium/chrome/browser/ui/edge_to_edge/TopPageColorObserver.java",
     "java/src/org/chromium/chrome/browser/ui/edge_to_edge/TransitiveTopInsetProvider.java",
   ]
   deps = [
@@ -61,6 +62,7 @@ android_library_factory("factory_java") {
     "//chrome/browser/tab:java",
     "//chrome/browser/ui/android/layouts:java",
     "//chrome/browser/ui/android/theme:java",
+    "//chrome/browser/ui/side_ui/public:java",
     "//third_party/androidx:androidx_appcompat_appcompat_java",
     "//ui/android:ui_no_recycler_view_java",
     "//ui/android:ui_utils_java",

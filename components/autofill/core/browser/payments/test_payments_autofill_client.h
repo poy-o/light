@@ -5,10 +5,12 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_PAYMENTS_TEST_PAYMENTS_AUTOFILL_CLIENT_H_
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_PAYMENTS_TEST_PAYMENTS_AUTOFILL_CLIENT_H_
 
+#include <optional>
 #include <vector>
 
 #include "base/containers/span.h"
 #include "base/functional/callback.h"
+#include "base/i18n/language_tag.h"
 #include "base/memory/raw_ref.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/data_manager/test_personal_data_manager.h"
@@ -32,7 +34,6 @@
 #include "components/autofill/core/browser/suggestions/suggestion.h"
 #include "components/autofill/core/browser/ui/payments/autofill_progress_ui_type.h"
 #include "components/autofill/core/browser/ui/payments/bnpl_ui_delegate.h"
-#include "components/autofill/core/browser/ui/payments/payments_churned_users_ui_delegate.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 
 #if !BUILDFLAG(IS_IOS)
@@ -203,13 +204,13 @@ class TestPaymentsAutofillClient : public PaymentsAutofillClient {
       base::span<const payments::BnplIssuerContext> bnpl_issuer_contexts,
       std::optional<int64_t> extracted_amount,
       bool is_amount_supported_by_any_issuer,
-      const std::optional<std::string>& app_locale,
+      const std::optional<base::i18n::LanguageTag>& app_locale,
       base::OnceCallback<void(BnplIssuer)> selected_issuer_callback,
       base::OnceClosure cancel_callback) override;
   bool ShowTouchToFillProgress(base::OnceClosure cancel_callback) override;
   bool ShowTouchToFillBnplIssuers(
       base::span<const payments::BnplIssuerContext> bnpl_issuer_contexts,
-      const std::string& app_locale,
+      const base::i18n::LanguageTag& app_locale,
       base::OnceCallback<void(BnplIssuer)> selected_issuer_callback,
       base::OnceClosure cancel_callback) override;
   bool ShowTouchToFillError(const AutofillErrorDialogContext& context) override;
@@ -238,12 +239,7 @@ class TestPaymentsAutofillClient : public PaymentsAutofillClient {
   BnplStrategy* GetBnplStrategy() override;
   BnplUiDelegate* GetBnplUiDelegate() override;
   WalletReminderNoticeManager* GetWalletReminderNoticeManager() override;
-  PaymentsChurnedUsersUiDelegate* GetPaymentsChurnedUsersUiDelegate() override;
 
-  void set_payments_churned_users_ui_delegate(
-      std::unique_ptr<PaymentsChurnedUsersUiDelegate> ui_delegate) {
-    payments_churned_users_ui_delegate_ = std::move(ui_delegate);
-  }
 
   void set_wallet_reminder_notice_manager(
       std::unique_ptr<WalletReminderNoticeManager>
@@ -416,6 +412,12 @@ class TestPaymentsAutofillClient : public PaymentsAutofillClient {
   bool omnibox_autofill_chip_shown() { return omnibox_autofill_chip_shown_; }
 
   bool omnibox_autofill_chip_hidden() { return omnibox_autofill_chip_hidden_; }
+
+  // Sets whether a WebAuthn dialog is showing, which is what
+  // CloseWebauthnDialog() reports back to its caller.
+  void set_is_webauthn_dialog_showing(bool is_webauthn_dialog_showing) {
+    is_webauthn_dialog_showing_ = is_webauthn_dialog_showing;
+  }
 #endif
 
  private:
@@ -522,8 +524,6 @@ class TestPaymentsAutofillClient : public PaymentsAutofillClient {
   std::unique_ptr<BnplUiDelegate> bnpl_ui_delegate_;
 
   std::unique_ptr<WalletReminderNoticeManager> wallet_reminder_notice_manager_;
-  std::unique_ptr<PaymentsChurnedUsersUiDelegate>
-      payments_churned_users_ui_delegate_;
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   // The OmniboxAutofillDelegate used to handle the logic flow and user
@@ -533,6 +533,9 @@ class TestPaymentsAutofillClient : public PaymentsAutofillClient {
   bool omnibox_autofill_chip_shown_ = false;
 
   bool omnibox_autofill_chip_hidden_ = false;
+
+  // This value is returned by CloseWebauthnDialog().
+  bool is_webauthn_dialog_showing_ = true;
 #endif
 };
 

@@ -47,6 +47,8 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "third_party/blink/public/common/switches.h"
+#include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/test/clipboard_test_util.h"
 #include "ui/base/interaction/element_identifier.h"
@@ -451,6 +453,39 @@ IN_PROC_BROWSER_TEST_F(FindBarViewsUiTest, NavigationByKeyEvent) {
       SendKeyPress(ui::VKEY_RETURN, false, false),
       CheckHasFocus(FindBarView::kNextButtonElementId),
       StopObservingState(kFindResultState));
+}
+
+IN_PROC_BROWSER_TEST_F(FindBarViewsUiTest, TextFieldAccessibleRole) {
+  RunTestSequence(
+      ShowFindBar(),
+      CheckView(
+          FindBarView::kTextField,
+          [](views::Textfield* textfield) {
+            ui::AXNodeData data;
+            textfield->GetViewAccessibility().GetAccessibleNodeData(&data);
+            return data.role;
+          },
+          ax::mojom::Role::kSearchBox));
+}
+
+// Arrow key presses and their releases are forwarded to the page, but a
+// release whose press was not forwarded (e.g. because an IME consumed it) must
+// not be claimed: that ends the IME's composition (crbug.com/589972494).
+IN_PROC_BROWSER_TEST_F(FindBarViewsUiTest,
+                       ForwardsKeyReleaseOnlyAfterForwardedPress) {
+  RunTestSequence(
+      Init(embedded_test_server()->GetURL("/a.html")), ShowFindBar(),
+      CheckView(FindBarView::kTextField, [this](views::Textfield* textfield) {
+        auto* const find_bar_view =
+            GetFindBarHost()->GetFindBarViewForTesting();
+        auto handle = [&](ui::EventType type) {
+          return find_bar_view->HandleKeyEvent(
+              textfield, ui::KeyEvent(type, ui::VKEY_DOWN, ui::EF_NONE));
+        };
+        return !handle(ui::EventType::kKeyReleased) &&
+               handle(ui::EventType::kKeyPressed) &&
+               handle(ui::EventType::kKeyReleased);
+      }));
 }
 
 IN_PROC_BROWSER_TEST_F(LegacyFindInPageTest, AccessibleName) {

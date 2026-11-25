@@ -17,6 +17,8 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/i18n/icubridge/date_time_formatter.h"
+#include "base/i18n/icubridge/icu_bridge.h"
 #include "base/i18n/rtl.h"
 #include "base/i18n/time_formatting.h"
 #include "base/metrics/histogram_functions.h"
@@ -32,7 +34,6 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/critical_actions/critical_action_factory.h"
 #include "chrome/browser/critical_actions/critical_action_ui_utils.h"
-#include "chrome/browser/critical_actions/glic_linkout_handler.h"
 #include "chrome/browser/favicon/large_icon_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/history/history_utils.h"
@@ -45,18 +46,17 @@
 #include "chrome/browser/sync/device_info_sync_service_factory.h"
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/profiles/profile_view_utils.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/url_identity.h"
 #include "chrome/browser/ui/webui/favicon_source.h"
 #include "chrome/browser/ui/webui/history/history_identity_state_watcher.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_features.h"
-#include "chrome/common/glic_enums.mojom.h"
 #include "chrome/common/pref_names.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/critical_actions/core/browser/critical_action_service.h"
 #include "components/critical_actions/core/browser/critical_action_types.h"
-#include "components/critical_actions/core/browser/features.h"
 #include "components/favicon/core/fallback_url_util.h"
 #include "components/favicon/core/large_icon_service.h"
 #include "components/favicon_base/favicon_url_parser.h"
@@ -137,59 +137,28 @@ history::mojom::AccountInfoPtr CreateAccountInfoDataMojo(
 }
 #endif
 
-// LINT.IfChange(OpenConversationSourceToHistogramSuffix)
-std::string_view OpenConversationSourceToHistogramSuffix(
+critical_actions::OpenConversationSource OpenConversationSourceFromMojom(
     history::mojom::OpenConversationSource source) {
   switch (source) {
     case history::mojom::OpenConversationSource::kEntryMenu:
-      return "EntryMenu";
+      return critical_actions::OpenConversationSource::kEntryMenu;
     case history::mojom::OpenConversationSource::kCriticalActionRow:
-      return "CriticalActionRow";
-  }
-  NOTREACHED();
-}
-// LINT.ThenChange(//tools/metrics/histograms/metadata/critical_actions/histograms.xml:OpenConversationSource)
-
-// Returns the Glic invocation source to open a conversation with for a request
-// from `source`. `GlicLinkoutHandler` derives from it whether the conversation
-// is opened at the entry's anchored turn: only
-// `kHistoryPageCriticalActionChatLinkout` targets the turn, while the entry
-// menu's visit-level `kHistoryPageChatLinkout` opens the conversation at its
-// default position.
-glic::mojom::InvocationSource GetGlicInvocationSource(
-    history::mojom::OpenConversationSource source) {
-  switch (source) {
-    case history::mojom::OpenConversationSource::kEntryMenu:
-      return glic::mojom::InvocationSource::kHistoryPageChatLinkout;
-    case history::mojom::OpenConversationSource::kCriticalActionRow:
-      // `kCriticalActionRow` is meant for a per-row entry point that is only
-      // offered when action-level chat linkouts are enabled, but the renderer
-      // is not trusted to enforce that. When the flag is off, fall back to the
-      // entry-menu behavior: still open the conversation (like "Go to Gemini
-      // chat", which is also only gated in the UI), but without targeting the
-      // anchored turn and without the new invocation source, so neither leaks
-      // out from behind the flag.
-      if (!critical_actions::features::IsActionLevelChatLinkoutsEnabled()) {
-        return glic::mojom::InvocationSource::kHistoryPageChatLinkout;
-      }
-      return glic::mojom::InvocationSource::
-          kHistoryPageCriticalActionChatLinkout;
+      return critical_actions::OpenConversationSource::kCriticalActionRow;
   }
   NOTREACHED();
 }
 
-void RecordOpenConversationResult(
-    history::mojom::OpenConversationSource source,
+history::mojom::OpenConversationResult OpenConversationResultToMojom(
     critical_actions::OpenConversationResult result) {
-  base::UmaHistogramEnumeration(
-      base::StrCat({"CriticalActions.OpenConversationResult.",
-                    OpenConversationSourceToHistogramSuffix(source)}),
-      result);
-}
-
-void RecordOpenConversationHasAnchor(bool has_anchor) {
-  base::UmaHistogramBoolean(
-      "CriticalActions.OpenConversation.HasConversationAnchor", has_anchor);
+  switch (result) {
+    case critical_actions::OpenConversationResult::kSuccess:
+      return history::mojom::OpenConversationResult::kSuccess;
+    case critical_actions::OpenConversationResult::kErrorInvalidActionEntry:
+      return history::mojom::OpenConversationResult::kErrorInvalidActionEntry;
+    case critical_actions::OpenConversationResult::kErrorInternal:
+      return history::mojom::OpenConversationResult::kErrorInternal;
+  }
+  NOTREACHED();
 }
 
 // Identifiers for the type of device from which a history entry originated.
@@ -320,6 +289,33 @@ history::mojom::FilteringBehavior FilteringBehaviorToMojom(
   }
 }
 
+// Extracts the year from `time` in the local time zone.
+int LocalYear(base::Time time) {
+  base::Time::Exploded exploded;
+  time.LocalExplode(&exploded);
+  return exploded.year;
+}
+
+// Extracts the weekday from `time` in the local time zone.
+std::u16string TimeFormatWeekday(base::Time time) {
+  return base::i18n::IcuBridge::GetInstance().date_time_formatter().Format(
+      time, base::i18n::datetime_options::E::Long());
+}
+
+// Formats the date with the full month name but without the year,
+// e.g. "November 8".
+std::u16string TimeFormatDateWithoutYear(base::Time time) {
+  return base::i18n::IcuBridge::GetInstance().date_time_formatter().Format(
+      time, base::i18n::datetime_options::MD::Long());
+}
+
+// Formats the date with the full month name and the year,
+// e.g. "January 15, 2025".
+std::u16string TimeFormatDateWithYear(base::Time time) {
+  return base::i18n::IcuBridge::GetInstance().date_time_formatter().Format(
+      time, base::i18n::datetime_options::YMD::Long());
+}
+
 // Converts `entry` to a history::mojom::QueryResult to be owned by the caller.
 history::mojom::HistoryEntryPtr HistoryEntryToMojom(
     const BrowsingHistoryService::HistoryEntry& entry,
@@ -385,14 +381,27 @@ history::mojom::HistoryEntryPtr HistoryEntryToMojom(
   if (entry.is_search_result) {
     snippet_string = entry.snippet;
   } else {
+    const base::Time now = clock->Now();
+    const bool is_refresh_enabled = features::IsHistoryPageRefreshEnabled();
+
     std::u16string date_str =
-        ui::TimeFormat::RelativeDate(entry.time, clock->Now().LocalMidnight());
-    if (date_str.empty()) {
-      date_str = base::TimeFormatFriendlyDate(entry.time);
+        ui::TimeFormat::RelativeDate(entry.time, now.LocalMidnight());
+    if (is_refresh_enabled) {
+      if (date_str.empty()) {
+        date_str = l10n_util::GetStringFUTF16(
+            IDS_HISTORY_WEEKDAY_WITH_DATE, TimeFormatWeekday(entry.time),
+            LocalYear(entry.time) == LocalYear(now)
+                ? TimeFormatDateWithoutYear(entry.time)
+                : TimeFormatDateWithYear(entry.time));
+      }
     } else {
-      date_str = l10n_util::GetStringFUTF16(
-          IDS_HISTORY_DATE_WITH_RELATIVE_TIME, date_str,
-          base::TimeFormatFriendlyDate(entry.time));
+      if (date_str.empty()) {
+        date_str = base::TimeFormatFriendlyDate(entry.time);
+      } else {
+        date_str = l10n_util::GetStringFUTF16(
+            IDS_HISTORY_DATE_WITH_RELATIVE_TIME, date_str,
+            base::TimeFormatFriendlyDate(entry.time));
+      }
     }
     date_relative_day = date_str;
     date_time_of_day = base::TimeFormatTimeOfDay(entry.time);
@@ -1097,30 +1106,10 @@ void BrowsingHistoryHandler::OpenCriticalActionConversation(
     const std::string& critical_action_id,
     history::mojom::OpenConversationSource source,
     OpenCriticalActionConversationCallback callback) {
-  if (critical_action_id.empty()) {
-    RecordOpenConversationResult(
-        source,
-        critical_actions::OpenConversationResult::kErrorInvalidActionEntry);
-    std::move(callback).Run(
-        history::mojom::OpenConversationResult::kErrorInvalidActionEntry);
-    return;
-  }
-
-  critical_actions::CriticalActionService* critical_action_service =
-      critical_actions::CriticalActionFactory::GetForProfile(profile_);
-  if (!critical_action_service) {
-    RecordOpenConversationResult(
-        source, critical_actions::OpenConversationResult::kErrorInternal);
-    std::move(callback).Run(
-        history::mojom::OpenConversationResult::kErrorInternal);
-    return;
-  }
-
-  critical_action_service->GetCriticalAction(
-      critical_action_id,
-      base::BindOnce(
-          &BrowsingHistoryHandler::OnCriticalActionRetrievedForLinkout,
-          weak_factory_.GetWeakPtr(), source, std::move(callback)));
+  critical_actions::OpenCriticalActionConversation(
+      profile_, web_contents_, critical_action_id,
+      OpenConversationSourceFromMojom(source),
+      base::BindOnce(&OpenConversationResultToMojom).Then(std::move(callback)));
 }
 
 void BrowsingHistoryHandler::GetTimePeriodOptions(
@@ -1141,41 +1130,6 @@ void BrowsingHistoryHandler::GetTimePeriodOptions(
     options_mojom.push_back(std::move(option_mojom));
   }
   std::move(callback).Run(std::move(options_mojom));
-}
-
-void BrowsingHistoryHandler::OnCriticalActionRetrievedForLinkout(
-    history::mojom::OpenConversationSource source,
-    OpenCriticalActionConversationCallback callback,
-    std::optional<critical_actions::CriticalActionEntry> entry) {
-  if (!entry) {
-    RecordOpenConversationResult(
-        source,
-        critical_actions::OpenConversationResult::kErrorInvalidActionEntry);
-    std::move(callback).Run(
-        history::mojom::OpenConversationResult::kErrorInvalidActionEntry);
-    return;
-  }
-
-  // Anchors are only stored while action-level chat linkouts are enabled, and
-  // only the per-row "Open chat" button opens the conversation at the anchored
-  // turn, so only record whether one exists for that source while the flag is
-  // on.
-  if (source == history::mojom::OpenConversationSource::kCriticalActionRow &&
-      critical_actions::features::IsActionLevelChatLinkoutsEnabled()) {
-    RecordOpenConversationHasAnchor(!entry->conversation_anchor_id.empty());
-  }
-
-  critical_actions::GlicLinkoutHandler::GetInstance()->OpenConversation(
-      web_contents_, *entry, GetGlicInvocationSource(source),
-      base::BindOnce(
-          [](history::mojom::OpenConversationSource source,
-             OpenCriticalActionConversationCallback cb,
-             critical_actions::OpenConversationResult result) {
-            RecordOpenConversationResult(source, result);
-            std::move(cb).Run(
-                static_cast<history::mojom::OpenConversationResult>(result));
-          },
-          source, std::move(callback)));
 }
 
 void BrowsingHistoryHandler::GetSyncedDevicesForFiltering(

@@ -91,10 +91,18 @@
 #include "ui/views/window/dialog_delegate.h"
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/profiles/profile_attributes_entry.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/account_preview_data_service_factory.h"
 #include "chrome/browser/signin/web_signin_interceptor.h"
 #include "chrome/browser/ui/signin/account_preview_utils.h"
 #include "chrome/browser/ui/webui/signin/cross_device_signin_qr_bubble_ui.h"
+#include "chrome/browser/ui/webui/signin/profile_customization_handler.h"
+#include "chrome/browser/ui/webui/signin/profile_customization_ui.h"
+#include "chrome/browser/ui/webui/signin/signin_url_utils.h"
+#include "chrome/common/pref_names.h"
 #include "components/signin/core/browser/account_preview_data_service.h"
 #include "components/signin/core/browser/test_account_preview_data_service.h"
 #include "components/sync/protocol/sync_enums.pb.h"
@@ -2213,6 +2221,154 @@ IN_PROC_BROWSER_TEST_F(SigninViewControllerWebUIAvatarOverflowBrowserTest,
   EXPECT_EQ(intercept_future.Get(), SigninInterceptionResult::kIgnored);
   // Destroying the handle after browser destruction is a safe no-op.
   intercept_handle.reset();
+}
+
+// Tests the profile customization dialog for the existing (signed-in or
+// signed-out) profile. The signed-in profile creation and edit profile versions
+// of the dialog behave the same: "Done" saves the name and the secondary button
+// ("Skip" or "Cancel") closes the dialog without saving it.
+class SigninViewControllerProfileCustomizationBrowserTest
+    : public SigninViewControllerBrowserTest,
+      public testing::WithParamInterface<ProfileCustomizationStyle> {
+ public:
+  // Shows the profile customization dialog with the style under test and waits
+  // until the page is loaded.
+  content::WebContents* ShowProfileCustomizationDialog() {
+    SigninViewController* controller = SigninViewController::From(browser());
+    controller->ShowModalProfileCustomizationDialog(GetParam());
+    CHECK(controller->ShowsModalDialog());
+    content::WebContents* web_contents =
+        controller->GetModalDialogWebContentsForTesting();
+    CHECK(content::WaitForLoadStop(web_contents));
+    CHECK_EQ(GetProfileCustomizationStyle(web_contents->GetVisibleURL()),
+             GetParam());
+    return web_contents;
+  }
+
+  ProfileAttributesEntry* GetProfileEntry() {
+    return g_browser_process->profile_manager()
+        ->GetProfileAttributesStorage()
+        .GetProfileAttributesWithPath(GetProfile()->GetPath());
+  }
+
+  // Shows the dialog, changes the profile name in the page to `kEditedName`,
+  // clicks the button with `button_id` and waits for the dialog to close.
+  void EditNameAndClick(std::string_view button_id) {
+    content::WebContents* web_contents = ShowProfileCustomizationDialog();
+    // The button must be visible and enabled for the user to click it. A
+    // scripted click would work on a hidden button too.
+    ASSERT_EQ(true,
+              content::EvalJs(
+                  web_contents,
+                  content::JsReplace(
+                      "const button = document"
+                      "    .querySelector('profile-customization-app')"
+                      "    .shadowRoot.querySelector($1);"
+                      "!!button && !button.disabled && button.checkVisibility("
+                      "    {checkOpacity: true, checkVisibilityCSS: true});",
+                      button_id)));
+
+    content::WebContentsDestroyedWatcher watcher(web_contents);
+    // The click closes the dialog, so the script does not wait for a result.
+    content::ExecuteScriptAsync(
+        web_contents,
+        content::JsReplace(
+            "const app = document.querySelector('profile-customization-app');"
+            "app.profileName_ = $1;"
+            "app.shadowRoot.querySelector($2).click();",
+            kEditedName, button_id));
+    watcher.Wait();
+    EXPECT_FALSE(SigninViewController::From(browser())->ShowsModalDialog());
+  }
+
+  static constexpr char16_t kEditedName[] = u"Edited name";
+};
+
+IN_PROC_BROWSER_TEST_P(SigninViewControllerProfileCustomizationBrowserTest,
+                       DoneSavesName) {
+  EditNameAndClick("#doneButton");
+  EXPECT_EQ(GetProfileEntry()->GetLocalProfileName(), kEditedName);
+}
+
+IN_PROC_BROWSER_TEST_P(SigninViewControllerProfileCustomizationBrowserTest,
+                       SecondaryButtonClosesWithoutSaving) {
+  const std::u16string name = GetProfileEntry()->GetLocalProfileName();
+  EditNameAndClick("#secondaryButton");
+  EXPECT_EQ(GetProfileEntry()->GetLocalProfileName(), name);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ,
+    SigninViewControllerProfileCustomizationBrowserTest,
+    testing::Values(ProfileCustomizationStyle::kSignedInProfileCreation,
+                    ProfileCustomizationStyle::kEditProfile),
+    [](const testing::TestParamInfo<ProfileCustomizationStyle>& info) {
+      return info.param == ProfileCustomizationStyle::kEditProfile
+                 ? "EditProfile"
+                 : "SignedInProfileCreation";
+    });
+
+// Selecting the Google Account picture in the edit profile dialog uses the
+// existing GAIA picture as the profile avatar.
+IN_PROC_BROWSER_TEST_F(SigninViewControllerBrowserTest,
+                       EditProfileDialogSetGaiaPictureAsAvatar) {
+  PrefService* prefs = GetProfile()->GetPrefs();
+  prefs->SetBoolean(prefs::kProfileUsingDefaultAvatar, true);
+  prefs->SetBoolean(prefs::kProfileUsingGAIAAvatar, false);
+  SigninViewController* controller = SigninViewController::From(browser());
+  controller->ShowModalProfileCustomizationDialog(
+      ProfileCustomizationStyle::kEditProfile);
+  content::WebContents* web_contents =
+      controller->GetModalDialogWebContentsForTesting();
+  ASSERT_TRUE(content::WaitForLoadStop(web_contents));
+
+  ASSERT_TRUE(
+      content::ExecJs(web_contents, "chrome.send('setGaiaPictureAsAvatar');"));
+  EXPECT_TRUE(base::test::RunUntil(
+      [&] { return prefs->GetBoolean(prefs::kProfileUsingGAIAAvatar); }));
+  EXPECT_FALSE(prefs->GetBoolean(prefs::kProfileUsingDefaultAvatar));
+  controller->CloseModalSignin();
+}
+
+// The GAIA picture is loaded asynchronously and is only listed in the avatar
+// selector once loaded, so the list is refreshed when the picture of the
+// profile is loaded (and not for other profiles).
+class SigninViewControllerManageProfileDialogBrowserTest
+    : public SigninViewControllerBrowserTest {
+ private:
+  base::test::ScopedFeatureList feature_list_{
+      switches::kReplaceManageProfileWithDialog};
+};
+
+IN_PROC_BROWSER_TEST_F(SigninViewControllerManageProfileDialogBrowserTest,
+                       EditProfileDialogRefreshesIconsWhenGaiaPictureLoaded) {
+  SigninViewController* controller = SigninViewController::From(browser());
+  controller->ShowModalProfileCustomizationDialog(
+      ProfileCustomizationStyle::kEditProfile);
+  content::WebContents* web_contents =
+      controller->GetModalDialogWebContentsForTesting();
+  ASSERT_TRUE(content::WaitForLoadStop(web_contents));
+  // Clear the list of avatars shown in the avatar selector of the page.
+  const std::string available_icons =
+      "document.querySelector('profile-customization-app').availableIcons_";
+  ASSERT_TRUE(content::ExecJs(web_contents, available_icons + " = [];"));
+
+  ProfileCustomizationHandler* handler =
+      web_contents->GetWebUI()
+          ->GetController()
+          ->GetAs<ProfileCustomizationUI>()
+          ->GetProfileCustomizationHandlerForTesting();
+  // The GAIA picture of another profile does not refresh the icons.
+  handler->OnProfileHighResAvatarLoaded(
+      GetProfile()->GetPath().DirName().AppendASCII("Profile 2"));
+  EXPECT_EQ(0, content::EvalJs(web_contents, available_icons + ".length"));
+
+  // The Gaia picture of the current profile updates the list of avatars.
+  handler->OnProfileHighResAvatarLoaded(GetProfile()->GetPath());
+  EXPECT_GT(
+      content::EvalJs(web_contents, available_icons + ".length").ExtractInt(),
+      0);
+  controller->CloseModalSignin();
 }
 
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)

@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">分享密碼</translation>
 <translation id="1554043146674176775">關閉 AI 模式</translation>
 <translation id="1554477036522844996">開啟新視窗</translation>
+<translation id="1555014818414775661">新增圖片</translation>
 <translation id="1557806604681757705">你的電腦</translation>
 <translation id="1558391695376153246">關閉無痕式分頁</translation>
 <translation id="1560153516220021659">收埋咗次要工具列按鈕</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">開啟 [Safari 設定]<ph name="BEGIN_BOLD" /><ph name="END_BOLD" /></translation>
 <translation id="3858860766373142691">名稱</translation>
 <translation id="386224966259596343">下次填寫相關表格時，你可以選擇將資料儲存至「錢包」。</translation>
-<translation id="3868495844258915202">顯示完整網址</translation>
 <translation id="3870931306085184145">沒有儲存的 <ph name="DOMAIN" /> 密碼</translation>
 <translation id="3875783148670536197">顯示方法</translation>
 <translation id="3878657761594430423">表格擷取器</translation>
@@ -1213,7 +1213,7 @@
 <translation id="479628432297359449">要停止下載嗎？</translation>
 <translation id="4796496140132859135">分頁群組，收埋咗。</translation>
 <translation id="4800912004582762296">正在點擊</translation>
-<translation id="4800930308997591052">切換至 <ph name="EMAIL" />，在裝置之間流暢地分享分頁，並從 Google 帳戶取得密碼、書籤和其他資料。</translation>
+<translation id="4800930308997591052">切換至 <ph name="EMAIL" />，在裝置之間流暢分享分頁，並從 Google 帳戶取得密碼、書籤和其他資料。</translation>
 <translation id="4802185666270672526">隱藏「切換至桌面版網站」</translation>
 <translation id="4803185665210547709">由您的機構管理。
 <ph name="BEGIN_LINK" />瞭解詳情<ph name="END_LINK" /></translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">如要接收價格追蹤通知，請在 iOS 設定開啟通知功能。</translation>
 <translation id="528857768909044842">分頁群組會儲存在這裡</translation>
 <translation id="5294624619177114121">流動通知</translation>
-<translation id="5295239312320826323">要移除帳戶 <ph name="USER_EMAIL" /> 嗎？</translation>
 <translation id="5300589172476337783">顯示</translation>
 <translation id="5311061401280561833">已允許存取攝錄機和麥克風</translation>
 <translation id="5313967007315987356">新增網站</translation>
@@ -1788,6 +1787,7 @@
 <translation id="6504541289630702018">輕鬆存取桌面版分頁群組</translation>
 <translation id="6505334220040167806">收埋分頁群組。</translation>
 <translation id="6506996418997555004">分享「<ph name="GROUP_NAME" />」分頁群組</translation>
+<translation id="650770261448122895">使用「智能鏡頭」搜尋眼前事物</translation>
 <translation id="6507973708545996744">登入後，即可從任何裝置取得自己的閱讀清單。</translation>
 <translation id="6518133107902771759">驗證</translation>
 <translation id="6523575793810663688">顯示方法</translation>
@@ -2145,7 +2145,6 @@
 <translation id="7603852183842204213">已封鎖彈出式視窗 (<ph name="NUMBER_OF_BLOCKED_POPUPS" /> 個)</translation>
 <translation id="7605594153474022051">同步處理功能無法正常運作</translation>
 <translation id="760667371114328991">關閉「安全檢查」通知</translation>
-<translation id="7612619742409846846">已使用下列帳戶登入 Google：</translation>
 <translation id="7612849887607288481">開啟 AI 原型選單</translation>
 <translation id="7618220760967055820">選擇工具列要顯示的按鈕</translation>
 <translation id="7620522820075868385">取消</translation>
@@ -2428,6 +2427,7 @@
 <translation id="8439758443371991593">隱藏「加入閱讀清單」</translation>
 <translation id="8443986842926457191">網址超過 2048 個字元</translation>
 <translation id="8449869326050867919">已分享密碼</translation>
+<translation id="8473367210869452063">如要與此網站互動，請停止目前的工作或等待 Gemini 完成工作</translation>
 <translation id="8473815223723723001">使用 Gemini 編輯圖像</translation>
 <translation id="8473863474539038330">地址及其他資料</translation>
 <translation id="8474378002946546633">允許通知</translation>

@@ -5463,6 +5463,14 @@ EVENT_TYPE(DBSC_REFRESH_RESULT)
 //   }
 EVENT_TYPE(DBSC_REGISTRATION_RESULT)
 
+// Measures how long a `URLRequest` waits for a key after a response with a
+// Secure-Session-GenerateKey header. The END phase contains the following
+// parameters:
+//   {
+//     "restart": <Whether the request is sent again with the generated key>,
+//   }
+EVENT_TYPE(DBSC_GENERATE_KEY)
+
 // The evaluation start/end of proxy resolution override rules.
 EVENT_TYPE(PROXY_RESOLUTION_OVERRIDE_RULES)
 
@@ -5569,5 +5577,6 @@ EVENT_TYPE(ENTERPRISE_PROXY_AUTH_CHALLENGE_RESOLVED)
 //      "destination_url": <string>,
 //      "proxy_url": <string>,
 //      "error_code": <integer>,
+//      "redirect_url": <optional string>,
 //   }
 EVENT_TYPE(ENTERPRISE_PROXY_DISGUISED_ERROR_SAVED)

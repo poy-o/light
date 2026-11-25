@@ -45,6 +45,7 @@
 #include "third_party/blink/renderer/core/editing/ime/input_method_controller.h"
 #include "third_party/blink/renderer/core/editing/selection_template.h"
 #include "third_party/blink/renderer/core/editing/serializers/markup_formatter.h"
+#include "third_party/blink/renderer/core/execution_context/security_context.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -68,6 +69,7 @@
 #include "third_party/blink/renderer/core/html/html_meta_element.h"
 #include "third_party/blink/renderer/core/html/html_summary_element.h"
 #include "third_party/blink/renderer/core/html/media/html_video_element.h"
+#include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/keywords.h"
 #include "third_party/blink/renderer/core/layout/adjust_for_absolute_zoom.h"
@@ -113,6 +115,7 @@
 #include "third_party/blink/renderer/platform/geometry/infinite_int_rect.h"
 #include "third_party/blink/renderer/platform/geometry/layout_unit.h"
 #include "third_party/blink/renderer/platform/graphics/image.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
 #include "third_party/blink/renderer/platform/image-decoders/image_decoder.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
@@ -232,6 +235,9 @@ class AutoBuildHelper final : public NativeEventListener {
 
 namespace {
 
+// If a corresponding iOS APC change needs to be done as a follow-up, please
+// add a TODO and/or file a bug to track the work.
+// LINT.IfChange(AIPageContentExtractionHelpers)
 String ReplaceUnpairedSurrogates(const StringView& node_text) {
   if (!RuntimeEnabledFeatures::AIPageContentConvertNodeTextToUtf8Enabled()) {
     return node_text.ToString();
@@ -2327,6 +2333,7 @@ void OffsetNodeGeometry(mojom::blink::AIPageContentNode& node,
     OffsetNodeGeometry(*child, offset);
   }
 }
+// LINT.ThenChange(//ios/chrome/browser/intelligence/proto_wrappers/resources/annotated_page_content_extraction.ts:ExtractAnnotatedPageContent)
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
@@ -2654,6 +2661,9 @@ mojom::blink::AIPageContentPtr AIPageContentAgent::GetAIPageContentInternal(
   return builder.Build(*frame);
 }
 
+// If a corresponding iOS APC change needs to be done as a follow-up, please
+// add a TODO and/or file a bug to track the work.
+// LINT.IfChange(AIPageContentBuilder)
 AIPageContentAgent::ContentBuilder::ContentBuilder(
     const mojom::blink::AIPageContentOptions& options)
     : options_(options) {
@@ -2704,8 +2714,55 @@ mojom::blink::AIPageContentPtr AIPageContentAgent::ContentBuilder::Build(
       forced_activatable_locks;
 
   // If we're doing this extraction as a part of the document lifecycle, we
-  // can't invalidate style/layout.
+  // can't invalidate style/layout or dispatch script events.
   if (!document.InvalidationDisallowed()) {
+    if (RuntimeEnabledFeatures::EditContextOnDemandEnabled()) {
+      // Snapshot extracted local frames before calling
+      // `CleanContextIfNeeded()`, since `contextrequest` listeners run
+      // synchronously and may mutate the frame tree (e.g. removing an iframe)
+      // or navigate `frame`. Walk `FirstChild()` / `NextSibling()` rather than
+      // `TraverseNext()` so we do not cross `RemoteFrame` boundaries or descend
+      // into redacted cross-site local subtrees.
+      HeapVector<Member<LocalFrame>> frames = {&frame};
+      for (wtf_size_t i = 0; i < frames.size(); ++i) {
+        for (Frame* child = frames[i]->Tree().FirstChild(); child;
+             child = child->Tree().NextSibling()) {
+          auto* local_frame = DynamicTo<LocalFrame>(child);
+          if (!local_frame) {
+            continue;
+          }
+          if (options_->include_same_site_only &&
+              !local_frame->IsOutermostMainFrame()) {
+            const SecurityOrigin* frame_origin =
+                local_frame->GetSecurityContext()->GetSecurityOrigin();
+            const SecurityOrigin* main_frame_origin =
+                local_frame->Top()->GetSecurityContext()->GetSecurityOrigin();
+            CHECK(frame_origin);
+            CHECK(main_frame_origin);
+            if (!frame_origin->IsSameSiteWith(main_frame_origin)) {
+              continue;
+            }
+          }
+          frames.push_back(local_frame);
+        }
+      }
+      for (const Member<LocalFrame>& target_frame : frames) {
+        if (Document* target_document = target_frame->GetDocument();
+            !target_document || !target_document->IsActive() ||
+            target_document->InvalidationDisallowed()) {
+          continue;
+        }
+        if (EditContext* edit_context = target_frame->GetInputMethodController()
+                                            .GetActiveEditContext()) {
+          edit_context->CleanContextIfNeeded();
+        }
+      }
+      if (frame.GetDocument() != &document || !document.IsActive() ||
+          !document.View()) {
+        return nullptr;
+      }
+    }
+
     // Force activatable locks so content which is accessible via find-in-page
     // is styled/laid out and included when walking the tree below.
     //
@@ -3297,6 +3354,14 @@ AIPageContentAgent::ContentBuilder::MaybeGenerateContentNodeImpl(
   } else if (element &&
              ProcessAriaFormControlNode(*element, aria_role, attributes)) {
     // ProcessAriaFormControlNode sets the attribute type and data.
+  } else if (element &&
+             RuntimeEnabledFeatures::AIPageContentIncludeLabelEnabled() &&
+             (element->HasTagName(html_names::kLabelTag) ||
+              element->HasTagName(html_names::kLegendTag) ||
+              element->HasTagName(html_names::kCaptionTag) ||
+              element->HasTagName(html_names::kFigcaptionTag))) {
+    attributes.attribute_type =
+        mojom::blink::AIPageContentAttributeType::kLabel;
   } else if (element && IsHeadingTag(*element)) {
     attributes.attribute_type =
         mojom::blink::AIPageContentAttributeType::kHeading;
@@ -4046,5 +4111,6 @@ void AIPageContentAgent::ContentBuilder::AddInteractionDisabledReasons(
 AIPageContentAgent::ContentBuilder::RecursionData::RecursionData(
     const ComputedStyle& document_style)
     : document_style(document_style) {}
+// LINT.ThenChange(//ios/chrome/browser/intelligence/proto_wrappers/resources/annotated_page_content_extraction.ts:ExtractAnnotatedPageContent)
 
 }  // namespace blink

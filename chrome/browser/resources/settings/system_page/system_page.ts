@@ -78,19 +78,13 @@ export class SettingsSystemPageElement extends SettingsSystemPageElementBase
       isProxyDefault_: {type: Boolean},
       isProxyEnforcedByMultipleSources_: {type: Boolean},
 
-      // <if expr="_google_chrome and is_win">
-      showFeatureNotificationsSetting_: {type: Boolean},
-      // </if>
-      // <if expr="is_win">
-      showProcessIsolationSetting_: {type: Boolean},
-      // </if>
-
       proxyPref_: {type: Object},
       proxyOverrideRulesPref_: {type: Object},
       hardwareAccelerationModeEnabledPref_: {type: Object},
       // <if expr="is_win">
       isolationStateEnabledPref_: {type: Object},
       // </if>
+      settingsRefresh2026Enabled_: {type: Boolean},
     };
   }
 
@@ -99,11 +93,11 @@ export class SettingsSystemPageElement extends SettingsSystemPageElementBase
   protected accessor isProxyEnforcedByMultipleSources_: boolean = false;
 
   // <if expr="_google_chrome and is_win">
-  protected accessor showFeatureNotificationsSetting_: boolean =
+  protected readonly showFeatureNotificationsSetting_: boolean =
       loadTimeData.getBoolean('showFeatureNotificationsSetting');
   // </if>
   // <if expr="is_win">
-  protected accessor showProcessIsolationSetting_: boolean =
+  protected readonly showProcessIsolationSetting_: boolean =
       loadTimeData.getBoolean('showProcessIsolationSetting');
   private processIsolationEnabledAtStartup_: boolean|undefined;
   // </if>
@@ -118,6 +112,9 @@ export class SettingsSystemPageElement extends SettingsSystemPageElementBase
   private accessor isolationStateEnabledPref_:
       chrome.settingsPrivate.PrefObject<boolean>|undefined;
   // </if>
+
+  protected accessor settingsRefresh2026Enabled_: boolean =
+      loadTimeData.getString('settingsRefresh2026') !== '';
 
   override connectedCallback() {
     super.connectedCallback();

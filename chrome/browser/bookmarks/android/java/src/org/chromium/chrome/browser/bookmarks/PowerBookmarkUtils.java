@@ -35,7 +35,6 @@ import org.chromium.components.power_bookmarks.ShoppingSpecifics;
 @NullMarked
 public class PowerBookmarkUtils {
     private static @Nullable Boolean sPriceTrackingEligibleForTesting;
-    private static @Nullable PowerBookmarkMeta sPowerBookmarkMetaForTesting;
 
     /** Returns whether the given meta is a shopping list item. */
     @Contract("_, null -> false")
@@ -103,9 +102,10 @@ public class PowerBookmarkUtils {
     }
 
     /**
-     * Checks if the given {@link BookmarkId} is price-tracked.
+     * Enables or disables price-tracking for the given {@link BookmarkId} and shows a status or
+     * retry snackbar.
      *
-     * @param bookmarkId The BookmarkId to check the price-tracking status of.
+     * @param bookmarkId The {@link BookmarkId} to update the price-tracking state for.
      * @param enabled Whether price-tracking should be enabled.
      * @param snackbarManager Manages snackbars, non-null if a message should be sent to alert the
      *     users of price-tracking events.
@@ -123,7 +123,6 @@ public class PowerBookmarkUtils {
             Profile profile,
             Callback<Boolean> callback,
             PriceDropNotificationManager priceDropNotificationManager) {
-        // TODO(crbug.com/393186352): Fix nullable annotation for bookmarkId parameter.
         // Early return when bookmarkId is null.
         if (bookmarkId == null) {
             Snackbar snackbar =
@@ -171,16 +170,13 @@ public class PowerBookmarkUtils {
                     } else {
                         snackbar =
                                 Snackbar.make(
-                                                resources.getString(
-                                                        R.string.price_tracking_error_snackbar),
-                                                retrySnackbarControllerAction,
-                                                Snackbar.TYPE_NOTIFICATION,
-                                                Snackbar.UMA_PRICE_TRACKING_FAILURE)
-                                        .setAction(
-                                                resources.getString(
-                                                        R.string
-                                                                .price_tracking_error_snackbar_action),
-                                                null);
+                                        resources.getString(R.string.price_tracking_error_snackbar),
+                                        retrySnackbarControllerAction,
+                                        Snackbar.TYPE_NOTIFICATION,
+                                        Snackbar.UMA_PRICE_TRACKING_FAILURE);
+                        snackbar.setAction(
+                                resources.getString(R.string.price_tracking_error_snackbar_action),
+                                /* actionData= */ null);
                     }
                     snackbar.setDefaultLines(false);
                     snackbarManager.showSnackbar(snackbar);
@@ -215,11 +211,5 @@ public class PowerBookmarkUtils {
     public static void setPriceTrackingEligibleForTesting(@Nullable Boolean enabled) {
         sPriceTrackingEligibleForTesting = enabled;
         ResettersForTesting.register(() -> sPriceTrackingEligibleForTesting = null);
-    }
-
-    /** Sets the current page meta to the test value given. */
-    public static void setPowerBookmarkMetaForTesting(@Nullable PowerBookmarkMeta meta) {
-        sPowerBookmarkMetaForTesting = meta;
-        ResettersForTesting.register(() -> sPowerBookmarkMetaForTesting = null);
     }
 }

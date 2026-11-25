@@ -213,6 +213,7 @@ static_library("browser") {
     "//components/safe_browsing/core/common",
     "//components/safe_browsing/core/common:safe_browsing_prefs",
     "//components/strings",
+    "//components/trusted_vault",
     "//components/url_formatter",
     "//services/metrics/public/cpp:metrics_cpp",
     "//services/metrics/public/cpp:ukm_builders",
@@ -288,10 +289,12 @@ source_set("change_password_filling_helper") {
     "//base",
     "//components/actor/public/mojom:mojo_bindings_shared",
     "//components/autofill/core/common",
+    "//url",
   ]
   deps = [
     ":browser",
     ":password_string",
+    "//components/password_manager/core/browser/actor_login:frame_util",
     "//mojo/public/cpp/bindings",
     "//third_party/abseil-cpp:absl",
   ]
@@ -466,6 +469,8 @@ static_library("test_support") {
     "mock_password_reuse_manager.h",
     "mock_webauthn_credentials_delegate.cc",
     "mock_webauthn_credentials_delegate.h",
+    "password_change/mock_password_change_credentials_provider.cc",
+    "password_change/mock_password_change_credentials_provider.h",
     "password_change/mock_password_change_service.cc",
     "password_change/mock_password_change_service.h",
     "password_manager_test_utils.cc",
@@ -653,6 +658,7 @@ source_set("unit_tests") {
     "//components/signin/public/base",
     "//components/strings",
     "//components/sync_preferences:test_support",
+    "//components/trusted_vault",
     "//components/ukm:test_support",
     "//components/url_formatter",
     "//device/fido",

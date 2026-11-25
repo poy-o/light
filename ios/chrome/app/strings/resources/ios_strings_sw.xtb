@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">Kutuma manenosiri</translation>
 <translation id="1554043146674176775">Zima Modi ya AI</translation>
 <translation id="1554477036522844996">Dirisha Jipya</translation>
+<translation id="1555014818414775661">Weka picha</translation>
 <translation id="1557806604681757705">kompyuta yako</translation>
 <translation id="1558391695376153246">Funga vichupo fiche</translation>
 <translation id="1560153516220021659">Kitufe cha upau wa ziada wa vidhibiti uliokunjwa</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">Fungua <ph name="BEGIN_BOLD" />Mipangilio ya Safari<ph name="END_BOLD" /></translation>
 <translation id="3858860766373142691">Jina</translation>
 <translation id="386224966259596343">Utapata nafasi ya kuhifadhi maelezo haya kwenye Pochi wakati mwingine utakapojaza fomu husika.</translation>
-<translation id="3868495844258915202">Onyesha URL kamili</translation>
 <translation id="3870931306085184145">Hamna manenosiri yaliyohifadhiwa ya <ph name="DOMAIN" /></translation>
 <translation id="3875783148670536197">Nionyeshe Jinsi ya Kufanya</translation>
 <translation id="3878657761594430423">Kiteuzi cha laha</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">Ili upate arifa za ufuatiliaji wa bei, washa arifa kwenye Mipangilio yako ya iOS.</translation>
 <translation id="528857768909044842">Vikundi vya vichupo vimehifadhiwa hapa</translation>
 <translation id="5294624619177114121">Arifa za kifaa cha mkononi</translation>
-<translation id="5295239312320826323">Ungependa kuondoa akaunti ya <ph name="USER_EMAIL" />?</translation>
 <translation id="5300589172476337783">Onyesha</translation>
 <translation id="5311061401280561833">Umeruhusu ufikiaji wa kamera na maikrofoni</translation>
 <translation id="5313967007315987356">Ongeza tovuti</translation>
@@ -1788,6 +1787,7 @@ Lazima Handoff iwashwe pia katika sehemu ya Jumla ya Mipangilio, na lazima vifaa
 <translation id="6504541289630702018">Fikia kwa urahisi vikundi vya vichupo vyako kwenye kompyuta ya mezani</translation>
 <translation id="6505334220040167806">Kunja kikundi cha vichupo.</translation>
 <translation id="6506996418997555004">Kuruhusu ufikiaji wa Kikundi cha Vichupo cha "<ph name="GROUP_NAME" />"</translation>
+<translation id="650770261448122895">Tafuta unachokiona ukitumia Lenzi</translation>
 <translation id="6507973708545996744">Ingia katika akaunti ili upate orodha yako ya kusoma kwenye vifaa vyako vyote.</translation>
 <translation id="6518133107902771759">Thibitisha</translation>
 <translation id="6523575793810663688">Nionyeshe jinsi ya kufanya hivyo</translation>
@@ -2147,7 +2147,6 @@ Unaweza kuanzisha upya wakati wowote.</translation>
 <translation id="7603852183842204213">Ibukizi zimefungwa (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Kipengele cha usawazishaji hakifanyi kazi</translation>
 <translation id="760667371114328991">Zima Arifa za Kipengele cha Ukaguzi wa Usalama</translation>
-<translation id="7612619742409846846">Umeingia katika akaunti ya Google ukitumia</translation>
 <translation id="7612849887607288481">Fungua Menyu ya Kuweka Mifano ya Awali ya AI</translation>
 <translation id="7618220760967055820">Chagua kitufe cha kuonyesha kwenye upau wa vidhibiti</translation>
 <translation id="7620522820075868385">Acha</translation>
@@ -2430,6 +2429,7 @@ Unaweza kuanzisha upya wakati wowote.</translation>
 <translation id="8439758443371991593">Ficha Chaguo la Weka kwenye Orodha ya Kusoma</translation>
 <translation id="8443986842926457191">URL imezidi herufi 2048</translation>
 <translation id="8449869326050867919">Nenosiri limeshirikiwa</translation>
+<translation id="8473367210869452063">Ili utumie tovuti hii, komesha jukumu la sasa au usubiri Gemini ikamilishe kazi</translation>
 <translation id="8473815223723723001">Hariri Picha ukitumia Gemini</translation>
 <translation id="8473863474539038330">Anwani na zaidi</translation>
 <translation id="8474378002946546633">Ruhusu arifa</translation>

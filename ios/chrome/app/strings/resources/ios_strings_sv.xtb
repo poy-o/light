@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">Dela lösenord</translation>
 <translation id="1554043146674176775">Inaktivera AI-läge</translation>
 <translation id="1554477036522844996">Nytt fönster</translation>
+<translation id="1555014818414775661">Lägg till bilder</translation>
 <translation id="1557806604681757705">datorn</translation>
 <translation id="1558391695376153246">Stäng inkognitoflikar</translation>
 <translation id="1560153516220021659">Knapp för komprimerat sekundärt verktygsfält</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">Öppna <ph name="BEGIN_BOLD" />Safari-inställningarna<ph name="END_BOLD" /></translation>
 <translation id="3858860766373142691">Namn</translation>
 <translation id="386224966259596343">Du får möjlighet att spara dessa uppgifter i Wallet nästa gång du fyller i ett relevant formulär.</translation>
-<translation id="3868495844258915202">Visa fullständig webbadress</translation>
 <translation id="3870931306085184145">Det finns inga sparade lösenord för <ph name="DOMAIN" /></translation>
 <translation id="3875783148670536197">Visa hur man gör</translation>
 <translation id="3878657761594430423">Arkplockare</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">Om du vill få aviseringar om prisbevakning måste du aktivera aviseringar i iOS-inställningarna.</translation>
 <translation id="528857768909044842">Flikgrupper sparas här</translation>
 <translation id="5294624619177114121">Telefonaviseringar</translation>
-<translation id="5295239312320826323">Vill du ta bort kontot <ph name="USER_EMAIL" />?</translation>
 <translation id="5300589172476337783">Visa</translation>
 <translation id="5311061401280561833">Kamera- och mikrofonåtkomst har tillåtits</translation>
 <translation id="5313967007315987356">Lägg till webbplats</translation>
@@ -1788,6 +1787,7 @@ Du måste även aktivera Handoff i avsnittet Allmänt i inställningarna och sam
 <translation id="6504541289630702018">Kom enkelt åt dina flikgrupper på datorn</translation>
 <translation id="6505334220040167806">Komprimera flikgruppen.</translation>
 <translation id="6506996418997555004">Dela flikgruppen <ph name="GROUP_NAME" /></translation>
+<translation id="650770261448122895">Sök efter det du ser med Lens</translation>
 <translation id="6507973708545996744">Logga in om du vill ha läslistan på alla dina enheter.</translation>
 <translation id="6518133107902771759">Verifiera</translation>
 <translation id="6523575793810663688">Visa hur man gör</translation>
@@ -2147,7 +2147,6 @@ Du kan starta om när som helst.</translation>
 <translation id="7603852183842204213">Popup blockeras (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Det går inte att synkronisera</translation>
 <translation id="760667371114328991">Inaktivera aviseringar från säkerhetskontroll</translation>
-<translation id="7612619742409846846">Inloggad i Google som</translation>
 <translation id="7612849887607288481">Öppna menyn för AI-prototyp</translation>
 <translation id="7618220760967055820">Välj vilken knapp som ska visas i verktygsfältet</translation>
 <translation id="7620522820075868385">Avbryt</translation>
@@ -2430,6 +2429,7 @@ Du kan starta om när som helst.</translation>
 <translation id="8439758443371991593">Dölj Lägg till i läslistan</translation>
 <translation id="8443986842926457191">Webbadressen är längre än 2 048 tecken</translation>
 <translation id="8449869326050867919">Lösenordet har delats</translation>
+<translation id="8473367210869452063">Om du vill interagera med den här webbplatsen ska du stoppa den aktuella uppgiften eller vänta tills Gemini har slutfört arbetet</translation>
 <translation id="8473815223723723001">Redigera bild med Gemini</translation>
 <translation id="8473863474539038330">Adresser och annat</translation>
 <translation id="8474378002946546633">Tillåt meddelanden</translation>

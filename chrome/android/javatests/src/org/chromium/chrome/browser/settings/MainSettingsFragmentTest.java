@@ -136,6 +136,8 @@ import org.chromium.chrome.browser.ui.signin.BottomSheetSigninAndHistorySyncCoor
 import org.chromium.chrome.browser.ui.signin.SigninAndHistorySyncActivityLauncher;
 import org.chromium.chrome.browser.ui.signin.history_sync.HistorySyncConfig;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.transit.AutoResetCtaTransitTestRule;
+import org.chromium.chrome.test.transit.ChromeTransitTestRules;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.browser.signin.SigninTestRule;
 import org.chromium.components.browser_ui.accessibility.AccessibilitySettings;
@@ -184,6 +186,9 @@ public class MainSettingsFragmentTest {
 
     private final SyncTestRule mSyncTestRule = new SyncTestRule();
 
+    private final AutoResetCtaTransitTestRule mCtaTestRule =
+            ChromeTransitTestRules.fastAutoResetCtaActivityRule();
+
     private final SettingsTestRule<MainSettings> mSettingsTestRule =
             new SettingsTestRule<>(MainSettings.class);
 
@@ -193,7 +198,10 @@ public class MainSettingsFragmentTest {
 
     @Rule
     public final RuleChain mRuleChain =
-            RuleChain.outerRule(mSyncTestRule).around(mHomepageTestRule).around(mSettingsTestRule);
+            RuleChain.outerRule(mSyncTestRule)
+                    .around(mCtaTestRule)
+                    .around(mHomepageTestRule)
+                    .around(mSettingsTestRule);
 
     @Rule
     public ChromeRenderTestRule mRenderTestRule =
@@ -222,6 +230,8 @@ public class MainSettingsFragmentTest {
 
     @Before
     public void setup() {
+        Intents.init();
+        mCtaTestRule.startOnBlankPage();
         // ObservableSupplier needs a Looper.
         if (Looper.myLooper() == null) {
             Looper.prepare();
@@ -231,7 +241,6 @@ public class MainSettingsFragmentTest {
         SigninAndHistorySyncActivityLauncherImpl.setLauncherForTest(
                 mSigninAndHistorySyncActivityLauncher);
         DeveloperSettings.setIsEnabledForTests(true);
-        Intents.init();
 
         // Keep render tests consistent by suppressing "new" labels.
         TrackerFactory.setTrackerForTests(mTestTracker);
@@ -275,8 +284,8 @@ public class MainSettingsFragmentTest {
     /** Test for the "Account" section. */
     @Test
     @SmallTest
+    @DisableFeatures(ChromeFeatureList.ANDROID_BOTTOM_BAR)
     public void testStartup() {
-        FeatureOverrides.disable(ChromeFeatureList.ANDROID_BOTTOM_BAR);
         startSettings();
 
         // For non-signed-in users, the section contains the generic header.
@@ -726,6 +735,26 @@ public class MainSettingsFragmentTest {
         onView(allOf(withId(R.id.alert_icon), isDisplayed())).check(matches(isDisplayed()));
     }
 
+    @Test
+    @SmallTest
+    @DisableFeatures({
+        SigninFeatures.MAKE_IDENTITY_MANAGER_SOURCE_OF_ACCOUNTS,
+        SigninFeatures.MAKE_IDENTITY_MANAGER_SOURCE_OF_ACCOUNTS_PART2,
+    })
+    public void testSigninRowUpdatesOnAccountRemoval_legacy() {
+        verifySigninRowUpdatesOnAccountRemoval();
+    }
+
+    @Test
+    @SmallTest
+    @EnableFeatures({
+        SigninFeatures.MAKE_IDENTITY_MANAGER_SOURCE_OF_ACCOUNTS,
+        SigninFeatures.MAKE_IDENTITY_MANAGER_SOURCE_OF_ACCOUNTS_PART2,
+    })
+    public void testSigninRowUpdatesOnAccountRemoval() {
+        verifySigninRowUpdatesOnAccountRemoval();
+    }
+
     // Tests that the account row shows the AI tier ring for an eligible account.
     @Test
     @SmallTest
@@ -974,8 +1003,8 @@ public class MainSettingsFragmentTest {
 
     @Test
     @SmallTest
+    @DisableFeatures(ChromeFeatureList.ANDROID_BOTTOM_BAR)
     public void testHomepageOff() {
-        FeatureOverrides.disable(ChromeFeatureList.ANDROID_BOTTOM_BAR);
         mHomepageTestRule.disableHomepageForTest();
         startSettings();
 
@@ -993,8 +1022,8 @@ public class MainSettingsFragmentTest {
      */
     @Test
     @SmallTest
+    @DisableFeatures(ChromeFeatureList.ANDROID_BOTTOM_BAR)
     public void testHomepageSummaryUpdatesOnHomepageStateChange() {
-        FeatureOverrides.disable(ChromeFeatureList.ANDROID_BOTTOM_BAR);
         // Start with the homepage enabled.
         mHomepageTestRule.useDefaultHomepageForTest();
         startSettings();
@@ -1028,12 +1057,12 @@ public class MainSettingsFragmentTest {
 
     @Test
     @SmallTest
+    @DisableFeatures(ChromeFeatureList.ANDROID_BOTTOM_BAR)
     public void testHomeButtonRemovalEnabled() {
         FeatureOverrides.newBuilder()
                 .enable(ChromeFeatureList.HOME_BUTTON_REMOVAL)
                 .param("remove_home_button_everywhere", true)
                 .param("set_default_to_false_on_homepage_on_desktop", false)
-                .disable(ChromeFeatureList.ANDROID_BOTTOM_BAR)
                 .apply();
         startSettings();
 
@@ -1059,11 +1088,11 @@ public class MainSettingsFragmentTest {
 
     @Test
     @SmallTest
+    @DisableFeatures(ChromeFeatureList.ANDROID_BOTTOM_BAR)
     public void testHomeButtonRemovalDisabled() {
         FeatureOverrides.newBuilder()
                 .enable(ChromeFeatureList.HOME_BUTTON_REMOVAL)
                 .param("remove_home_button_everywhere", false)
-                .disable(ChromeFeatureList.ANDROID_BOTTOM_BAR)
                 .apply();
         startSettings();
 
@@ -1223,8 +1252,8 @@ public class MainSettingsFragmentTest {
 
     @Test
     @SmallTest
+    @DisableFeatures(ChromeFeatureList.ANDROID_BOTTOM_BAR)
     public void testAndroidAddressBarFlagOn() {
-        FeatureOverrides.disable(ChromeFeatureList.ANDROID_BOTTOM_BAR);
         startSettings();
         // This setting should only appear for certain devices, even if the flag is enabled. Since
         // this is an instrumentation test there's not a good way to fake or force device
@@ -1252,9 +1281,9 @@ public class MainSettingsFragmentTest {
     @Test
     @SmallTest
     @Restriction(DeviceFormFactor.PHONE)
+    @EnableFeatures(ChromeFeatureList.ANDROID_BOTTOM_BAR)
     public void testToolbarSettingsMovedToAppearance() {
         Assume.assumeFalse(DeviceInfo.isAutomotive());
-        FeatureOverrides.enable(ChromeFeatureList.ANDROID_BOTTOM_BAR);
         startSettings();
 
         Assert.assertNull(mMainSettings.findPreference(MainSettings.PREF_ADDRESS_BAR));
@@ -1281,12 +1310,10 @@ public class MainSettingsFragmentTest {
     @Test
     @SmallTest
     @Restriction(DeviceFormFactor.PHONE)
+    @EnableFeatures(
+            ChromeFeatureList.ANDROID_BOTTOM_BAR + ":move_toolbar_settings_to_appearance/false")
     public void testToolbarSettingsNotMovedToAppearanceWhenParamOff() {
         Assume.assumeFalse(DeviceInfo.isAutomotive());
-        FeatureOverrides.newBuilder()
-                .enable(ChromeFeatureList.ANDROID_BOTTOM_BAR)
-                .param("move_toolbar_settings_to_appearance", false)
-                .apply();
         startSettings();
 
         assertSettingsExists(MainSettings.PREF_ADDRESS_BAR, AddressBarSettingsFragment.class);
@@ -1527,6 +1554,41 @@ public class MainSettingsFragmentTest {
         mSettingsTestRule.startSettingsActivity();
         mMainSettings = mSettingsTestRule.getFragment();
         Assert.assertNotNull("SettingsActivity failed to launch.", mMainSettings);
+    }
+
+    private void verifySigninRowUpdatesOnAccountRemoval() {
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> SyncServiceFactory.setInstanceForTesting(new FakeSyncServiceImpl()));
+        mSyncTestRule.getSigninTestRule().addAccountThenSignin(TestAccounts.ACCOUNT1);
+        startSettings();
+
+        SignInPreference signInPreference = mMainSettings.findPreference(MainSettings.PREF_SIGN_IN);
+        CriteriaHelper.pollUiThread(
+                () -> {
+                    Criteria.checkThat(
+                            signInPreference.getTitle().toString(),
+                            Matchers.is(TestAccounts.ACCOUNT1.getFullName()));
+                    Criteria.checkThat(
+                            signInPreference.getSummary().toString(),
+                            Matchers.is(TestAccounts.ACCOUNT1.getEmail()));
+                    Criteria.checkThat(
+                            signInPreference.getFragment(),
+                            Matchers.is(ManageSyncSettings.class.getName()));
+                });
+
+        mSyncTestRule.getSigninTestRule().removeAccount(TestAccounts.ACCOUNT1.getId());
+
+        CriteriaHelper.pollUiThread(
+                () -> {
+                    Criteria.checkThat(
+                            signInPreference.getTitle().toString(),
+                            Matchers.is(mMainSettings.getString(R.string.signin_settings_title)));
+                    Criteria.checkThat(
+                            signInPreference.getSummary().toString(),
+                            Matchers.is(
+                                    mMainSettings.getString(R.string.signin_settings_subtitle)));
+                    Criteria.checkThat(signInPreference.getFragment(), Matchers.nullValue());
+                });
     }
 
     /** Makes the primary account eligible for the AI tier ring. */

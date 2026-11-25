@@ -78,6 +78,7 @@
 <translation id="112840717907525620">ප්‍රතිපත්ති තාවකාලික මතකය හරි</translation>
 <translation id="1131264053432022307">ඔබ පිටපත් කළ රූපය</translation>
 <translation id="1132735979845538847"><ph name="ORIGIN" /> – සම්පූර්ණ තිරයෙන් පිටවීමට, ඉහළ සිට ඇදගෙන ආපසු බොත්තම ස්පර්ශ කරන්න</translation>
+<translation id="11370190534773372">කාඩ්පත් විස්තර පුරවා ඇත</translation>
 <translation id="1138458427267715730">වෙබය පුරා ඕනෑම අඩවියක මිල පහත වැටෙන විට ඇඟවීම් ලබා ගන්න</translation>
 <translation id="1142713751288681188">කඩදාසි වර්ගය</translation>
 <translation id="1142965388643537393">සංචාර තතු</translation>
@@ -583,6 +584,7 @@
 <translation id="1988881251331415125">අක්ෂර වින්‍යාසය නිවැරදි නම්, <ph name="BEGIN_LINK" />සබැඳුම් හැකියා දෝෂ නිර්ණ ධාවනය කිරීම උත්සාහ කරන්න<ph name="END_LINK" />.</translation>
 <translation id="1991370806334788445">තෙවන-පාර්ශ්ව කුකි වලට ඉඩ දීමට උත්සාහ කරන්න, එයින් අදහස් කරන්නේ බ්‍රවුස් කිරීමේ ආරක්ෂාව අඩු නමුත් වෙබ් අඩවි විශේෂාංග අපේක්ෂා කළ පරිදි ක්‍රියා කිරීමට වැඩි ඉඩක් ඇති බවයි.</translation>
 <translation id="1992331125980284532">JIS B3</translation>
+<translation id="1995173078718234136">අන්තර්ගතය ස්කෑන් කරමින්...</translation>
 <translation id="1996557034791506430">අවසරය ඉවත් කරන්න ද?</translation>
 <translation id="1997484222658892567"><ph name="URL" /> හට විශාල දත්ත ඔබේ ස්ථානීය පරිගණකයේ ස්ථිරව ගබඩා කිරීමට අවශ්‍යයි</translation>
 <translation id="1997774360448418989">කඩදාසි (සැහැල්ලු)</translation>
@@ -666,7 +668,6 @@
 <translation id="2126374524350484896">PDF නිෂ්පාදක:</translation>
 <translation id="2127090458081644412">මුරපදය මෙම උපාංගයට සුරැකිණි</translation>
 <translation id="2127747486437921899">ඇලකුරු</translation>
-<translation id="2129163794581571479">Gemini සමග පුද්ගලික බුද්ධිය මගින් බලගන්වයි. වැඩිදියුණු කළ ස්වයංක්‍රීය පිරවීම වැඩි දියුණු කිරීම සඳහා ඔබේ ඉල්ලීම්, පිටු මාතෘකා සහ URL සමාලෝචනය කළ හැක. <ph name="BEGIN_LINK" />සැකසීම් කළමනාකරණය කරන්න<ph name="END_LINK" /></translation>
 <translation id="2130448033692577677">ඔබ සඳහන් කර ඇති අච්චු DnsOverHttpsMode ප්‍රතිපත්තිය නොසැකසීම හේතුවෙන් නොයෙදිය හැක.</translation>
 <translation id="2130699163006053678">A3x7</translation>
 <translation id="2131006834960167560">ගෙවීම් ස්වයං පිරවීම සබල කරන්න සම්පූර්ණ උසින් විවෘත කරන ලදි.</translation>
@@ -1216,7 +1217,6 @@
 <translation id="3041584414879052436">දැන් මිලදී ගන්න-ගෙවන්න-පසුව නිකුත් කරන්නන්ගේ ලැයිස්තුව වසා ඇත.</translation>
 <translation id="3041612393474885105">සහතික තොරතුරු</translation>
 <translation id="3041835740069544003">Chrome හට දැන් වඩාත් බුද්ධිමත් පෝරම අවබෝධය සමග තවත් පෝරම හඳුනාගෙන පිරවිය හැක. මෙය සිදු කිරීම සඳහා, පිටු අන්තර්ගතය සහ URL යොමු ක්ලවුඩ් තුළ පෞද්ගලික අවකාශයක සැකසිය හැක. සැකසීම් තුළ කළමනාකරණය කරන්න.</translation>
-<translation id="3047054686095898948"><ph name="IDS_AUTOFILL_GOOGLE_WALLET_TITLE_1" /> හි ඔබේ තතු සුරකින්න සහ Google නිෂ්පාදන හරහා පෝරම පිරවීම වැනි දේවල් වේගයෙන් සිදු කරන්න. ඔබට <ph name="ACCOUNT" /> සඳහා <ph name="IDS_AUTOFILL_GOOGLE_WALLET_TITLE_2" /> තුළ <ph name="BEGIN_LINK" />ඔබේ තතු කළමනාකරණය කළ<ph name="END_LINK" /> හැක</translation>
 <translation id="305162504811187366">වේලා මුද්‍රා, සංග්‍රාහක සහ සේවාලාභී සැසි ID ඇතුළුව, Chrome දුරස්ථ ඩෙස්ක්ටොප් ඉතිහාසය</translation>
 <translation id="3052868890529250114">ඔබ සාමාන්‍යයෙන් අඩවිවලට සුරක්‍ෂිතව සම්බන්‍ධ වන නමුත්, Chrome හට මෙවර සුරක්‍ෂිත සම්බන්‍ධතාවක් භාවිත කළ නොහැකි විය. ප්‍රහාරකයෙකු ඔබේ ජාල සම්බන්‍ධතාවට සවන් දීමට හෝ එය වෙනස් කිරීමට උත්සාහ කරමින් සිටීමට ඉඩ ඇත. <ph name="BEGIN_LEARN_MORE_LINK" />මෙම අනතුරු ඇඟවීම ගැන තව දැන ගන්න<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="3052964831964880138"><ph name="PRODUCT_NAME" /> හි <ph name="PRICE_DROP" />ක මිල අඩු වීමක්</translation>
@@ -1587,7 +1587,6 @@
 <translation id="3655670868607891010">ඔබ නිතර මෙය දකී නම්, මෙය උත්සහ කරන්න <ph name="HELP_LINK" />.</translation>
 <translation id="3658742229777143148">පුනරීක්ශණය</translation>
 <translation id="3659521826520353662">කුමන පරිපාලක විසින් නිර්වචනය කරන ලද වෙබ් අඩවි වෙත පිවිසෙන්නේ ද සහ කෙවිට ද: <ph name="ALLOWLISTED_WEBSITES" /></translation>
-<translation id="3663760610864720538">Gemini සමග පුද්ගලික බුද්ධිය මගින් බලගන්වයි. <ph name="BEGIN_LINK" />සැකසීම් කළමනාකරණය කරන්න<ph name="END_LINK" /></translation>
 <translation id="3664479564786885722">මෙම නිෂ්පාදනය විකුණන වෙනත් වෙළඳසැල් වලින් තවත් මිල දී ගැනීමේ විකල්ප සොයන්න.</translation>
 <translation id="3664782872746246217">මූලපද:</translation>
 <translation id="3670030362669914947">අංකය</translation>
@@ -1866,7 +1865,6 @@
 <translation id="4112140312785995938">පසුපසට සොයන්න</translation>
 <translation id="4114007503059268298">ඔබට ඔබේ Google ගිණුමේ සහ මෙම උපාංගයේ මෙම කාඩ්පත සුරැකීමට අවශ්‍යයි ද?</translation>
 <translation id="4114146879518089587">අඩවිය වෙත ඉදිරියට යන්න</translation>
-<translation id="4115378294792113321">මැජෙන්ටා</translation>
 <translation id="4116701314593212016">JIS B7</translation>
 <translation id="4116798170070772848">RA2</translation>
 <translation id="4117700440116928470">ප්‍රතිපත්ති විෂයපථය උපකාර නොකරයි.</translation>
@@ -3450,6 +3448,7 @@
 <translation id="6727094998759448074">SRA4</translation>
 <translation id="672853333773293432">ගිණුම සමග පුරනය විය</translation>
 <translation id="6732087373923685049">කැමරාව</translation>
+<translation id="6736243959894955139">ලිපිනය</translation>
 <translation id="6738516213925468394">ඔබේ දත්ත <ph name="TIME" /> වූ විට ඔබේ <ph name="BEGIN_LINK" />මුර වැකිකඩ<ph name="END_LINK" /> සංකේතන කරනු ලැබුවේය. සමමුහූර්තය ආරම්භ කිරීමට එය ඇතුළත් කරන්න.</translation>
 <translation id="6740851646645036700">ඔබ දැනට ඔබේ ලිවීමේ උදවු සීමාවට ළඟා වී ඇත. පසුව නැවත උත්සාහ කරන්න.</translation>
 <translation id="674375294223700098">නොදන්නා සේවාදායක සහතික දෝෂය.</translation>
@@ -4548,6 +4547,7 @@
 <translation id="8577348305244205642">අතථ්‍ය කාඩ්පත ලබා ගත නොහැකිය</translation>
 <translation id="8579000896558714521">යතුරු පුවරුව අභිබවා යාම</translation>
 <translation id="8579561564816585231">මුරපද කළමනාකරු වැනි Google සේවාවක් භාවිතයෙන් පුරනය විය</translation>
+<translation id="8580478010934016252">ගෙවීමේ ක්‍රම වෙත යන්න</translation>
 <translation id="8581064022803799721">මෙම පිටුව <ph name="LAST_BOOKMARKS_FOLDER" /> හි සුරකින ලදි.</translation>
 <translation id="858637041960032120">දුරකථන අංකය එක් කරන්න</translation>
 <translation id="8587100480629037893">අතින් ලුහුබැඳීමට ඉඩ නැත</translation>

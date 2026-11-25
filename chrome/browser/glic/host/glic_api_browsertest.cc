@@ -678,6 +678,26 @@ class GlicApiTestWithDefaultTabContextDisabled : public GlicApiTest {
   base::test::ScopedFeatureList feature_list_;
 };
 
+class GlicApiTestWithActionFirstSuggestionsDisabled : public GlicApiTest {
+ public:
+  GlicApiTestWithActionFirstSuggestionsDisabled() {
+    feature_list_.InitWithFeatures({}, {features::kGlicActionFirstSuggestions});
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+class GlicApiTestWithActionFirstSuggestionsEnabled : public GlicApiTest {
+ public:
+  GlicApiTestWithActionFirstSuggestionsEnabled() {
+    feature_list_.InitWithFeatures({features::kGlicActionFirstSuggestions}, {});
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
 class GlicApiTestWithBlankInstanceDelay : public GlicApiTest {
  public:
   GlicApiTestWithBlankInstanceDelay() {
@@ -2912,13 +2932,18 @@ IN_PROC_BROWSER_TEST_P(GlicApiTestWithNewTabDaisyChain,
   // 8. Open Glic in the new (third) tab.
   ASSERT_OK_AND_ASSIGN(auto* tab2_instance, WaitForGlicOpen(tab2));
 
-  // In GEiC, daisy-chained tabs are not auto-pinned, and attached mode only
-  // attributes focused-tab input metrics to pinned tabs.
-  if (IsGeic()) {
+  // When pin-on-bind is disabled, daisy-chained tabs are not auto-pinned, and
+  // attached mode only attributes focused-tab input metrics to pinned tabs.
+  const bool expect_pin_on_bind =
+      !IsGeic() || base::FeatureList::IsEnabled(features::kGeicPinOnBind);
+  if (!expect_pin_on_bind) {
     EXPECT_FALSE(
         tab2_instance->GetSharingManager()->IsTabPinned(tab2->GetHandle()));
     tab2_instance->GetSharingManager()->PinTabs({tab2->GetHandle()},
                                                 GlicPinTrigger::kContextMenu);
+  } else {
+    EXPECT_TRUE(
+        tab2_instance->GetSharingManager()->IsTabPinned(tab2->GetHandle()));
   }
 
   // 9. Trigger "inputSubmitted" in the third tab's panel.
@@ -4374,6 +4399,11 @@ IN_PROC_BROWSER_TEST_P(
       1);
 }
 
+IN_PROC_BROWSER_TEST_P(GlicApiTest, testReportScriptToolRejections) {
+  ASSERT_OK(OpenGlicForActiveTab());
+  ExecuteJsTest();
+}
+
 // TODO(harringtond): Flaky on windows.
 // TODO(b/508340871): Re-enable on Android. Failing because something pops up
 // and suppresses the bottom sheet.
@@ -4915,6 +4945,15 @@ IN_PROC_BROWSER_TEST_P(GlicApiTestWebAuthnInWarmedGuest,
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 IN_PROC_BROWSER_TEST_P(GlicApiTest, testGetPageMetadataOnNavigation) {
+  ASSERT_TRUE(content::NavigateToURL(
+      GetTabListInterface()->GetActiveTab()->GetContents(),
+      embedded_test_server()->GetURL("/glic/browser_tests/test.html")));
+  ASSERT_OK(OpenGlicForActiveTab());
+  ExecuteJsTest();
+}
+
+IN_PROC_BROWSER_TEST_P(GlicApiTest,
+                       testGetPageMetadataResubscribeAfterNavigation) {
   ASSERT_TRUE(content::NavigateToURL(
       GetTabListInterface()->GetActiveTab()->GetContents(),
       embedded_test_server()->GetURL("/glic/browser_tests/test.html")));
@@ -6124,6 +6163,18 @@ IN_PROC_BROWSER_TEST_P(GlicApiTest, testSetGuestUrlQueryParam) {
   ExecuteJsTest({.params = base::Value("verify_cleared")});
 }
 
+IN_PROC_BROWSER_TEST_P(GlicApiTestWithActionFirstSuggestionsDisabled,
+                       testActionFirstSuggestionsUndefinedWhenFeatureDisabled) {
+  ASSERT_OK(OpenGlicForActiveTab());
+  ExecuteJsTest();
+}
+
+IN_PROC_BROWSER_TEST_P(GlicApiTestWithActionFirstSuggestionsEnabled,
+                       testGetActionFirstSuggestions) {
+  ASSERT_OK(OpenGlicForActiveTab());
+  ExecuteJsTest();
+}
+
 // Runs each test against consumer Gemini, with and without NoWebview, and
 // against Gemini Enterprise in Chrome (GEiC).
 auto DefaultTestParamSet() {
@@ -6246,6 +6297,16 @@ INSTANTIATE_TEST_SUITE_P(,
 
 INSTANTIATE_TEST_SUITE_P(,
                          GlicApiTestWithDefaultTabContextDisabled,
+                         DefaultTestParamSet(),
+                         &WithTestParams::PrintTestVariant);
+
+INSTANTIATE_TEST_SUITE_P(,
+                         GlicApiTestWithActionFirstSuggestionsDisabled,
+                         DefaultTestParamSet(),
+                         &WithTestParams::PrintTestVariant);
+
+INSTANTIATE_TEST_SUITE_P(,
+                         GlicApiTestWithActionFirstSuggestionsEnabled,
                          DefaultTestParamSet(),
                          &WithTestParams::PrintTestVariant);
 

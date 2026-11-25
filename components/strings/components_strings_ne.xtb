@@ -78,6 +78,7 @@
 <translation id="112840717907525620">नीति क्यास ठिक छ</translation>
 <translation id="1131264053432022307">तपाईंले प्रतिलिपि गर्नुभएको फोटो</translation>
 <translation id="1132735979845538847"><ph name="ORIGIN" /> – फुल स्क्रिनबाट बाहिरिन सिरानबाट ड्र्याग गर्नुहोस् र "पछाडि जानुहोस्" बटनमा टच गर्नुहोस्</translation>
+<translation id="11370190534773372">कार्डसम्बन्धी विवरण भरिएका छन्</translation>
 <translation id="1138458427267715730">इन्टरनेटमा भएको कुनै पनि साइटमा उत्पादनको मूल्य घटेका खण्डमा अलर्ट प्राप्त गर्नुहोस्</translation>
 <translation id="1142713751288681188">पेपरको प्रकार</translation>
 <translation id="1142965388643537393">यात्रासम्बन्धी जानकारी</translation>
@@ -583,6 +584,7 @@
 <translation id="1988881251331415125">हिज्जे सही छ भने <ph name="BEGIN_LINK" />'कनेक्टिभिटीका निदानहरू' चलाएर हेर्नुहोस्<ph name="END_LINK" />।</translation>
 <translation id="1991370806334788445">तेस्रो पक्षीय कुकीहरू प्रयोग गर्ने अनुमति दिई हेर्नुहोस्। यसको अर्थ ब्राउजिङको सुरक्षाको स्तर कम हुन्छ तर साइटका सुविधाहरूले अपेक्षा गरिएअनुसार काम गर्ने सम्भावना बढी हुन्छ।</translation>
 <translation id="1992331125980284532">JIS B3</translation>
+<translation id="1995173078718234136">सामग्री स्क्यान गर्दै...</translation>
 <translation id="1996557034791506430">अनुमति हटाउने हो?</translation>
 <translation id="1997484222658892567"><ph name="URL" /> तपाईंको स्थानीय कम्प्युटरमा स्थायी रूपमा ठुलो परिमाणको डेटा भण्डारण गर्न चाहन्छ</translation>
 <translation id="1997774360448418989">पेपर (लाइटवेट)</translation>
@@ -666,7 +668,6 @@
 <translation id="2126374524350484896">PDF निर्माता:</translation>
 <translation id="2127090458081644412">पासवर्ड यो डिभाइसमा सेभ गरियो</translation>
 <translation id="2127747486437921899">इटालिक</translation>
-<translation id="2129163794581571479">Gemini मा उपलब्ध पर्सनल इन्टेलिजेन्स प्रयोग गरी बनाइएको। अटोफिल गर्ने परिष्कृत सुविधाको गुणस्तर सुधार गर्ने प्रयोजनका लागि तपाईंका अनुरोध, पेजका शीर्षक र URL हरूको समीक्षा गरिन सक्छ। <ph name="BEGIN_LINK" />सेटिङ मिलाउनुहोस्<ph name="END_LINK" /></translation>
 <translation id="2130448033692577677">DnsOverHttpsMode नीति निर्धारण नगरिएकाले तपाईंले तोक्नुभएका टेम्प्लेटहरू लागू नहुन सक्छन्।</translation>
 <translation id="2130699163006053678">A3x7</translation>
 <translation id="2131006834960167560">"भुक्तानीसम्बन्धी जानकारी स्वतः भर्ने सुविधा अन गर्नुहोस्" पूरै स्क्रिनमा खोलिएको छ।</translation>
@@ -1216,7 +1217,6 @@
 <translation id="3041584414879052436">"अहिले किन्नुहोस् पछि तिर्नुहोस्" सुविधा उपलब्ध गराउने संस्थाहरूको सूची बन्द गरिएको छ।</translation>
 <translation id="3041612393474885105">प्रमाणपत्र जानकारी</translation>
 <translation id="3041835740069544003">Chrome ले अब अझ स्मार्ट तरिकाले फाराम भर्ने सुविधा प्रयोग गरी अझ धेरै फारामहरू पत्ता लगाउन र भर्न सक्छ। यसो गर्न पेजका कन्टेन्ट र URL हरू क्लाउडमा रहेको निजी स्पेसमा प्रोसेस गर्न सकिन्छ। सेटिङमा गई व्यवस्थापन गर्नुहोस्।</translation>
-<translation id="3047054686095898948">आफ्नो जानकारी <ph name="IDS_AUTOFILL_GOOGLE_WALLET_TITLE_1" /> मा सेभ गर्नुहोस् र Google का विभिन्न उत्पादनमा फाराम भर्ने जस्ता कामहरू अझ छिटो पूरा गर्नुहोस्। तपाईं <ph name="ACCOUNT" /> को <ph name="IDS_AUTOFILL_GOOGLE_WALLET_TITLE_2" /> मा गई <ph name="BEGIN_LINK" />आफ्नो जानकारी व्यवस्थापन गर्न<ph name="END_LINK" /> सक्नुहुन्छ</translation>
 <translation id="305162504811187366">Chrome को रिमोट डेस्कटपसम्बन्धी इतिहास (जस्तै, टाइमस्ट्याम्प, होस्ट र क्लाइन्ट सेसन ID)</translation>
 <translation id="3052868890529250114">तपाईं प्रायः जसो साइटहरूमा सुरक्षित रूपमा कनेक्ट गर्नुहुन्छ तर Chrome ले अहिले सुरक्षित कनेक्सन प्रयोग गर्न सकेन। ह्याकरले तपाईंको नेटवर्क कनेक्सन निगरानी गर्न वा परिमार्जन गर्न खोजिरहेको हुन सक्छ। <ph name="BEGIN_LEARN_MORE_LINK" />यो चेतावनीका बारेमा थप जान्नुहोस्<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="3052964831964880138"><ph name="PRODUCT_NAME" /> को मूल्य <ph name="PRICE_DROP" /> घटेको छ</translation>
@@ -1584,7 +1584,6 @@
 <translation id="3655670868607891010">यदि तपाईं यो बारम्बार रूपमा देखिरहनुभएको छ भने, यिनीहरू गर्ने प्रयास गर्नुहोस् <ph name="HELP_LINK" />।</translation>
 <translation id="3658742229777143148">संशोधन</translation>
 <translation id="3659521826520353662">एड्मिनले तोकेका कुन-कुन वेबसाइटहरू हेरिएका छन् र कहिले हेरिएका छन्: <ph name="ALLOWLISTED_WEBSITES" /></translation>
-<translation id="3663760610864720538">Gemini मा उपलब्ध पर्सनल इन्टेलिजेन्स प्रयोग गरी बनाइएको। <ph name="BEGIN_LINK" />सेटिङ मिलाउनुहोस्<ph name="END_LINK" /></translation>
 <translation id="3664479564786885722">यो उत्पादन बिक्री गर्ने अन्य स्टोरमा खरिद गर्ने थप विकल्पहरू खोज्नुहोस्।</translation>
 <translation id="3664782872746246217">किवर्डहरू:</translation>
 <translation id="3670030362669914947">अङ्क</translation>
@@ -1864,7 +1863,6 @@
 <translation id="4112140312785995938">पछाडि जानुहोस्</translation>
 <translation id="4114007503059268298">तपाईं यो कार्डलाई आफ्नो Google खाता र यस डिभाइसमा सेभ गर्न चाहनुहुन्छ?</translation>
 <translation id="4114146879518089587">साइटमा जानुहोस्</translation>
-<translation id="4115378294792113321">म्याग्नेटा</translation>
 <translation id="4116701314593212016">JIS B7</translation>
 <translation id="4116798170070772848">RA2</translation>
 <translation id="4117700440116928470">नीति क्षेत्र समर्थित छैन।</translation>
@@ -3333,6 +3331,7 @@
 <translation id="6520509611422418552"><ph name="MEMBER_FIRST_NAME" /> "<ph name="GROUP_NAME" />" ट्याब समूहमा सामेल हुनुभयो</translation>
 <translation id="6521745193039995384">सक्रिय छैन</translation>
 <translation id="6524830701589638230">एस्सेसिबिलिटी सेटिङ मिलाउने बटन, Chrome का सेटिङमा गई एस्सेसिबिलिटी टुलहरू पर्सनलाइज गर्न यो बटन थिच्नुहोस्</translation>
+<translation id="652643331002043144">यो साइट फिसिङ, मालवेयर र स्क्यामसँग सम्बन्धित अन्य साइटहरू जस्तै देखिन्छ।</translation>
 <translation id="6529173248185917884">सातौँ रोल</translation>
 <translation id="6529602333819889595">मेटाउने कार्य &amp;पुन: गर्नुहोस्</translation>
 <translation id="6532101170117367231">Google ड्राइभमा सेभ गर्नुहोस्</translation>
@@ -3447,6 +3446,7 @@
 <translation id="6727094998759448074">SRA4</translation>
 <translation id="672853333773293432">खातामार्फत साइन इन गरिएको छ</translation>
 <translation id="6732087373923685049">क्यामेरा</translation>
+<translation id="6736243959894955139">ठेगाना</translation>
 <translation id="6738516213925468394">तपाईंको डेटा तपाईंको <ph name="BEGIN_LINK" />पासफ्रेज सिंक गर्नुहोस्<ph name="END_LINK" /> मार्फत <ph name="TIME" /> मा इन्क्रिप्ट गरियो। सिंक प्रक्रिया सुरु गर्न उक्स पासफ्रेज प्रविष्टि गर्नुहोस्।</translation>
 <translation id="6740851646645036700">तपाईं अहिले लेखनसम्बन्धी थप मद्दत प्राप्त गर्न सक्नुहुन्न। पछि फेरि प्रयास गर्नुहोस्।</translation>
 <translation id="674375294223700098">अज्ञात सर्भर सर्टिफिकेट त्रुटि।</translation>
@@ -4545,6 +4545,7 @@
 <translation id="8577348305244205642">भर्चुअल कार्ड उपलब्ध छैन</translation>
 <translation id="8579000896558714521">किबोर्ड ओभरराइड</translation>
 <translation id="8579561564816585231">पासवर्ड म्यानेजर जस्ता Google को कुनै सेवा प्रयोग गरी साइन इन गरिएको छ</translation>
+<translation id="8580478010934016252">भुक्तानी विधिहरूमा जानुहोस्</translation>
 <translation id="8581064022803799721">यो पेज <ph name="LAST_BOOKMARKS_FOLDER" /> मा सेभ गरिएको छ।</translation>
 <translation id="858637041960032120">फोन नम्बर थप्नुहोस्</translation>
 <translation id="8587100480629037893">हात ट्र्याक गर्ने अनुमति दिइएको छैन</translation>

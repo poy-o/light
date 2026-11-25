@@ -81,6 +81,7 @@ Es posible que algunas funciones no estén disponibles y que no se guarden los c
 <translation id="1688214853608504530">Al escribir en la barra de direcciones o en el cuadro de búsqueda, Chrome envía lo que escribes a las herramientas de búsqueda, de IA y de agente de tu organización para obtener sugerencias.</translation>
 <translation id="1698376642261615901">Google Chrome es un navegador web que ejecuta aplicaciones y páginas web a gran velocidad. Es rápido, estable y fácil de utilizar. Navega por la Web de forma más segura gracias a la protección integrada contra suplantación de identidad y malware.</translation>
 <translation id="1713301662689114961">{0,plural, =1{Chrome se reiniciará dentro de 1 hora}other{Chrome se reiniciará dentro de # horas}}</translation>
+<translation id="1713866023633141719">La IA en el dispositivo está lista</translation>
 <translation id="1722488837206509557">Esto te permitirá seleccionar los dispositivos disponibles y mostrar contenido en ellos.</translation>
 <translation id="1724094881572874997">Para proteger tu trabajo en Chrome, tu organización podrá ver o gestionar determinada información cuando tengas la sesión iniciada en Chrome.</translation>
 <translation id="1769661297620183092">Puedes volver a abrir el panel de la Búsqueda de Google para hacer preguntas mientras navegas</translation>
@@ -102,12 +103,14 @@ Es posible que algunas funciones no estén disponibles y que no se guarden los c
 <translation id="1896602904211344018">Descarga la aplicación Chrome</translation>
 <translation id="1919130412786645364">Permitir el inicio de sesión en Chrome</translation>
 <translation id="1925069572871307609">Para recibir futuras actualizaciones de Google Chrome, deberás tener la versión 1809 de Windows 10 o una posterior. Este ordenador tiene una versión antigua de Windows 10.</translation>
+<translation id="1975400514743766362">Llévate la seguridad de Google a cualquier lugar con la aplicación Chrome en tu <ph name="DEVICE_TYPE" /></translation>
 <translation id="1979600810166324878">Aumenta tu seguridad estés donde estés con Navegación segura mejorada en Chrome para iOS</translation>
 <translation id="2001586581944147178">Haz que a las personas con acceso a tu tráfico de Internet les resulte más complicado ver los sitios que visitas. Chrome usa una conexión segura para buscar la dirección IP de un sitio en el DNS (sistema de nombres de dominio).</translation>
 <translation id="2018879682492276940">No se ha podido realizar la instalación. Vuelve a intentarlo.</translation>
 <translation id="2024959665595762054">Para usar y guardar los datos de Chrome en tu cuenta de Google, verifica tu identidad</translation>
 <translation id="2034233344106846793">Chrome cambia las conexiones no seguras a HTTPS automáticamente cuando es posible</translation>
 <translation id="2039417478970545937">Configuración.</translation>
+<translation id="2040220733769034247">Escanea el código QR con tu teléfono para descargar Chrome e iniciar sesión con tu cuenta de Google.</translation>
 <translation id="2044908892530830113">Mostrar la búsqueda con Chrome en la barra de menú de Mac y activar combinación de teclas</translation>
 <translation id="2050189601866423230">Puedes fijar el Modo IA de la Búsqueda de Google para hacer preguntas mientras navegas</translation>
 <translation id="2060311596979880693">¡Listo! Ahora puedes hacer preguntas fácilmente mientras navegas con la Búsqueda de Google en Chrome</translation>
@@ -140,7 +143,6 @@ Es posible que algunas funciones no estén disponibles y que no se guarden los c
 <translation id="2307973900865360088">Mantener en el Dock</translation>
 <translation id="2309047409763057870">Esta instalación de Google Chrome es secundaria, por lo que no se puede establecer como navegador predeterminado.</translation>
 <translation id="2345992953227471816">Chrome ha detectado que estas extensiones contienen malware:</translation>
-<translation id="2350411688004301551">Cambiar a Gemini Enterprise</translation>
 <translation id="2358140144860869442">Para acceder a tu lista de lectura y otros elementos en todos tus dispositivos, inicia sesión en Chrome</translation>
 <translation id="2359808026110333948">Continuar</translation>
 <translation id="2403703063067034158">Error de arranque: se está ejecutando otra instancia de la configuración. Inténtalo de nuevo más tarde.</translation>
@@ -153,6 +155,7 @@ Es posible que algunas funciones no estén disponibles y que no se guarden los c
 <translation id="2513154137948333830">Reinicio requerido: <ph name="INSTALL_SUCCESS" /></translation>
 <translation id="251329670120169391">tu organización</translation>
 <translation id="2521391734665471391">Cerrar Modo IA de la Búsqueda de Google</translation>
+<translation id="2523048609826818526">Escritura de uso general</translation>
 <translation id="2523492931736391680">Tu trabajo está protegido en Chrome</translation>
 <translation id="2534365042754120737">Para proteger tus datos, permite que Chrome quite los permisos de los sitios que no hayas visitado recientemente. No dejarás de recibir notificaciones.</translation>
 <translation id="2556847002339236023">Tu organización cierra Chrome cuando lleva <ph name="TIMEOUT_DURATION" /> sin usarse. Se han eliminado los datos de navegación. Entre estos datos, podrían incluirse el historial, la función Autocompletar y las descargas.</translation>
@@ -197,7 +200,6 @@ Si esta página no funciona correctamente, prueba a permitir la optimización.</
 <translation id="2876628302275096482">Más información sobre <ph name="BEGIN_LINK" />cómo protege Chrome la privacidad de tus datos<ph name="END_LINK" /></translation>
 <translation id="2885378588091291677">Administrador de tareas</translation>
 <translation id="2888126860611144412">Información de Chrome</translation>
-<translation id="2898830646167954300">Volver a tu asistente Gemini no gestionado</translation>
 <translation id="2915996080311180594">Reiniciar más tarde</translation>
 <translation id="2926952073016206995">Chrome necesita el permiso de la cámara para este sitio</translation>
 <translation id="2945997411976714835">Error de instalación: no se ha podido iniciar el proceso de instalación.</translation>
@@ -251,6 +253,7 @@ Si esta página no funciona correctamente, prueba a permitir la optimización.</
 <translation id="3373752068427117404">Algunas funciones y extensiones de Chrome incluyen atajos. Puedes volver a activarlos.</translation>
 <translation id="3379938682270551431">{0,plural, =0{Chrome se reiniciará ahora}=1{Chrome se reiniciará dentro de 1 segundo}other{Chrome se reiniciará dentro de # segundos}}</translation>
 <translation id="3380249972812870825">Para abrir Gemini en Chrome, pulsa <ph name="GLOBAL_HOTKEY" /></translation>
+<translation id="3392127217442962664">Chrome ha añadido IA que se ejecuta en tu dispositivo. Los sitios y Chrome pueden usarla para funciones como:</translation>
 <translation id="3396977131400919238">Se ha producido un error de sistema operativo durante el proceso de instalación. Vuelve a descargar Google Chrome.</translation>
 <translation id="3428747202529429621">Te protege en Chrome y puede usarse para mejorar tu seguridad en otras aplicaciones de Google cuando has iniciado sesión</translation>
 <translation id="3438681572027105609">Para acceder a tus contraseñas y más en todos tus dispositivos, inicia sesión en Chrome</translation>
@@ -300,6 +303,7 @@ Si esta página no funciona correctamente, prueba a permitir la optimización.</
 <translation id="3973161977468201858">Google Chrome quiere eliminar tus datos del Gestor de contraseñas de Google. Introduce tu contraseña de Windows para permitirlo.</translation>
 <translation id="3984557288004650913">Con el botón "Búsqueda de Google en Chrome" de la barra de herramientas, puedes volver a abrirla para hacer preguntas mientras navegas</translation>
 <translation id="399788104667917863">Fijar en la barra de herramientas</translation>
+<translation id="4000385468528550798">IA en el dispositivo actualizada</translation>
 <translation id="400161754580828648">Para compartir tu pantalla, permite la grabación de pantalla de Chrome en Ajustes del sistema.</translation>
 <translation id="4012899077942246412">Mientras tengas la sesión iniciada, puedes usar tus contraseñas y otros elementos de tu cuenta de Google en Chrome. Para cambiarlo, ve a Tu cuenta en Chrome.</translation>
 <translation id="4022972681110646219">Traducir pantalla</translation>
@@ -418,7 +422,6 @@ Puede que algunas funciones no estén disponibles. Especifica otro directorio de
 <translation id="5271833978500241046">Úsalas junto con otras funciones de Gemini en Chrome</translation>
 <translation id="5320351714793324716">Si permites las cookies, es posible que Chrome las use en la precarga</translation>
 <translation id="5321325624576443340">Google Lens no está disponible. Inténtalo de nuevo más tarde.</translation>
-<translation id="5336664042114176802">Puedes cambiar al asistente Gemini asociado originalmente a tu cuenta de Google y no gestionado por <ph name="DOMAIN" />. Las respuestas ya no se basarán en archivos o servicios gestionados por <ph name="DOMAIN" /> y tu historial de conversaciones no se transferirá. Puede que no sea adecuado para el trabajo. Para cambiar, debes reiniciar Chrome.</translation>
 <translation id="5346389065299425353">Profundiza en tu búsqueda añadiendo varias pestañas, archivos y herramientas</translation>
 <translation id="5353252989841766347">Exportar contraseñas de Chrome</translation>
 <translation id="5368118228313795342">Código adicional: <ph name="EXTRA_CODE" />.</translation>
@@ -537,7 +540,6 @@ Google Chrome no puede recuperar tu configuración.</translation>
 <translation id="6438015621983209660">Amplía Navegación segura mejorada con Chrome en tu teléfono</translation>
 <translation id="6442774133615368941">Compra, traduce e identifica lo que ves con tu cámara en la aplicación iOS de Chrome</translation>
 <translation id="6446105560007692480">para buscar con Chrome o personalizar en <ph name="BEGIN_LINK" />Configuración<ph name="END_LINK" /></translation>
-<translation id="6447943657065463998">Este navegador gestionado puede usar un asistente de Gemini configurado para el trabajo por <ph name="DOMAIN" />. Puede encontrar información y ofrecer respuestas basadas en los archivos y los servicios aprobados de la organización. No se recomienda usarlo con un perfil personal. El historial de conversaciones no se transferirá. Para cambiar, debes reiniciar Chrome.</translation>
 <translation id="6448835208126432197">Para seleccionar parte de la pantalla en Gemini en Chrome, usa la combinación de teclas.</translation>
 <translation id="6473905796280459355">Ir a la página Información de Chrome</translation>
 <translation id="6481963882741794338">Vincula Chrome y otros servicios de Google con fines de personalización y otros propósitos</translation>
@@ -559,6 +561,7 @@ Google Chrome no puede recuperar tu configuración.</translation>
 <translation id="6632012506031284914">para buscar con Chrome.</translation>
 <translation id="6634299872736643004">Los cambios que se hagan en este ajuste se aplicarán cuando se reinicie Chrome.</translation>
 <translation id="6644846457769259194">Actualizando el dispositivo (<ph name="PROGRESS_PERCENT" />)</translation>
+<translation id="6659177157954429254">La IA en el dispositivo está actualizada</translation>
 <translation id="6660596345553328257">¿Iniciar sesión en Chrome?</translation>
 <translation id="6664219008737641504">Si has olvidado tu frase de contraseña o quieres cambiar este ajuste, <ph name="SETTINGS_LINK" /> los datos de Chrome de tu cuenta.</translation>
 <translation id="6676384891291319759">Accede a Internet.</translation>
@@ -600,6 +603,7 @@ Google Chrome no puede recuperar tu configuración.</translation>
 <translation id="7024536598735240744">Error al descomprimir: <ph name="UNPACK_ERROR" />.</translation>
 <translation id="7025800014283535195">Puedes cambiar de un perfil de Chrome a otro aquí</translation>
 <translation id="7026856149118332950">Haz clic en <ph name="BEGIN_BOLD" />Sí<ph name="END_BOLD" /> en la notificación de Windows para fijar Chrome a la barra de tareas y que puedas acceder rápidamente.</translation>
+<translation id="7033785662379319359">Ya puedes usar una versión nueva y más compacta de la IA en el dispositivo para resúmenes, revisiones y otras tareas</translation>
 <translation id="7047386856539490735">¿Te han resultado útiles estos resultados?</translation>
 <translation id="7051685429025310665">No has visitado el sitio recientemente. Chrome ha eliminado <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> y <ph name="PERMISSION_3" />.</translation>
 <translation id="7059914902409643750">Personaliza Chrome a tu gusto</translation>
@@ -706,7 +710,6 @@ Google Chrome no puede recuperar tu configuración.</translation>
 <translation id="8064965390968184078">1. Haz clic en <ph name="BUTTON_LABEL" /> a continuación
 2. Haz clic en <ph name="BUTTON_2" /> en la configuración de Windows
 3. Haz clic en <ph name="BUTTON_3" /> en la notificación de Windows para fijar Chrome a la barra de tareas y que puedas acceder rápidamente</translation>
-<translation id="8066474819446975249">Reiniciar Chrome para cambiar</translation>
 <translation id="8074398340364918139">Para buscar una función o extensión de Chrome específica, escribe su atajo en la barra de direcciones y, después, pulsa la tecla de teclado que hayas seleccionado</translation>
 <translation id="8077579734294125741">Otros perfiles de Chrome</translation>
 <translation id="8086881907087796310">No se ha podido realizar la instalación porque tu ordenador no cumple los requisitos mínimos de hardware.</translation>

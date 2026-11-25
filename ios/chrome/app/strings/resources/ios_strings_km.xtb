@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">ចែករំលែក​ពាក្យ​សម្ងាត់</translation>
 <translation id="1554043146674176775">បិទ​មុខងារ AI</translation>
 <translation id="1554477036522844996">វិនដូ​ថ្មី</translation>
+<translation id="1555014818414775661">បញ្ចូលរូបភាព</translation>
 <translation id="1557806604681757705">កុំព្យូទ័ររបស់អ្នក</translation>
 <translation id="1558391695376153246">បិទ​ផ្ទាំងឯកជន</translation>
 <translation id="1560153516220021659">ប៊ូតុង​របារឧបករណ៍​បន្ទាប់បន្សំ​ដែលបាន​បង្រួម</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">បើក <ph name="BEGIN_BOLD" />Safari Settings<ph name="END_BOLD" /></translation>
 <translation id="3858860766373142691">ឈ្មោះ</translation>
 <translation id="386224966259596343">អ្នកនឹងមានឱកាសរក្សាទុកព័ត៌មាននេះទៅក្នុង Wallet នៅពេលអ្នកបំពេញទម្រង់បែបបទដែលពាក់ព័ន្ធនៅពេលក្រោយ។</translation>
-<translation id="3868495844258915202">បង្ហាញ URL ពេញលេញ</translation>
 <translation id="3870931306085184145">មិនមាន​ពាក្យសម្ងាត់​ដែលបាន​រក្សាទុក​សម្រាប់ <ph name="DOMAIN" /> ទេ</translation>
 <translation id="3875783148670536197">បង្ហាញខ្ញុំ​អំពី​របៀប</translation>
 <translation id="3878657761594430423">កម្មវិធី​ស្រង់យក​ទិន្នន័យសន្លឹក</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">ដើម្បីទទួលបានការជូនដំណឺងអំពីការតាមដានតម្លៃ សូមបើកការជូនដំណឺងនៅក្នុងការកំណត់ iOS របស់អ្នក។</translation>
 <translation id="528857768909044842">ក្រុមផ្ទាំង​ត្រូវបាន​រក្សាទុក​នៅទីនេះ</translation>
 <translation id="5294624619177114121">ការជូនដំណឹង​នៅលើ​ឧបករណ៍​ចល័ត</translation>
-<translation id="5295239312320826323">លុបគណនី <ph name="USER_EMAIL" /> ឬ?</translation>
 <translation id="5300589172476337783">បង្ហាញ</translation>
 <translation id="5311061401280561833">បានអនុញ្ញាត​ឱ្យចូលប្រើប្រាស់​កាមេរ៉ា និង​មីក្រូហ្វូន</translation>
 <translation id="5313967007315987356">បន្ថែមគេហទំព័រ</translation>
@@ -2148,7 +2147,6 @@ Handoff ត្រូវបើកដំណើរការនៅក្នុងផ
 <translation id="7603852183842204213">ការលេចឡើងត្រូវបានរារាំង (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">សមកាលកម្មមិនដំណើរការទេ</translation>
 <translation id="760667371114328991">បិទ​ការជូន​ដំណឹង​អំពី​ការពិនិត្យ​សុវត្ថិភាព</translation>
-<translation id="7612619742409846846">បានចូល Google ជា</translation>
 <translation id="7612849887607288481">បើកម៉ឺនុយគំរូសាកល្បង AI</translation>
 <translation id="7618220760967055820">ជ្រើសរើស​ប៊ូតុង​ដែលត្រូវ​បង្ហាញ​នៅក្នុង​របារឧបករណ៍</translation>
 <translation id="7620522820075868385">បោះបង់</translation>

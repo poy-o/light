@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://webui-toolbar.top-chrome/lazy_load.js';
+import 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
 
 import type {HelpBubbleOptions} from '//resources/cr_components/help_bubble/help_bubble_controller.js';
 import {hexColorToSkColor} from '//resources/js/color_utils.js';
@@ -10,9 +10,8 @@ import type {CrIconElement} from 'chrome://resources/cr_elements/cr_icon/cr_icon
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {eventToPromise, microtasksFinished} from 'chrome://webui-test/test_util.js';
-import type {PageActionIconElement} from 'chrome://webui-toolbar.top-chrome/lazy_load.js';
 import {BrowserProxyImpl, IconTable, IconType, PageActionAnimationStyle, PageActionId, PageActionTrigger, TrackedElementManager} from 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
-import type {PageActionState} from 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
+import type {PageActionIconElement, PageActionState} from 'chrome://webui-toolbar.top-chrome/webui_toolbar.js';
 
 import {TestToolbarBrowserProxy} from './test_toolbar_browser_proxy.js';
 import type {TestToolbarUiHandler} from './test_toolbar_browser_proxy.js';
@@ -54,6 +53,7 @@ suite('PageActionIconTest', function() {
       animationStyle: PageActionAnimationStyle.kStandard,
       trailingIcon: null,
       showTrailingIcon: false,
+      isAnchoredMessageVisible: false,
     };
   }
 
@@ -137,12 +137,12 @@ suite('PageActionIconTest', function() {
 
   test('Background color', async function() {
     const button = icon.$.button;
-    const actualButton = button.$.button;
+    const paintLayer = button.$.background;
     icon.style.setProperty(
         '--color-omnibox-icon-background-tonal', 'rgb(255, 0, 0)');
 
     // Default: transparent.
-    const style = actualButton.computedStyleMap();
+    const style = paintLayer.computedStyleMap();
     assertEquals('rgba(0, 0, 0, 0)', style.get('background-color')?.toString());
 
     // Show a text chip, should now use --color-omnibox-icon-background-tonal
@@ -228,7 +228,11 @@ suite('PageActionIconTest', function() {
     await microtasksFinished();
 
     assertEquals('rgb(0, 0, 255)', style.get('color')?.toString());
-    assertEquals('rgb(255, 0, 255)', style.get('background-color')?.toString());
+    assertEquals(
+        'rgb(255, 0, 255)',
+        button.$.background.computedStyleMap()
+            .get('background-color')
+            ?.toString());
 
     // And back to no custom color again.
     icon.state = {
@@ -253,16 +257,16 @@ suite('PageActionIconTest', function() {
     document.documentElement.style.setProperty(
         '--color-omnibox-icon-hover', kIconHoverColor);
 
-    const actualButton = icon.$.button.$.button;
+    const paintLayer = icon.$.button.$.background;
 
     // Default icon-only chip uses kColorOmniboxActionIconHover and
     // kColorOmniboxIconPressed.
     assertEquals(
         kActionHoverColor,
-        window.getComputedStyle(actualButton, '::before').backgroundColor);
+        window.getComputedStyle(paintLayer, '::before').backgroundColor);
     assertEquals(
         kIconPressedColor,
-        window.getComputedStyle(actualButton, '::after').backgroundColor);
+        window.getComputedStyle(paintLayer, '::after').backgroundColor);
 
     // When label is shown, hover switches to kColorOmniboxIconHover while
     // ripple remains kColorOmniboxIconPressed.
@@ -275,10 +279,10 @@ suite('PageActionIconTest', function() {
 
     assertEquals(
         kIconHoverColor,
-        window.getComputedStyle(actualButton, '::before').backgroundColor);
+        window.getComputedStyle(paintLayer, '::before').backgroundColor);
     assertEquals(
         kIconPressedColor,
-        window.getComputedStyle(actualButton, '::after').backgroundColor);
+        window.getComputedStyle(paintLayer, '::after').backgroundColor);
 
     // Verify inside a page-action-icons container (capsule vs. non-capsule):
     // native doesn't tie inkdrop colors to the capsule, so they always use
@@ -292,26 +296,140 @@ suite('PageActionIconTest', function() {
     const nonCapsuleIcon =
         container.shadowRoot.querySelector('page-action-icon');
     assertTrue(!!nonCapsuleIcon);
-    const nonCapsuleButton = nonCapsuleIcon.$.button.$.button;
+    const nonCapsulePaintLayer = nonCapsuleIcon.$.button.$.background;
     assertEquals(
         kActionHoverColor,
-        window.getComputedStyle(nonCapsuleButton, '::before').backgroundColor);
+        window.getComputedStyle(nonCapsulePaintLayer, '::before')
+            .backgroundColor);
     assertEquals(
         kIconPressedColor,
-        window.getComputedStyle(nonCapsuleButton, '::after').backgroundColor);
+        window.getComputedStyle(nonCapsulePaintLayer, '::after')
+            .backgroundColor);
 
     // Capsule
     container.toggleAttribute('is-capsule', true);
     await microtasksFinished();
     assertEquals(
         kActionHoverColor,
-        window.getComputedStyle(nonCapsuleButton, '::before').backgroundColor);
+        window.getComputedStyle(nonCapsulePaintLayer, '::before')
+            .backgroundColor);
     assertEquals(
         kIconPressedColor,
-        window.getComputedStyle(nonCapsuleButton, '::after').backgroundColor);
+        window.getComputedStyle(nonCapsulePaintLayer, '::after')
+            .backgroundColor);
 
     container.remove();
   });
+
+  function setUpAnchoredMessageColors() {
+    icon.style.setProperty('--toolbar-chip-height', '28px');
+    icon.style.setProperty(
+        '--color-omnibox-icon-background-tonal', 'rgb(255, 0, 0)');
+    icon.style.setProperty(
+        '--color-omnibox-icon-foreground-tonal', 'rgb(0, 128, 255)');
+    icon.style.setProperty('--color-toolbar-button-icon', 'rgb(1, 2, 3)');
+  }
+
+  test('Tonal styling while anchored message is visible', async function() {
+    const button = icon.$.button;
+    const actualButton = button.$.button;
+    const paintLayer = button.$.background;
+    const textEl = icon.shadowRoot.querySelector<HTMLElement>('#text')!;
+    const kActionHoverColor = 'rgb(11, 22, 33)';
+    const kIconHoverColor = 'rgb(77, 88, 99)';
+    setUpAnchoredMessageColors();
+    document.documentElement.style.setProperty(
+        '--color-omnibox-action-icon-hover', kActionHoverColor);
+    document.documentElement.style.setProperty(
+        '--color-omnibox-icon-hover', kIconHoverColor);
+    toolbarUiHandler.resetResolver('onPageActionChipShowingChanged');
+
+    const style = paintLayer.computedStyleMap();
+    assertEquals('rgba(0, 0, 0, 0)', style.get('background-color')?.toString());
+    assertEquals('rgb(1, 2, 3)', style.get('color')?.toString());
+    assertEquals(
+        kActionHoverColor,
+        window.getComputedStyle(paintLayer, '::before').backgroundColor);
+
+    // Showing an anchored message applies tonal pill and solid-background hover
+    // colors while keeping the button collapsed to icon-only size (no expanded
+    // chip label).
+    icon.state = {
+      ...createBaseState(),
+      text: 'Translate',
+      shouldShowChip: false,
+      isAnchoredMessageVisible: true,
+    };
+    await microtasksFinished();
+
+    assertTrue(icon.hasAttribute('anchored-message-visible'));
+    assertEquals('rgb(255, 0, 0)', style.get('background-color')?.toString());
+    assertEquals('rgb(0, 128, 255)', style.get('color')?.toString());
+    assertEquals(
+        kIconHoverColor,
+        window.getComputedStyle(paintLayer, '::before').backgroundColor);
+    assertFalse(button.hasAttribute('has-label'));
+    assertFalse(textEl.hasAttribute('visible'));
+    assertEquals(28, actualButton.offsetHeight);
+    assertEquals(actualButton.offsetHeight, actualButton.offsetWidth);
+    assertEquals(
+        0, toolbarUiHandler.getCallCount('onPageActionChipShowingChanged'));
+
+    // Hiding the anchored message reverts to transparent background, default
+    // toolbar button icon foreground color, and default action hover color
+    // without calling onPageActionChipShowingChanged.
+    icon.state = {
+      ...createBaseState(),
+      text: 'Translate',
+      shouldShowChip: false,
+      isAnchoredMessageVisible: false,
+    };
+    await microtasksFinished();
+
+    assertFalse(icon.hasAttribute('anchored-message-visible'));
+    assertEquals('rgba(0, 0, 0, 0)', style.get('background-color')?.toString());
+    assertEquals('rgb(1, 2, 3)', style.get('color')?.toString());
+    assertEquals(
+        kActionHoverColor,
+        window.getComputedStyle(paintLayer, '::before').backgroundColor);
+    assertEquals(
+        0, toolbarUiHandler.getCallCount('onPageActionChipShowingChanged'));
+  });
+
+  test(
+      'Color overrides take precedence over anchored message tonal colors',
+      async function() {
+        setUpAnchoredMessageColors();
+        const style = icon.$.button.$.background.computedStyleMap();
+
+        icon.state = {
+          ...createBaseState(),
+          text: 'Translate',
+          shouldShowChip: false,
+          isAnchoredMessageVisible: true,
+          backgroundColorOverride: hexColorToSkColor('#00ff00'),
+          foregroundColorOverride: hexColorToSkColor('#ff00ff'),
+        };
+        await microtasksFinished();
+
+        assertEquals(
+            'rgb(0, 255, 0)', style.get('background-color')?.toString());
+        assertEquals('rgb(255, 0, 255)', style.get('color')?.toString());
+
+        // Clearing overrides while the anchored message remains visible
+        // restores tonal colors.
+        icon.state = {
+          ...createBaseState(),
+          text: 'Translate',
+          shouldShowChip: false,
+          isAnchoredMessageVisible: true,
+        };
+        await microtasksFinished();
+
+        assertEquals(
+            'rgb(255, 0, 0)', style.get('background-color')?.toString());
+        assertEquals('rgb(0, 128, 255)', style.get('color')?.toString());
+      });
 
   test('Render without accessible name', async function() {
     icon.state = {
@@ -1288,6 +1406,7 @@ suite('PageActionIconsTest', function() {
       animationStyle: PageActionAnimationStyle.kStandard,
       trailingIcon: null,
       showTrailingIcon: false,
+      isAnchoredMessageVisible: false,
     };
   }
 

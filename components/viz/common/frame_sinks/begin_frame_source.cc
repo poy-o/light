@@ -25,6 +25,10 @@
 #include "components/viz/common/features.h"
 #include "components/viz/common/frame_sinks/delay_based_time_source.h"
 
+#if BUILDFLAG(IS_MAC)
+#include "ui/display/types/display_constants.h"
+#endif
+
 namespace viz {
 
 namespace {
@@ -221,23 +225,6 @@ void BeginFrameSource::RecordBeginFrameSourceAccuracy(base::TimeDelta delta) {
         /*min=*/base::Microseconds(100),
         /*max=*/base::Milliseconds(33), /*bucket_count=*/30);
   }
-
-  total_delta_ += delta.magnitude();
-  frames_since_last_recording_++;
-
-  // Emit the histogram every 3600 frames.
-  constexpr int kFramesToEmitHistogram = 3600;
-  if (frames_since_last_recording_ < kFramesToEmitHistogram) {
-    return;
-  }
-
-  UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
-      "Viz.BeginFrameSource.Accuracy.AverageDelta2",
-      total_delta_ / kFramesToEmitHistogram,
-      /*min=*/base::Microseconds(100),
-      /*max=*/base::Milliseconds(33), /*bucket_count=*/30);
-  frames_since_last_recording_ = 0;
-  total_delta_ = base::TimeDelta();
 }
 #endif
 
@@ -662,5 +649,12 @@ base::flat_set<base::TimeDelta>
 ExternalBeginFrameSource::GetSupportedFrameIntervals(base::TimeDelta interval) {
   return GetDefaultSupportedFrameIntervals(interval);
 }
+
+#if BUILDFLAG(IS_MAC)
+int64_t ExternalBeginFrameSource::display_id() const {
+  return display::kInvalidDisplayId;
+}
+
+#endif
 
 }  // namespace viz

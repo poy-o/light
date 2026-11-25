@@ -625,7 +625,6 @@ android_library("chrome_test_java_org.chromium.chrome.browser.autofill") {
     "//chrome/browser/profiles/android:java",
     "//chrome/browser/settings:settings_in_tab_java",
     "//chrome/browser/ui/android/autofill/internal:java",
-    "//chrome/browser/ui/android/autofill/internal:javatests",
     "//components/autofill/core/browser/data_model/payments:mojo_bindings_java",
     "//components/payments/content/android:service_impl_java",
   ]
@@ -866,9 +865,14 @@ android_library("chrome_test_java_org.chromium.chrome.browser.download") {
     "src/org/chromium/chrome/browser/download/DownloadTest.java",
     "src/org/chromium/chrome/browser/download/ServicificationDownloadTest.java",
     "src/org/chromium/chrome/browser/download/dialogs/DownloadDialogIncognitoTest.java",
+    "src/org/chromium/chrome/browser/download/items/OfflineContentAggregatorNotificationBridgeUiLeakTest.java",
   ]
 
-  deps = [ ":chrome_test_java_helper" ]
+  deps = [
+    ":chrome_test_java_helper",
+    "//third_party/android_deps:com_squareup_leakcanary_leakcanary_object_watcher_android_core_java",
+    "//third_party/android_deps:com_squareup_leakcanary_leakcanary_object_watcher_java",
+  ]
 }
 
 android_library("chrome_test_java_org.chromium.chrome.browser.feedback") {
@@ -1640,8 +1644,10 @@ android_library("chrome_test_java_org.chromium.chrome.browser.tabmodel") {
   deps = [
     ":chrome_test_java_helper",
     "//base:tristate_java",
+    "//chrome/browser/ui/browser_window/public/android:browser_window_interface_java",
     "//chrome/browser/ui/browser_window/public/android:factory_java",
     "//chrome/browser/ui/browser_window/public/android:java",
+    "//components/split_tabs:split_tabs_java",
     "//components/tabs/public/android:java",
     "//third_party/jni_zero:jni_zero_java",
   ]
@@ -1756,7 +1762,6 @@ android_library("chrome_test_java_org.chromium.chrome.browser.touch_to_fill") {
     "//chrome/browser/profiles/android:java",
     "//chrome/browser/settings:settings_in_tab_java",
     "//chrome/browser/ui/android/autofill/internal:java",
-    "//chrome/browser/ui/android/autofill/internal:javatests",
     "//components/autofill/core/browser/data_model/payments:mojo_bindings_java",
     "//components/payments/content/android:service_impl_java",
   ]
@@ -1839,7 +1844,6 @@ android_library("chrome_test_java_various") {
     "src/org/chromium/chrome/browser/homepage/HomepagePolicyIntegrationTest.java",
     "src/org/chromium/chrome/browser/homepage/settings/HomepageSettingsRenderTest.java",
     "src/org/chromium/chrome/browser/host_zoom/HostZoomListenerTest.java",
-    "src/org/chromium/chrome/browser/identity_disc/IdentityDiscControllerTest.java",
     "src/org/chromium/chrome/browser/init/ChromeBrowserInitializerTest.java",
     "src/org/chromium/chrome/browser/init/LaunchFailedActivityTest.java",
     "src/org/chromium/chrome/browser/input/InputOnVizTest.java",
@@ -1944,6 +1948,7 @@ android_library("chrome_test_java_various") {
     "//chrome/browser/ui/browser_window/public/android:factory_java",
     "//chrome/browser/ui/browser_window/public/android:java",
     "//chrome/browser/ui/side_panel/android:dev_java",
+    "//chrome/browser/ui/vertical_tabs:java",
     "//components/browser_ui/contacts_picker/android:java",
     "//components/browser_ui/http_auth/android:java",
     "//components/variations:variations_java",

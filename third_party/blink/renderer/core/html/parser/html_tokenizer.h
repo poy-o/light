@@ -224,6 +224,7 @@ class CORE_EXPORT HTMLTokenizer {
   }
 
  private:
+  HTMLTokenizer(const HTMLParserOptions&, bool simd_scan_enabled);
   bool NextTokenImpl(SegmentedString&);
   inline bool ProcessEntity(SegmentedString&);
 
@@ -231,6 +232,18 @@ class CORE_EXPORT HTMLTokenizer {
   // characters in the source.
   ALWAYS_INLINE bool SkipWhitespaces(SegmentedString& source, UChar& cc);
   NOINLINE bool SkipWhitespacesHelper(SegmentedString& source, UChar& cc);
+
+  // Attempts to bulk-scan characters in kScriptDataState / kRAWTEXTState using
+  // SIMD until '<', '\n', '\r', or '\0'. Returns true if at least one character
+  // was consumed and appended to `token_`.
+  bool TrySimdScanScriptOrRawtext(SegmentedString& source);
+
+  // Attempts to bulk-scan characters in quoted attribute value states using
+  // SIMD until `quote_char` ('"' or '\''), '&', '\n', '\r', or '\0'. Returns
+  // true if at least one character was consumed and appended to the current
+  // attribute value.
+  bool TrySimdScanQuotedAttributeValue(SegmentedString& source,
+                                       char quote_char);
 
   inline void ParseError();
 
@@ -309,6 +322,10 @@ class CORE_EXPORT HTMLTokenizer {
   bool force_null_character_replacement_;
   bool should_allow_cdata_;
   const bool truncated_markup_declaration_enabled_;
+  [[maybe_unused]] const bool simd_scan_script_data_enabled_;
+  [[maybe_unused]] const bool simd_scan_rawtext_enabled_;
+  [[maybe_unused]] const bool simd_scan_attribute_value_enabled_;
+  [[maybe_unused]] const size_t simd_scan_min_length_;
   const HTMLParserOptions options_;
 
   // http://www.whatwg.org/specs/web-apps/current-work/#additional-allowed-character

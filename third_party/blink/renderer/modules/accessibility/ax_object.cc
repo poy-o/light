@@ -51,7 +51,9 @@
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/accessibility/ax_utilities_generated.h"
 #include "third_party/blink/renderer/core/accessibility/axid.h"
+#include "third_party/blink/renderer/core/css/css_value_id_mappings.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
+#include "third_party/blink/renderer/core/css_value_keywords.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -337,16 +339,61 @@ const QualifiedName& DeprecatedAriaRowtextAttrName() {
 
 const AtomicString& AriaTokenAttributeFromValue(const QualifiedName& attribute,
                                                 const AtomicString& value) {
+  DCHECK(IsAriaTokenAttribute(attribute) || IsAriaTokenListAttribute(attribute))
+      << "Not a token attribute. Use AriaFloatAttribute(), "
+         "AriaIntAttribute(), AriaStringAttribute(), etc. instead.";
+  if (value.empty()) {
+    return g_null_atom;
+  }
   static const base::NoDestructor<AtomicString> undefined_value(
       AtomicString::FromLiteral<"undefined">());
-  if (IsAriaTokenAttribute(attribute) || IsAriaTokenListAttribute(attribute)) {
-    // These properties support a list of tokens, and "undefined"/"" is
-    // equivalent to not setting the attribute.
-    return value.empty() || value == *undefined_value ? g_null_atom : value;
+  // These properties support a list of tokens, and "undefined"/"" is
+  // equivalent to not setting the attribute.
+  return value == *undefined_value ? g_null_atom : value;
+}
+
+void SerializeDisplayStyle(const ComputedStyle& computed_style,
+                           ui::AXNodeData* node_data) {
+  if (computed_style.IsDisplayLayoutCustom()) [[unlikely]] {
+    String display_style =
+        CSSProperty::Get(CSSPropertyID::kDisplay)
+            .CSSValueFromComputedStyle(
+                computed_style, /*layout_object=*/nullptr,
+                /*allow_visited_style=*/false, CSSValuePhase::kComputedValue)
+            ->CssText();
+    if (!display_style.empty()) {
+      TruncateAndAddStringAttribute(node_data,
+                                    ax::mojom::blink::StringAttribute::kDisplay,
+                                    display_style);
+    }
+    return;
   }
-  DCHECK(false) << "Not a token attribute. Use AriaFloatAttribute(), "
-                   "AriaIntAttribute(), AriaStringAttribute(), etc. instead.";
-  return value;
+  std::string_view display_name;
+  switch (computed_style.Display()) {
+    case EDisplay::kBlockMath:
+      display_name = "block math";
+      break;
+    case EDisplay::kBlockRuby:
+      display_name = "block ruby";
+      break;
+    case EDisplay::kInlineListItem:
+      display_name = "inline list-item";
+      break;
+    case EDisplay::kFlowRootListItem:
+      display_name = "flow-root list-item";
+      break;
+    case EDisplay::kInlineFlowRootListItem:
+      display_name = "inline flow-root list-item";
+      break;
+    default:
+      display_name =
+          GetCSSValueName(PlatformEnumToCSSValueID(computed_style.Display()));
+      break;
+  }
+  if (!display_name.empty()) {
+    node_data->AddStringAttribute(ax::mojom::blink::StringAttribute::kDisplay,
+                                  std::string(display_name));
+  }
 }
 
 bool IsGenericWrapper(const Element& element, const AtomicString& role_str) {
@@ -1016,10 +1063,13 @@ void AXObject::ShowAXTreeForThis() const {
 // static
 bool AXObject::HasAriaAttribute(const Element& element,
                                 const QualifiedName& attribute) {
-  if (element.FastHasAttribute(attribute)) {
+  if (element.HasElementData() && element.FastHasAttribute(attribute)) {
     return true;
   }
 
+  if (!element.IsCustomElement()) {
+    return false;
+  }
   const ElementInternals* internals = element.GetElementInternals();
   return internals && internals->HasAttribute(attribute);
 }
@@ -1035,9 +1085,11 @@ bool AXObject::HasAriaAttribute(const QualifiedName& attribute) const {
 // static
 const AtomicString& AXObject::AriaAttribute(const Element& element,
                                             const QualifiedName& attribute) {
-  const AtomicString& value = element.FastGetAttribute(attribute);
-  if (!value.IsNull()) {
-    return value;
+  if (element.HasElementData()) {
+    const AtomicString& value = element.FastGetAttribute(attribute);
+    if (!value.IsNull()) {
+      return value;
+    }
   }
   return GetInternalsAttribute(element, attribute);
 }
@@ -1150,6 +1202,9 @@ const AtomicString& AXObject::AriaTokenAttribute(
 const AtomicString& AXObject::GetInternalsAttribute(
     const Element& element,
     const QualifiedName& attribute) {
+  if (!element.IsCustomElement()) {
+    return g_null_atom;
+  }
   const ElementInternals* internals = element.GetElementInternals();
   if (!internals) {
     return g_null_atom;
@@ -1606,7 +1661,7 @@ void AXObject::SerializeHTMLTagAndClass(ui::AXNodeData* node_data) const {
 
   TruncateAndAddStringAttribute(node_data,
                                 ax::mojom::blink::StringAttribute::kHtmlTag,
-                                element->tagName().ToAsciiLower());
+                                element->TagQName().ToString().ToAsciiLower());
 
   if (const AtomicString& class_name = element->GetClassAttribute()) {
     TruncateAndAddStringAttribute(
@@ -1907,20 +1962,9 @@ void AXObject::SerializeScreenReaderAttributes(ui::AXNodeData* node_data) const 
   }
   SerializeHTMLTagAndClass(node_data);
 
-  String display_style;
   if (Element* element = GetElement()) {
     if (const ComputedStyle* computed_style = element->GetComputedStyle()) {
-      display_style = CSSProperty::Get(CSSPropertyID::kDisplay)
-                          .CSSValueFromComputedStyle(
-                              *computed_style, /* layout_object */ nullptr,
-                              /* allow_visited_style */ false,
-                              CSSValuePhase::kComputedValue)
-                          ->CssText();
-      if (!display_style.empty()) {
-        TruncateAndAddStringAttribute(
-            node_data, ax::mojom::blink::StringAttribute::kDisplay,
-            display_style);
-      }
+      SerializeDisplayStyle(*computed_style, node_data);
     }
 
     // Whether it has ARIA attributes at all.
@@ -1930,12 +1974,13 @@ void AXObject::SerializeScreenReaderAttributes(ui::AXNodeData* node_data) const 
     }
   }
 
-  if (KeyboardShortcut().length() &&
+  String keyboard_shortcut = KeyboardShortcut();
+  if (keyboard_shortcut.length() &&
       !node_data->HasStringAttribute(
           ax::mojom::blink::StringAttribute::kKeyShortcuts)) {
     TruncateAndAddStringAttribute(
         node_data, ax::mojom::blink::StringAttribute::kKeyShortcuts,
-        KeyboardShortcut());
+        keyboard_shortcut);
   }
 
   if (AXObject* active_descendant = ActiveDescendant()) {
@@ -1944,8 +1989,9 @@ void AXObject::SerializeScreenReaderAttributes(ui::AXNodeData* node_data) const 
         active_descendant->AXObjectID());
   }
 
-  if (CheckedState() != ax::mojom::blink::CheckedState::kNone) {
-    node_data->SetCheckedState(CheckedState());
+  const ax::mojom::blink::CheckedState checked_state = CheckedState();
+  if (checked_state != ax::mojom::blink::CheckedState::kNone) {
+    node_data->SetCheckedState(checked_state);
   }
 
   SerializeTextChangeTypesAttributes(node_data);
@@ -1980,6 +2026,19 @@ String AXObject::KeyboardShortcut() const {
 void AXObject::SerializeOtherScreenReaderAttributes(
     ui::AXNodeData* node_data) const {
   DCHECK_NE(node_data->role, ax::mojom::blink::Role::kUnknown);
+
+  // Text nodes without an associated `Element` cannot have HTML/ARIA attributes
+  // or role-specific properties handled below (such as links, form controls,
+  // or dialogs). They only need line attributes and their default action verb
+  // (e.g., `kClickAncestor` when inside a clickable element).
+  if (node_data->role == ax::mojom::blink::Role::kStaticText && !GetElement()) {
+    SerializeLineAttributes(node_data);
+    if (const ax::mojom::blink::DefaultActionVerb action = Action();
+        action != ax::mojom::blink::DefaultActionVerb::kNone) {
+      node_data->SetDefaultActionVerb(action);
+    }
+    return;
+  }
 
   if (IsA<Document>(GetNode())) {
     // The busy attribute is only relevant for actual Documents, not popups.
@@ -2024,14 +2083,17 @@ void AXObject::SerializeOtherScreenReaderAttributes(
         RadioButtonsInGroup(), node_data);
   }
 
-  if (GetAriaCurrentState() != ax::mojom::blink::AriaCurrentState::kNone) {
+  const ax::mojom::blink::AriaCurrentState aria_current = GetAriaCurrentState();
+  if (aria_current != ax::mojom::blink::AriaCurrentState::kNone) {
     node_data->AddIntAttribute(
         ax::mojom::blink::IntAttribute::kAriaCurrentState,
-        static_cast<int32_t>(GetAriaCurrentState()));
+        static_cast<int32_t>(aria_current));
   }
 
-  if (GetInvalidState() != ax::mojom::blink::InvalidState::kNone)
-    node_data->SetInvalidState(GetInvalidState());
+  const ax::mojom::blink::InvalidState invalid_state = GetInvalidState();
+  if (invalid_state != ax::mojom::blink::InvalidState::kNone) {
+    node_data->SetInvalidState(invalid_state);
+  }
 
   if (node_data->role == ax::mojom::blink::Role::kListMarker) {
     SerializeListMarkerAttributes(node_data);
@@ -2044,15 +2106,18 @@ void AXObject::SerializeOtherScreenReaderAttributes(
       node_data, ax::mojom::blink::StringAttribute::kAutoComplete,
       AutoComplete());
 
-  if (Action() != ax::mojom::blink::DefaultActionVerb::kNone) {
-    node_data->SetDefaultActionVerb(Action());
+  const ax::mojom::blink::DefaultActionVerb action = Action();
+  if (action != ax::mojom::blink::DefaultActionVerb::kNone) {
+    node_data->SetDefaultActionVerb(action);
   }
 
-  AXObjectVector error_messages = ErrorMessage();
-  if (error_messages.size() > 0) {
-    AddIntListAttributeFromObjects(
-        ax::mojom::blink::IntListAttribute::kErrormessageIds, error_messages,
-        node_data);
+  if (invalid_state != ax::mojom::blink::InvalidState::kFalse) {
+    AXObjectVector error_messages = ErrorMessage();
+    if (error_messages.size() > 0) {
+      AddIntListAttributeFromObjects(
+          ax::mojom::blink::IntListAttribute::kErrormessageIds, error_messages,
+          node_data);
+    }
   }
 
   if (ui::SupportsHierarchicalLevel(node_data->role) && HierarchicalLevel()) {
@@ -4242,18 +4307,14 @@ bool AXObject::ComputeIsInert(IgnoredReasons* ignored_reasons) const {
 }
 
 bool AXObject::IsAriaHiddenRoot() const {
-  if (AXObjectCache().HasBadAriaHidden(*this)) {
-    return false;
-  }
-
+  const Element* element = GetElement();
   // aria-hidden:true works a bit like display:none.
   // * aria-hidden=true affects entire subtree.
   // * aria-hidden=false is a noop.
-  if (!IsAriaAttributeTrue(html_names::kAriaHiddenAttr)) {
+  if (!element || !IsAriaAttributeTrue(*element, html_names::kAriaHiddenAttr) ||
+      AXObjectCache().HasBadAriaHidden(*this)) {
     return false;
   }
-
-  auto* node = GetNode();
 
   // The aria-hidden attribute is not valid for the main html and body elements:
   // See more at https://github.com/w3c/aria/pull/1880.
@@ -4261,8 +4322,9 @@ bool AXObject::IsAriaHiddenRoot() const {
   // logic in the case where the option is selected, and aria-hidden does not
   // prevent selection of the option (it cannot because ARIA does not affect
   // behavior outside of assistive tech driven by a11y API).
-  if (IsA<HTMLBodyElement>(node) || node == GetDocument()->documentElement() ||
-      IsA<HTMLOptionElement>(node)) {
+  if (IsA<HTMLBodyElement>(element) ||
+      element == GetDocument()->documentElement() ||
+      IsA<HTMLOptionElement>(element)) {
     AXObjectCache().DiscardBadAriaHiddenBecauseOfElement(*this);
     return false;
   }
@@ -4371,12 +4433,17 @@ bool AXObject::IsDescendantOfDisabledNode() {
 }
 
 bool AXObject::ComputeIsDescendantOfDisabledNode() {
-  if (IsA<Document>(GetNode()))
+  Node* node = GetNode();
+  if (IsA<Document>(node)) {
     return false;
+  }
 
-  bool disabled = false;
-  if (AriaBooleanAttribute(html_names::kAriaDisabledAttr, &disabled)) {
-    return disabled;
+  if (const Element* element = DynamicTo<Element>(node)) {
+    bool disabled = false;
+    if (AriaBooleanAttribute(*element, html_names::kAriaDisabledAttr,
+                             &disabled)) {
+      return disabled;
+    }
   }
 
   if (AXObject* parent = ParentObject()) {
@@ -4494,13 +4561,15 @@ bool AXObject::ComputeIsIgnoredButIncludedInTree() {
     return false;
   }
 
-  if (AXObjectCache().IsAriaOwned(this) || HasARIAOwns(GetElement())) {
+  Node* node = GetNode();
+  Element* element = DynamicTo<Element>(node);
+
+  if (AXObjectCache().IsAriaOwned(this, /*checks=*/DCHECK_IS_ON()) ||
+      HasARIAOwns(element)) {
     // Always include an aria-owned object. It must be a child of the
     // element with aria-owns.
     return true;
   }
-
-  const Node* node = GetNode();
 
   if (!node) {
     if (GetLayoutObject()) {
@@ -4599,8 +4668,6 @@ bool AXObject::ComputeIsIgnoredButIncludedInTree() {
     }
   }
 
-  Element* element = GetElement();
-
   // Include all pseudo-element content. Any anonymous subtree is included
   // from above, in the condition where there is no node.
   if (element && element->IsPseudoElement()) {
@@ -4613,16 +4680,7 @@ bool AXObject::ComputeIsIgnoredButIncludedInTree() {
   // pseudo-elements: Specifically, ::first-letter/::backdrop are not visited by
   // LayoutTreeBuilderTraversal, and cannot be in the tree, therefore do not add
   // a special rule to include their parents.
-  if (element && (element->GetPseudoElement(kPseudoIdBefore) ||
-                  element->GetPseudoElement(kPseudoIdAfter) ||
-                  element->GetPseudoElement(kPseudoIdMarker) ||
-                  element->GetPseudoElement(kPseudoIdScrollButtonBlockStart) ||
-                  element->GetPseudoElement(kPseudoIdScrollButtonInlineStart) ||
-                  element->GetPseudoElement(kPseudoIdScrollButtonInlineEnd) ||
-                  element->GetPseudoElement(kPseudoIdScrollButtonBlockEnd) ||
-                  element->GetPseudoElement(kPseudoIdScrollMarkerGroupBefore) ||
-                  element->GetPseudoElement(kPseudoIdScrollMarkerGroupAfter) ||
-                  element->GetPseudoElement(kPseudoIdScrollMarker))) {
+  if (element && element->HasAXIncludedPseudos()) {
     return true;
   }
 
@@ -4711,7 +4769,7 @@ bool AXObject::ComputeIsIgnoredButIncludedInTree() {
   }
 
   // Preserve nodes with language attributes.
-  if (HasAriaAttribute(html_names::kLangAttr)) {
+  if (HasAriaAttribute(*element, html_names::kLangAttr)) {
     return true;
   }
 
@@ -5159,10 +5217,10 @@ const ComputedStyle* AXObject::GetComputedStyle() const {
   }
 
   // For elements with layout objects we can get their style directly.
-  if (GetLayoutObject()) {
-    return &GetLayoutObject()->Style();
+  if (LayoutObject* layout_object = GetLayoutObject()) {
+    return &layout_object->Style();
   }
-  if (const Element* element = GetElement()) {
+  if (const Element* element = DynamicTo<Element>(node)) {
     return element->GetComputedStyle();
   }
   return nullptr;
@@ -6110,36 +6168,23 @@ bool AXObject::IsActiveLiveRegionRoot() const {
 }
 
 const AtomicString& AXObject::LiveRegionStatus() const {
-  static const base::NoDestructor<AtomicString> live_region_status_assertive(
-      AtomicString::FromLiteral<"assertive">());
-  static const base::NoDestructor<AtomicString> live_region_status_polite(
-      AtomicString::FromLiteral<"polite">());
   static const base::NoDestructor<AtomicString> live_region_status_undefined(
       AtomicString::FromLiteral<"undefined">());
 
-  const AtomicString& live_region_status =
-      AriaTokenAttribute(html_names::kAriaLiveAttr);
-  if (!live_region_status.empty()) {
-    return live_region_status;
+  if (const Element* element = GetElement()) {
+    const AtomicString& live_region_status = AriaTokenAttributeFromValue(
+        html_names::kAriaLiveAttr,
+        AriaAttribute(*element, html_names::kAriaLiveAttr));
+    if (!live_region_status.empty()) {
+      return live_region_status;
+    }
   }
 
   const AtomicString& implicit_value = GetImplicitAriaLive(RoleValue());
   // "undefined" means this element is not a live region.
   // See: https://github.com/w3c/aria/issues/2653
-  if (implicit_value == *live_region_status_undefined) {
-    return g_null_atom;
-  }
-  if (implicit_value == *live_region_status_assertive) {
-    return *live_region_status_assertive;
-  }
-  if (implicit_value == *live_region_status_polite) {
-    return *live_region_status_polite;
-  }
-  if (implicit_value == keywords::kOff) {
-    return keywords::kOff;
-  }
-
-  return g_null_atom;
+  return implicit_value == *live_region_status_undefined ? g_null_atom
+                                                         : implicit_value;
 }
 
 const AtomicString& AXObject::LiveRegionRelevant() const {
@@ -6156,34 +6201,36 @@ const AtomicString& AXObject::LiveRegionRelevant() const {
 }
 
 bool AXObject::IsDisabled() const {
+  Element* element = GetElement();
+  if (!element) {
+    return false;
+  }
+
   // <embed> or <object> with unsupported plugin, or more iframes than allowed.
   if (IsEmbeddingElement()) {
     if (IsAriaHidden()) {
       return true;
     }
-    auto* html_frame_owner_element = To<HTMLFrameOwnerElement>(GetElement());
+    auto* html_frame_owner_element = To<HTMLFrameOwnerElement>(element);
     return !html_frame_owner_element->ContentFrame();
   }
 
-  Node* node = GetNode();
-  if (node) {
-    // Check for HTML form control with the disabled attribute.
-    if (GetElement() && GetElement()->IsDisabledFormControl()) {
+  // Check for HTML form control with the disabled attribute.
+  if (element->IsDisabledFormControl()) {
+    return true;
+  }
+  // This is for complex pickers, such as a date picker.
+  if (AXObject::IsControl()) {
+    Element* owner_shadow_host = element->OwnerShadowHost();
+    if (owner_shadow_host &&
+        owner_shadow_host->FastHasAttribute(html_names::kDisabledAttr)) {
       return true;
-    }
-    // This is for complex pickers, such as a date picker.
-    if (AXObject::IsControl()) {
-      Element* owner_shadow_host = node->OwnerShadowHost();
-      if (owner_shadow_host &&
-          owner_shadow_host->FastHasAttribute(html_names::kDisabledAttr)) {
-        return true;
-      }
     }
   }
   // Check aria-disabled. According to ARIA in HTML section 3.1, aria-disabled
   // attribute does NOT override the native HTML disabled attribute.
   // https://www.w3.org/TR/html-aria/
-  if (IsAriaAttributeTrue(html_names::kAriaDisabledAttr)) {
+  if (IsAriaAttributeTrue(*element, html_names::kAriaDisabledAttr)) {
     return true;
   }
 
@@ -9261,15 +9308,16 @@ const AXObject* AXObject::LowestCommonAncestor(const AXObject& first,
 }
 
 // Extra checks that only occur during serialization.
-void AXObject::PreSerializationConsistencyCheck() const{
-  int reason_val = cached_values_dirty_reason_.has_value()
-                       ? static_cast<int>(cached_values_dirty_reason_.value())
-                       : -1;
-  SCOPED_CRASH_KEY_NUMBER("AXObject", "DirtyReason", reason_val);
-
+void AXObject::PreSerializationConsistencyCheck() const {
   CHECK(!IsDetached()) << "Do not serialize detached nodes: " << this;
   CHECK(AXObjectCache().IsFrozen());
-  CHECK(!NeedsToUpdateCachedValues()) << "Stale values on: " << this;
+  if (NeedsToUpdateCachedValues()) [[unlikely]] {
+    int reason_val = cached_values_dirty_reason_.has_value()
+                         ? static_cast<int>(cached_values_dirty_reason_.value())
+                         : -1;
+    SCOPED_CRASH_KEY_NUMBER("AXObject", "DirtyReason", reason_val);
+    NOTREACHED() << "Stale values on: " << this;
+  }
   CHECK(!IsMissingParent());
   if (!IsIncludedInTree()) {
     AXObject* included_parent = ParentObjectIncludedInTree();

@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">Zdieľanie hesiel</translation>
 <translation id="1554043146674176775">Vypnúť režim AI</translation>
 <translation id="1554477036522844996">Nové okno</translation>
+<translation id="1555014818414775661">Pridať obrázky</translation>
 <translation id="1557806604681757705">váš počítač</translation>
 <translation id="1558391695376153246">Zavrieť karty inkognito</translation>
 <translation id="1560153516220021659">Zbalené sekundárne tlačidlo panela s nástrojmi</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">Otvorte <ph name="BEGIN_BOLD" />Nastavenia prehliadača Safari<ph name="END_BOLD" /></translation>
 <translation id="3858860766373142691">Názov</translation>
 <translation id="386224966259596343">Tieto informácie budete môcť uložiť do Peňaženky pri ďalšom vypĺňaní príslušného formulára.</translation>
-<translation id="3868495844258915202">Zobraziť úplnú webovú adresu</translation>
 <translation id="3870931306085184145">Žiadne uložené heslá domény <ph name="DOMAIN" /></translation>
 <translation id="3875783148670536197">Ukázať postup</translation>
 <translation id="3878657761594430423">Rukoväť hárka</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">Ak chcete dostávať upozornenia na sledovanie cien, zapnite upozornenia v nastaveniach systému iOS.</translation>
 <translation id="528857768909044842">Tu sa ukladajú skupiny kariet</translation>
 <translation id="5294624619177114121">Mobilné upozornenia</translation>
-<translation id="5295239312320826323">Chcete odstrániť účet <ph name="USER_EMAIL" />?</translation>
 <translation id="5300589172476337783">Zobraziť</translation>
 <translation id="5311061401280561833">Prístup ku kamere a mikrofónu je povolený</translation>
 <translation id="5313967007315987356">Pridať web</translation>
@@ -1788,6 +1787,7 @@ Funkciu Handoff musíte povoliť v nastaveniach v časti Všeobecné a vaše zar
 <translation id="6504541289630702018">Jednoduchý prístup k skupinám kariet vytvoreným v počítači</translation>
 <translation id="6505334220040167806">Zbaliť skupinu kariet</translation>
 <translation id="6506996418997555004">Zdieľanie skupiny kariet <ph name="GROUP_NAME" /></translation>
+<translation id="650770261448122895">Vyhľadávajte s funkciou Lens, čo vidíte</translation>
 <translation id="6507973708545996744">Ak chcete mať čitateľský zoznam k dispozícii vo všetkých zariadeniach, prihláste sa.</translation>
 <translation id="6518133107902771759">Overiť</translation>
 <translation id="6523575793810663688">Postup</translation>
@@ -2147,7 +2147,6 @@ Kedykoľvek môžete začať odznova.</translation>
 <translation id="7603852183842204213">Blokované kontextové okná (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Synchronizácia nefunguje</translation>
 <translation id="760667371114328991">Vypnite upozornenia kontroly bezpečnosti</translation>
-<translation id="7612619742409846846">Prihlásený účet Google</translation>
 <translation id="7612849887607288481">Otvoriť ponuku vytvárania prototypov pomocou umelej inteligencie</translation>
 <translation id="7618220760967055820">Vyberte, ktoré tlačidlo sa má zobrazovať na paneli s nástrojmi</translation>
 <translation id="7620522820075868385">Zrušiť</translation>
@@ -2430,6 +2429,7 @@ Kedykoľvek môžete začať odznova.</translation>
 <translation id="8439758443371991593">Skryť položku Pridať do čitateľského zoznamu</translation>
 <translation id="8443986842926457191">Webová adresa obsahuje viac ako 2 048 znakov.</translation>
 <translation id="8449869326050867919">Heslo bolo zdieľané</translation>
+<translation id="8473367210869452063">Ak chcete s týmto webom interagovať, zastavte aktuálnu úlohu alebo počkajte, kým ju Gemini dokončí</translation>
 <translation id="8473815223723723001">Upraviť obrázok pomocou Gemini</translation>
 <translation id="8473863474539038330">Adresy a ďalšie údaje</translation>
 <translation id="8474378002946546633">Povoliť upozornenia</translation>

@@ -10,15 +10,19 @@
 #include <vector>
 
 #include "base/scoped_observation.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/gmock_expected_support.h"
 #include "base/test/run_until.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/values.h"
+#include "chrome/browser/background/glic/glic_background_mode_manager.h"
+#include "chrome/browser/background/glic/glic_launcher_configuration.h"
+#include "chrome/browser/glic/common/glic_relaunch.h"
 #include "chrome/browser/glic/glic_pref_names.h"
+#include "chrome/browser/glic/host/glic_assistant_switcher.h"
 #include "chrome/browser/glic/host/glic_no_webview_contents_manager.h"
 #include "chrome/browser/glic/host/glic_overlay.mojom.h"
-#include "chrome/browser/glic/host/glic_provider_change_relaunch.h"
 #include "chrome/browser/glic/host/host.h"
 #include "chrome/browser/glic/public/features.h"
 #include "chrome/browser/glic/public/glic_enabling.h"
@@ -29,6 +33,7 @@
 #include "chrome/browser/glic/test_support/glic_browser_test.h"
 #include "chrome/browser/glic/test_support/glic_test_environment.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/shell_integration.h"
 #include "chrome/browser/tab_list/tab_list_interface.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/test/base/chrome_test_utils.h"
@@ -41,6 +46,7 @@
 #include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
 #include "components/tabs/public/tab_interface.h"
+#include "components/version_info/channel.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_launcher.h"
@@ -112,6 +118,27 @@ class GlicProviderSwitchNoticeBrowserTest : public InProcessBrowserTest {
         &policy_provider_);
   }
 
+  void SetUpOnMainThread() override {
+    InProcessBrowserTest::SetUpOnMainThread();
+    // Simulate a default/stable browser check so `CompleteOnboarding()`
+    // asynchronously enables background mode across all build configurations
+    // without querying the host OS default browser state.
+    GlicLauncherConfiguration::SetCheckDefaultBrowserCallbackForTesting(
+        base::BindRepeating([] {
+          base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+              FROM_HERE,
+              base::BindOnce(
+                  &GlicLauncherConfiguration::OnCheckIsDefaultBrowserFinished,
+                  version_info::Channel::STABLE,
+                  shell_integration::DefaultWebClientState::IS_DEFAULT));
+        }));
+  }
+
+  void TearDownOnMainThread() override {
+    GlicLauncherConfiguration::SetCheckDefaultBrowserCallbackForTesting({});
+    InProcessBrowserTest::TearDownOnMainThread();
+  }
+
  protected:
   Profile* profile() { return chrome_test_utils::GetProfile(this); }
 
@@ -126,6 +153,12 @@ class GlicProviderSwitchNoticeBrowserTest : public InProcessBrowserTest {
   // Onboards the user to the latched provider, as its FRE does.
   void CompleteOnboarding() {
     GetGlicProviderSpec(profile()).GetFreStore().CompleteOnboarding(profile());
+    if (GlicEnabling::IsOsEntryPointEnabledForProfile(profile())) {
+      ASSERT_TRUE(base::test::RunUntil([] {
+        return GlicBackgroundModeManager::GetInstance()
+            ->IsInBackgroundModeForTesting();
+      }));
+    }
   }
 
   // Returns the known provider, or std::nullopt if none is known.
@@ -439,9 +472,9 @@ IN_PROC_BROWSER_TEST_F(GlicProviderSwitchNoticeWebviewBrowserTest,
   ASSERT_OK(
       WaitForWebUiState(mojom::WebUiState::kProviderSwitchNoticeGeicToGemini));
 
-  ASSERT_TRUE(content::ExecJs(
-      instance->host().webui_contents(),
-      "document.getElementById('continueButton').click()"));
+  ASSERT_TRUE(
+      content::ExecJs(instance->host().webui_contents(),
+                      "document.getElementById('continueButton').click()"));
 
   EXPECT_OK(WaitForWebUiState(mojom::WebUiState::kReady));
   EXPECT_EQ(KnownProviderKey(), GlicProviderKey::Gemini());

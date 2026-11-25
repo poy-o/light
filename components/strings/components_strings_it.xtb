@@ -78,6 +78,7 @@
 <translation id="112840717907525620">Cache delle policy integra</translation>
 <translation id="1131264053432022307">Immagine copiata</translation>
 <translation id="1132735979845538847"><ph name="ORIGIN" />: per uscire dalla modalità a schermo intero, trascina dall'alto e tocca il pulsante Indietro</translation>
+<translation id="11370190534773372">Dati della carta inseriti</translation>
 <translation id="1138458427267715730">Ricevi avvisi quando il prezzo cala su qualsiasi sito del web</translation>
 <translation id="1142713751288681188">Tipo di carta</translation>
 <translation id="1142965388643537393">Informazioni di viaggio</translation>
@@ -583,6 +584,7 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="1988881251331415125">Se l'ortografia è corretta, <ph name="BEGIN_LINK" />prova a eseguire lo strumento Diagnostica della connettività<ph name="END_LINK" />.</translation>
 <translation id="1991370806334788445">Prova a consentire i cookie di terze parti. In questo modo avrai meno protezione durante la navigazione, ma è più probabile che le funzionalità del sito operino come previsto.</translation>
 <translation id="1992331125980284532">JIS B3</translation>
+<translation id="1995173078718234136">Ricerca contenuti in corso...</translation>
 <translation id="1996557034791506430">Rimuovere autorizzazione?</translation>
 <translation id="1997484222658892567"><ph name="URL" /> vuole memorizzare in modo definitivo grandi quantità di dati sul computer locale</translation>
 <translation id="1997774360448418989">Carta (Leggera)</translation>
@@ -666,7 +668,6 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="2126374524350484896">App creazione file PDF:</translation>
 <translation id="2127090458081644412">Password salvata su questo dispositivo</translation>
 <translation id="2127747486437921899">Corsivo</translation>
-<translation id="2129163794581571479">Basato su Gemini con Personal Intelligence. Le tue richieste, i titoli delle pagine e gli URL potrebbero essere esaminati per migliorare la compilazione automatica avanzata. <ph name="BEGIN_LINK" />Gestisci le impostazioni<ph name="END_LINK" /></translation>
 <translation id="2130448033692577677">I modelli che hai specificato potrebbero non essere applicati a causa della mancata impostazione della policy DnsOverHttpsMode.</translation>
 <translation id="2130699163006053678">A3x7</translation>
 <translation id="2131006834960167560">Riquadro per l'attivazione della compilazione automatica dei pagamenti aperto alla massima altezza.</translation>
@@ -1216,7 +1217,6 @@ In caso contrario l'uso sarà bloccato dalle impostazioni sulla privacy. I conte
 <translation id="3041584414879052436">L'elenco degli emittenti di Buy now, pay later è chiuso.</translation>
 <translation id="3041612393474885105">Informazioni certificato</translation>
 <translation id="3041835740069544003">Chrome ora può rilevare e compilare più moduli grazie alla comprensione moduli più intelligente. A questo scopo, i contenuti e gli URL delle pagine possono essere elaborati in uno spazio privato nel cloud. Gestisci nelle impostazioni.</translation>
-<translation id="3047054686095898948">Salva le tue informazioni in <ph name="IDS_AUTOFILL_GOOGLE_WALLET_TITLE_1" /> e velocizza le attività, ad esempio la compilazione dei moduli nei prodotti Google. Puoi <ph name="BEGIN_LINK" />gestire le tue informazioni<ph name="END_LINK" /> in <ph name="IDS_AUTOFILL_GOOGLE_WALLET_TITLE_2" /> per <ph name="ACCOUNT" /></translation>
 <translation id="305162504811187366">Cronologia di Chrome Remote Desktop, inclusi timestamp, host e ID sessione client</translation>
 <translation id="3052868890529250114">In genere ti connetti ai siti in modo sicuro, ma questa volta Chrome non ha potuto usare una connessione sicura. Un attaccante potrebbe tentare di intercettare o modificare la connessione di rete. <ph name="BEGIN_LEARN_MORE_LINK" />Scopri di più sull'avviso<ph name="END_LEARN_MORE_LINK" />.</translation>
 <translation id="3052964831964880138"><ph name="PRICE_DROP" /> in meno su <ph name="PRODUCT_NAME" /></translation>
@@ -1584,7 +1584,6 @@ Per nascondere le opzioni di pagamento posticipato, vai alle <ph name="BEGIN_LIN
 <translation id="3655670868607891010">Se questo problema si verifica spesso, prova questi <ph name="HELP_LINK" />.</translation>
 <translation id="3658742229777143148">Revisione</translation>
 <translation id="3659521826520353662">Quali siti web definiti dall'amministratore vengono visitati e quando: <ph name="ALLOWLISTED_WEBSITES" /></translation>
-<translation id="3663760610864720538">Basato su Gemini con Personal Intelligence. <ph name="BEGIN_LINK" />Gestisci le impostazioni<ph name="END_LINK" /></translation>
 <translation id="3664479564786885722">Cerca altre opzioni di acquisto in altri negozi che vendono questo prodotto.</translation>
 <translation id="3664782872746246217">Parole chiave:</translation>
 <translation id="3670030362669914947">Numero</translation>
@@ -1863,7 +1862,6 @@ Per nascondere le opzioni di pagamento posticipato, vai alle <ph name="BEGIN_LIN
 <translation id="4112140312785995938">Vai indietro</translation>
 <translation id="4114007503059268298">Vuoi salvare questa carta nel tuo Account Google e su questo dispositivo?</translation>
 <translation id="4114146879518089587">Continua sul sito</translation>
-<translation id="4115378294792113321">Magenta</translation>
 <translation id="4116701314593212016">JIS B7</translation>
 <translation id="4116798170070772848">RA2</translation>
 <translation id="4117700440116928470">L'ambito della norma non è supportato.</translation>
@@ -3331,6 +3329,7 @@ Per nascondere le opzioni di pagamento posticipato, vai alle <ph name="BEGIN_LIN
 <translation id="6520509611422418552"><ph name="MEMBER_FIRST_NAME" /> è ora parte del gruppo di schede "<ph name="GROUP_NAME" />"</translation>
 <translation id="6521745193039995384">Non attivo</translation>
 <translation id="6524830701589638230">Pulsante Gestisci le impostazioni di accessibilità, attiva per personalizzare i tuoi strumenti di accessibilità nelle impostazioni di Chrome</translation>
+<translation id="652643331002043144">Questo sito sembra simile ad altri siti associati a phishing, malware e truffe.</translation>
 <translation id="6529173248185917884">Settimo rullo</translation>
 <translation id="6529602333819889595">&amp;Ripeti eliminazione</translation>
 <translation id="6532101170117367231">Salva in Google Drive</translation>
@@ -3445,6 +3444,7 @@ Per nascondere le opzioni di pagamento posticipato, vai alle <ph name="BEGIN_LIN
 <translation id="6727094998759448074">SRA4</translation>
 <translation id="672853333773293432">Accesso fatto con l'account</translation>
 <translation id="6732087373923685049">fotocamera</translation>
+<translation id="6736243959894955139">Indirizzo</translation>
 <translation id="6738516213925468394">I tuoi dati sono stati criptati con la tua <ph name="BEGIN_LINK" />passphrase di sincronizzazione<ph name="END_LINK" /> in data <ph name="TIME" />. Inseriscila per avviare la sincronizzazione.</translation>
 <translation id="6740851646645036700">Per il momento, hai raggiunto il limite di aiuto per la scrittura. Riprova più tardi.</translation>
 <translation id="674375294223700098">Errore sconosciuto del certificato del server.</translation>
@@ -4544,6 +4544,7 @@ Ulteriori dettagli:
 <translation id="8577348305244205642">Carta virtuale non disponibile</translation>
 <translation id="8579000896558714521">Override tastiera</translation>
 <translation id="8579561564816585231">Accesso fatto utilizzando un servizio Google come Gestore delle password</translation>
+<translation id="8580478010934016252">Vai ai metodi di pagamento</translation>
 <translation id="8581064022803799721">La pagina è salvata in <ph name="LAST_BOOKMARKS_FOLDER" />.</translation>
 <translation id="858637041960032120">Aggiungi telefono</translation>
 <translation id="8587100480629037893">Tracciamento delle mani non consentito</translation>

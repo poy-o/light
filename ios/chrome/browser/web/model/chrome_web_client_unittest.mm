@@ -20,6 +20,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "base/test/scoped_feature_list.h"
+#import "base/test/test_future.h"
 #import "components/captive_portal/core/captive_portal_detector.h"
 #import "components/content_settings/core/browser/host_content_settings_map.h"
 #import "components/enterprise/net/core/enterprise_proxy_error_data.h"
@@ -51,6 +52,7 @@
 #import "ios/chrome/browser/safe_browsing/model/client_side_detection/client_side_detection_java_script_feature.h"
 #import "ios/chrome/browser/safe_browsing/model/safe_browsing_blocking_page.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
@@ -93,6 +95,7 @@
 #import "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "ui/base/l10n/l10n_util.h"
+#import "url/gurl.h"
 
 using base::test::ios::kWaitForActionTimeout;
 using base::test::ios::WaitUntilConditionOrTimeout;
@@ -111,7 +114,7 @@ const char kExampleSearchEngineTemplateURL[] =
     "https://www.exampleSE.com/search?q={searchTerms}";
 const char kExampleSearchEngineSearchURL[] =
     "https://www.exampleSE.com/search?q=test";
-const char kExampleSearcheEngineRootURL[] = "https://www.exampleSE.com/";
+const char kExampleSearchEngineRootURL[] = "https://www.exampleSE.com/";
 const char kNonDSEURL[] = "https://www.example.com/";
 
 // Error used to test PrepareErrorPage method.
@@ -152,6 +155,31 @@ class ChromeWebClientTest : public PlatformTest {
   ~ChromeWebClientTest() override = default;
 
   ProfileIOS* profile() { return profile_.get(); }
+
+  // Sets `prefs::kAllowDinosaurEasterEgg` to `enabled`, calls
+  // `PrepareErrorPage()` for a generic net error and verifies the returned
+  // page matches `GetErrorPage()` for the same dinosaur easter egg state.
+  void VerifyPrepareErrorPageForDinoEasterEgg(bool enabled) {
+    profile()->GetPrefs()->SetBoolean(prefs::kAllowDinosaurEasterEgg, enabled);
+    ChromeWebClient web_client;
+    NSError* error = CreateTestError();
+    base::test::TestFuture<NSString*> future;
+    web::FakeWebState web_state;
+    web_state.SetBrowserState(profile());
+    web_client.PrepareErrorPage(&web_state, GURL(kTestUrl), error,
+                                /*is_post=*/false,
+                                /*is_off_the_record=*/false,
+                                /*info=*/std::nullopt,
+                                /*navigation_id=*/0, future.GetCallback());
+    NSString* page = future.Get();
+    EXPECT_NSEQ(GetErrorPage(GURL(kTestUrl), error, /*is_post=*/false,
+                             /*is_off_the_record=*/false,
+                             /*is_dino_easter_egg_enabled=*/enabled),
+                page);
+    const bool has_disabled_message = [page
+        containsString:l10n_util::GetNSString(IDS_ERRORPAGE_FUN_DISABLED)];
+    EXPECT_EQ(!enabled, has_disabled_message);
+  }
 
  protected:
   web::WebTaskEnvironment environment_{
@@ -214,6 +242,7 @@ TEST_F(ChromeWebClientTest, PrepareErrorPageNonPostNonOtr) {
         page = error_html;
       });
   web::FakeWebState web_state;
+  web_state.SetBrowserState(profile());
   web_client.PrepareErrorPage(&web_state, GURL(kTestUrl), error,
                               /*is_post=*/false,
                               /*is_off_the_record=*/false,
@@ -224,7 +253,8 @@ TEST_F(ChromeWebClientTest, PrepareErrorPageNonPostNonOtr) {
     return callback_called;
   }));
   EXPECT_NSEQ(GetErrorPage(GURL(kTestUrl), error, /*is_post=*/false,
-                           /*is_off_the_record=*/false),
+                           /*is_off_the_record=*/false,
+                           /*is_dino_easter_egg_enabled=*/true),
               page);
 }
 
@@ -240,6 +270,7 @@ TEST_F(ChromeWebClientTest, PrepareErrorPagePostNonOtr) {
         page = error_html;
       });
   web::FakeWebState web_state;
+  web_state.SetBrowserState(profile());
   web_client.PrepareErrorPage(&web_state, GURL(kTestUrl), error,
                               /*is_post=*/true,
                               /*is_off_the_record=*/false,
@@ -250,7 +281,8 @@ TEST_F(ChromeWebClientTest, PrepareErrorPagePostNonOtr) {
     return callback_called;
   }));
   EXPECT_NSEQ(GetErrorPage(GURL(kTestUrl), error, /*is_post=*/true,
-                           /*is_off_the_record=*/false),
+                           /*is_off_the_record=*/false,
+                           /*is_dino_easter_egg_enabled=*/true),
               page);
 }
 
@@ -266,6 +298,7 @@ TEST_F(ChromeWebClientTest, PrepareErrorPageNonPostOtr) {
         page = error_html;
       });
   web::FakeWebState web_state;
+  web_state.SetBrowserState(profile());
   web_client.PrepareErrorPage(&web_state, GURL(kTestUrl), error,
                               /*is_post=*/false,
                               /*is_off_the_record=*/true,
@@ -276,7 +309,8 @@ TEST_F(ChromeWebClientTest, PrepareErrorPageNonPostOtr) {
     return callback_called;
   }));
   EXPECT_NSEQ(GetErrorPage(GURL(kTestUrl), error, /*is_post=*/false,
-                           /*is_off_the_record=*/true),
+                           /*is_off_the_record=*/true,
+                           /*is_dino_easter_egg_enabled=*/true),
               page);
 }
 
@@ -292,6 +326,7 @@ TEST_F(ChromeWebClientTest, PrepareErrorPagePostOtr) {
         page = error_html;
       });
   web::FakeWebState web_state;
+  web_state.SetBrowserState(profile());
   web_client.PrepareErrorPage(&web_state, GURL(kTestUrl), error,
                               /*is_post=*/true,
                               /*is_off_the_record=*/true,
@@ -302,8 +337,19 @@ TEST_F(ChromeWebClientTest, PrepareErrorPagePostOtr) {
     return callback_called;
   }));
   EXPECT_NSEQ(GetErrorPage(GURL(kTestUrl), error, /*is_post=*/true,
-                           /*is_off_the_record=*/true),
+                           /*is_off_the_record=*/true,
+                           /*is_dino_easter_egg_enabled=*/true),
               page);
+}
+
+// Tests `PrepareErrorPage()` when dinosaur easter egg is disabled via pref.
+TEST_F(ChromeWebClientTest, PrepareErrorPageWithDinoDisabled) {
+  VerifyPrepareErrorPageForDinoEasterEgg(/*enabled=*/false);
+}
+
+// Tests `PrepareErrorPage()` when dinosaur easter egg is enabled via pref.
+TEST_F(ChromeWebClientTest, PrepareErrorPageWithDinoEnabled) {
+  VerifyPrepareErrorPageForDinoEasterEgg(/*enabled=*/true);
 }
 
 // Tests PrepareErrorPage with SSLInfo, which results in an SSL committed
@@ -1011,7 +1057,7 @@ TEST_F(ChromeWebClientTest, ShouldBlockUniversalLinksForURL) {
   EXPECT_TRUE(web_client.ShouldBlockUniversalLinksForURL(
       profile(), GURL(kExampleSearchEngineSearchURL)));
   EXPECT_TRUE(web_client.ShouldBlockUniversalLinksForURL(
-      profile(), GURL(kExampleSearcheEngineRootURL)));
+      profile(), GURL(kExampleSearchEngineRootURL)));
   EXPECT_FALSE(web_client.ShouldBlockUniversalLinksForURL(
       profile(), GURL(kGoogleSearchURL)));
 }

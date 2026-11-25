@@ -14,6 +14,7 @@
 #include "base/containers/span.h"
 #include "base/containers/to_vector.h"
 #include "base/feature_list.h"
+#include "base/i18n/language_tag.h"
 #include "base/notimplemented.h"
 #include "base/notreached.h"
 #include "base/strings/strcat.h"
@@ -65,7 +66,7 @@ using autofill::EntityTypeName;
 //    `api::autofill_private::EntityInstanceWithLabels` to the output.
 void EntityInstanceToPrivateApiEntityInstanceWithLabels(
     base::span<const EntityInstance*> entity_instances,
-    std::string_view app_locale,
+    const base::i18n::LanguageTag& app_locale,
     bool obfuscate_sensitive_types,
     std::vector<autofill_private::EntityInstanceWithLabels>& output) {
   // Step 1#, get all available labels for `entity_instances`.
@@ -140,7 +141,7 @@ AttributeTypeDataTypeToPrivateApiAttributeTypeDataType(
 
 std::optional<EntityInstance> PrivateApiEntityInstanceToEntityInstance(
     const autofill_private::EntityInstance& private_api_entity_instance,
-    std::string_view app_locale,
+    const base::i18n::LanguageTag& app_locale,
     bool entity_supports_wallet_storage) {
   base::flat_set<AttributeInstance, AttributeInstance::CompareByType>
       attribute_instances;
@@ -235,7 +236,7 @@ std::optional<EntityInstance> PrivateApiEntityInstanceToEntityInstance(
 
 autofill_private::EntityInstance EntityInstanceToPrivateApiEntityInstance(
     const EntityInstance& entity_instance,
-    std::string_view app_locale,
+    const base::i18n::LanguageTag& app_locale,
     bool entity_supports_wallet_storage) {
   std::vector<autofill_private::AttributeInstance>
       private_api_attribute_instances;
@@ -308,7 +309,7 @@ std::vector<autofill_private::EntityInstanceWithLabels>
 EntityInstancesToPrivateApiEntityInstancesWithLabels(
     base::span<const EntityInstance> entity_instances,
     bool obfuscate_sensitive_types,
-    std::string_view app_locale) {
+    const base::i18n::LanguageTag& app_locale) {
   // Entity labels should be generated based on other entities of the same
   // type. This is because the disambiguation values of attributes are only
   // relevant inside a specific entity type.

@@ -13,6 +13,7 @@
 #include <utility>
 
 #include "base/android/android_info.h"
+#include "base/android/callback_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/compiler_specific.h"
@@ -430,8 +431,7 @@ MediaDrmBridge::CdmCreationResult MediaDrmBridge::CreateInternal(
   if (!media_drm_bridge->j_media_drm_) {
     DCHECK_NE(media_drm_bridge->last_create_error_,
               MediaDrmCreateError::SUCCESS);
-    return base::unexpected(ConvertMediaDrmCreateError(
-        media_drm_bridge->last_create_error_, security_level));
+    return base::unexpected(media_drm_bridge->GetLastCreateErrorStatus());
   }
 
   return media_drm_bridge;
@@ -765,6 +765,7 @@ void MediaDrmBridge::CompleteInitialization(
   }
 
   DVLOG(1) << __func__;
+  DCHECK(j_media_drm_);
 
   SetMediaCryptoReadyCB(std::move(media_crypto_ready_cb));
 
@@ -772,15 +773,17 @@ void MediaDrmBridge::CompleteInitialization(
   ScopedJavaLocalRef<jstring> j_security_origin =
       ConvertUTF8ToJavaString(env, origin_id);
 
-  bool success = Java_MediaDrmBridge_initializeWithOriginAndCrypto(
-      env, j_media_drm_, j_security_origin);
-
-  if (!success) {
+  if (!Java_MediaDrmBridge_initializeWithOriginAndCrypto(env, j_media_drm_,
+                                                         j_security_origin)) {
+    // Java calls onCreateError() and release() -> onMediaCryptoReady(null) on
+    // failure, so wait for NotifyMediaCryptoReady(nullptr) to emit
+    // Media.EME.MediaCryptoAvailable and invoke `media_crypto_ready_cb_` once.
     LOG(ERROR) << "Failed to complete JNI MediaDrmBridge initialization.";
-    if (media_crypto_ready_cb_) {
-      std::move(media_crypto_ready_cb_).Run(nullptr, false);
-    }
   }
+}
+
+CreateCdmStatus MediaDrmBridge::GetLastCreateErrorStatus() const {
+  return ConvertMediaDrmCreateError(last_create_error_, security_level_);
 }
 
 bool MediaDrmBridge::SetPropertyStringForTesting(
@@ -798,9 +801,24 @@ bool MediaDrmBridge::SetPropertyStringForTesting(
       env, j_media_drm_, j_property_name_string, j_property_value_string);
 }
 
+void MediaDrmBridge::SetFailSetOriginForTesting(bool fail) {
+  Java_MediaDrmBridge_setFailSetOriginForTesting(  // IN-TEST
+      AttachCurrentThread(), j_media_drm_, fail);
+}
+
+void MediaDrmBridge::PostToTaskRunner(JNIEnv* env, base::OnceClosure runnable) {
+  // Called from the MediaDrm listener Executor (typically on a Binder thread).
+  // Must always post asynchronously rather than running inline so that session
+  // events triggered during a synchronous MediaDrm JNI call (e.g. restoreKeys)
+  // execute after the enclosing method queues its promise resolution.
+  task_runner_->PostTask(FROM_HERE, std::move(runnable));
+}
+
 //------------------------------------------------------------------------------
-// The following OnXxx functions are called from Java. The implementation must
-// only do minimal work and then post tasks to avoid reentrancy issues.
+// The following OnXxx functions are called from Java on |task_runner_|. The
+// implementation must only do minimal work and then post tasks to
+// |task_runner_| to avoid synchronous reentrancy and ensure session events
+// posted by MediaDrm listeners run after preceding promise resolutions.
 
 void MediaDrmBridge::OnMediaCryptoReady(
     JNIEnv* env,
@@ -878,6 +896,7 @@ void MediaDrmBridge::OnSessionMessage(JNIEnv* env,
                                       const JavaRef<jbyteArray>& j_session_id,
                                       int32_t j_message_type,
                                       const JavaRef<jbyteArray>& j_message) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
   DVLOG(2) << __func__;
 
   std::vector<uint8_t> message;
@@ -895,6 +914,7 @@ void MediaDrmBridge::OnSessionMessage(JNIEnv* env,
 void MediaDrmBridge::OnSessionClosed(JNIEnv* env,
                                      const JavaRef<jbyteArray>& j_session_id,
                                      int32_t j_reason) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
   DVLOG(2) << __func__;
   std::string session_id;
   JavaByteArrayToString(env, j_session_id, &session_id);
@@ -912,6 +932,7 @@ void MediaDrmBridge::OnSessionKeysChange(
     const JavaRef<jobjectArray>& j_keys_info,
     bool has_additional_usable_key,
     bool is_key_release) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
   DVLOG(2) << __func__;
 
   CdmKeysInfo cdm_keys_info;
@@ -966,6 +987,7 @@ void MediaDrmBridge::OnSessionExpirationUpdate(
     JNIEnv* env,
     const JavaRef<jbyteArray>& j_session_id,
     int64_t expiry_time_ms) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
   DVLOG(2) << __func__ << ": " << expiry_time_ms << " ms";
   std::string session_id;
   JavaByteArrayToString(env, j_session_id, &session_id);

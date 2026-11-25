@@ -29,6 +29,12 @@ _webui_code_cache_paks = [
   "$root_gen_dir/chrome/webui_toolbar_code_cache_resources.pak",
   "$root_gen_dir/ui/webui/resources/webui_code_cache_resources.pak",
 ]
+if (enable_webui_ntp) {
+  _webui_code_cache_paks += [
+    "$root_gen_dir/chrome/new_tab_page_code_cache_resources.pak",
+    "$root_gen_dir/chrome/new_tab_page_eager_code_cache_resources.pak",
+  ]
+}
 _webui_code_cache_pak_deps = [
   "//chrome/browser/resources:code_cache_resources",
   "//ui/webui/resources:code_cache_resources",
@@ -96,12 +102,12 @@ template("chrome_repack_percent") {
     if (is_chromeos) {
       sources += [
         "$root_gen_dir/ash/login/resources/login_resources_${percent}_percent.pak",
-        "$root_gen_dir/chrome/chromeos_app_icon_resources_${percent}_percent.pak",
+        "$root_gen_dir/ash/resources/ash_scaled_resources_${percent}_percent.pak",
         "$root_gen_dir/ui/chromeos/resources/ui_chromeos_resources_${percent}_percent.pak",
       ]
       deps += [
         "//ash/login/resources",
-        "//chrome/browser/resources/chromeos:app_icon_resources",
+        "//ash/resources:scaled_resources",
         "//ui/chromeos/resources",
       ]
       if (is_chrome_branded) {
@@ -376,7 +382,6 @@ template("chrome_extra_paks") {
         "$root_gen_dir/chrome/app_install_resources.pak",
         "$root_gen_dir/chrome/bluetooth_pairing_dialog_resources.pak",
         "$root_gen_dir/chrome/cloud_upload_resources.pak",
-        "$root_gen_dir/chrome/common/chromeos/extensions/chromeos_system_extensions_resources.pak",
         "$root_gen_dir/chrome/cros_styles_resources.pak",
         "$root_gen_dir/chrome/crostini_installer_resources.pak",
         "$root_gen_dir/chrome/cryptohome_resources.pak",
@@ -419,6 +424,7 @@ template("chrome_extra_paks") {
         "$root_gen_dir/chromeos/ash/ash_resources.pak",
         "$root_gen_dir/chromeos/ash/components/emoji/emoji.pak",
         "$root_gen_dir/chromeos/ash/experiences/extensions/chromeos_extensions_resources.pak",
+        "$root_gen_dir/chromeos/ash/experiences/extensions/common/telemetry/chromeos_system_extensions_resources.pak",
         "$root_gen_dir/chromeos/chromeos_boca_app_bundle_resources.pak",
         "$root_gen_dir/chromeos/chromeos_help_app_bundle_resources.pak",
         "$root_gen_dir/chromeos/chromeos_help_app_kids_magazine_bundle_resources.pak",
@@ -480,10 +486,10 @@ template("chrome_extra_paks") {
         "//ash/webui/vc_background_ui/resources",
         "//ash/wm/overview/birch/resources:coral_resources",
         "//chrome/browser/resources:office_web_app_resources",
-        "//chrome/common/chromeos/extensions:resources",
         "//chromeos/ash/components/emoji:resources",
         "//chromeos/ash/experiences/arc/input_overlay/resources",
         "//chromeos/ash/experiences/extensions:resources",
+        "//chromeos/ash/experiences/extensions/common/telemetry:resources",
         "//chromeos/ash/resources",
         "//ui/chromeos/styles:cros_styles_resources",
         "//ui/file_manager:file_manager_gen_resources",
@@ -658,7 +664,7 @@ template("chrome_extra_paks") {
       deps += [ "//chrome/browser/resources/default_browser/visual_guided_setter:resources" ]
     }
 
-    if (safe_browsing_mode == 1) {
+    if (safe_browsing_mode != 0) {
       sources += [ "$root_gen_dir/chrome/reset_password_resources.pak" ]
       deps += [ "//chrome/browser/resources/reset_password:resources" ]
     }

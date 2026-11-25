@@ -31,8 +31,10 @@ class IOSChromePasskeyClient : public webauthn::IOSPasskeyClient {
   void FetchTrustedVaultKeys(
       webauthn::ReauthenticatePurpose purpose,
       webauthn::PasskeyUserVerificationStatus user_verification_status,
+      bool allow_ui,
       webauthn::FetchTrustedVaultKeysCallback callback) override;
   void FetchDeviceAuthorizationKeys(
+      bool allow_reauth,
       webauthn::FetchDeviceAuthKeysCallback callback) override;
   void ShowSuggestionBottomSheet(RequestInfo request_info) override;
   void ShowCreationBottomSheet(RequestInfo request_info) override;
@@ -51,8 +53,10 @@ class IOSChromePasskeyClient : public webauthn::IOSPasskeyClient {
   PasskeyKeychainProviderBridge* GetPasskeyKeychainProviderBridge();
 
   // Handles the result of `DeviceAuthorizationService::GetOrFetchKeys()`,
-  // initiating the embedded ReAuth flow if required.
+  // initiating the embedded ReAuth flow if required and `allow_reauth` is
+  // `true`.
   void OnDeviceAuthorizationKeysFetched(
+      bool allow_reauth,
       webauthn::FetchDeviceAuthKeysCallback callback,
       webauthn::DeviceAuthFetchResult result);
 

@@ -257,7 +257,8 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
   void SetMediaCryptoReadyCB(MediaCryptoReadyCB media_crypto_ready_cb);
 
   // Completes initialization by setting the security origin and triggering
-  // MediaCrypto creation.
+  // MediaCrypto creation. `media_crypto_ready_cb` will be called asynchronously
+  // on `task_runner_` once MediaCrypto is created or initialization fails.
   void CompleteInitialization(const std::string& origin_id,
                               MediaCryptoReadyCB media_crypto_ready_cb);
 
@@ -267,8 +268,14 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
   bool SetPropertyStringForTesting(const std::string& property_name,
                                    const std::string& property_value);
 
-  // All the OnXxx functions below are called from Java. The implementation must
-  // only do minimal work and then post tasks to avoid reentrancy issues.
+  // Makes the next security origin update in Java fail, so tests can drive
+  // CompleteInitialization() down its failure path.
+  void SetFailSetOriginForTesting(bool fail);
+
+  // All the OnXxx functions below are called from Java on |task_runner_|. The
+  // implementation must only do minimal work and then post tasks to
+  // |task_runner_| to avoid synchronous reentrancy and ensure session events
+  // posted by MediaDrm listeners run after preceding promise resolutions.
 
   // Called by Java after a MediaCrypto object is created.
   void OnMediaCryptoReady(
@@ -336,9 +343,19 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
   // object.
   void OnCreateError(JNIEnv* env, int32_t j_error_code);
 
+  // Posts a Java Runnable to |task_runner_| for MediaDrm listener callbacks.
+  // May be called on any thread.
+  void PostToTaskRunner(JNIEnv* env, base::OnceClosure runnable);
+
  private:
   friend class MediaDrmBridgeFactory;
+  friend class MediaDrmBridgeFactoryTest;
   FRIEND_TEST_ALL_PREFIXES(MediaDrmBridgeTest, MaybeParseCdmVersion);
+  FRIEND_TEST_ALL_PREFIXES(MediaDrmBridgeTest,
+                           ProvisionAfterDestroyedWhileProvisioning_Widevine);
+  FRIEND_TEST_ALL_PREFIXES(
+      MediaDrmBridgeTest,
+      UpdateSession_ClearKey_DeliversListenerCallbacksOnTaskRunner);
   // For DeleteSoon() in DeleteOnCorrectThread().
   friend class base::DeleteHelper<MediaDrmBridge>;
 
@@ -385,6 +402,11 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
   // Called on the |task_runner_| when there is additional usable key.
   void OnHasAdditionalUsableKey();
 
+  // Converts `last_create_error_` to `CreateCdmStatus` using
+  // `security_level_`. Returns `CreateCdmStatus::kSuccess` if no create error
+  // was recorded.
+  CreateCdmStatus GetLastCreateErrorStatus() const;
+
   // UUID of the key system.
   std::vector<uint8_t> scheme_uuid_;
 
@@ -427,15 +449,15 @@ class MEDIA_EXPORT MediaDrmBridge : public ContentDecryptionModule,
   CdmPromiseAdapter cdm_promise_adapter_;
 
   // Default task runner.
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   // The security level of the MediaDrmBridge.
   const SecurityLevel security_level_;
 
   MediaCryptoContextImpl media_crypto_context_;
 
-  // Error recorded when creating MediaDrmBridge Java object. Only set if
-  // create() returns null.
+  // Error recorded when creating MediaDrmBridge Java object or completing its
+  // initialization. Only set on failure.
   MediaDrmCreateError last_create_error_ = MediaDrmCreateError::SUCCESS;
 
   // NOTE: Weak pointers must be invalidated before all other member variables.

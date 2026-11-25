@@ -103,12 +103,14 @@
 <translation id="1896602904211344018">Chrome 앱 다운로드</translation>
 <translation id="1919130412786645364">Chrome 로그인 허용</translation>
 <translation id="1925069572871307609">향후 Chrome 업데이트를 받으려면 Windows 10 버전 1809 이상이 필요합니다. 이 컴퓨터에서는 이전 버전의 Windows 10을 사용 중입니다.</translation>
+<translation id="1975400514743766362"><ph name="DEVICE_TYPE" />에서 Chrome 앱을 사용하여 이동 중에도 Google의 안전 기능을 활용하세요</translation>
 <translation id="1979600810166324878">iOS용 Chrome의 향상된 세이프 브라우징으로 이동 중에도 더 안전하게 보호하세요.</translation>
 <translation id="2001586581944147178">내 인터넷 트래픽에 액세스할 수 있는 사용자가 내가 방문하는 사이트를 확인하기가 더 어려워집니다. Chrome은 DNS(도메인 이름 시스템)에서 사이트의 IP 주소를 조회하는 데 보안 연결을 사용합니다.</translation>
 <translation id="2018879682492276940">설치할 수 없습니다. 다시 시도해 보세요.</translation>
 <translation id="2024959665595762054">Google 계정에서 Chrome 데이터를 사용하고 저장하려면 본인 인증을 완료하세요.</translation>
 <translation id="2034233344106846793">가능한 경우 Chrome이 비보안 연결을 HTTPS로 자동 업그레이드합니다.</translation>
 <translation id="2039417478970545937">설정</translation>
+<translation id="2040220733769034247">휴대전화로 QR 코드를 스캔하여 Chrome을 다운로드하고 Google 계정에 로그인하세요.</translation>
 <translation id="2044908892530830113">Mac 메뉴 바에 Chrome으로 검색 표시 및 키보드 단축키 사용 설정</translation>
 <translation id="2050189601866423230">Google 검색 AI 모드를 고정하여 탐색 중에 질문할 수 있습니다.</translation>
 <translation id="2060311596979880693">완료되었습니다. 이제 Chrome에서 Google 검색을 사용해 탐색 중에도 쉽게 질문할 수 있습니다.</translation>
@@ -139,9 +141,9 @@
 <translation id="2295218613066132598">Chrome 사이트 바로가기 표시</translation>
 <translation id="2301513536169703857">모든 기기에서 비밀번호, 북마크 등을 사용하려면 Chrome에 로그인하세요</translation>
 <translation id="2307973900865360088">도크에 고정</translation>
+<translation id="2308558013860776484">다른 앱이나 파일과 같은 Chrome 외부 콘텐츠의 스크린샷을 공유하세요.</translation>
 <translation id="2309047409763057870">Chrome의 보조 설치이며 기본 브라우저로 설정할 수 없습니다.</translation>
 <translation id="2345992953227471816">Chrome에서 다음 확장 프로그램에 멀웨어가 포함된 것을 발견했습니다.</translation>
-<translation id="2350411688004301551">Gemini Enterprise로 전환</translation>
 <translation id="2358140144860869442">모든 기기에서 읽기 목록 등을 사용하려면 Chrome에 로그인하세요</translation>
 <translation id="2359808026110333948">계속</translation>
 <translation id="2403703063067034158">시작 오류: 현재 다른 설정 인스턴스가 실행 중입니다. 나중에 다시 시도해 주세요.</translation>
@@ -199,7 +201,6 @@
 <translation id="2876628302275096482"><ph name="BEGIN_LINK" />Chrome에서 데이터를 비공개로 유지하는 방법<ph name="END_LINK" /> 자세히 알아보기</translation>
 <translation id="2885378588091291677">작업 관리자</translation>
 <translation id="2888126860611144412">Chrome 정보</translation>
-<translation id="2898830646167954300">비관리형 Gemini 어시스턴트로 다시 전환</translation>
 <translation id="2915996080311180594">나중에 다시 시작</translation>
 <translation id="2926952073016206995">Chrome에서 사이트에 대한 카메라 권한이 필요합니다.</translation>
 <translation id="2945997411976714835">설치 오류: 설치 프로그램 프로세스를 시작할 수 없습니다.</translation>
@@ -250,6 +251,7 @@
 <translation id="3294686910656423119">사용 통계 및 비정상 종료 보고서</translation>
 <translation id="3327226547491422998">나중에 Chrome에서 저장된 정보를 사용하여 양식을 자동 완성할지 묻습니다.</translation>
 <translation id="3352986031709923790">검색 영역의 오른쪽 상단: 오른쪽 <ph name="RIGHT" />%, 상단 <ph name="TOP" />%</translation>
+<translation id="3370239327277137701">사이트와 Chrome에서는 요약, 교정, 자막 등의 기능에 기기에서 직접 실행되는 AI를 사용할 수 있습니다. 이는 Chrome의 Gemini와는 별개입니다. <ph name="BEGIN_LINK" />온디바이스 AI에 대해 자세히 알아보기<ph name="END_LINK" /></translation>
 <translation id="3373752068427117404">일부 Chrome 기능 및 확장 프로그램에는 바로가기가 제공됩니다. 다시 사용 설정할 수 있습니다</translation>
 <translation id="3379938682270551431">{0,plural, =0{지금 Chrome이 다시 시작됩니다}=1{1초 후 Chrome이 다시 시작됩니다}other{#초 후 Chrome이 다시 시작됩니다}}</translation>
 <translation id="3380249972812870825">Chrome의 Gemini를 열려면 <ph name="GLOBAL_HOTKEY" /> 키를 누르세요</translation>
@@ -348,6 +350,7 @@
 <translation id="4427306783828095590">향상된 보호 기능이 피싱 및 멀웨어를 더욱 효과적으로 차단합니다.</translation>
 <translation id="4434353761996769206">설치 프로그램 오류: <ph name="INSTALLER_ERROR" /></translation>
 <translation id="4437295824090654417">Chrome의 Gemini와 이 문서를 공유하여 간략한 개요를 확인하고 후속 질문을 하세요</translation>
+<translation id="4440999670272408191">언제든지 삭제할 수 있습니다. 사이트 또는 기능에 필요한 경우 Chrome에서 자동으로 다시 다운로드할 수 있습니다.</translation>
 <translation id="4450664632294415862">Chrome - 네트워크 로그인 - <ph name="PAGE_TITLE" /></translation>
 <translation id="4458462641685292929">Chrome에서 다른 작업이 진행 중입니다. 나중에 다시 시도해 주세요.</translation>
 <translation id="4493028449971051158">시작 오류: 관리자로 설치 프로그램을 실행하세요.</translation>
@@ -355,6 +358,7 @@
 <translation id="4501839397124711198">측면 패널에 Google 검색을 고정하여 탐색 중에 질문할 수 있습니다.</translation>
 <translation id="4571503333518166079">Chrome 알림 설정으로 이동</translation>
 <translation id="4580939929828762295">Google 비밀번호 관리자로 보안을 유지하세요</translation>
+<translation id="4589544932092381064">Windows 태스크 바에 Chrome으로 검색 표시 및 키보드 단축키 사용 설정</translation>
 <translation id="459622048091363950">Chrome에 액세스 권한을 부여하면 웹사이트에서 액세스 권한을 요청할 수 있게 됩니다.</translation>
 <translation id="4598116752460667024">목록에서 프로세스를 검색합니다.</translation>
 <translation id="4600710005438004015">Chrome을 최신 버전으로 업데이트하지 못했기 때문에 새로운 기능과 보안 수정 사항이 적용되지 않았습니다.</translation>
@@ -370,6 +374,7 @@
 <translation id="4754614261631455953">Chrome Canary(mDNS-In)</translation>
 <translation id="4756182432527369254">Chrome의 V8 엔진으로 사이트 속도를 높이지만 Chrome이 공격에 약간 더 취약해집니다.</translation>
 <translation id="4768676935374695498">Google 렌즈로 이 동영상 검색</translation>
+<translation id="4783580253728290203">사용 중지하면 Chrome에서 온디바이스 AI 모델을 삭제하며 다시 다운로드하지 않습니다. 일부 사이트 및 Chrome 기능이 작동하지 않을 수 있습니다.</translation>
 <translation id="479167709087336770">Google 검색과 동일한 맞춤법 검사기가 사용됩니다. 브라우저에 입력되는 텍스트는 Google로 전송됩니다. 설정에서 언제든지 이 동작을 변경할 수 있습니다.</translation>
 <translation id="4793679854893018356">Chrome이 사용자를 안전하게 보호하는 방법 알아보기</translation>
 <translation id="4803313124144656665">Chrome에서 Google 검색 닫기</translation>
@@ -421,7 +426,6 @@
 <translation id="5271833978500241046">Chrome에서 다른 Gemini 기능과 함께 사용하세요</translation>
 <translation id="5320351714793324716">사용자가 쿠키를 허용하면 Chrome에서 미리 로드할 때 쿠키를 사용할 수 있습니다.</translation>
 <translation id="5321325624576443340">Google 렌즈를 사용할 수 없습니다. 나중에 다시 시도해 주세요.</translation>
-<translation id="5336664042114176802">원래 Google 계정과 연결되어 있으며 <ph name="DOMAIN" />에서 관리하지 않는 Gemini 어시스턴트로 전환할 수 있습니다. 대답은 더 이상 <ph name="DOMAIN" />에서 관리하는 파일 또는 서비스를 기반으로 제공되지 않으며 채팅 기록도 이전되지 않습니다. 업무용으로 사용하기에 적합하지 않을 수 있습니다. 전환하려면 Chrome을 다시 실행해야 합니다.</translation>
 <translation id="5346389065299425353">여러 탭, 파일, 도구를 추가하여 심층적으로 검색하세요.</translation>
 <translation id="5353252989841766347">Chrome에서 비밀번호 내보내기</translation>
 <translation id="5368118228313795342">추가 코드: <ph name="EXTRA_CODE" />.</translation>
@@ -456,6 +460,7 @@ Chrome에서 설정을 복구할 수 없습니다.</translation>
 <translation id="5690427481109656848">Google LLC</translation>
 <translation id="569897634095159764">인터넷에 연결할 수 없습니다. 프록시 서버를 인증해야 합니다.</translation>
 <translation id="5709557627224531708">Chrome을 기본 브라우저로 설정</translation>
+<translation id="5715427327524421317">Chrome에서 이러한 AI 모델을 자동으로 다운로드하고 업데이트합니다.</translation>
 <translation id="5717779012650642443">{COUNT,plural, =1{고급 보호를 사용하려면 Chrome을 다시 실행하여 업데이트를 적용해야 합니다. 보안 시크릿 창은 다시 열리지 않습니다.}other{고급 보호를 사용하려면 Chrome을 다시 실행하여 업데이트를 적용해야 합니다. #개의 보안 시크릿 창은 다시 열리지 않습니다.}}</translation>
 <translation id="5719246646468301581">Chrome 및 ChromeOS 추가 서비스 약관</translation>
 <translation id="5736850870166430177">사이트에서 사용자의 비밀번호를 도용하려고 하거나 사용자가 유해한 파일을 다운로드하는 경우, Chrome에서 페이지 콘텐츠 일부를 비롯한 URL을 세이프 브라우징 서비스에 보낼 수 있습니다.</translation>
@@ -540,7 +545,6 @@ Chrome에서 설정을 복구할 수 없습니다.</translation>
 <translation id="6438015621983209660">휴대전화에서 Chrome으로 향상된 세이프 브라우징을 확장하세요</translation>
 <translation id="6442774133615368941">iOS용 Chrome 앱에서 카메라를 사용해 눈앞의 물건을 쇼핑하고, 번역하고, 알아보세요.</translation>
 <translation id="6446105560007692480">Chrome으로 검색하거나 <ph name="BEGIN_LINK" />설정<ph name="END_LINK" />에서 맞춤설정합니다.</translation>
-<translation id="6447943657065463998">이 관리 브라우저는 <ph name="DOMAIN" />에서 업무용으로 설정한 Gemini 어시스턴트를 사용할 수 있습니다. 조직의 파일 및 승인된 서비스를 바탕으로 정보를 찾고 대답을 제공할 수 있습니다. 개인 프로필에서 사용하는 것은 권장되지 않을 수 있습니다. 채팅 기록은 이전되지 않습니다. 전환하려면 Chrome을 다시 실행해야 합니다.</translation>
 <translation id="6448835208126432197">Chrome의 Gemini에서 화면의 일부를 선택하려면 키보드 단축키를 사용하세요.</translation>
 <translation id="6473905796280459355">Chrome 정보 페이지로 이동</translation>
 <translation id="6481963882741794338">맞춤설정 등의 목적으로 Chrome과 다른 Google 서비스를 연결합니다</translation>
@@ -548,6 +552,7 @@ Chrome에서 설정을 복구할 수 없습니다.</translation>
 <translation id="6491330562720922580">휴대기기에서 Chrome 브라우저를 다운로드할 수 있는 QR 코드</translation>
 <translation id="6493527311031785448">Chrome에서 <ph name="AUTHENTICATION_PURPOSE" />을(를) 시도하는 중입니다.</translation>
 <translation id="6497147134301593682">Chrome이 자동으로 종료되었습니다</translation>
+<translation id="650039555447046671">Chrome에서 이 기기의 AI 모델을 삭제합니다. 일부 사이트 및 Chrome 기능이 작동하지 않을 수 있습니다.</translation>
 <translation id="6506909944137591434">Chrome에서 주변의 3D 지도를 만들려면 카메라 권한이 필요합니다.</translation>
 <translation id="6515495397637126556"><ph name="PAGE_TITLE" /> - 개발자용 Chrome</translation>
 <translation id="6520670145826811516">위치를 사용하려면 <ph name="BEGIN_LINK" />시스템 설정<ph name="END_LINK" />에서 Chrome에 액세스 권한을 부여하세요.</translation>
@@ -586,6 +591,7 @@ Chrome에서 설정을 복구할 수 없습니다.</translation>
 <translation id="6877155553248388166">검색 영역의 오른쪽 하단: 오른쪽 <ph name="RIGHT" />%, 하단 <ph name="BOTTOM" />%</translation>
 <translation id="6879791154455204815">Chrome으로 검색 열기</translation>
 <translation id="6881299373831449287">Chrome 업데이트 중</translation>
+<translation id="6881997500528805781">기기 저장용량을 사용합니다. Chrome은 45일이 경과하거나 저장용량이 부족할 때 사용하지 않는 AI 모델을 삭제합니다.</translation>
 <translation id="6885412569789873916">Chrome 베타 앱</translation>
 <translation id="6893363893008038481">Chrome에서 계정 삭제</translation>
 <translation id="6896758677409633944">복사</translation>
@@ -711,7 +717,6 @@ Chrome에서 설정을 복구할 수 없습니다.</translation>
 <translation id="8064965390968184078">1. 아래의 <ph name="BUTTON_LABEL" /> 버튼을 클릭합니다.
 2. Windows 설정에서 <ph name="BUTTON_2" /> 버튼을 클릭합니다.
 3. 빠른 액세스를 위해 Windows 알림에서 <ph name="BUTTON_3" /> 버튼을 클릭하여 Chrome을 작업 표시줄에 고정합니다.</translation>
-<translation id="8066474819446975249">Chrome을 다시 실행하여 전환</translation>
 <translation id="8074398340364918139">특정 Chrome 기능 또는 확장 프로그램을 검색하려면 주소 표시줄에 바로가기를 입력한 다음 선택한 키보드 키를 입력하세요</translation>
 <translation id="8077579734294125741">기타 Chrome 프로필</translation>
 <translation id="8086881907087796310">컴퓨터가 최소 하드웨어 요구사항을 충족하지 않으므로 설치에 실패했습니다.</translation>

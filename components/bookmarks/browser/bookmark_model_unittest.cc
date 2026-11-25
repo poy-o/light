@@ -23,6 +23,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/gtest_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -34,6 +35,7 @@
 #include "build/build_config.h"
 #include "components/bookmarks/browser/bookmark_model_observer.h"
 #include "components/bookmarks/browser/bookmark_node.h"
+#include "components/bookmarks/browser/bookmark_node_iterator.h"
 #include "components/bookmarks/browser/bookmark_undo_provider.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/browser/bookmark_uuids.h"
@@ -57,7 +59,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/container/flat_hash_set.h"
 #include "third_party/skia/include/core/SkBitmap.h"
-#include "ui/base/models/tree_node_iterator.h"
 #include "ui/gfx/image/image.h"
 #include "url/gurl.h"
 
@@ -218,8 +219,35 @@ void SwapDateUsed(BookmarkNode* n1, BookmarkNode* n2) {
   n2->set_date_last_used(tmp);
 }
 
-// See comment in PopulateNodeFromString.
-using TestNode = ui::TreeNodeWithValue<BookmarkNode::Type>;
+// Lightweight tree node used by PopulateNodeFromString and
+// VerifyModelMatchesNode to describe expected bookmark subtrees in tests.
+class TestNode {
+ public:
+  TestNode() = default;
+  TestNode(const std::u16string& title, BookmarkNode::Type value)
+      : value(value), title_(title) {}
+
+  TestNode(const TestNode&) = delete;
+  TestNode& operator=(const TestNode&) = delete;
+
+  TestNode* Add(std::unique_ptr<TestNode> node) {
+    TestNode* ptr = node.get();
+    children_.push_back(std::move(node));
+    return ptr;
+  }
+
+  const std::vector<std::unique_ptr<TestNode>>& children() const {
+    return children_;
+  }
+
+  const std::u16string& GetTitle() const { return title_; }
+
+  BookmarkNode::Type value = BookmarkNode::URL;
+
+ private:
+  std::u16string title_;
+  std::vector<std::unique_ptr<TestNode>> children_;
+};
 
 // Does the work of PopulateNodeFromString. index gives the index of the current
 // element in description to process.
@@ -316,7 +344,7 @@ void VerifyModelMatchesNode(TestNode* expected, const BookmarkNode* actual) {
 }
 
 void VerifyNoDuplicateIDs(BookmarkModel* model) {
-  ui::TreeNodeIterator<const BookmarkNode> it(model->root_node());
+  BookmarkNodeIterator it(model->root_node());
   absl::flat_hash_set<int64_t> ids;
   while (it.has_next()) {
     ASSERT_TRUE(ids.insert(it.Next()->id()).second);
@@ -1358,7 +1386,6 @@ TEST_F(BookmarkModelTest, MoveWithUuidCollisionInDescendant) {
                                    NodeTypeForUuidLookup::kAccountNodes));
 }
 
-#if defined(GTEST_HAS_DEATH_TEST)
 using BookmarkModelDeathTest = BookmarkModelTest;
 
 TEST_F(BookmarkModelDeathTest, MoveIntoSelfOrDescendantCrashes) {
@@ -1366,10 +1393,19 @@ TEST_F(BookmarkModelDeathTest, MoveIntoSelfOrDescendantCrashes) {
       model()->AddFolder(model()->bookmark_bar_node(), 0, u"Folder");
   const BookmarkNode* child = model()->AddFolder(folder, 0, u"Child");
 
-  EXPECT_DEATH(model()->Move(folder, folder, 0), "");
-  EXPECT_DEATH(model()->Move(folder, child, 0), "");
+  EXPECT_CHECK_DEATH(model()->Move(folder, folder, 0));
+  EXPECT_CHECK_DEATH(model()->Move(folder, child, 0));
 }
-#endif  // defined(GTEST_HAS_DEATH_TEST)
+
+TEST_F(BookmarkModelDeathTest, MoveOutOfBoundsIndexCrashes) {
+  const BookmarkNode* node =
+      model()->AddURL(model()->bookmark_bar_node(), 0, u"Bookmark",
+                      GURL("https://example.com"));
+  const BookmarkNode* folder =
+      model()->AddFolder(model()->bookmark_bar_node(), 1, u"Folder");
+
+  EXPECT_CHECK_DEATH(model()->Move(node, folder, 1));
+}
 
 // Tests the default node if no bookmarks have been added yet
 TEST_F(BookmarkModelTest, ParentForNewNodesWithEmptyModel) {
@@ -3649,6 +3685,66 @@ TEST(BookmarkNodeTest, NodeMetaInfo) {
   EXPECT_FALSE(node.GetMetaInfoMap());
 }
 
+TEST(BookmarkNodeTest, TreeOperations) {
+  auto root = std::make_unique<BookmarkNode>(
+      /*id=*/0, base::Uuid::GenerateRandomV4(), GURL());
+  EXPECT_TRUE(root->is_root());
+  EXPECT_EQ(1u, root->GetTotalNodeCount());
+
+  BookmarkNode* folder = root->Add(std::make_unique<BookmarkNode>(
+      /*id=*/1, base::Uuid::GenerateRandomV4(), GURL()));
+  EXPECT_EQ(std::nullopt, folder->GetIndexOf(root.get()));
+  folder->SetTitle(u"Folder\nName");
+  EXPECT_EQ(u"Folder Name", folder->GetTitle());
+  EXPECT_FALSE(folder->is_root());
+  EXPECT_EQ(root.get(), folder->parent());
+  EXPECT_TRUE(folder->HasAncestor(root.get()));
+  EXPECT_TRUE(folder->HasAncestor(folder));
+  EXPECT_FALSE(folder->HasAncestor(nullptr));
+  EXPECT_FALSE(root->HasAncestor(folder));
+
+  BookmarkNode* url_b = folder->Add(std::make_unique<BookmarkNode>(
+      /*id=*/2, base::Uuid::GenerateRandomV4(), GURL("https://b.example")));
+  url_b->SetTitle(u"B");
+  BookmarkNode* url_a = folder->Add(
+      std::make_unique<BookmarkNode>(/*id=*/3, base::Uuid::GenerateRandomV4(),
+                                     GURL("https://a.example")),
+      /*index=*/0);
+  url_a->SetTitle(u"A");
+  BookmarkNode* url_c = folder->Add(std::make_unique<BookmarkNode>(
+      /*id=*/4, base::Uuid::GenerateRandomV4(), GURL("https://c.example")));
+  url_c->SetTitle(u"C");
+
+  EXPECT_TRUE(url_a->HasAncestor(root.get()));
+  EXPECT_EQ(5u, root->GetTotalNodeCount());
+  EXPECT_EQ(0u, folder->GetIndexOf(url_a));
+  EXPECT_EQ(1u, folder->GetIndexOf(url_b));
+  EXPECT_EQ(2u, folder->GetIndexOf(url_c));
+  EXPECT_EQ(std::nullopt, root->GetIndexOf(url_a));
+
+  // Use a 3-cycle so `new_children[new_order[i]] = children_[i]` is
+  // distinguished from its inverse permutation.
+  folder->ReorderChildren({1, 2, 0});
+  EXPECT_THAT(folder->children(),
+              ElementsAre(testing::Pointer(url_c), testing::Pointer(url_a),
+                          testing::Pointer(url_b)));
+
+  folder->SortChildren([](const auto& lhs, const auto& rhs) {
+    return lhs->GetTitle() < rhs->GetTitle();
+  });
+  EXPECT_THAT(folder->children(),
+              ElementsAre(testing::Pointer(url_a), testing::Pointer(url_b),
+                          testing::Pointer(url_c)));
+
+  std::unique_ptr<BookmarkNode> removed = folder->Remove(0);
+  ASSERT_EQ(url_a, removed.get());
+  EXPECT_EQ(nullptr, removed->parent());
+  EXPECT_EQ(2u, folder->children().size());
+
+  root->DeleteAll();
+  EXPECT_TRUE(root->children().empty());
+}
+
 // Creates a set of nodes in the bookmark model, and checks that the loaded
 // structure is what we first created.
 TEST(BookmarkModelTest2, CreateAndRestore) {
@@ -3805,6 +3901,69 @@ TEST_F(BookmarkModelTest, IsLocalOnlyNodeWithSyncFeatureOnAndDettachedNode) {
       /*id=*/200, base::Uuid::GenerateRandomV4(), GURL());
 
   EXPECT_TRUE(model()->IsLocalOnlyNode(*dettached_node));
+}
+
+TEST_F(BookmarkModelTest, GetNodeById) {
+  EXPECT_EQ(model()->root_node(), model()->GetNodeById(kRootNodeId));
+  EXPECT_EQ(model()->bookmark_bar_node(),
+            model()->GetNodeById(model()->bookmark_bar_node()->id()));
+  EXPECT_EQ(model()->other_node(),
+            model()->GetNodeById(model()->other_node()->id()));
+  EXPECT_EQ(model()->mobile_node(),
+            model()->GetNodeById(model()->mobile_node()->id()));
+  EXPECT_EQ(nullptr, model()->GetNodeById(99999));
+
+  // Pre-load model resolves root_node() and returns null for other IDs.
+  auto unloaded_model =
+      std::make_unique<BookmarkModel>(std::make_unique<TestBookmarkClient>());
+  EXPECT_EQ(unloaded_model->root_node(),
+            unloaded_model->GetNodeById(kRootNodeId));
+  EXPECT_EQ(nullptr, unloaded_model->GetNodeById(1));
+
+  const BookmarkNode* folder =
+      model()->AddFolder(model()->bookmark_bar_node(), 0, u"folder");
+  const BookmarkNode* child =
+      model()->AddURL(folder, 0, u"example", GURL("https://example.com"));
+  const int64_t folder_id = folder->id();
+  const int64_t child_id = child->id();
+
+  EXPECT_EQ(folder, model()->GetNodeById(folder_id));
+  EXPECT_EQ(child, model()->GetNodeById(child_id));
+
+  // Removing a folder removes both the folder and its descendants from IdIndex,
+  // and restoring via Undo re-inserts them.
+  model()->Remove(folder, metrics::BookmarkEditSource::kOther, FROM_HERE);
+  EXPECT_EQ(nullptr, model()->GetNodeById(folder_id));
+  EXPECT_EQ(nullptr, model()->GetNodeById(child_id));
+
+  auto* undo_client =
+      static_cast<TestBookmarkClientWithUndo*>(model()->client());
+  ASSERT_TRUE(undo_client->RestoreLastRemovedBookmark(model()));
+  EXPECT_EQ(folder, model()->GetNodeById(folder_id));
+  EXPECT_EQ(child, model()->GetNodeById(child_id));
+
+  model()->RemoveAllUserBookmarks(FROM_HERE);
+  EXPECT_EQ(nullptr, model()->GetNodeById(folder_id));
+  EXPECT_EQ(nullptr, model()->GetNodeById(child_id));
+  EXPECT_EQ(model()->bookmark_bar_node(),
+            model()->GetNodeById(model()->bookmark_bar_node()->id()));
+}
+
+TEST_F(BookmarkModelTest, GetAccountNodeById) {
+  model()->CreateAccountPermanentFolders();
+  const int64_t account_bb_id = model()->account_bookmark_bar_node()->id();
+  const BookmarkNode* account_url =
+      model()->AddURL(model()->account_bookmark_bar_node(), 0, u"acct",
+                      GURL("https://acct.example"));
+  const int64_t account_url_id = account_url->id();
+
+  EXPECT_EQ(model()->account_bookmark_bar_node(),
+            model()->GetNodeById(account_bb_id));
+  EXPECT_EQ(account_url, model()->GetNodeById(account_url_id));
+
+  model()->RemoveAccountPermanentFolders();
+  EXPECT_EQ(nullptr, model()->GetNodeById(account_bb_id));
+  EXPECT_EQ(nullptr, model()->GetNodeById(account_url_id));
 }
 
 TEST_F(BookmarkModelTest, UserFolderDepthHistograms) {

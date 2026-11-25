@@ -78,6 +78,7 @@
 <translation id="112840717907525620">নীতি ক্যাশেটি ঠিক আছে</translation>
 <translation id="1131264053432022307">আপনার কপি করা ছবি</translation>
 <translation id="1132735979845538847"><ph name="ORIGIN" /> – ফুল-স্ক্রিন থেকে বেরিয়ে আসতে উপর থেকে টেনে আনুন এবং ফিরে যাওয়ার বোতাম টাচ করুন</translation>
+<translation id="11370190534773372">কার্ডের বিবরণ পূরণ করা হয়েছে</translation>
 <translation id="1138458427267715730">ওয়েব জুড়ে কোনও সাইটের দাম কমে গেলে সতর্কতা পান</translation>
 <translation id="1142713751288681188">পেপারের ধরন</translation>
 <translation id="1142965388643537393">ভ্রমণের তথ্য</translation>
@@ -584,6 +585,7 @@
 <translation id="1988881251331415125">বানান সঠিক হলে, <ph name="BEGIN_LINK" />'কানেক্টিভিটি ডায়াগনস্টিক' টুল চালিয়ে দেখুন<ph name="END_LINK" />।</translation>
 <translation id="1991370806334788445">থার্ড-পার্টি কুকিকে অনুমতি দিয়ে দেখুন। এর মানে হল, ব্রাউজ করার ক্ষেত্রে সুরক্ষা কম হয়ে গেলেও সাইটের ফিচারগুলি প্রত্যাশা অনুযায়ী আরও বেশি কাজ করতে পারে।</translation>
 <translation id="1992331125980284532">JIS B3</translation>
+<translation id="1995173078718234136">সামগ্রী স্ক্যান হচ্ছে...</translation>
 <translation id="1996557034791506430">অনুমতি সরাতে চান?</translation>
 <translation id="1997484222658892567"><ph name="URL" /> স্থায়ীভাবে আপনার কম্পিউটারে বেশি ডেটা স্টোর করতে চায়</translation>
 <translation id="1997774360448418989">পেপার (লাইটওয়েট)</translation>
@@ -667,7 +669,6 @@
 <translation id="2126374524350484896">PDF প্রোডিউসার:</translation>
 <translation id="2127090458081644412">এই ডিভাইসে পাসওয়ার্ড সেভ করা হয়েছে</translation>
 <translation id="2127747486437921899">তির্যক টেক্সট</translation>
-<translation id="2129163794581571479">Gemini-এর 'পার্সোনাল ইন্টেলিজেন্স' দ্বারা পরিচালিত। 'উন্নত অটোফিল' ফিচারের পারফর্ম্যান্স উন্নত করতে আপনার অনুরোধ, পৃষ্ঠার টাইটেল ও URL পর্যালোচনা করা হতে পারে। <ph name="BEGIN_LINK" />সেটিংস ম্যানেজ করুন<ph name="END_LINK" /></translation>
 <translation id="2130448033692577677">DnsOverHttpsMode নীতি সেট না থাকার কারণে আপনার নির্দিষ্ট করা টেমপ্লেট হয়তো ব্যবহার করা যাবে না।</translation>
 <translation id="2130699163006053678">A3x7</translation>
 <translation id="2131006834960167560">পেমেন্ট অটোফিল চালু করার সুবিধা সম্পূর্ণ স্ক্রিন জুড়ে খোলা আছে।</translation>
@@ -1217,7 +1218,6 @@
 <translation id="3041584414879052436">কিস্তিতে পেমেন্ট করার সুবিধার ক্ষেত্রে 'এখন কিনুন, পরে পেমেন্ট করুন' ইস্যুকারীর তালিকা বন্ধ আছে।</translation>
 <translation id="3041612393474885105">সার্টিফিকেট তথ্য</translation>
 <translation id="3041835740069544003">Chrome এখন 'ফর্ম ফিল করার স্মার্ট সমাধান' ফিচার ব্যবহার করে আরও বেশি ফর্ম শনাক্ত ও পূরণ করতে পারে। এটি করার জন্য, ক্লাউডের প্রাইভেট স্পেসে পৃষ্ঠার কন্টেন্ট ও URL প্রসেস করা হতে পারে। সেটিংসে গিয়ে ম্যানেজ করুন।</translation>
-<translation id="3047054686095898948">আপনার তথ্য <ph name="IDS_AUTOFILL_GOOGLE_WALLET_TITLE_1" />-এ সেভ করুন এবং Google প্রোডাক্ট জুড়ে ফর্ম পূরণ করার মতো কাজগুলি আরও দ্রুত সেরে ফেলুন। আপনি <ph name="ACCOUNT" />-এর জন্য <ph name="IDS_AUTOFILL_GOOGLE_WALLET_TITLE_2" />-এ <ph name="BEGIN_LINK" />আপনার তথ্য ম্যানেজ করতে<ph name="END_LINK" /> পারবেন</translation>
 <translation id="305162504811187366">টাইমস্ট্যাম্প, হোস্ট এবং ক্লায়েন্ট সেশন আইডি সহ Chrome রিমোট ডেস্কটপ ইতিহাস</translation>
 <translation id="3052868890529250114">সাধারণত আপনি এই সাইট নিরাপদে কানেক্ট করেন, তবে এখন Chrome কোনও সুরক্ষিত কানেকশন ব্যবহার করতে পারছে না। কোনও হ্যাকার হয়ত আপনার নেটওয়ার্ক কানেকশনে গোপনে আড়ি পাততে চাইছে বা সেটি পরিবর্তন করার চেষ্টা করছে। <ph name="BEGIN_LEARN_MORE_LINK" />এই সতর্কতা সম্পর্কে আরও জানুন<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="3052964831964880138"><ph name="PRODUCT_NAME" />-এ <ph name="PRICE_DROP" /> দাম কমে গেছে</translation>
@@ -1588,7 +1588,6 @@
 <translation id="3655670868607891010">আপনি যদি এটি প্রায়শই দেখতে পান, তাহলে <ph name="HELP_LINK" /> চেষ্টা করে দেখুন৷</translation>
 <translation id="3658742229777143148">পুনর্বিবেচনা</translation>
 <translation id="3659521826520353662">অ্যাডমিনিস্ট্রেটর-নির্দিষ্ট করা কোন ওয়েবসাইট কখন দেখা হয়: <ph name="ALLOWLISTED_WEBSITES" /></translation>
-<translation id="3663760610864720538">Gemini-এর 'পার্সোনাল ইন্টেলিজেন্স' দ্বারা পরিচালিত। <ph name="BEGIN_LINK" />সেটিংস ম্যানেজ করুন<ph name="END_LINK" /></translation>
 <translation id="3664479564786885722">এই প্রোডাক্ট বিক্রি করে এমন অন্যান্য স্টোর থেকে কেনার অন্য বিকল্প সার্চ করুন।</translation>
 <translation id="3664782872746246217">কীওয়ার্ড:</translation>
 <translation id="3670030362669914947">নম্বর</translation>
@@ -1867,7 +1866,6 @@
 <translation id="4112140312785995938">পিছিয়ে যান</translation>
 <translation id="4114007503059268298">আপনি কি এই কার্ড আপনার Google অ্যাকাউন্টে এবং এই ডিভাইসে সেভ করতে চান?</translation>
 <translation id="4114146879518089587">সাইটে এগিয়ে যান</translation>
-<translation id="4115378294792113321">ম্যাজেন্টা</translation>
 <translation id="4116701314593212016">JIS B7</translation>
 <translation id="4116798170070772848">RA2</translation>
 <translation id="4117700440116928470">নীতির সুযোগটি সমর্থিত নয়৷</translation>
@@ -3335,6 +3333,7 @@
 <translation id="6520509611422418552"><ph name="MEMBER_FIRST_NAME" />, "<ph name="GROUP_NAME" />" ট্যাব গ্রুপে যোগ দিয়েছেন</translation>
 <translation id="6521745193039995384">অ্যাক্টিভ নয়</translation>
 <translation id="6524830701589638230">'অ্যাক্সেসিবিলিটি সেটিংস ম্যানেজ করুন' বোতাম, আপনার অ্যাক্সেসিবিলিটি টুল পছন্দমতো করতে Chrome সেটিংস থেকে এটি চালু করুন</translation>
+<translation id="652643331002043144">এই সাইটটি ফিশিং, ম্যালওয়্যার ও স্ক্যামের সাথে যুক্ত অন্যান্য সাইটের মতো বলে মনে হচ্ছে।</translation>
 <translation id="6529173248185917884">Seventh Roll</translation>
 <translation id="6529602333819889595">&amp;মুছে ফেলাকে আবার করুন</translation>
 <translation id="6532101170117367231">Google ড্রাইভে সেভ করুন</translation>
@@ -3449,6 +3448,7 @@
 <translation id="6727094998759448074">SRA4</translation>
 <translation id="672853333773293432">অ্যাকাউন্টের মাধ্যমে সাইন-ইন করা হয়েছে</translation>
 <translation id="6732087373923685049">ক্যামেরা</translation>
+<translation id="6736243959894955139">ঠিকানা</translation>
 <translation id="6738516213925468394"><ph name="TIME" />-এ আপনার <ph name="BEGIN_LINK" />সিঙ্ক পাসফ্রেজ<ph name="END_LINK" /> দিয়ে ডেটা এনক্রিপ্ট করা হয়েছিল। সিঙ্ক শুরু করতে সেটি লিখুন।</translation>
 <translation id="6740851646645036700">আপনি এখন আপনার লেখার সহায়তার সীমাতে পৌঁছে গেছেন। পরে আবার চেষ্টা করুন। পরে আবার চেষ্টা করুন।</translation>
 <translation id="674375294223700098">অজানা সার্ভার সার্টিফিকেট ত্রুটি৷</translation>
@@ -4548,6 +4548,7 @@
 <translation id="8577348305244205642">ভার্চুয়াল কার্ড উপলভ্য নেই</translation>
 <translation id="8579000896558714521">কীবোর্ড ওভাররাইড</translation>
 <translation id="8579561564816585231">Password Manager-এর মতো Google পরিষেবা ব্যবহার করে সাইন-ইন করা হয়েছে</translation>
+<translation id="8580478010934016252">পেমেন্ট পদ্ধতি বিকল্পে যান</translation>
 <translation id="8581064022803799721">এই পৃষ্ঠাটি <ph name="LAST_BOOKMARKS_FOLDER" />-এ সেভ করা আছে।</translation>
 <translation id="858637041960032120">ফোননম্বর জুড়ুন</translation>
 <translation id="8587100480629037893">হাত ট্র্যাক করার অনুমতি দেওয়া হয়নি</translation>

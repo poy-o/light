@@ -77,6 +77,17 @@ chromium-metrics-reviews@google.com.
 
 <!-- LINT.ThenChange(//chrome/browser/glic/gemini_enterprise/gemini_enterprise.mojom:OpenAuthTabResult) -->
 
+<!-- LINT.IfChange(GeicSelectRolloutStageResult) -->
+
+<enum name="GeicSelectRolloutStageResult">
+  <int value="0" label="Unknown"/>
+  <int value="1" label="Success"/>
+  <int value="2" label="Unknown stage"/>
+  <int value="3" label="Not supported"/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/glic/gemini_enterprise/gemini_enterprise.mojom:SelectRolloutStageResult) -->
+
 <!-- LINT.IfChange(GeminiNavigationCaptureResult) -->
 
 <enum name="GeminiNavigationCaptureResult">
@@ -288,6 +299,35 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <!-- LINT.ThenChange(//chrome/browser/glic/service/metrics/metrics_types.h:GlicDragAndDropValidationResult) -->
+
+<!-- LINT.IfChange(GlicDrivePickerOutcome) -->
+
+<enum name="GlicDrivePickerOutcome">
+  <int value="0" label="Files picked"/>
+  <int value="1" label="Cancelled by user"/>
+  <int value="2" label="Cancelled by Glic (panel closed or host torn down)"/>
+  <int value="3" label="Unknown error"/>
+  <int value="4" label="Web session signed out"/>
+  <int value="5" label="Chrome sign-in required"/>
+  <int value="6" label="Account mismatch"/>
+  <int value="7" label="Another picker already active"/>
+  <int value="8" label="No anchor window"/>
+  <int value="9" label="Disabled by policy or missing consent"/>
+  <int value="10" label="Unsupported (not expected in practice)"/>
+  <int value="11" label="OAuth token fetch failed"/>
+  <int value="12" label="Google Picker API failed to load"/>
+  <int value="13" label="Picker disconnected"/>
+  <int value="14" label="Picker page: malformed response"/>
+  <int value="15" label="Picker page: invalid file ID"/>
+  <int value="16" label="Picker page: invalid file metadata"/>
+  <int value="17" label="Picker page: unsupported file type"/>
+  <int value="18" label="Picker page: invalid file size"/>
+  <int value="19" label="Browser rejected the selection"/>
+  <int value="20" label="Picker dialog could not be created"/>
+  <int value="21" label="Picker dialog closed without a result"/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/glic/host/glic_drive_picker_manager.h:GlicDrivePickerOutcome) -->
 
 <!-- LINT.IfChange(GlicEntryPointStatus) -->
 
@@ -639,6 +679,7 @@ chromium-metrics-reviews@google.com.
   <int value="114" label="SetGuestUrlQueryParam"/>
   <int value="115" label="SwitchAssistant"/>
   <int value="116" label="ShowDrivePicker"/>
+  <int value="117" label="SubscribeToActionFirstSuggestions"/>
 </enum>
 
 <!-- LINT.ThenChange(//chrome/browser/glic/public/glic_api_metrics.h:GlicHostApiRequestId) -->
@@ -832,6 +873,7 @@ chromium-metrics-reviews@google.com.
   <int value="51"
       label="History page critical action row 'Open chat' linkout (opens at
              the recorded turn)"/>
+  <int value="52" label="Context Hub Record Replay"/>
 </enum>
 
 <!-- LINT.ThenChange(//chrome/common/glic_enums.mojom:InvocationSource) -->
@@ -1410,6 +1452,10 @@ chromium-metrics-reviews@google.com.
   <int value="208"
       label="History page critical action row 'Open chat' linkout, detached,
              audio mode."/>
+  <int value="209" label="Context Hub Record Replay, attached, text mode."/>
+  <int value="210" label="Context Hub Record Replay, attached, audio mode."/>
+  <int value="211" label="Context Hub Record Replay, detached, text mode."/>
+  <int value="212" label="Context Hub Record Replay, detached, audio mode."/>
 </enum>
 
 <!-- LINT.ThenChange(//chrome/browser/glic/service/metrics/metrics_types.h:ResponseSegmentation) -->
@@ -1926,16 +1972,6 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <!-- LINT.ThenChange(//chrome/browser/glic/host/glic_webui.mojom:WebUiState) -->
-
-<!-- LINT.IfChange(WebViewAutoPlayProgress) -->
-
-<enum name="WebViewAutoPlayProgress">
-  <int value="0" label="WebContentsObserver registered"/>
-  <int value="1" label="AutoPlay granted for primary RFH"/>
-  <int value="2" label="AutoPlay granted for other RFH"/>
-</enum>
-
-<!-- LINT.ThenChange(//chrome/browser/glic/host/glic_guest_observer.cc:WebViewAutoPlayProgress) -->
 
 </enums>
 

@@ -9,12 +9,15 @@ import static org.junit.Assert.assertEquals;
 import android.view.View;
 
 import androidx.test.filters.LargeTest;
+import androidx.test.filters.MediumTest;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.transit.Element;
 import org.chromium.base.test.transit.TripBuilder;
 import org.chromium.base.test.util.Batch;
@@ -25,13 +28,17 @@ import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.UserActionTester;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.ViewportTestUtils;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider.ControlsPosition;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.toolbar.ToolbarPositionController.ToolbarPositionAndSource;
+import org.chromium.chrome.browser.toolbar.settings.AddressBarPreference;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.transit.AutoResetCtaTransitTestRule;
 import org.chromium.chrome.test.transit.ChromeTransitTestRules;
 import org.chromium.chrome.test.transit.browser_controls.BrowserControlsFacility;
 import org.chromium.chrome.test.transit.browser_controls.BrowserControlsOffsetCondition;
+import org.chromium.chrome.test.transit.browser_controls.BrowserControlsPositionCondition;
 import org.chromium.chrome.test.transit.page.BasePageStation;
 import org.chromium.chrome.test.transit.page.FrameInfoUpdatedCondition;
 import org.chromium.chrome.test.transit.page.PageLoadCallbackCondition;
@@ -108,9 +115,40 @@ public class BrowserControlsPTTest {
 
         var blankPage = mActivityTestRule.startOnBlankPage();
         mPage =
-                TopBottomLinksPageStation.loadPageNoFacility(
+                TopBottomLinksPageStation.loadPage(
                         mActivityTestRule.getActivityTestRule(), blankPage);
         mActivity = mActivityTestRule.getActivity();
+    }
+
+    @After
+    public void tearDown() {
+        ThreadUtils.runOnUiThreadBlocking(
+                () ->
+                        AddressBarPreference.setToolbarPositionAndSource(
+                                ToolbarPositionAndSource.TOP_SETTINGS));
+    }
+
+    @Test
+    @MediumTest
+    @Restriction(DeviceFormFactor.PHONE)
+    public void bottomControlsShown() {
+        mPage.runOnUiThreadTo(
+                        () ->
+                                AddressBarPreference.setToolbarPositionAndSource(
+                                        ToolbarPositionAndSource.BOTTOM_SETTINGS))
+                .waitFor(
+                        BrowserControlsPositionCondition.at(
+                                mPage.getActivityElement(), ControlsPosition.BOTTOM),
+                        BrowserControlsOffsetCondition.shown(mPage.getActivityElement()));
+
+        mPage.runOnUiThreadTo(
+                        () ->
+                                AddressBarPreference.setToolbarPositionAndSource(
+                                        ToolbarPositionAndSource.TOP_SETTINGS))
+                .waitFor(
+                        BrowserControlsPositionCondition.at(
+                                mPage.getActivityElement(), ControlsPosition.TOP),
+                        BrowserControlsOffsetCondition.shown(mPage.getActivityElement()));
     }
 
     @Test
@@ -120,8 +158,9 @@ public class BrowserControlsPTTest {
     public void topControlsScroll() {
         BrowserControlsFacility.waitForBrowserControlsToBeMoveable(mPage);
 
-        mPage.scrollToBottom(BrowserControlsFacility.scrolledOff());
-        mPage.scrollToTop(BrowserControlsFacility.shown());
+        var bottomFacility =
+                mPage.topFacility.scrollToBottom(BrowserControlsFacility.scrolledOff());
+        bottomFacility.scrollToTop(BrowserControlsFacility.shown());
     }
 
     @Test
@@ -131,7 +170,7 @@ public class BrowserControlsPTTest {
     public void topControlsScrollingDisabled() {
         var lockedControls =
                 mPage.noopTo().enterFacility(BrowserControlsFacility.shownAndHeightSynced());
-        mPage.scrollToBottom(null);
+        mPage.topFacility.scrollToBottom();
         mPage.noopTo()
                 .exitFacilityAnd(lockedControls)
                 .enterFacility(BrowserControlsFacility.shownAndHeightSynced());
@@ -145,10 +184,8 @@ public class BrowserControlsPTTest {
     public void twoStepPullToRefreshWhenTopControlsHiddenAcrossSameOriginNav() {
         BrowserControlsFacility.waitForBrowserControlsToBeMoveable(mPage);
 
-        var bottomFacility = new TopBottomLinksPageStation.BottomFacility();
-        mPage.scrollPageDownWithGestureTo()
-                .withRetry()
-                .enterFacilities(BrowserControlsFacility.scrolledOff(), bottomFacility);
+        var bottomFacility =
+                mPage.topFacility.scrollToBottom(BrowserControlsFacility.scrolledOff());
 
         // Same-origin link navigation keeps top controls scrolled off on the new page (scrollY==0).
         String destinationUrl =

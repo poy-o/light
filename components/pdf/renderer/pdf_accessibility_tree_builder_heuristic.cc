@@ -1881,13 +1881,8 @@ OrderedMarker GetLetterMarker(
   // their first item, which "i" is as a Roman numeral.
   //
   // "v" and "x" would start partway through either kind of list, so they're
-  // read as letters.
-  //
-  // TODO(crbug.com/525509231): Lists end at each page break, so the first item
-  // on a new page has no list to follow. If the guess above is wrong, e.g.
-  // letter "i" after "h" or Roman "v" after "iv", the next marker doesn't
-  // confirm a list and the item becomes a paragraph. Try the other style when
-  // the first one doesn't confirm a list.
+  // read as letters. If this guess doesn't confirm a list,
+  // `CheckOrderedMarkerInEitherStyle()` tries the other style.
   return letters == "i" ? roman_marker : letter_marker;
 }
 
@@ -2134,6 +2129,42 @@ OrderedListCheck ContinuesOrConfirmsOrderedList(
   return IsOrderedListStartConfirmed(context, run_index, ordered_kind);
 }
 
+// Checks `ordered_kind` with `ContinuesOrConfirmsOrderedList()`, then tries the
+// other style if it doesn't match. A lone "i", "v" or "x" may be read in the
+// wrong style, e.g. letter "i" at the top of a page that continues an "h." list
+// from the previous page.
+//
+// Keeps the first check's lookahead if neither style matches.
+OrderedListCheck CheckOrderedMarkerInEitherStyle(
+    const ListMarkerContext& context,
+    size_t run_index,
+    const ListMarkerKind& ordered_kind) {
+  const PageLayoutData& layout = *context.layout;
+  const OrderedListCheck check =
+      ContinuesOrConfirmsOrderedList(context, run_index, ordered_kind);
+  const OrderedMarkerType::CounterStyle counter_style =
+      ordered_kind.ordered_marker->type.counter_style;
+  if (check.kind.form != ListMarkerForm::kNone ||
+      counter_style == OrderedMarkerType::CounterStyle::kDecimal) {
+    return check;
+  }
+  const OrderedMarker other_style_marker = {
+      .type = {.counter_style =
+                   counter_style == OrderedMarkerType::CounterStyle::kLowerRoman
+                       ? OrderedMarkerType::CounterStyle::kLowerAlpha
+                       : OrderedMarkerType::CounterStyle::kLowerRoman}};
+  const ListMarkerKind other_kind = ClassifyOrderedMarker(
+      GetTextRunContext(layout, run_index), other_style_marker);
+  // Changing the style keeps the same marker text, so it still matches.
+  CHECK(other_kind.ordered_marker.has_value());
+  if (other_kind.ordered_marker->type == ordered_kind.ordered_marker->type) {
+    return check;
+  }
+  const OrderedListCheck other_check =
+      ContinuesOrConfirmsOrderedList(context, run_index, other_kind);
+  return other_check.kind.form != ListMarkerForm::kNone ? other_check : check;
+}
+
 // Classifies whether the run at `run_index` is a standalone list marker run or
 // combines a list marker with item text.
 ListMarkerKind ClassifyListMarker(
@@ -2194,7 +2225,7 @@ ListMarkerKind ClassifyListMarker(
   }
 
   const OrderedListCheck check =
-      ContinuesOrConfirmsOrderedList(context, run_index, ordered_kind);
+      CheckOrderedMarkerInEitherStyle(context, run_index, ordered_kind);
   if (check.lookahead_lines.has_value()) {
     RecordOrderedListLookaheadLines(run_index, *check.lookahead_lines,
                                     last_recorded_lookahead_run_index);
@@ -3165,6 +3196,41 @@ void PdfAccessibilityTreeBuilderHeuristic::BuildPageTree() {
       }
     }
 
+    bool add_text_run = true;
+    if (features::IsPdfAccessibilityHeuristicEnhancementsEnabled()) {
+      // Add every link and image that starts at or before this run, without
+      // moving `text_run_index` backward.
+      size_t next_text_run_index = text_run_index;
+      while (true) {
+        if (IsObjectWithRangeInTextRun(builder_->links(), current_link_index_,
+                                       text_run_index)) {
+          BuildStaticNode(&static_text_state);
+          if (AddLinkToParaNode(builder_->links()[current_link_index_++],
+                                block_node, &previous_on_line_node,
+                                &line_helper, &next_text_run_index)) {
+            add_text_run = false;
+            text_run_index = next_text_run_index - 1;
+          }
+        } else if (IsObjectInTextRun(images, current_image_index_,
+                                     text_run_index)) {
+          BuildStaticNode(&static_text_state);
+          AddImageToParaNode(images[current_image_index_++], block_node,
+                             &text_run_index);
+        } else {
+          break;
+        }
+      }
+    }
+
+    // Handles one object per pass. For images and zero-length links, the
+    // helper steps `text_run_index` back, so `continue` revisits this run.
+    //
+    // When `kPdfAccessibilityHeuristicEnhancements` is enabled, the loop above
+    // already added every link and image at or before this run, so only the
+    // highlight or last branch can run. If a link already added this run, the
+    // highlight waits for the next run, since `AddHighlightToParaNode()` steps
+    // `text_run_index` back and would add this run again.
+    //
     // If the `text_run_index` is less than or equal to the link's
     // `text_run_index`, then push the link node in the block.
     if (IsObjectWithRangeInTextRun(builder_->links(), current_link_index_,
@@ -3181,14 +3247,14 @@ void PdfAccessibilityTreeBuilderHeuristic::BuildPageTree() {
       AddImageToParaNode(images[current_image_index_++], block_node,
                          &text_run_index);
       continue;
-    } else if (IsObjectWithRangeInTextRun(builder_->highlights(),
-                                          current_highlight_index_,
-                                          text_run_index)) {
+    } else if (add_text_run && IsObjectWithRangeInTextRun(
+                                   builder_->highlights(),
+                                   current_highlight_index_, text_run_index)) {
       BuildStaticNode(&static_text_state);
       AddHighlightToParaNode(
           (builder_->highlights())[current_highlight_index_++], block_node,
           &previous_on_line_node, &line_helper, &text_run_index);
-    } else {
+    } else if (add_text_run) {
       // A style, language, or text position change starts a new static text
       // node, which ends any heading the current block was classified as.
       if (BreaksStaticTextNode(
@@ -3740,6 +3806,48 @@ void PdfAccessibilityTreeBuilderHeuristic::AddTextToObjectNode(
       NormalizeTextRunIndex(object_end_text_run_index, *text_run_index);
 }
 
+bool PdfAccessibilityTreeBuilderHeuristic::AddTextToObjectNodeWithEnhancements(
+    size_t object_text_run_index,
+    uint32_t object_text_run_count,
+    ui::AXNodeData* object_node,
+    ui::AXNodeData* para_node,
+    ui::AXNodeData** previous_on_line_node,
+    LineHelper* line_helper,
+    size_t* text_run_index) {
+  CHECK_LE(object_text_run_index, *text_run_index);
+  if (object_text_run_count == 0) {
+    return false;
+  }
+
+  const size_t object_end_text_run_index =
+      std::min(object_text_run_index + object_text_run_count,
+               builder_->text_runs().size()) -
+      1;
+  if (object_end_text_run_index < *text_run_index) {
+    // The loop already passed this object's runs, so use a separate
+    // `LineHelper` to keep the outer block's line links unchanged.
+    ui::AXNodeData* inner_previous_on_line_node = nullptr;
+    LineHelper inner_line_helper(builder_->text_runs());
+    AddTextToAXNode(object_text_run_index, object_end_text_run_index,
+                    object_node, &inner_previous_on_line_node,
+                    &inner_line_helper);
+    para_node->relative_bounds.bounds.Union(
+        object_node->relative_bounds.bounds);
+    return false;
+  }
+
+  if (object_text_run_index < *text_run_index) {
+    // Partial overlap with runs already added: clear line state so the
+    // previous object does not link backward to `object_text_run_index`.
+    *previous_on_line_node = nullptr;
+  }
+  AddTextToAXNode(object_text_run_index, object_end_text_run_index, object_node,
+                  previous_on_line_node, line_helper);
+  para_node->relative_bounds.bounds.Union(object_node->relative_bounds.bounds);
+  *text_run_index = object_end_text_run_index + 1;
+  return true;
+}
+
 bool PdfAccessibilityTreeBuilderHeuristic::AddLinkToParaNode(
     const chrome_pdf::AccessibilityLinkInfo& link,
     ui::AXNodeData* para_node,
@@ -3748,6 +3856,12 @@ bool PdfAccessibilityTreeBuilderHeuristic::AddLinkToParaNode(
     size_t* text_run_index) {
   ui::AXNodeData* link_node = builder_->CreateLinkNode(link);
   para_node->child_ids.push_back(link_node->id);
+
+  if (features::IsPdfAccessibilityHeuristicEnhancementsEnabled()) {
+    return AddTextToObjectNodeWithEnhancements(
+        link.text_range.index, link.text_range.count, link_node, para_node,
+        previous_on_line_node, line_helper, text_run_index);
+  }
 
   // If `link.text_range.count` == 0, then the link is not part of the page
   // text. Push it ahead of the current text run.
@@ -3772,7 +3886,9 @@ void PdfAccessibilityTreeBuilderHeuristic::AddImageToParaNode(
   // index, then push the image ahead of the current text run.
   ui::AXNodeData* image_node = builder_->CreateImageNode(image);
   para_node->child_ids.push_back(image_node->id);
-  --(*text_run_index);
+  if (!features::IsPdfAccessibilityHeuristicEnhancementsEnabled()) {
+    --(*text_run_index);
+  }
 }
 
 void PdfAccessibilityTreeBuilderHeuristic::AddHighlightToParaNode(

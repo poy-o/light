@@ -77,19 +77,17 @@ std::optional<FidoTransportProtocol> FromWinTransportsMask(
   return std::nullopt;
 }
 
-base::flat_set<FidoTransportProtocol> FromWinTransportsBitmask(
-    const DWORD transports) {
-  base::flat_set<FidoTransportProtocol> result;
+FidoTransportProtocolSet FromWinTransportsBitmask(DWORD transports) {
+  FidoTransportProtocolSet result;
   for (const auto& [mask, protocol] : kTransportMap) {
     if (transports & mask) {
-      result.insert(protocol);
+      result.Put(protocol);
     }
   }
   return result;
 }
 
-uint32_t ToWinTransportsMask(
-    const base::flat_set<FidoTransportProtocol>& transports) {
+uint32_t ToWinTransportsMask(FidoTransportProtocolSet transports) {
   uint32_t result = 0;
   for (const FidoTransportProtocol transport : transports) {
     switch (transport) {

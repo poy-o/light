@@ -72,6 +72,7 @@
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "mojo/public/cpp/system/simple_watcher.h"
 #include "net/base/isolation_info.h"
+#include "net/cookies/cookie_util.h"
 #include "net/dns/public/resolve_error_info.h"
 #include "net/http/http_connection_info.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
@@ -135,6 +136,7 @@ class PrerenderHostRegistry;
 class RenderFrameHostCSPContext;
 class ServiceWorkerClient;
 class ServiceWorkerMainResourceHandle;
+class StoragePartitionImpl;
 class SubframeHistoryNavigationThrottle;
 
 enum class ErrorPageProcess;
@@ -684,6 +686,10 @@ class CONTENT_EXPORT NavigationRequest
 
   const network::mojom::URLResponseHead* response() {
     return response_head_.get();
+  }
+
+  const net::cookie_util::ParsedRequestCookies& request_cookies() const {
+    return request_cookies_;
   }
 
   const mojo::DataPipeConsumerHandle& response_body() {
@@ -1891,6 +1897,12 @@ class CONTENT_EXPORT NavigationRequest
     network_restrictions_id_ = network_restrictions_id;
   }
 
+  // Registers `allowlists` for `network_restrictions_id_` in the target
+  // RenderFrameHost's StoragePartitionImpl and records the partition so the
+  // restrictions are cleared if this navigation fails or never commits.
+  void RegisterNetworkRestrictions(network::ConnectionAllowlists allowlists,
+                                   base::OnceClosure on_complete);
+
   bool HasResumeAfterDeferredCommitListener() const {
     return resume_after_deferred_commit_listener_.is_valid();
   }
@@ -2110,11 +2122,6 @@ class CONTENT_EXPORT NavigationRequest
   // origin and to record that they should remain default-isolated in their
   // existing BrowsingInstances.
   void MaybeRegisterExistingOriginAsHavingDefaultIsolation(const GURL& url);
-
-  // Returns whether the ad exclusion from origin-keyed processes can apply. If
-  // not, no navigation is an excluded ad.
-  bool IsAdExclusionFromOriginKeyedProcessesEnabled(
-      BrowserContext* browser_context);
 
   // Uses the current inputs to calculate if this navigation is an ad that must
   // get a site-keyed process when origin-keyed processes are turned on by
@@ -2605,7 +2612,7 @@ class CONTENT_EXPORT NavigationRequest
   //
   // Return whether the response's COEP is compatible with its parent's COEP. It
   // also sends COEP reports if needed.
-  bool CheckResponseAdherenceToCoep(const GURL& url);
+  bool CheckResponseAdherenceToCoep();
 
   std::optional<network::mojom::BlockedByResponseReason> EnforceCOEP();
 
@@ -3239,9 +3246,6 @@ class CONTENT_EXPORT NavigationRequest
 
   // The time OnResponseStarted() was called.
   base::TimeTicks receive_response_time_;
-
-  // The time this navigation was ready to commit.
-  base::TimeTicks ready_to_commit_time_;
 
   // The first `fetchStart` time. This is different from the
   // `first_request_start_time` in `NavigationHandleTiming` since the
@@ -3887,6 +3891,15 @@ class CONTENT_EXPORT NavigationRequest
   // `commit_params`.
   GURL original_url_;
 
+  // The URL to use in COEP violation reports sent to the parent.
+  //
+  // Goal: the parent must not learn anything new from these reports, such as
+  // a cross-origin redirect target restored by a history navigation, or the
+  // URL picked by a cross-origin child. This is the full requested URL only
+  // if a document same-origin with the parent requested it, and its origin
+  // otherwise.
+  GURL coep_report_url_;
+
   // Set to true if `this` started as a same-document navigation but couldn't
   // commit, and was restarted as a cross-document navigation. See
   // `blink::mojom::CommitResult::RestartCrossDocument`.
@@ -3923,6 +3936,15 @@ class CONTENT_EXPORT NavigationRequest
   // cross-document navigations.
   base::UnguessableToken network_restrictions_id_ =
       network::GetNoOpNetworkRestrictionsId();
+
+  // Tracks the StoragePartitionImpl where `network_restrictions_id_` was
+  // registered prior to commit so restrictions are cleared if the navigation
+  // fails or never commits.
+  // TODO(crbug.com/580435305): Wrap `network_restrictions_id_` and
+  // `WeakPtr<StoragePartitionImpl>` in a ref-counted RAII handle that clears
+  // registered restrictions on destruction, shared across NavigationRequest,
+  // DocumentAssociatedData, and worker hosts.
+  base::WeakPtr<StoragePartitionImpl> network_restrictions_storage_partition_;
 
   // Connection-Allowlist feature: set to true when this navigation is blocked
   // because the initiator's Connection-Allowlist disallows the destination URL
@@ -3994,6 +4016,12 @@ class CONTENT_EXPORT NavigationRequest
 
   // The resolved and validated full URL for the activation beacon.
   GURL activation_beacon_url_;
+
+  // Browser-only snapshot of cookies sent on the final navigation request when
+  // `TrustedParams::include_request_cookies_with_response` was enabled by a
+  // preloading loader, extracted and cleared from `response_head_` in
+  // `OnResponseStarted()` before `response_head_` can be cloned or forwarded.
+  net::cookie_util::ParsedRequestCookies request_cookies_;
 
   // A record of the state of the document that initiated the navigation. Null
   // for browser intiiated navigations.

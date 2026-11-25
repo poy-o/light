@@ -2715,9 +2715,11 @@ group("base_rust") {
   public_deps = [
     ":callback",
     ":command_line",
+    ":dump_without_crashing",
     ":feature",
     ":file_path",
     ":histogram",
+    ":location",
     ":run_loop",
     ":sequenced",
     ":sequenced_task_runner",
@@ -2841,6 +2843,26 @@ rust_static_library("command_line") {
   ]
 }
 
+source_set("dump_without_crashing_shim") {
+  sources = [
+    "debug/dump_without_crashing_rust_shim.cc",
+    "debug/dump_without_crashing_rust_shim.h",
+  ]
+  deps = [ "//base" ]
+}
+
+rust_static_library("dump_without_crashing") {
+  sources = [ "debug/dump_without_crashing.rs" ]
+  crate_root = "debug/dump_without_crashing.rs"
+  cxx_bindings = [ "debug/dump_without_crashing.rs" ]
+  allow_unsafe = true
+  deps = [
+    ":dump_without_crashing_shim",
+    ":location",
+    "//base",
+  ]
+}
+
 rust_static_library("feature") {
   sources = [ "feature.rs" ]
   crate_root = "feature.rs"
@@ -2872,6 +2894,14 @@ rust_static_library("unguessable_token") {
     "//base",
     "//third_party/rust/subtle/v2:lib",
   ]
+}
+
+rust_static_library("location") {
+  sources = [ "location.rs" ]
+  crate_root = "location.rs"
+  cxx_bindings = [ "location.rs" ]
+  allow_unsafe = true
+  deps = [ "//base" ]
 }
 
 rust_static_library("histogram") {
@@ -2987,7 +3017,9 @@ rust_static_library("base_rust_unittests") {
   sources = [
     "base_rust_unittests.rs",
     "command_line_unittest.rs",
+    "debug/dump_without_crashing_unittest.rs",
     "files/file_path_unittest.rs",
+    "location_unittest.rs",
     "metrics/histogram_unittest.rs",
     "task/sequenced_task_runner_unittest.rs",
     "task/thread_lock_unittest.rs",
@@ -2995,12 +3027,15 @@ rust_static_library("base_rust_unittests") {
   crate_root = "base_rust_unittests.rs"
   deps = [
     ":command_line",
+    ":dump_without_crashing",
     ":file_path",
     ":histogram",
+    ":location",
     ":scoped_refptr",
     ":sequenced",
     ":sequenced_task_runner",
     ":sequenced_task_runner_test_bridge",
+    "//base/test:dump_without_crashing_tester",
     "//base/test:histogram_tester",
     "//base/test:task_environment",
     "//testing/rust_gtest_interop",
@@ -6566,6 +6601,7 @@ if (is_android) {
       ":base_shared_preferences_java",
       ":content_uri_utils_java",
       ":features_java",
+      ":file_error_java",
       ":flagged_apis_java",
       ":jni_callbacks_junit_tests_java",
       ":location_junit_tests",

@@ -23,8 +23,6 @@
 #include "chrome/browser/keyboard_accessory/android/manual_filling_controller.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "components/affiliations/core/browser/match_type.h"
-#include "components/autofill/content/browser/content_autofill_client.h"
-#include "components/autofill/core/browser/at_memory/at_memory_enablement_util.h"
 #include "components/autofill/core/common/unique_ids.h"
 #include "components/password_manager/core/browser/credential_cache.h"
 #include "components/password_manager/core/browser/password_form.h"
@@ -206,14 +204,12 @@ void ManualFillingViewAndroid::SwapSheetWithKeyboard() {
 
 void ManualFillingViewAndroid::Show(
     WaitForKeyboard wait_for_keyboard,
-    ShouldShowOnLargeFormFactor should_show_on_large_form_factor,
-    IsUnstructuredField is_unstructured_field) {
+    ShouldShowOnLargeFormFactor should_show_on_large_form_factor) {
   TRACE_EVENT0("passwords", "ManualFillingViewAndroid::Show");
   if (auto obj = GetOrCreateJavaObject()) {
     Java_ManualFillingComponentBridge_show(
         base::android::AttachCurrentThread(), obj, wait_for_keyboard.value(),
-        should_show_on_large_form_factor.value(),
-        is_unstructured_field.value());
+        should_show_on_large_form_factor.value());
   }
 }
 
@@ -345,18 +341,6 @@ static void JNI_ManualFillingComponentBridge_CachePasswordSheetDataForTesting(
 }
 
 // static
-static void JNI_ManualFillingComponentBridge_OnOptionSelectedForWebContents(
-    content::WebContents* web_contents,
-    autofill::AccessoryAction selected_action) {
-  if (!web_contents) {
-    return;
-  }
-  if (auto controller = ManualFillingController::GetOrCreate(web_contents)) {
-    controller->OnOptionSelected(selected_action);
-  }
-}
-
-// static
 static void JNI_ManualFillingComponentBridge_NotifyFocusedFieldTypeForTesting(
     content::WebContents* web_contents,
     int64_t j_focused_field_id,
@@ -396,31 +380,6 @@ std::unique_ptr<ManualFillingViewInterface> ManualFillingViewInterface::Create(
     ManualFillingController* controller,
     content::WebContents* web_contents) {
   return std::make_unique<ManualFillingViewAndroid>(controller, web_contents);
-}
-
-static bool JNI_ManualFillingComponentBridge_IsAtMemoryEnabled(
-    content::WebContents* web_contents) {
-  autofill::ContentAutofillClient* autofill_client =
-      autofill::ContentAutofillClient::FromWebContents(web_contents);
-  // Not every `WebContents` has a `ContentAutofillClient`.
-  if (!autofill_client) {
-    return false;
-  }
-
-  const GURL& page_url = web_contents->GetLastCommittedURL();
-  return autofill::MayPerformAtMemoryAction(
-      autofill::AtMemoryAction::kTriggerSearchUI, *autofill_client, page_url);
-}
-
-static void JNI_ManualFillingComponentBridge_HideAtMemoryBottomSheet(
-    content::WebContents* web_contents) {
-  autofill::ContentAutofillClient* autofill_client =
-      autofill::ContentAutofillClient::FromWebContents(web_contents);
-  if (autofill_client) {
-    autofill_client->HideSuggestions(
-        autofill::SuggestionHidingReason::kHiddenByCaller,
-        autofill::FillingProduct::kAtMemory);
-  }
 }
 
 DEFINE_JNI(ManualFillingComponentBridge)

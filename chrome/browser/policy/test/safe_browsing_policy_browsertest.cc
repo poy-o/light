@@ -144,6 +144,7 @@ IN_PROC_BROWSER_TEST_F(SafeBrowsingPolicyTest, SafeBrowsingStatePolicyManaged) {
   EXPECT_EQ(security_interstitials::CMD_TEXT_NOT_FOUND,
             IsEnhancedProtectionMessageVisibleOnInterstitial(this));
 }
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 // Test that when password protection login URLs are set by policy, password
 // protection service gets the correct value.
@@ -248,7 +249,6 @@ IN_PROC_BROWSER_TEST_F(SafeBrowsingPolicyTest,
       "accounts.google.com"));
 }
 #endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
-#endif  // !BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
 class MockPasswordProtectionService

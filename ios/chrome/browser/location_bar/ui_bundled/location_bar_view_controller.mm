@@ -56,6 +56,7 @@
 #import "ios/chrome/browser/shared/public/commands/page_action_menu_commands.h"
 #import "ios/chrome/browser/shared/public/commands/page_action_menu_entry_point_commands.h"
 #import "ios/chrome/browser/shared/public/commands/scene_commands.h"
+#import "ios/chrome/browser/shared/public/commands/voice_search_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
@@ -510,7 +511,7 @@ const CGFloat kGeminiLiveCircleSize = 20.0;
       _defaultSearchEngineIconView,
       CGSizeMake(kOmniboxLeadingImageSize + 12.0f, kOmniboxLeadingImageSize));
 
-  if (IsProactiveSuggestionsFrameworkEnabled()) {
+  if (IsPageActionMenuEnabled()) {
     _locationBarSteadyView.pageActionMenuHandler = self.pageActionMenuHandler;
   }
 
@@ -533,7 +534,7 @@ const CGFloat kGeminiLiveCircleSize = 20.0;
   self.locationBarSteadyView.trailingButton.alpha = alphaValue;
   self.locationBarSteadyView.badgesContainerView.placeholderView.alpha =
       alphaValue;
-  if (IsProactiveSuggestionsFrameworkEnabled()) {
+  if (IsPageActionMenuEnabled()) {
     [self.locationBarSteadyView.badgesContainerView
         updateForFullscreenAlpha:alphaValue];
   }

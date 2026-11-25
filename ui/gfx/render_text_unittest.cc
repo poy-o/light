@@ -19,6 +19,7 @@
 #include <tuple>
 #include <vector>
 
+#include "base/check.h"
 #include "base/command_line.h"
 #include "base/format_macros.h"
 #include "base/i18n/base_i18n_switches.h"
@@ -43,11 +44,16 @@
 #include "build/build_config.h"
 #include "cc/paint/paint_record.h"
 #include "cc/paint/paint_recorder.h"
+#include "skia/ext/font_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/icu/source/common/unicode/uscript.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "third_party/skia/include/core/SkFontMgr.h"
 #include "third_party/skia/include/core/SkFontStyle.h"
+#include "third_party/skia/include/core/SkGraphics.h"
+#include "third_party/skia/include/core/SkStream.h"
 #include "third_party/skia/include/core/SkString.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/core/SkTextBlob.h"
@@ -64,6 +70,7 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/point_f.h"
+#include "ui/gfx/platform_font.h"
 #include "ui/gfx/range/range.h"
 #include "ui/gfx/range/range_f.h"
 #include "ui/gfx/render_text_harfbuzz.h"
@@ -105,6 +112,18 @@ enum {
 };
 
 using FontSpan = std::pair<Font, Range>;
+
+// Returns a copy of |typeface| that has its own unique ID and that nothing
+// else references.
+sk_sp<SkTypeface> CloneTypeface(SkTypeface* typeface) {
+  int ttc_index = 0;
+  std::unique_ptr<SkStreamAsset> stream = typeface->openStream(&ttc_index);
+  CHECK(stream);
+  sk_sp<SkTypeface> clone =
+      skia::DefaultFontMgr()->makeFromStream(std::move(stream), ttc_index);
+  CHECK(clone);
+  return clone;
+}
 
 bool IsFontsSmoothingEnabled() {
 #if BUILDFLAG(IS_WIN)
@@ -492,6 +511,13 @@ class RenderTextTest : public testing::Test {
   internal::TextRunList* GetHarfBuzzRunList() {
     test_api()->EnsureLayout();
     return test_api()->GetHarfBuzzRunList();
+  }
+
+  void ShapeRunsWithFont(
+      std::u16string_view text,
+      const internal::TextRunHarfBuzz::FontParams& font_params,
+      std::vector<internal::TextRunHarfBuzz*>* in_out_runs) {
+    GetRenderText()->ShapeRunsWithFont(text, font_params, in_out_runs);
   }
 
   // For testing purposes, returns which fonts were chosen for which parts of
@@ -1225,6 +1251,71 @@ TEST_F(RenderTextTest, SelectWithTranslucentBackground) {
   // This whole slice should be the same color and opacity.
   rect_buffer.EnsureRectIsAllSameColor(0, 0, text_rect.width() - 1, 1);
 }
+
+// Gelasio ("fi") and DejaVu Sans (lam-alef) are only available through the
+// fontconfig test fonts.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+// Ensure that when only part of a ligature is selected, the selection color
+// covers only the selected part of the ligature glyph, including the
+// underline. See crbug.com/40894449.
+TEST_F(RenderTextTest, SelectPartOfLigature) {
+  struct {
+    const char* font;
+    const char16_t* text;
+    Range selection;
+  } kTestCases[] = {
+      {"Gelasio, 40px", u"fi", Range(1, 2)},
+      {"DejaVu Sans, 40px", u"\u0644\u0627", Range(0, 1)},
+  };
+  constexpr Size kCanvasSize(100, 60);
+  SkBitmap bitmap;
+  bitmap.allocPixels(
+      SkImageInfo::MakeN32Premul(kCanvasSize.width(), kCanvasSize.height()));
+  cc::SkiaPaintCanvas paint_canvas(bitmap);
+  Canvas canvas(&paint_canvas, 1.0f);
+
+  RenderText* render_text = GetRenderText();
+  render_text->SetColor(SK_ColorBLACK);
+  render_text->set_selection_color(SK_ColorRED);
+  render_text->set_selection_background_focused_color(SK_ColorWHITE);
+  render_text->set_focused(true);
+  render_text->SetDisplayRect(Rect(kCanvasSize));
+  for (const auto& test_case : kTestCases) {
+    SCOPED_TRACE(test_case.font);
+    render_text->SetFontList(FontList(test_case.font));
+    render_text->SetStyle(TEXT_STYLE_UNDERLINE, true);
+    render_text->SetText(test_case.text);
+    render_text->SelectRange(Range());
+    Draw();
+    // The text must be drawn as a single ligature glyph for this test.
+    ASSERT_EQ(1u, text_log().size());
+    ASSERT_EQ(1u, text_log()[0].glyphs().size());
+
+    paint_canvas.clear(SkColors::kWhite);
+    render_text->SelectRange(test_case.selection);
+    render_text->Draw(&canvas);
+
+    const Rect selection = GetSubstringBoundsUnion(test_case.selection);
+    bool red_outside_selection = false;
+    bool red_in_selection = false;
+    for (int y = 0; y < kCanvasSize.height(); ++y) {
+      for (int x = 0; x < kCanvasSize.width(); ++x) {
+        const SkColor color = bitmap.getColor(x, y);
+        if (SkColorGetR(color) <= SkColorGetG(color) + 0x40) {
+          continue;
+        }
+        if (x < selection.x() - 1 || x > selection.right() + 1) {
+          red_outside_selection = true;
+        } else if (x > selection.x() + 1 && x < selection.right() - 1) {
+          red_in_selection = true;
+        }
+      }
+    }
+    EXPECT_FALSE(red_outside_selection);
+    EXPECT_TRUE(red_in_selection);
+  }
+}
+#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 
 TEST_F(RenderTextTest, SelectRangeColoredGrapheme) {
   RenderText* render_text = GetRenderText();
@@ -7200,6 +7291,69 @@ TEST_F(RenderTextTest, HarfBuzz_EmojiDefaultVS15PrefersTextPresentation) {
   }
 }
 
+// Verifies that when a shaping batch contains both a normal emoji run and a
+// VS-15 (U+FE0E) run, ShapeRunsWithFont defers only the VS-15 run from the
+// color-emoji typeface regardless of run order.
+TEST_F(RenderTextTest, HarfBuzz_MixedEmojiAndVS15RunsInSameBatch) {
+  RenderTextHarfBuzz* render_text = GetRenderText();
+
+  // U+1F310 (emoji-default) and U+1F310+VS-15 both have USCRIPT_COMMON and
+  // match the emoji pre-pass, so they are passed to ShapeRunsWithFont in the
+  // same batch separated by a space run.
+  for (const bool vs15_first : {false, true}) {
+    SCOPED_TRACE(vs15_first);
+    render_text->SetText(vs15_first ? u"\xD83C\xDF10\uFE0E \xD83C\xDF10"
+                                    : u"\xD83C\xDF10 \xD83C\xDF10\uFE0E");
+    render_text->SetDisplayRect({1000, 50});
+    const internal::TextRunList* run_list = GetHarfBuzzRunList();
+    ASSERT_EQ(3U, run_list->size());
+
+    const auto& vs15_run = run_list->runs()[vs15_first ? 0 : 2];
+    const auto& emoji_run = run_list->runs()[vs15_first ? 2 : 0];
+
+    EXPECT_FALSE(TypefaceMayRenderColorEmojiForTest(
+        vs15_run->font_params.skia_face.get()))
+        << "VS-15 run was shaped with a color-emoji typeface";
+#if BUILDFLAG(IS_WIN)
+    EXPECT_EQ(0U, vs15_run->CountMissingGlyphs())
+        << "VS-15 run rendered as tofu";
+#endif
+
+    EXPECT_GT(emoji_run->shape.glyph_count, 0U);
+#if !BUILDFLAG(IS_FUCHSIA)
+    EXPECT_EQ(0U, emoji_run->CountMissingGlyphs());
+#endif
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE)
+    EXPECT_TRUE(TypefaceMayRenderColorEmojiForTest(
+        emoji_run->font_params.skia_face.get()))
+        << "Emoji run was not routed through the platform color emoji font";
+#endif
+  }
+
+  // Multiple VS-15 runs interleaved with a normal emoji run in the same batch:
+  // both VS-15 runs must be deferred while the middle emoji run is kept.
+  render_text->SetText(u"\xD83C\xDF10\uFE0E \xD83C\xDF10 \xD83C\xDF10\uFE0E");
+  render_text->SetDisplayRect({1000, 50});
+  const internal::TextRunList* run_list = GetHarfBuzzRunList();
+  ASSERT_EQ(5U, run_list->size());
+  for (size_t index : {0U, 4U}) {
+    const auto& vs15_run = run_list->runs()[index];
+    EXPECT_FALSE(TypefaceMayRenderColorEmojiForTest(
+        vs15_run->font_params.skia_face.get()))
+        << "VS-15 run was shaped with a color-emoji typeface";
+  }
+  const auto& middle_emoji_run = run_list->runs()[2];
+  EXPECT_GT(middle_emoji_run->shape.glyph_count, 0U);
+#if !BUILDFLAG(IS_FUCHSIA)
+  EXPECT_EQ(0U, middle_emoji_run->CountMissingGlyphs());
+#endif
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE)
+  EXPECT_TRUE(TypefaceMayRenderColorEmojiForTest(
+      middle_emoji_run->font_params.skia_face.get()))
+      << "Emoji run was not routed through the platform color emoji font";
+#endif
+}
+
 TEST_F(RenderTextTest, HarfBuzz_OrphanedVariationSelector) {
   RenderTextHarfBuzz* render_text = GetRenderText();
 
@@ -7424,6 +7578,48 @@ TEST_F(RenderTextTest, HarfBuzz_BreakRunsByAscii) {
   EXPECT_EQ("[0->1][2]", GetRunListStructureString());
 }
 
+// Left-to-right ASCII text skips ICU BiDi analysis. Its runs must still be
+// split by script and at special characters.
+TEST_F(RenderTextTest, HarfBuzz_BreakRunsInLtrAscii) {
+  RenderTextHarfBuzz* render_text = GetRenderText();
+  render_text->SetDirectionalityMode(DIRECTIONALITY_FORCE_LTR);
+
+  render_text->SetText(u"a-b");
+  EXPECT_EQ("[0][1][2]", GetRunListStructureString());
+
+  render_text->SetText(u"Hello, world");
+  EXPECT_EQ("[0->4][5][6][7->11]", GetRunListStructureString());
+
+  render_text->SetText(u"Tab 2");
+  EXPECT_EQ("[0->2][3][4]", GetRunListStructureString());
+
+  render_text->SetText(u"a(b)");
+  EXPECT_EQ("[0][1][2][3]", GetRunListStructureString());
+
+  // ASCII text in a right-to-left paragraph still needs BiDi analysis: the
+  // trailing punctuation takes the paragraph direction, so it comes first
+  // visually.
+  render_text->SetDirectionalityMode(DIRECTIONALITY_FORCE_RTL);
+  render_text->SetText(u"abc.");
+  EXPECT_EQ("[3][0->2]", GetRunListStructureString());
+}
+
+// RenderTextHarfBuzz does not ask ICU for the scripts of ASCII code points. It
+// assumes that letters are Latin and everything else is Common, and that none
+// of them has script extensions. Verifies that ICU agrees.
+TEST_F(RenderTextTest, HarfBuzz_AsciiScriptExtensions) {
+  for (UChar32 codepoint = 0; codepoint < 0x80; ++codepoint) {
+    SCOPED_TRACE(codepoint);
+    UScriptCode scripts[2];
+    UErrorCode icu_error = U_ZERO_ERROR;
+    ASSERT_EQ(1, uscript_getScriptExtensions(codepoint, scripts,
+                                             std::size(scripts), &icu_error));
+    ASSERT_TRUE(U_SUCCESS(icu_error));
+    EXPECT_EQ(base::IsAsciiAlpha(codepoint) ? USCRIPT_LATIN : USCRIPT_COMMON,
+              scripts[0]);
+  }
+}
+
 // Test that, on Mac, font fallback mechanisms and Harfbuzz configuration cause
 // the correct glyphs to be chosen for unicode regional indicators.
 TEST_F(RenderTextTest, EmojiFlagGlyphCount) {
@@ -7478,6 +7674,64 @@ TEST_F(RenderTextTest, HarfBuzz_ShapeRunsWithMultipleFonts) {
     mapped_fonts.push_back(font_span.first.GetFontName());
   EXPECT_EQ(expected_fonts, mapped_fonts);
 #endif
+}
+
+// The typeface cache must keep a reference to the typeface, because the cached
+// hb_face_t points at it.
+TEST_F(RenderTextTest, HarfBuzz_TypefaceCacheRetainsTypeface) {
+  Font font;
+  sk_sp<SkTypeface> fresh_typeface =
+      CloneTypeface(font.platform_font()->GetNativeSkTypeface().get());
+  ASSERT_TRUE(fresh_typeface->unique());
+
+  {
+    // Use a string longer than ShapeRunCache's kMaxRunLengthToCache (25) so
+    // ShapeRunCache does not retain |fresh_typeface|; only TypefaceCache does.
+    const std::u16string text(30, u'a');
+    internal::TextRunHarfBuzz run(font);
+    run.range = Range(0, text.length());
+    internal::TextRunHarfBuzz::FontParams font_params(font);
+    font_params.skia_face = fresh_typeface;
+    std::vector<internal::TextRunHarfBuzz*> runs = {&run};
+    ShapeRunsWithFont(text, font_params, &runs);
+  }
+
+  // Purge Skia's strike cache so only TypefaceCache retains |fresh_typeface|.
+  SkGraphics::PurgeFontCache();
+
+  EXPECT_FALSE(fresh_typeface->unique());
+}
+
+// The hash of a shape cache key must depend on the typeface, the script and
+// the font size, and not only on the text.
+TEST_F(RenderTextTest, HarfBuzz_ShapeRunHashIncludesFontParams) {
+  Font font;
+  sk_sp<SkTypeface> base_typeface = font.platform_font()->GetNativeSkTypeface();
+
+  internal::TextRunHarfBuzz::FontParams base_params(font);
+  base_params.skia_face = base_typeface;
+  base_params.script = USCRIPT_LATIN;
+  base_params.font_size = 12;
+
+  constexpr std::u16string_view kText = u"hello";
+  const Range range(0, kText.length());
+  const size_t base_hash = RenderTextHarfBuzz::ComputeShapeRunHashForTesting(
+      kText, base_params, range);
+
+  internal::TextRunHarfBuzz::FontParams size_params = base_params;
+  size_params.font_size = 24;
+  EXPECT_NE(base_hash, RenderTextHarfBuzz::ComputeShapeRunHashForTesting(
+                           kText, size_params, range));
+
+  internal::TextRunHarfBuzz::FontParams script_params = base_params;
+  script_params.script = USCRIPT_GREEK;
+  EXPECT_NE(base_hash, RenderTextHarfBuzz::ComputeShapeRunHashForTesting(
+                           kText, script_params, range));
+
+  internal::TextRunHarfBuzz::FontParams face_params = base_params;
+  face_params.skia_face = CloneTypeface(base_typeface.get());
+  EXPECT_NE(base_hash, RenderTextHarfBuzz::ComputeShapeRunHashForTesting(
+                           kText, face_params, range));
 }
 
 TEST_F(RenderTextTest, GlyphBounds) {
@@ -9420,6 +9674,86 @@ TEST_F(SkiaTextRendererTest, DrawUnderlineMinimumThickness) {
   EXPECT_FLOAT_EQ(rects[1].height(), 2.0f);
   EXPECT_FLOAT_EQ(rects[2].height(),
                   11.0f * 2.0f * RenderText::kLineThicknessFactor);
+}
+
+// Ensure HINTING_FULL maps to SkFontHinting::kNormal so LCD surface
+// rasterization matches Skia's canonicalized shaping metrics and does not jump
+// glyph widths when subpixel rendering is suppressed (crbug.com/472679086).
+TEST_F(SkiaTextRendererTest, FullHintingUsesNormalSkiaHinting) {
+  FontRenderParams params_full;
+  params_full.antialiasing = true;
+  params_full.subpixel_rendering = FontRenderParams::SUBPIXEL_RENDERING_RGB;
+  params_full.subpixel_positioning = false;
+  params_full.autohinter = true;
+  params_full.hinting = FontRenderParams::HINTING_FULL;
+
+  renderer()->SetFontRenderParams(params_full,
+                                  /*subpixel_rendering_suppressed=*/false);
+  const SkFont& font = test::RenderTextTestApi::GetRendererFont(renderer());
+  EXPECT_EQ(font.getEdging(), SkFont::Edging::kSubpixelAntiAlias);
+  EXPECT_FALSE(font.isSubpixel());
+  EXPECT_TRUE(font.isForceAutoHinting());
+  EXPECT_EQ(font.getHinting(), SkFontHinting::kNormal);
+
+  renderer()->SetFontRenderParams(params_full,
+                                  /*subpixel_rendering_suppressed=*/true);
+  EXPECT_EQ(font.getEdging(), SkFont::Edging::kAntiAlias);
+  EXPECT_FALSE(font.isSubpixel());
+  EXPECT_EQ(font.getHinting(), SkFontHinting::kNormal);
+
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+  sk_sp<SkTypeface> typeface =
+      Font(kTestFontName, 16).platform_font()->GetNativeSkTypeface();
+  ASSERT_TRUE(typeface);
+
+  FontRenderParams params_medium = params_full;
+  params_medium.hinting = FontRenderParams::HINTING_MEDIUM;
+
+  renderer()->SetTypeface(typeface);
+  renderer()->SetTextSize(16);
+  renderer()->SetFontRenderParams(params_full,
+                                  /*subpixel_rendering_suppressed=*/false);
+  const SkFont lcd_full_font = font;
+
+  renderer()->SetFontRenderParams(params_medium,
+                                  /*subpixel_rendering_suppressed=*/false);
+  const SkFont lcd_medium_font = font;
+
+  const SkGlyphID glyph_t = typeface->unicharToGlyph('t');
+  ASSERT_NE(glyph_t, 0u);
+  EXPECT_FLOAT_EQ(lcd_full_font.getWidth(glyph_t),
+                  lcd_medium_font.getWidth(glyph_t));
+
+  const SkSurfaceProps lcd_props(0, kRGB_H_SkPixelGeometry);
+  const SkImageInfo info = SkImageInfo::MakeN32Premul(32, 32);
+  sk_sp<SkSurface> full_surface = SkSurfaces::Raster(info, &lcd_props);
+  sk_sp<SkSurface> medium_surface = SkSurfaces::Raster(info, &lcd_props);
+  ASSERT_TRUE(full_surface);
+  ASSERT_TRUE(medium_surface);
+
+  SkPaint paint;
+  paint.setColor(SK_ColorBLACK);
+  const SkPoint pos = SkPoint::Make(8, 24);
+
+  full_surface->getCanvas()->clear(SK_ColorWHITE);
+  full_surface->getCanvas()->drawGlyphs({&glyph_t, 1}, {&pos, 1}, {0, 0},
+                                        lcd_full_font, paint);
+
+  medium_surface->getCanvas()->clear(SK_ColorWHITE);
+  medium_surface->getCanvas()->drawGlyphs({&glyph_t, 1}, {&pos, 1}, {0, 0},
+                                          lcd_medium_font, paint);
+
+  SkPixmap full_pixmap;
+  SkPixmap medium_pixmap;
+  ASSERT_TRUE(full_surface->peekPixels(&full_pixmap));
+  ASSERT_TRUE(medium_surface->peekPixels(&medium_pixmap));
+  for (int y = 0; y < info.height(); ++y) {
+    for (int x = 0; x < info.width(); ++x) {
+      EXPECT_EQ(full_pixmap.getColor(x, y), medium_pixmap.getColor(x, y))
+          << "LCD pixel mismatch at (" << x << ", " << y << ")";
+    }
+  }
+#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 }
 
 class RenderTextDirectionTest

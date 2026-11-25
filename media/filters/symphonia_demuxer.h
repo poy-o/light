@@ -29,6 +29,8 @@
 #include "media/base/media_log.h"
 #include "media/base/media_track.h"
 #include "media/base/pipeline_status.h"
+#include "media/base/ranges.h"
+#include "media/base/timestamp_constants.h"
 #include "media/filters/symphonia_data_source_bridge.h"
 #include "media/filters/symphonia_demuxer_stream.h"
 #include "third_party/rust/cxx/v1/cxx.h"
@@ -61,7 +63,11 @@ struct SymphoniaTrackInfo;
 //
 // What works now:
 // - Probing all container formats and starting the first supported audio track.
+// - Audio decoder config metadata: codec delay (including Opus pre-skip), seek
+//   preroll (80 ms for Opus), and channel layout configurations (including
+//   discrete multichannel layouts).
 // - Reading packets, including gapless trimming represented by discard padding.
+// - Reporting buffered time ranges to `DemuxerHost`.
 // - Seeking, aborting reads, and enabling/disabling tracks.
 //
 // What does not work yet:
@@ -69,14 +75,12 @@ struct SymphoniaTrackInfo;
 //   only if no fallback is available; TODO(crbug.com/583934381).
 // - Encrypted media - `encrypted_media_init_data_cb` is never invoked;
 //   TODO(crbug.com/583935700).
-// - Mid-stream config changes (TODO(crbug.com/583935452),
-//   TODO(crbug.com/583934912)) and bitstream conversions
+// - Mid-stream config changes other than a new chained Ogg stream
+//   (TODO(crbug.com/583934912)) and bitstream conversions
 //   (TODO(crbug.com/583935590)).
 // - Packet side data, excluding discard padding; TODO(crbug.com/583935113).
 // - Non-zero start time (TODO(crbug.com/583934943)) and timeline offsets
 //   (TODO(crbug.com/583936230)).
-// - Re-enabling tracks at the current playback time - currently resumes at the
-//   current demuxing position; TODO(crbug.com/583935964).
 class MEDIA_EXPORT SymphoniaDemuxer : public Demuxer {
  public:
   // Outcome of `Initialize()`, recorded to the
@@ -187,10 +191,15 @@ class MEDIA_EXPORT SymphoniaDemuxer : public Demuxer {
   void OnInitializeDone(InitResultOrError result);
   void OnReadPacketDone(SymphoniaReadPacketResult packet_result);
   void OnSeekDone(SymphoniaSeekResult seek_result);
+  void OnTrackChangeSeekDone(SymphoniaSeekResult seek_result);
 
   // Ends every stream, and sets the duration from the packets read so far if
   // the container did not report one.
   void OnEndOfStream();
+
+  // Handles a new stream starting mid-playback (e.g. chained Ogg) with the
+  // container's new `tracks`.
+  void OnStreamResetRequired(const rust::Vec<SymphoniaTrackInfo>& tracks);
 
   // Reports a fatal error to the `DemuxerHost`.
   void OnDemuxerError(PipelineStatus status);
@@ -214,12 +223,25 @@ class MEDIA_EXPORT SymphoniaDemuxer : public Demuxer {
   raw_ptr<DemuxerHost> host_ = nullptr;
 
   std::vector<std::unique_ptr<SymphoniaDemuxerStream>> streams_;
+  // When a chained stream (e.g. chained Ogg) starts with a new track ID,
+  // packets with this ID are routed to `streams_[0]`.
+  std::optional<uint32_t> chained_track_id_;
+
   // `kInfiniteDuration` until end of stream if the container does not report
   // a duration.
   base::TimeDelta duration_;
+  // True after a chained stream reset (`OnStreamResetRequired()`). Symphonia's
+  // Ogg reader probes only the first stream's duration, so chained streams
+  // raise `duration_` as later links run past it.
+  bool has_chained_stream_ = false;
   // End time of the latest packet read so far, used to set the duration at end
   // of stream.
   base::TimeDelta max_packet_end_time_;
+  // End time of the latest packet added to `buffered_ranges_` in the current
+  // contiguous read run, or `kNoTimestamp` before any packet (and after a
+  // `Seek()`).
+  base::TimeDelta last_buffered_timestamp_ = kNoTimestamp;
+  Ranges<base::TimeDelta> buffered_ranges_;
   // Atomic because `OnInitializeDone()` sets it on the media sequence, while
   // `DemuxerManager::GetContainerForMetrics()` reads it from the main thread.
   std::atomic<container_names::MediaContainerName> container_name_{
@@ -232,6 +254,9 @@ class MEDIA_EXPORT SymphoniaDemuxer : public Demuxer {
 
   PipelineStatusCallback pending_init_cb_;
   PipelineStatusCallback pending_seek_cb_;
+  // Set while seeking to the current time after a track is re-enabled; runs
+  // the `TrackChangeCB` for that change.
+  base::OnceClosure pending_track_change_cb_;
   bool is_read_pending_ = false;
   bool is_eos_ = false;
   bool is_stopped_ = false;

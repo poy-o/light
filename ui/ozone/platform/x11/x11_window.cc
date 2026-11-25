@@ -208,6 +208,9 @@ x11::Window GetWindowForEvent(const x11::Event& xev) {
   if (auto* xievent = xev.As<x11::Input::DeviceEvent>()) {
     return xievent->event;
   }
+  if (auto* pinch = xev.As<x11::Input::GesturePinchEvent>()) {
+    return pinch->event;
+  }
   if (auto* crossing = xev.As<x11::CrossingEvent>()) {
     return crossing->event;
   }
@@ -628,8 +631,16 @@ void X11Window::SetBoundsInPixels(const gfx::Rect& bounds) {
   }
 
   if (origin_changed) {
-    req.x = new_bounds_in_pixels.x();
-    req.y = new_bounds_in_pixels.y();
+    // With NorthWestGravity, the window manager places the frame at the
+    // requested position, so offset by the frame extents. Without a native
+    // frame, _NET_FRAME_EXTENTS may be stale (Mutter keeps the old value).
+    gfx::Point origin = new_bounds_in_pixels.origin();
+    if (window_mapped_in_server_ && use_native_frame_ && !static_gravity_) {
+      origin.Offset(-native_window_frame_borders_in_pixels_.left(),
+                    -native_window_frame_borders_in_pixels_.top());
+    }
+    req.x = origin.x();
+    req.y = origin.y();
   }
 
   if (origin_changed || size_changed) {
@@ -895,9 +906,15 @@ void X11Window::Activate() {
 
   auto weak_this = weak_ptr_factory_.GetWeakPtr();
 
+  // Capture the currently active window before clearing
+  // `ignore_keyboard_input_`, which could otherwise make `this` appear active
+  // after a prior `Deactivate()`.
+  X11Window* active_window =
+      X11WindowManager::GetInstance()->GetCurrentActiveWindow();
+
   // wmii says that it supports _NET_ACTIVE_WINDOW but does not.
   // https://code.google.com/p/wmii/issues/detail?id=266
-  static bool wm_supports_active_window =
+  bool wm_supports_active_window =
       GuessWindowManager() != WM_WMII &&
       connection_->WmSupportsHint(connection_->GetAtom("_NET_ACTIVE_WINDOW"));
 
@@ -910,13 +927,10 @@ void X11Window::Activate() {
     ignore_keyboard_input_ = false;
 
     std::array<uint32_t, 5> data = {
-        // We're an app.
+        // Source indication: 1 = normal application.
         1,
         static_cast<uint32_t>(timestamp),
-        // TODO(thomasanderson): if another chrome window is active, specify
-        // that here.  The EWMH spec claims this may make the WM more likely to
-        // service our _NET_ACTIVE_WINDOW request.
-        0,
+        active_window ? static_cast<uint32_t>(active_window->window()) : 0,
         0,
         0,
     };
@@ -1258,6 +1272,9 @@ void X11Window::SetOpaqueRegion(
 
 void X11Window::SetInputRegion(
     std::optional<std::vector<gfx::Rect>> region_px) {
+  if (!accept_events_) {
+    return;
+  }
   if (!region_px.has_value() || region_px->empty()) {
     connection_->shape().Mask({
         .operation = x11::Shape::So::Set,
@@ -1443,6 +1460,9 @@ void X11Window::OnFrameTypeChanged() {
   // the visible window. Window managers that honor _GTK_FRAME_EXTENTS (e.g.
   // Mutter) would otherwise keep the old frame rectangle and add the new
   // shadow insets around it. See https://crbug.com/394152435.
+  // _NET_FRAME_EXTENTS is stale until the window manager handles the frame
+  // change, so use StaticGravity until OnWmSynced().
+  SetWinGravity(x11::WIN_GRAVITY_HINT_STATIC_GRAVITY);
   gfx::Rect bounds = GetBoundsInPixels();
   bounds.Inset(*old_insets_px);
   bounds.Inset(-*decoration_insets_in_pixels_);
@@ -1611,7 +1631,7 @@ void X11Window::UpdateDecorationInsets() {
                             static_cast<uint32_t>(insets_px.bottom())});
 }
 
-void X11Window::OnXWindowStateChanged() {
+void X11Window::OnXWindowStateChanged(bool was_fullscreen) {
   // Determine the new window state information to be propagated to the client.
   // Note that the order of checks is important here, because window can have
   // several properties at the same time.
@@ -1624,30 +1644,29 @@ void X11Window::OnXWindowStateChanged() {
     new_state = PlatformWindowState::kMaximized;
   }
 
-  // fullscreen state is set syschronously at ToggleFullscreen() and must be
+  // Fullscreen state is set synchronously at SetFullscreen() and must be
   // kept and propagated to the client only when explicitly requested by upper
-  // layers, as it means we are in "browser fullscreen mode" (where
-  // decorations, omnibar, buttons, etc are hidden), which is different from
+  // layers, as it means Chrome is in "browser fullscreen mode" (where
+  // decorations, omnibar, buttons, etc. are hidden), which is different from
   // the case where the request comes from the window manager (or any other
-  // process), handled by this method. In this case, we follow EWMH guidelines:
-  // Optimize the whole application for fullscreen usage. Window decorations
-  // (e.g. borders) should be hidden, but the functionalily of the application
-  // should not change. Further details:
+  // process), handled by this method. In this case, Chrome follows EWMH
+  // guidelines: optimize the whole application for fullscreen usage. Window
+  // decorations (e.g. borders) should be hidden, but the functionality of the
+  // application should not change. Further details:
   // https://specifications.freedesktop.org/wm-spec/wm-spec-1.3.html
-  bool browser_fullconnection_mode = state_ == PlatformWindowState::kFullScreen;
-  bool window_fullconnection_mode =
-      new_state == PlatformWindowState::kFullScreen;
-  // So, we ignore fullscreen state transitions in 2 cases:
-  // 1. If |new_state| is kFullScreen but |state_| is not, which means the
-  // fullscreen request is coming from an external process. So the browser
-  // window must occupies the entire screen but not transitioning to browser
-  // fullscreen mode.
-  // 2. if |state_| is kFullScreen but |new_state| is not, we have been
-  // requested to exit fullscreen by other process (e.g: via WM keybinding),
-  // in this case we must keep on "browser fullscreen mode" bug the platform
-  // window gets back to its previous state (e.g: unmaximized, tiled in TWMs,
-  // etc).
-  if (window_fullconnection_mode != browser_fullconnection_mode) {
+  bool browser_fullscreen_mode = state_ == PlatformWindowState::kFullScreen;
+  bool window_fullscreen_mode = new_state == PlatformWindowState::kFullScreen;
+  // Ignore external fullscreen entry requests (when `new_state` is kFullScreen
+  // but `state_` is not) so the window occupies the entire screen without
+  // hiding browser UI. Also ignore non-fullscreen state updates while a
+  // browser-initiated fullscreen request is still awaiting
+  // _NET_WM_STATE_FULLSCREEN from the window manager (`!was_fullscreen`), or
+  // when a fullscreen window is minimized while retaining
+  // _NET_WM_STATE_FULLSCREEN (`IsFullscreen()`). However, when the window was
+  // in _NET_WM_STATE_FULLSCREEN and the window manager cleared it (e.g. via an
+  // OS shortcut), propagate the exit so the browser leaves fullscreen mode too.
+  if (window_fullscreen_mode != browser_fullscreen_mode &&
+      (!browser_fullscreen_mode || !was_fullscreen || IsFullscreen())) {
     return;
   }
 
@@ -2086,6 +2105,7 @@ void X11Window::CreateXWindow(const PlatformWindowInitProperties& properties) {
   x11_extension_delegate_ = properties.x11_extension_delegate;
 
   activatable_ = properties.activatable;
+  accept_events_ = properties.accept_events;
 
   x11::CreateWindowRequest req;
   req.bit_gravity = x11::Gravity::NorthWest;
@@ -2174,6 +2194,15 @@ void X11Window::CreateXWindow(const PlatformWindowInitProperties& properties) {
   xwindow_ = connection_->GenerateId<x11::Window>();
   req.wid = xwindow_;
   connection_->CreateWindow(req);
+  if (!accept_events_) {
+    // An empty input shape makes the window transparent to pointer input.
+    connection_->shape().Rectangles(x11::Shape::RectanglesRequest{
+        .operation = x11::Shape::So::Set,
+        .destination_kind = x11::Shape::Sk::Input,
+        .ordering = x11::ClipOrdering::YXBanded,
+        .destination_window = xwindow_,
+    });
+  }
   // Unretained is safe since we own `geometry_cache_`.
   geometry_cache_ = std::make_unique<x11::GeometryCache>(
       &*connection_, xwindow_,
@@ -2214,11 +2243,13 @@ void X11Window::Map(bool inactive) {
   const gfx::Rect bounds = GetBoundsInPixels();
   size_hints.x = bounds.x();
   size_hints.y = bounds.y();
-  // Set STATIC_GRAVITY so that the window position is not affected by the
-  // frame width when running with window manager.
+  // Set STATIC_GRAVITY so that the initial window position is not affected by
+  // the frame width when running with window manager. It is reset to
+  // NorthWestGravity in OnWindowMapped().
   size_hints.flags |= x11::SIZE_HINT_P_WIN_GRAVITY;
   size_hints.win_gravity = x11::WIN_GRAVITY_HINT_STATIC_GRAVITY;
   connection_->SetWmNormalHints(xwindow_, size_hints);
+  static_gravity_ = true;
 
   ignore_keyboard_input_ = inactive;
   auto wm_user_time_ms = ignore_keyboard_input_
@@ -2248,7 +2279,10 @@ void X11Window::Map(bool inactive) {
   window_mapped_in_client_ = true;
   OnMapPending();
 
-  // TODO(thomasanderson): Find out why this flush is necessary.
+  // Non-GLib builds (e.g. CastOS and Linux-ChromeOS, see crbug.com/988915) use
+  // X11EventWatcherFdWatch, which only flushes after reading from the X11
+  // socket and has no pre-poll hook before MessagePumpEpoll sleeps. Flush here
+  // so MapWindow is not left buffered when going idle.
   connection_->Flush();
 }
 
@@ -2708,6 +2742,10 @@ void X11Window::OnMapPending() {
 void X11Window::OnWindowMapped() {
   window_mapped_in_server_ = true;
   map_pending_ = false;
+  // Use NorthWestGravity, like most X11 clients, so that moves requested by
+  // other clients (e.g. xdotool) position the frame rather than the client
+  // window. See https://crbug.com/338741570.
+  SetWinGravity(x11::WIN_GRAVITY_HINT_NORTHWEST_GRAVITY);
   // Some WMs only respect maximize hints after the window has been mapped.
   // Check whether we need to re-do a maximization.
   if (should_maximize_after_map_) {
@@ -2789,6 +2827,7 @@ void X11Window::UpdateWindowProperties(
   }
 
   const bool was_minimized = IsMinimized();
+  const bool was_fullscreen = IsFullscreen();
   window_properties_ = new_window_properties;
 
   // A window manager restoring a minimized window clears _NET_WM_STATE_HIDDEN
@@ -2799,14 +2838,9 @@ void X11Window::UpdateWindowProperties(
     OnMapPending();
   }
 
-  // Ignore requests by the window manager to enter or exit fullscreen (e.g. as
-  // a result of pressing a window manager accelerator key). Chrome does not
-  // handle window manager initiated fullscreen. In particular, Chrome needs to
-  // do preprocessing before the x window's fullscreen state is toggled.
-
   is_always_on_top_ = HasWMSpecProperty(
       window_properties_, connection_->GetAtom("_NET_WM_STATE_ABOVE"));
-  OnXWindowStateChanged();
+  OnXWindowStateChanged(was_fullscreen);
   MaybeUpdateOcclusionState();
   ResetWindowRegion();
 }
@@ -2956,7 +2990,19 @@ void X11Window::SetBoundsWithWmSync(const gfx::Rect& bounds_px) {
 
 void X11Window::OnWmSynced() {
   bounds_wm_sync_.reset();
+  if (static_gravity_ && window_mapped_in_server_) {
+    SetWinGravity(x11::WIN_GRAVITY_HINT_NORTHWEST_GRAVITY);
+  }
   OnBoundsChanged(last_set_bounds_px_, GetBoundsInPixels());
+}
+
+void X11Window::SetWinGravity(uint32_t gravity) {
+  x11::SizeHints size_hints = {};
+  connection_->GetWmNormalHints(xwindow_, &size_hints);
+  size_hints.flags |= x11::SIZE_HINT_P_WIN_GRAVITY;
+  size_hints.win_gravity = gravity;
+  connection_->SetWmNormalHints(xwindow_, size_hints);
+  static_gravity_ = gravity == x11::WIN_GRAVITY_HINT_STATIC_GRAVITY;
 }
 
 void X11Window::OnBoundsChanged(const std::optional<gfx::Rect>& old_bounds_px,

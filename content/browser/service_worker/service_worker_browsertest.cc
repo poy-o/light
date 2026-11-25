@@ -40,6 +40,7 @@
 #include "base/task/task_traits.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/run_until.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_run_loop_timeout.h"
 #include "base/test/test_future.h"
@@ -70,6 +71,8 @@
 #include "content/browser/service_worker/service_worker_version.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/features.h"
+#include "content/common/service_worker/forwarded_race_network_request_url_loader_factory.h"
+#include "content/common/service_worker/race_network_request_url_loader_client.h"
 #include "content/common/service_worker/race_network_request_write_buffer_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -2206,6 +2209,79 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest,
       "});",
       iframe_target_tao.c_str(), iframe_target_tao.c_str());
   EXPECT_EQ(true, EvalJs(shell(), script_tao));
+}
+
+// A navigation that the fetch handler passes through with
+// `respondWith(fetch(event.request))` and that is redirected to an external
+// scheme must still reach the external protocol handler. The browser computes
+// the redirect target from the Location header of the opaque-redirect
+// response, so that header must reach the browser unchanged.
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest,
+                       PassThroughNavigationRedirectToExternalScheme) {
+  const GURL kExternalUrl("myapp://callback?code=123");
+
+  class ExternalProtocolRecordingClient
+      : public ContentBrowserTestContentBrowserClient {
+   public:
+    const std::optional<GURL>& external_url() const { return external_url_; }
+
+    bool HandleExternalProtocol(
+        const GURL& url,
+        WebContents::Getter web_contents_getter,
+        FrameTreeNodeId frame_tree_node_id,
+        NavigationUIData* navigation_data,
+        bool is_primary_main_frame,
+        bool is_in_fenced_frame_tree,
+        network::mojom::WebSandboxFlags sandbox_flags,
+        ui::PageTransition page_transition,
+        bool has_user_gesture,
+        const std::optional<url::Origin>& initiating_origin,
+        RenderFrameHost* initiator_document,
+        const net::IsolationInfo& isolation_info,
+        mojo::PendingRemote<network::mojom::URLLoaderFactory>* out_factory)
+        override {
+      external_url_ = url;
+      return true;
+    }
+
+   private:
+    std::optional<GURL> external_url_;
+  };
+
+  embedded_test_server()->RegisterRequestHandler(base::BindLambdaForTesting(
+      [&](const net::test_server::HttpRequest& request)
+          -> std::unique_ptr<net::test_server::HttpResponse> {
+        if (request.relative_url != "/service_worker/redirect_to_external") {
+          return nullptr;
+        }
+        auto response = std::make_unique<net::test_server::BasicHttpResponse>();
+        response->set_code(net::HTTP_FOUND);
+        response->AddCustomHeader("Location", kExternalUrl.spec());
+        return response;
+      }));
+  StartServerAndNavigateToSetup();
+
+  // Register a service worker that controls /service_worker/ and passes
+  // requests through with `respondWith(fetch(event.request))`.
+  EXPECT_TRUE(NavigateToURL(shell(),
+                            embedded_test_server()->GetURL(
+                                "/service_worker/create_service_worker.html")));
+  EXPECT_EQ("DONE",
+            EvalJs(shell(), "register('fetch_event_respond_with_fetch.js');"));
+
+  ExternalProtocolRecordingClient browser_client;
+  base::HistogramTester histogram_tester;
+  TestNavigationObserver observer(shell()->web_contents());
+  shell()->LoadURL(
+      embedded_test_server()->GetURL("/service_worker/redirect_to_external"));
+  observer.Wait();
+
+  // The fetch handler handled the navigation request.
+  histogram_tester.ExpectUniqueSample(
+      "ServiceWorker.FetchEvent.MainResource.Status",
+      blink::ServiceWorkerStatusCode::kOk, 1);
+  // The redirect to the external scheme reached the external protocol handler.
+  EXPECT_EQ(browser_client.external_url(), kExternalUrl);
 }
 
 // A document that commits with a non-opaque origin because its response carries
@@ -7580,6 +7656,137 @@ IN_PROC_BROWSER_TEST_P(
   EXPECT_EQ(1, GetRequestCount(relative_url));
 }
 
+class ServiceWorkerRaceNetworkRequestUnconsumedLeakBrowserTest
+    : public ServiceWorkerStaticRouterRaceNetworkAndFetchHandlerSourceBrowserTest {
+ public:
+  ServiceWorkerRaceNetworkRequestUnconsumedLeakBrowserTest() {
+    // Cover both shipping default (FallbackOnDisconnect disabled ->
+    // `pending_url_loader_factory_`) and fieldtrial config (enabled ->
+    // `url_loader_factory_remote_`).
+    feature_list_.InitWithFeatureStates({
+        {kServiceWorkerRaceNetworkRequestCloseUnconsumedClientPipe, true},
+        {blink::features::kServiceWorkerRaceNetworkRequestFallbackOnDisconnect,
+         GetParam()},
+    });
+  }
+  ~ServiceWorkerRaceNetworkRequestUnconsumedLeakBrowserTest() override =
+      default;
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    ServiceWorkerRaceNetworkRequestUnconsumedLeakBrowserTest,
+    testing::Bool());
+
+IN_PROC_BROWSER_TEST_P(
+    ServiceWorkerRaceNetworkRequestUnconsumedLeakBrowserTest,
+    Large200Response_UnconsumedByFetchHandler_DoesNotLeakLoader) {
+  base::HistogramTester histogram_tester;
+  SetupAndRegisterServiceWorker();
+
+  // Server sends 3072 bytes (> 1024-byte pipe capacity) with 200 OK while the
+  // Service Worker responds synthetically (`sw_respond`) without calling
+  // `fetch(event.request)`.
+  const GURL test_url = embedded_test_server()->GetURL(
+      "/service_worker/mock_response?server_large_data&sw_slow&sw_respond");
+  NavigateToURLBlockUntilNavigationsComplete(shell(), test_url, 1);
+
+  // Navigate away so the previous navigation's URLLoader connection closes.
+  // `DataTransferResult` is recorded in
+  // `~ServiceWorkerRaceNetworkRequestURLLoaderClient()`, so recording 1 sample
+  // proves `ServiceWorkerMainResourceLoader` did not leak in
+  // `ShouldDelayDeletion()`.
+  ASSERT_TRUE(NavigateToURL(shell(), GURL("about:blank")));
+  EXPECT_TRUE(base::test::RunUntil([&]() {
+    return histogram_tester
+               .GetAllSamples(
+                   "ServiceWorker.FetchEvent.MainResource.RaceNetworkRequest."
+                   "DataTransferResult")
+               .size() > 0;
+  }));
+  histogram_tester.ExpectTotalCount(
+      "ServiceWorker.FetchEvent.MainResource.RaceNetworkRequest."
+      "DataTransferResult",
+      1);
+}
+
+IN_PROC_BROWSER_TEST_P(
+    ServiceWorkerRaceNetworkRequestUnconsumedLeakBrowserTest,
+    Large200Response_ServiceWorkerWins_UnconsumedByFetchHandler_DoesNotLeakLoader) {
+  base::HistogramTester histogram_tester;
+  SetupAndRegisterServiceWorker();
+
+  // Service Worker wins the race (`server_slow` delays the server by 2s) and
+  // responds synthetically without calling `fetch(event.request)`.
+  const GURL test_url = embedded_test_server()->GetURL(
+      "/service_worker/mock_response?server_slow&server_large_data&sw_respond");
+  NavigateToURLBlockUntilNavigationsComplete(shell(), test_url, 1);
+  EXPECT_EQ("[ServiceWorkerRaceNetworkRequest] Response from the fetch handler",
+            EvalJs(GetPrimaryMainFrame(), "document.body.innerText"));
+
+  // Navigate away so the previous navigation's URLLoader connection closes.
+  // Because the raced request is aborted before `OnReceiveResponse()`,
+  // `simple_buffer_manager_` is never created and
+  // `~ServiceWorkerRaceNetworkRequestURLLoaderClient()` records
+  // `CloneResponseForFetchHandlerCancelled` instead of `DataTransferResult`.
+  ASSERT_TRUE(NavigateToURL(shell(), GURL("about:blank")));
+  EXPECT_TRUE(base::test::RunUntil([&]() {
+    return histogram_tester
+               .GetAllSamples(
+                   "ServiceWorker.FetchEvent.MainResource.RaceNetworkRequest."
+                   "CloneResponseForFetchHandlerCancelled")
+               .size() > 0;
+  }));
+  histogram_tester.ExpectTotalCount(
+      "ServiceWorker.FetchEvent.MainResource.RaceNetworkRequest."
+      "CloneResponseForFetchHandlerCancelled",
+      1);
+}
+
+class ServiceWorkerRaceNetworkRequestCloseUnconsumedPipeTwoPhaseWriteBrowserTest
+    : public ServiceWorkerStaticRouterRaceNetworkAndFetchHandlerSourceBrowserTest {
+ public:
+  ServiceWorkerRaceNetworkRequestCloseUnconsumedPipeTwoPhaseWriteBrowserTest() {
+    feature_list_.InitWithFeatureStates({
+        {kServiceWorkerRaceNetworkRequestCloseUnconsumedClientPipe, true},
+        {kServiceWorkerRaceNetworkRequestDeprecateTwoPhaseWrite, false},
+        {blink::features::kServiceWorkerRaceNetworkRequestFallbackOnDisconnect,
+         GetParam()},
+    });
+  }
+  ~ServiceWorkerRaceNetworkRequestCloseUnconsumedPipeTwoPhaseWriteBrowserTest()
+      override = default;
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    ServiceWorkerRaceNetworkRequestCloseUnconsumedPipeTwoPhaseWriteBrowserTest,
+    testing::Bool());
+
+IN_PROC_BROWSER_TEST_P(
+    ServiceWorkerRaceNetworkRequestCloseUnconsumedPipeTwoPhaseWriteBrowserTest,
+    FetchHandlerFallback_LargeBody_DoesNotAbort) {
+  SetupAndRegisterServiceWorker();
+
+  // SW falls back without calling `fetch(event.request)` before the slow server
+  // sends headers. With `DeprecateTwoPhaseWrite` disabled, the multi-chunk
+  // response flows through `TwoPhaseWrite` after `forwarding_client_` has
+  // already disconnected; cancelling the fetch-handler pipe must not abort the
+  // committed navigation response.
+  const std::string relative_url =
+      "/service_worker/mock_response?server_slow&server_large_data&sw_fallback";
+  NavigateToURLBlockUntilNavigationsComplete(
+      shell(), embedded_test_server()->GetURL(relative_url), 1);
+  EXPECT_EQ(std::string(1024 * 3, 'A'), GetInnerText());
+  EXPECT_EQ(1, GetRequestCount(relative_url));
+}
+
 class ServiceWorkerRaceNetworkRequestAbortedErrorMessageBrowserTest
     : public ServiceWorkerStaticRouterRaceNetworkAndFetchHandlerSourceBrowserTest {
  public:
@@ -8070,6 +8277,38 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerAutoPreloadBrowserTest,
 
   ReloadBlockUntilNavigationsComplete(shell(), 1);
   EXPECT_EQ(2, GetRequestCount(relative_url));
+}
+
+class ServiceWorkerAutoPreloadCloseUnconsumedPipeBrowserTest
+    : public ServiceWorkerAutoPreloadBrowserTest {
+ public:
+  ServiceWorkerAutoPreloadCloseUnconsumedPipeBrowserTest() {
+    feature_list_.InitAndEnableFeature(
+        kServiceWorkerRaceNetworkRequestCloseUnconsumedClientPipe);
+  }
+  ~ServiceWorkerAutoPreloadCloseUnconsumedPipeBrowserTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         ServiceWorkerAutoPreloadCloseUnconsumedPipeBrowserTest,
+                         testing::Bool());
+
+IN_PROC_BROWSER_TEST_P(ServiceWorkerAutoPreloadCloseUnconsumedPipeBrowserTest,
+                       FetchHandlerFallback_LargeBody_DoesNotAbort) {
+  SetupAndRegisterServiceWorker();
+
+  // AutoPreload uses `TwoPhaseWrite` even when `DeprecateTwoPhaseWrite` is
+  // enabled. Verify multi-chunk fallback responses still complete cleanly when
+  // the unconsumed fetch-handler pipe disconnects on FetchEvent completion.
+  const std::string relative_url =
+      "/service_worker/mock_response?server_slow&server_large_data&sw_fallback";
+  NavigateToURLBlockUntilNavigationsComplete(
+      shell(), embedded_test_server()->GetURL(relative_url), 1);
+  EXPECT_EQ(std::string(1024 * 3, 'A'), GetInnerText());
+  EXPECT_EQ(1, GetRequestCount(relative_url));
 }
 
 // TODO(crbug.com/448009920): Clean up tests for subresources.

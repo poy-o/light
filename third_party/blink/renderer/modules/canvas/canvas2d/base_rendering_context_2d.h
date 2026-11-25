@@ -15,7 +15,7 @@
 #include "base/byte_size.h"
 #include "base/cancelable_callback.h"
 #include "base/functional/callback_forward.h"
-#include "base/memory/raw_ref.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
@@ -25,6 +25,7 @@
 #include "components/viz/common/gpu/raster_context_provider.h"
 #include "gpu/command_buffer/client/shared_image_pool.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
+#include "third_party/blink/public/platform/web_graphics_shared_image_interface_provider.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_canvas_fill_rule.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_image_smoothing_quality.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
@@ -34,9 +35,10 @@
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d_state.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_2d_color_params.h"
-#include "third_party/blink/renderer/platform/graphics/canvas_resource.h"
+#include "third_party/blink/renderer/platform/graphics/color.h"
 #include "third_party/blink/renderer/platform/graphics/flush_for_image_listener.h"
 #include "third_party/blink/renderer/platform/graphics/flush_reason.h"
+#include "third_party/blink/renderer/platform/graphics/image_orientation.h"
 #include "third_party/blink/renderer/platform/graphics/memory_managed_paint_recorder.h"
 #include "third_party/blink/renderer/platform/graphics/scoped_raster_timer.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
@@ -126,6 +128,11 @@ class MODULES_EXPORT BaseRenderingContext2D
 
   int Width() const final;
   int Height() const final;
+
+  RespectImageOrientationEnum RespectImageOrientation() const override {
+    return kRespectImageOrientation;
+  }
+  Color GetCurrentColor() const override { return Color::kBlack; }
 
   bool clear_frame() const { return clear_frame_; }
   void set_clear_frame(bool clear_frame) { clear_frame_ = clear_frame; }
@@ -342,7 +349,6 @@ class MODULES_EXPORT BaseRenderingContext2D
     return sw_snapshot_sk_image_id_;
   }
   bool HasUnusedResourcesForTesting() const;
-  bool UnusedResourcesReclaimTimerIsRunningForTesting() const;
 
   HeapTaskRunnerTimer<BaseRenderingContext2D>
       dispatch_context_lost_event_timer_;
@@ -418,14 +424,15 @@ class MODULES_EXPORT BaseRenderingContext2D
                              gpu::SharedImageUsageSet shared_image_usage_flags);
   void CreateSharedImagePoolForSoftwareCompositor();
   void CreateSoftwareSurface();
-  void RecordBackingHistograms();
   scoped_refptr<StaticBitmapImage> Snapshot();
 
   bool context_restorable_{true};
 
  private:
+  class Resource;
+
   scoped_refptr<ExportedCanvasResource> CreateExportedResource(
-      scoped_refptr<CanvasResource> resource);
+      scoped_refptr<Resource> resource);
 
   void UpdateRecordingLimits(bool is_graphite);
   virtual bool IsHibernating() const { return false; }
@@ -467,7 +474,7 @@ class MODULES_EXPORT BaseRenderingContext2D
 
   void ResetSharedImagePool();
   void ClearUnusedResources();
-  scoped_refptr<CanvasResource> NewOrRecycledResource();
+  scoped_refptr<Resource> NewOrRecycledResource();
   gpu::raster::RasterInterface* RasterInterface() const;
   bool IsGpuContextLost() const;
   bool ShouldReplaceTargetBuffer();
@@ -476,6 +483,7 @@ class MODULES_EXPORT BaseRenderingContext2D
   void EndWriteAccess();
   void RasterRecordToSharedImage(cc::PaintRecord last_recording);
   void RasterRecordToSoftwareSurface(cc::PaintRecord last_recording);
+  void UploadSoftwareRenderingResults(Resource& resource);
   void ApplyAnimatedImageFrameIndexesForId(SkCanvas* canvas, uint32_t id);
   // Returns a map of frame indexes to be used by
   // PlaybackImageProvider::GetRasterContent, indexed by `id` (one map per
@@ -488,28 +496,15 @@ class MODULES_EXPORT BaseRenderingContext2D
   // recycling.
   static constexpr int kMaxRecycledCanvasResources = 3;
 
-  // Pool-scoped helper bound weakly into resource release callbacks so
-  // returning resources can recycle into the exact `image_pool_` they came
-  // from (if recycling is enabled) without binding `BaseRenderingContext2D`.
-  // Resetting `resource_recycler_` in `ResetSharedImagePool()` invalidates
-  // callbacks for resources from any previous pool.
-  struct ResourceRecycler {
-    explicit ResourceRecycler(gpu::SharedImagePool<CanvasResource>& pool);
-    ~ResourceRecycler();
-
-    void Recycle(scoped_refptr<CanvasResource> resource);
-
-    raw_ref<gpu::SharedImagePool<CanvasResource>> pool;
-    bool enabled = true;
-    base::WeakPtrFactory<ResourceRecycler> weak_ptr_factory{this};
-  };
-
   Canvas2DColorParams color_params_;
-  // If this instance is single-buffered or `resource_recycler_->enabled` is
-  // false, `image_pool_` will not recycle resources.
-  std::unique_ptr<gpu::SharedImagePool<CanvasResource>> image_pool_;
-  std::optional<ResourceRecycler> resource_recycler_;
-  scoped_refptr<CanvasResource> resource_;
+  // If this instance is single-buffered or `resource_recycling_enabled_->data`
+  // is false, `image_pool_` will not recycle resources.
+  std::unique_ptr<gpu::SharedImagePool<Resource>> image_pool_;
+  // Pool-scoped flag wrapped in `RefCountedData` so resource release callbacks
+  // can check whether recycling is enabled without binding the Oilpan-managed
+  // `BaseRenderingContext2D`. Non-null iff `image_pool_` is non-null.
+  scoped_refptr<base::RefCountedData<bool>> resource_recycling_enabled_;
+  scoped_refptr<Resource> resource_;
   bool is_accelerated_ = false;
   sk_sp<SkSurface> surface_;
   std::unique_ptr<CanvasImageProvider> canvas_image_provider_;

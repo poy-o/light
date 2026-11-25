@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/payments/profile_list_view_controller.h"
 
 #include "base/functional/bind.h"
+#include "base/i18n/language_tag.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view.h"
@@ -165,8 +166,7 @@ class ShippingProfileViewController : public ProfileListViewController,
     return state()->profile_comparator()->IsShippingComplete(&profile);
   }
 
-  std::vector<raw_ptr<autofill::AutofillProfile, VectorExperimental>>
-  GetProfiles() override {
+  std::vector<raw_ptr<autofill::AutofillProfile>> GetProfiles() override {
     return state()->shipping_profiles();
   }
 
@@ -290,8 +290,7 @@ class ContactProfileViewController : public ProfileListViewController {
     return state()->profile_comparator()->IsContactInfoComplete(&profile);
   }
 
-  std::vector<raw_ptr<autofill::AutofillProfile, VectorExperimental>>
-  GetProfiles() override {
+  std::vector<raw_ptr<autofill::AutofillProfile>> GetProfiles() override {
     return state()->contact_profiles();
   }
 

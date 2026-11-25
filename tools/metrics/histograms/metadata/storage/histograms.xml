@@ -117,22 +117,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="API.StorageAccessHeader.ActivateStorageAccessLoadOutcome"
-    enum="ActivateStorageAccessLoadOutcome" expires_after="2027-01-04">
-  <owner>sledoux@chromium.org</owner>
-  <owner>cfredric@chromium.org</owner>
-  <summary>
-    Records instances of HTTP responses that include the
-    `Activate-Storage-Access` header with a well-formed value indicating the
-    server would like the response to be loaded with an active storage access
-    permission. Logs whether the header was honored, or the reason for its
-    rejection if it was not.
-
-    Recorded for each HTTP response received that contains a
-    `Activate-Storage-Access` header with the value of `load`.
-  </summary>
-</histogram>
-
 <histogram name="API.StorageAccessHeader.StorageAccessStatusOutcome"
     enum="StorageAccessStatusOutcome" expires_after="2027-01-24">
   <owner>sledoux@chromium.org</owner>
@@ -497,7 +481,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="IndexedDB.LargeValueReadResult" enum="FileErrorCode"
-    expires_after="2027-01-17">
+    expires_after="2027-05-23">
   <owner>leimy@chromium.org</owner>
   <owner>evanstade@microsoft.com</owner>
   <owner>chrome-owp-storage@google.com</owner>
@@ -891,7 +875,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="IndexedDB.WrappedBlobLoadTime" units="ms"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -1254,7 +1238,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Storage.ClearSiteDataHeader.Parameters"
-    enum="ClearSiteDataParameters" expires_after="2027-03-21">
+    enum="ClearSiteDataParameters" expires_after="2027-05-23">
   <owner>estade@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>
@@ -1273,7 +1257,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Storage.DeclarativePerformanceObserver.EvictionCount"
-    units="reports" expires_after="2026-12-19">
+    units="reports" expires_after="2027-11-18">
   <owner>sisidovski@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -1479,6 +1463,16 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Storage.FileSystemAccess.ReadDirectoryChangesError"
+    enum="WinGetLastError" expires_after="2027-07-11">
+  <owner>mych@chromium.org</owner>
+  <owner>src/content/browser/file_system_access/OWNERS</owner>
+  <summary>
+    Windows error returned when a File System Access directory watch fails to
+    complete or to submit its next read.
+  </summary>
+</histogram>
+
 <histogram name="Storage.FileSystemAccess.RestorePermissionPromptOutcome"
     enum="FileSystemAccessRestorePermissionPromptOutcome"
     expires_after="2027-07-11">
@@ -1585,7 +1579,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Storage.SessionStorage.DatabaseOnDiskSizeKB{DomStorageSqliteRolloutStage}"
-    units="KB" expires_after="2027-03-21">
+    units="KB" expires_after="2027-05-23">
   <owner>fergal@chromium.org</owner>
   <owner>rahsin@microsoft.com</owner>
   <owner>chrome-owp-storage@google.com</owner>

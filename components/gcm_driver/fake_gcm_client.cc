@@ -10,7 +10,9 @@
 
 #include "base/check.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/location.h"
+#include "base/notimplemented.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
@@ -119,31 +121,18 @@ void FakeGCMClient::Stop() {
 }
 
 void FakeGCMClient::Register(
-    scoped_refptr<RegistrationInfo> registration_info) {
+    scoped_refptr<GCMRegistrationInfo> gcm_registration_info) {
   DCHECK(io_thread_->RunsTasksInCurrentSequence());
+  CHECK(gcm_registration_info);
 
-  std::string registration_id;
-
-  GCMRegistrationInfo* gcm_registration_info =
-      GCMRegistrationInfo::FromRegistrationInfo(registration_info.get());
-  if (gcm_registration_info) {
-    registration_id =
-        GenerateGCMRegistrationID(gcm_registration_info->sender_ids);
-  }
-
-  InstanceIDTokenInfo* instance_id_token_info =
-      InstanceIDTokenInfo::FromRegistrationInfo(registration_info.get());
-  if (instance_id_token_info) {
-    CHECK(instance_id_data_.contains(registration_info->app_id));
-    registration_id =
-        GenerateInstanceIDToken(instance_id_token_info->authorized_entity,
-                                instance_id_token_info->scope);
-  }
+  std::string registration_id =
+      GenerateGCMRegistrationID(gcm_registration_info->sender_ids);
 
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(&FakeGCMClient::RegisterFinished,
-                                weak_ptr_factory_.GetWeakPtr(),
-                                std::move(registration_info), registration_id));
+      FROM_HERE,
+      base::BindOnce(&FakeGCMClient::RegisterFinished,
+                     weak_ptr_factory_.GetWeakPtr(),
+                     std::move(gcm_registration_info), registration_id));
 }
 
 bool FakeGCMClient::ValidateRegistration(
@@ -153,16 +142,14 @@ bool FakeGCMClient::ValidateRegistration(
 }
 
 void FakeGCMClient::Unregister(
-    scoped_refptr<RegistrationInfo> registration_info) {
+    scoped_refptr<GCMRegistrationInfo> gcm_registration_info) {
   DCHECK(io_thread_->RunsTasksInCurrentSequence());
-  if (InstanceIDTokenInfo::FromRegistrationInfo(registration_info.get())) {
-    CHECK(instance_id_data_.contains(registration_info->app_id));
-  }
+  CHECK(gcm_registration_info);
 
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&FakeGCMClient::UnregisterFinished,
-                     weak_ptr_factory_.GetWeakPtr(), registration_info));
+      FROM_HERE, base::BindOnce(&FakeGCMClient::UnregisterFinished,
+                                weak_ptr_factory_.GetWeakPtr(),
+                                std::move(gcm_registration_info)));
 }
 
 void FakeGCMClient::Send(const std::string& app_id,
@@ -221,6 +208,34 @@ void FakeGCMClient::GetInstanceIDData(const std::string& app_id,
   *extra_data = iter->second.second;
 }
 
+void FakeGCMClient::GetToken(scoped_refptr<InstanceIDTokenInfo> token_info,
+                             GetTokenCallback callback) {
+  DCHECK(io_thread_->RunsTasksInCurrentSequence());
+  CHECK(token_info);
+  CHECK(instance_id_data_.contains(token_info->app_id));
+
+  std::string token =
+      GenerateInstanceIDToken(token_info->authorized_entity, token_info->scope);
+  Result result = token.empty() ? SERVER_ERROR : SUCCESS;
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), std::move(token), result));
+}
+
+void FakeGCMClient::DeleteToken(scoped_refptr<InstanceIDTokenInfo> token_info,
+                                DeleteTokenCallback callback) {
+  DCHECK(io_thread_->RunsTasksInCurrentSequence());
+  CHECK(token_info);
+  CHECK(instance_id_data_.contains(token_info->app_id));
+  CHECK(callback);
+
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), SUCCESS));
+}
+
+void FakeGCMClient::WaitForInitialConnectionReady(base::OnceClosure callback) {
+  NOTIMPLEMENTED();
+}
+
 void FakeGCMClient::PerformDelayedStart() {
   DCHECK(ui_thread_->RunsTasksInCurrentSequence());
 
@@ -252,17 +267,17 @@ void FakeGCMClient::Started() {
 }
 
 void FakeGCMClient::RegisterFinished(
-    scoped_refptr<RegistrationInfo> registration_info,
+    scoped_refptr<GCMRegistrationInfo> gcm_registration_info,
     const std::string& registrion_id) {
-  observers_.Notify(&Observer::OnRegisterFinished, registration_info,
-                    registrion_id,
+  observers_.Notify(&Observer::OnRegisterFinished,
+                    std::move(gcm_registration_info), registrion_id,
                     registrion_id.empty() ? SERVER_ERROR : SUCCESS);
 }
 
 void FakeGCMClient::UnregisterFinished(
-    scoped_refptr<RegistrationInfo> registration_info) {
-  observers_.Notify(&Observer::OnUnregisterFinished, registration_info,
-                    GCMClient::SUCCESS);
+    scoped_refptr<GCMRegistrationInfo> gcm_registration_info) {
+  observers_.Notify(&Observer::OnUnregisterFinished,
+                    std::move(gcm_registration_info), GCMClient::SUCCESS);
 }
 
 void FakeGCMClient::SendFinished(const std::string& app_id,

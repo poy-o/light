@@ -55,7 +55,7 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <histogram name="Session.Android.TabbedSessionContainedGoogleSearch"
-    enum="Boolean" expires_after="2027-03-21">
+    enum="Boolean" expires_after="2027-05-23">
   <owner>nafisabedin@google.com</owner>
   <owner>yfriedman@chromium.org</owner>
   <summary>
@@ -295,7 +295,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Session.IsActive" enum="BooleanActive"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>rogerm@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -318,7 +318,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Session.IsActive2" enum="BooleanActive"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>rogerm@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -384,7 +384,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Session.OpenedTabCounts" units="operations"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>rohitrao@chromium.org</owner>
   <owner>marq@chromium.org</owner>
   <summary>
@@ -1415,6 +1415,21 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Session.WindowTracking.UntrackedTrackableWindowChangeDropped"
+    enum="Boolean" expires_after="2027-11-09">
+  <owner>dljames@chromium.org</owner>
+  <owner>musalmaan@chromium.org</owner>
+  <summary>
+    Recorded when SessionServiceBase handles a tab insertion, tab selection, or
+    navigation update for a trackable browser window. Records true when
+    SessionServiceBase drops the update because the browser window is missing
+    from its windows_tracking_ set even though the window is currently open in
+    the browser collection and eligible for session restore tracking; records
+    false when the window is present in windows_tracking_. Each outcome is
+    recorded at most once per window per session file rebuild.
+  </summary>
+</histogram>
+
 <histogram name="Session.ZeroWindowDuration" units="ms"
     expires_after="2027-04-11">
   <owner>victortan@chromium.org</owner>
@@ -1519,7 +1534,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SessionRestore.ErrorReason.{Type}"
-    enum="SessionRestoreErrorReason" expires_after="2027-03-14">
+    enum="SessionRestoreErrorReason" expires_after="2027-05-23">
   <owner>jacastro@chromium.org</owner>
   <owner>chrome-counter-abuse-alerts@google.com</owner>
   <summary>
@@ -1611,7 +1626,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SessionRestore.Outcome.{Type}" enum="SessionRestoreOutcome"
-    expires_after="2027-03-14">
+    expires_after="2027-05-23">
   <owner>jacastro@chromium.org</owner>
   <owner>chrome-counter-abuse-alerts@google.com</owner>
   <summary>

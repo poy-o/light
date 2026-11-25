@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">പാസ്‍വേഡുകൾ പങ്കിടുക</translation>
 <translation id="1554043146674176775">AI മോഡ് ഓഫാക്കുക</translation>
 <translation id="1554477036522844996">പുതിയ വിന്‍ഡോ</translation>
+<translation id="1555014818414775661">ചിത്രങ്ങൾ ചേർക്കുക</translation>
 <translation id="1557806604681757705">നിങ്ങളുടെ കമ്പ്യൂട്ടർ</translation>
 <translation id="1558391695376153246">അദൃശ്യ ടാബുകൾ അടയ്‌ക്കുക</translation>
 <translation id="1560153516220021659">ചുരുക്കിയ സെക്കൻഡറി ടൂൾബാർ ബട്ടൺ</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832"><ph name="BEGIN_BOLD" />Safari ക്രമീകരണം<ph name="END_BOLD" /> തുറക്കുക</translation>
 <translation id="3858860766373142691">പേര്</translation>
 <translation id="386224966259596343">അടുത്ത തവണ നിങ്ങൾ പ്രസക്തമായ ഫോം പൂരിപ്പിക്കുമ്പോൾ ഈ വിവരങ്ങൾ Wallet-ലേക്ക് സംരക്ഷിക്കാനുള്ള അവസരം ലഭിക്കും.</translation>
-<translation id="3868495844258915202">പൂർണ്ണ URL കാണിക്കുക</translation>
 <translation id="3870931306085184145"><ph name="DOMAIN" /> ഡൊമെയ്‌നിന് സംരക്ഷിച്ച പാസ്‌വേഡുകൾ ഇല്ല</translation>
 <translation id="3875783148670536197">എങ്ങനെയെന്ന് എന്നെ കാണിക്കുക</translation>
 <translation id="3878657761594430423">ഷീറ്റ് ഗ്രാബർ</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">നിരക്ക് ട്രാക്കിംഗ് അറിയിപ്പുകൾ നേടാൻ, നിങ്ങളുടെ iOS ക്രമീകരണത്തിൽ അറിയിപ്പുകൾ ഓണാക്കുക.</translation>
 <translation id="528857768909044842">ടാബ് ഗ്രൂപ്പുകൾ ഇവിടെ സംരക്ഷിക്കും</translation>
 <translation id="5294624619177114121">മൊബൈൽ അറിയിപ്പുകൾ</translation>
-<translation id="5295239312320826323"><ph name="USER_EMAIL" /> എന്ന അക്കൗണ്ട് നീക്കം ചെയ്യണോ?</translation>
 <translation id="5300589172476337783">കാണിക്കുക</translation>
 <translation id="5311061401280561833">ക്യാമറ, മൈക്രോഫോൺ ആക്‌സസ് അനുവദിച്ചിരിക്കുന്നു</translation>
 <translation id="5313967007315987356">സൈറ്റ് ചേർക്കുക</translation>
@@ -1788,6 +1787,7 @@
 <translation id="6504541289630702018">നിങ്ങളുടെ ഡെസ്ക്ടോപ്പ് ടാബ് ഗ്രൂപ്പുകൾ എളുപ്പത്തിൽ ആക്സസ് ചെയ്യുക</translation>
 <translation id="6505334220040167806">ടാബ് ഗ്രൂപ്പ് ചുരുക്കുക.</translation>
 <translation id="6506996418997555004">"<ph name="GROUP_NAME" />" ടാബ് ഗ്രൂപ്പ് പങ്കിടുക</translation>
+<translation id="650770261448122895">കാണുന്നത് എന്തെല്ലാമാണെന്ന്, Lens ഉപയോഗിച്ച് തിരയുക</translation>
 <translation id="6507973708545996744">വായിക്കാനുള്ളവയുടെ ലിസ്‌റ്റ് നിങ്ങളുടെ എല്ലാ ഉപകരണങ്ങളിലും ലഭ്യമാക്കാൻ സെെൻ ഇൻ ചെയ്യുക.</translation>
 <translation id="6518133107902771759">സ്ഥിരീകരിക്കുക</translation>
 <translation id="6523575793810663688">എങ്ങനെയെന്ന് എന്നെ കാണിക്കുക</translation>
@@ -2147,7 +2147,6 @@
 <translation id="7603852183842204213">പോപ്പ്-അപ്പുകൾ തടഞ്ഞു (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">സമന്വയിപ്പിക്കൽ പ്രവർത്തിക്കുന്നില്ല</translation>
 <translation id="760667371114328991">സുരക്ഷാ പരിശോധനയ്ക്കുള്ള അറിയിപ്പുകൾ ഓഫാക്കുക</translation>
-<translation id="7612619742409846846">ഇനി പറയുന്നതിൽ നിന്നും Google-ലേക്ക് സൈൻ ഇൻ ചെയ്‌തു</translation>
 <translation id="7612849887607288481">AI പ്രോട്ടോടൈപ്പിംഗ് മെനു തുറക്കുക</translation>
 <translation id="7618220760967055820">ടൂൾബാറിൽ ഏത് ബട്ടണാണ് കാണിക്കേണ്ടതെന്ന് തിരഞ്ഞെടുക്കുക</translation>
 <translation id="7620522820075868385">റദ്ദാക്കുക</translation>
@@ -2430,6 +2429,7 @@
 <translation id="8439758443371991593">'വായിക്കാനുള്ളവയുടെ ലിസ്റ്റിലേക്ക് ചേർക്കുക' മറയ്ക്കുക</translation>
 <translation id="8443986842926457191">URL-ൽ 2048 പ്രതീകങ്ങളിൽ കൂടുതൽ അടങ്ങിയിരിക്കുന്നു</translation>
 <translation id="8449869326050867919">പാസ്‌വേഡ് പങ്കിട്ടു</translation>
+<translation id="8473367210869452063">ഈ സൈറ്റുമായി ഇടപഴകാൻ, നിലവിലെ ടാസ്ക് നിർത്തുക അല്ലെങ്കിൽ Gemini-യുടെ പ്രവർത്തനം പൂർത്തിയാകാൻ കാത്തിരിക്കുക</translation>
 <translation id="8473815223723723001">Gemini ഉപയോഗിച്ച് ചിത്രം എഡിറ്റ് ചെയ്യുക</translation>
 <translation id="8473863474539038330">വിലാസങ്ങളും മറ്റും</translation>
 <translation id="8474378002946546633">അറിയിപ്പുകൾ അനുവദിക്കുക</translation>

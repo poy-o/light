@@ -74,9 +74,21 @@ OnDeviceTranslationErrorReason ToOnDeviceTranslationErrorReason(
     case Error::kLanguagePackDownloadFailed:
       return OnDeviceTranslationErrorReason::
           kCreateTranslatorLanguagePackDownloadFailed;
+    case Error::kExceedsLanguagePackCountLimitation:
+      return OnDeviceTranslationErrorReason::
+          kCreateTranslatorExceedsLanguagePackCountLimitation;
     case Error::kNotEnoughDiskSpace:
       return OnDeviceTranslationErrorReason::
           kCreateTranslatorNotEnoughDiskSpace;
+    case Error::kOffline:
+      return OnDeviceTranslationErrorReason::kCreateTranslatorOffline;
+    case Error::kDataSaverEnabled:
+      return OnDeviceTranslationErrorReason::kCreateTranslatorDataSaverEnabled;
+    case Error::kMeteredConnectionBlocked:
+      return OnDeviceTranslationErrorReason::
+          kCreateTranslatorMeteredConnectionBlocked;
+    case Error::kUnsupportedDevice:
+      return OnDeviceTranslationErrorReason::kCreateTranslatorUnsupportedDevice;
   }
   return OnDeviceTranslationErrorReason::kCreateTranslatorUnknownError;
 }
@@ -159,6 +171,12 @@ void TranslationDispatcherOnDevice::OnCanTranslate(
       ResetCreationAndNotifyFailure(
           std::move(callback), OnDeviceTranslationErrorReason::
                                    kCanTranslateExceedsServiceCountLimitation);
+      return;
+    case OnDeviceTranslationController::CanTranslateResult::
+        kNoUnsupportedDevice:
+      ResetCreationAndNotifyFailure(
+          std::move(callback),
+          OnDeviceTranslationErrorReason::kCanTranslateUnsupportedDevice);
       return;
   }
 }

@@ -610,12 +610,6 @@ export const ComposeboxEmbedderMixin =
                 this.hasValidQuery() && this.fileUploadsComplete;
           }
 
-          if (changedPrivateProperties.has('canSubmitFilesAndInput')) {
-            this.fire('can-submit-files-and-input-changed', {
-              canSubmitFilesAndInput: this.canSubmitFilesAndInput,
-            });
-          }
-
           // Hold `willFulfillInAim` steady while `submitting` (so clearing
           // inputs on submit or entering AI Mode on SEND does not flash the UI
           // before navigation), and reconcile once `submitting` clears.
@@ -1739,7 +1733,9 @@ export const ComposeboxEmbedderMixin =
           if (action?.queryActionOverride) {
             switch (action.queryActionOverride) {
               case QueryActionOverride.kHint:
-                this.fuseboxChipHint_ = request.suggestion;
+                // An empty suggestion keeps the default placeholder instead of
+                // blanking it.
+                this.fuseboxChipHint_ = request.suggestion || null;
                 this.updateInputPlaceholder();
                 text = '';
                 break;
@@ -1900,8 +1896,8 @@ export const ComposeboxEmbedderMixin =
               model = this.getDefaultModel_();
             }
             // With dynamic AIM fulfillment, a model enters AI Mode and no model
-            // leaves it, including AI Mode left over from an outside-click
-            // close.
+            // leaves it, including AI Mode left over from an outside click on
+            // a composebox with content.
             this.getSearchboxHandler().setActiveModelMode(
                 model, /*isSetByAim=*/ false);
           }

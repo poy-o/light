@@ -14,8 +14,8 @@
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/common/buildflags.h"
-#include "chrome/common/pref_font_webkit_names.h"
 #include "components/compose/buildflags.h"
+#include "components/content_settings/core/common/pref_names.h"
 #include "components/offline_pages/buildflags/buildflags.h"
 #include "components/signin/public/base/signin_buildflags.h"
 #include "content/public/common/buildflags.h"
@@ -129,9 +129,6 @@ inline constexpr char kImportantSitesDialogHistory[] = "important_sites_dialog";
 // This is the profile creation time.
 inline constexpr char kProfileCreationTime[] = "profile.creation_time";
 
-// Preference which stores randomly generated profile ID for LOM.
-inline constexpr char kLomProfileId[] = "private_metrics.lom.profile_id";
-
 #if BUILDFLAG(IS_WIN)
 // This is a timestamp of the last time this profile was reset by a third party
 // tool. On Windows, a third party tool may set a registry value that will be
@@ -198,14 +195,36 @@ static_assert(std::string_view(kRlzPingDelaySeconds) ==
 // absence of MIME charset specification
 inline constexpr char kDefaultCharset[] = "intl.charset_default";
 
+// Four-letter ISO 15924 script code plus NUL terminator.
+using FontScriptCode = std::array<char, 5>;
+
 // If these change, the corresponding enums in the extension API
-// experimental.fontSettings.json must also change.
+// experimental.fontSettings.json must also change. Stored inline in .rodata
+// to avoid dynamic ELF relocations.
 inline constexpr auto kWebKitScriptsForFontFamilyMaps =
-    std::to_array<const char*>({
-#define EXPAND_SCRIPT_FONT(x, script_name) script_name,
-#include "chrome/common/pref_font_script_names-inl.h"
-        ALL_FONT_SCRIPTS("unused param")
-#undef EXPAND_SCRIPT_FONT
+    std::to_array<FontScriptCode>({
+        {"Afak"}, {"Arab"}, {"Aran"}, {"Armi"}, {"Armn"}, {"Avst"}, {"Bali"},
+        {"Bamu"}, {"Bass"}, {"Batk"}, {"Beng"}, {"Blis"}, {"Bopo"}, {"Brah"},
+        {"Brai"}, {"Bugi"}, {"Buhd"}, {"Cakm"}, {"Cans"}, {"Cari"}, {"Cham"},
+        {"Cher"}, {"Cirt"}, {"Copt"}, {"Cprt"}, {"Cyrl"}, {"Cyrs"}, {"Deva"},
+        {"Dsrt"}, {"Dupl"}, {"Egyd"}, {"Egyh"}, {"Egyp"}, {"Elba"}, {"Ethi"},
+        {"Geor"}, {"Geok"}, {"Glag"}, {"Goth"}, {"Gran"}, {"Grek"}, {"Gujr"},
+        {"Guru"}, {"Hang"}, {"Hani"}, {"Hano"}, {"Hans"}, {"Hant"}, {"Hebr"},
+        {"Hluw"}, {"Hmng"}, {"Hung"}, {"Inds"}, {"Ital"}, {"Java"}, {"Jpan"},
+        {"Jurc"}, {"Kali"}, {"Khar"}, {"Khmr"}, {"Khoj"}, {"Knda"}, {"Kpel"},
+        {"Kthi"}, {"Lana"}, {"Laoo"}, {"Latf"}, {"Latg"}, {"Latn"}, {"Lepc"},
+        {"Limb"}, {"Lina"}, {"Linb"}, {"Lisu"}, {"Loma"}, {"Lyci"}, {"Lydi"},
+        {"Mand"}, {"Mani"}, {"Maya"}, {"Mend"}, {"Merc"}, {"Mero"}, {"Mlym"},
+        {"Moon"}, {"Mong"}, {"Mroo"}, {"Mtei"}, {"Mymr"}, {"Narb"}, {"Nbat"},
+        {"Nkgb"}, {"Nkoo"}, {"Nshu"}, {"Ogam"}, {"Olck"}, {"Orkh"}, {"Orya"},
+        {"Osma"}, {"Palm"}, {"Perm"}, {"Phag"}, {"Phli"}, {"Phlp"}, {"Phlv"},
+        {"Phnx"}, {"Plrd"}, {"Prti"}, {"Rjng"}, {"Roro"}, {"Runr"}, {"Samr"},
+        {"Sara"}, {"Sarb"}, {"Saur"}, {"Sgnw"}, {"Shaw"}, {"Shrd"}, {"Sind"},
+        {"Sinh"}, {"Sora"}, {"Sund"}, {"Sylo"}, {"Syrc"}, {"Syre"}, {"Syrj"},
+        {"Syrn"}, {"Tagb"}, {"Takr"}, {"Tale"}, {"Talu"}, {"Taml"}, {"Tang"},
+        {"Tavt"}, {"Telu"}, {"Teng"}, {"Tfng"}, {"Tglg"}, {"Thaa"}, {"Thai"},
+        {"Tibt"}, {"Tirh"}, {"Ugar"}, {"Vaii"}, {"Visp"}, {"Wara"}, {"Wole"},
+        {"Xpeo"}, {"Xsux"}, {"Yiii"}, {"Zmth"}, {"Zsym"}, {"Zyyy"},
     });
 
 inline constexpr size_t kWebKitScriptsForFontFamilyMapsLength =
@@ -215,16 +234,18 @@ inline constexpr size_t kWebKitScriptsForFontFamilyMapsLength =
 // in pref_names_util.cc and the pref format in font_settings_api.cc must also
 // change.
 inline constexpr char kWebKitStandardFontFamilyMap[] =
-    WEBKIT_WEBPREFS_FONTS_STANDARD;
-inline constexpr char kWebKitFixedFontFamilyMap[] = WEBKIT_WEBPREFS_FONTS_FIXED;
-inline constexpr char kWebKitSerifFontFamilyMap[] = WEBKIT_WEBPREFS_FONTS_SERIF;
+    "webkit.webprefs.fonts.standard";
+inline constexpr char kWebKitFixedFontFamilyMap[] =
+    "webkit.webprefs.fonts.fixed";
+inline constexpr char kWebKitSerifFontFamilyMap[] =
+    "webkit.webprefs.fonts.serif";
 inline constexpr char kWebKitSansSerifFontFamilyMap[] =
-    WEBKIT_WEBPREFS_FONTS_SANSERIF;
+    "webkit.webprefs.fonts.sansserif";
 inline constexpr char kWebKitCursiveFontFamilyMap[] =
-    WEBKIT_WEBPREFS_FONTS_CURSIVE;
+    "webkit.webprefs.fonts.cursive";
 inline constexpr char kWebKitFantasyFontFamilyMap[] =
-    WEBKIT_WEBPREFS_FONTS_FANTASY;
-inline constexpr char kWebKitMathFontFamilyMap[] = WEBKIT_WEBPREFS_FONTS_MATH;
+    "webkit.webprefs.fonts.fantasy";
+inline constexpr char kWebKitMathFontFamilyMap[] = "webkit.webprefs.fonts.math";
 inline constexpr char kWebKitStandardFontFamilyArabic[] =
     "webkit.webprefs.fonts.standard.Arab";
 #if BUILDFLAG(IS_WIN)
@@ -2072,37 +2093,11 @@ inline constexpr char kDnsOverHttpsAutomaticModeFallbackToDoh[] =
 inline constexpr char kAdditionalDnsQueryTypesEnabled[] =
     "async_dns.additional_dns_query_types_enabled";
 
-// A pref holding the value of the policy used to explicitly allow or deny
-// access to audio capture devices.  When enabled or not set, the user is
-// prompted for device access.  When disabled, access to audio capture devices
-// is not allowed and no prompt will be shown.
-// See also kAudioCaptureAllowedUrls.
-inline constexpr char kAudioCaptureAllowed[] = "hardware.audio_capture_enabled";
 #if BUILDFLAG(IS_CHROMEOS)
 static_assert(std::string_view(kAudioCaptureAllowed) ==
               std::string_view(ash::chrome_prefs::kAudioCaptureAllowed));
-#endif  // BUILDFLAG(IS_CHROMEOS)
-
-// Holds URL patterns that specify URLs that will be granted access to audio
-// capture devices without prompt.
-inline constexpr char kAudioCaptureAllowedUrls[] =
-    "hardware.audio_capture_allowed_urls";
-
-// A pref holding the value of the policy used to explicitly allow or deny
-// access to video capture devices.  When enabled or not set, the user is
-// prompted for device access.  When disabled, access to video capture devices
-// is not allowed and no prompt will be shown.
-inline constexpr char kVideoCaptureAllowed[] = "hardware.video_capture_enabled";
-#if BUILDFLAG(IS_CHROMEOS)
 static_assert(std::string_view(kVideoCaptureAllowed) ==
               std::string_view(ash::chrome_prefs::kVideoCaptureAllowed));
-#endif  // BUILDFLAG(IS_CHROMEOS)
-
-// Holds URL patterns that specify URLs that will be granted access to video
-// capture devices without prompt.
-inline constexpr char kVideoCaptureAllowedUrls[] =
-    "hardware.video_capture_allowed_urls";
-#if BUILDFLAG(IS_CHROMEOS)
 static_assert(std::string_view(kVideoCaptureAllowedUrls) ==
               std::string_view(ash::chrome_prefs::kVideoCaptureAllowedUrls));
 #endif  // BUILDFLAG(IS_CHROMEOS)

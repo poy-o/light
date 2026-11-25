@@ -89,7 +89,7 @@ public class RecentActivityActionHandlerImpl implements RecentActivityActionHand
     public void openTabGroupEditDialog() {
         SavedTabGroup savedTabGroup = getSavedTabGroup();
         LocalTabGroupId localId = assumeNonNull(savedTabGroup).localId;
-        mDataSharingTabGroupsDelegate.openTabGroup(assumeNonNull(localId).tabGroupId);
+        mDataSharingTabGroupsDelegate.openTabGroup(assumeNonNull(localId).tabGroupId.getToken());
     }
 
     @Override

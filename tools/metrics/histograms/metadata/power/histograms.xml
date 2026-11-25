@@ -732,7 +732,7 @@ tools/metrics/histograms/metadata/stability/enums.xml
 </histogram>
 
 <histogram name="Power.BatteryChargeHealth" units="%"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>puthik@chromium.org</owner>
   <owner>chromeos-platform-power@google.com</owner>
   <summary>
@@ -857,7 +857,7 @@ tools/metrics/histograms/metadata/stability/enums.xml
 </histogram>
 
 <histogram name="Power.BatteryDischargeRateMilliwatts6.TenMinutes"
-    units="milliwatts" expires_after="2027-03-21">
+    units="milliwatts" expires_after="2027-05-23">
   <owner>pmonette@chromium.org</owner>
   <owner>fdoray@chromium.org</owner>
   <summary>
@@ -958,7 +958,7 @@ tools/metrics/histograms/metadata/stability/enums.xml
 </histogram>
 
 <histogram name="Power.BatteryDischargeRateWhileSuspended" units="mW"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>puthik@chromium.org</owner>
   <owner>chromeos-platform-power@google.com</owner>
   <summary>
@@ -1513,7 +1513,7 @@ tools/metrics/histograms/metadata/stability/enums.xml
 </histogram>
 
 <histogram name="Power.HighestFanSpeed" units="100rpm"
-    expires_after="2027-03-14">
+    expires_after="2027-05-23">
   <owner>eshimanovich@google.com</owner>
   <owner>chromeos-platform-power@google.com</owner>
   <summary>
@@ -1547,7 +1547,7 @@ tools/metrics/histograms/metadata/stability/enums.xml
 </histogram>
 
 <histogram name="Power.KernelResumeTimeOnAC" units="ms"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>puthik@chromium.org</owner>
   <owner>mhiramat@google.com</owner>
   <owner>chromeos-platform-power@google.com</owner>
@@ -1574,7 +1574,7 @@ tools/metrics/histograms/metadata/stability/enums.xml
 </histogram>
 
 <histogram name="Power.KernelSuspendTimeOnAC" units="ms"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>puthik@chromium.org</owner>
   <owner>mhiramat@google.com</owner>
   <owner>chromeos-platform-power@google.com</owner>
@@ -1678,13 +1678,16 @@ tools/metrics/histograms/metadata/stability/enums.xml
 </histogram>
 
 <histogram name="Power.PowerButtonPressed" units="units"
-    expires_after="2024-06-30">
+    expires_after="2027-11-23">
   <owner>emaamari@google.com</owner>
   <owner>chromeos-commercial-identity@google.com</owner>
   <summary>
     Indicates a press of the power button, recorded when PowerManagerClient
     receives a signal that the power button was pressed and notifies
     FingerprintPowerButtonRaceDetector.
+
+    Warning: this histogram was expired from 2024-06-30 to 2026-11-23; data may
+    be missing.
   </summary>
 </histogram>
 
@@ -1842,7 +1845,7 @@ tools/metrics/histograms/metadata/stability/enums.xml
 </histogram>
 
 <histogram name="Power.SuspendJourneyResult" enum="SuspendJourneyResult"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>eizan@chromium.org</owner>
   <owner>chromeos-power-team@google.com</owner>
   <summary>
@@ -1883,7 +1886,7 @@ tools/metrics/histograms/metadata/stability/enums.xml
 </histogram>
 
 <histogram name="Power.TimeInSuspendAtResume" units="minutes"
-    expires_after="2027-03-21">
+    expires_after="2027-05-23">
   <owner>tbroch@chromium.org</owner>
   <summary>
     Chrome OS time in minutes spent in suspend-to-RAM mode sampled at resume.
@@ -1978,16 +1981,6 @@ tools/metrics/histograms/metadata/stability/enums.xml
   <summary>
     What happens after screen is dimmed by powerd by ignoring the model
     instruction. Only applicable to Chrome OS.
-  </summary>
-</histogram>
-
-<histogram name="PowerML.PreviousEventLogging.Result"
-    enum="PowerMLPreviousEventLoggingResult" expires_after="2020-12-13">
-  <owner>napper@chromium.org</owner>
-  <owner>thanhdng@chromium.org</owner>
-  <summary>
-    Status of logging previous idle event after a screen dim imminent signal is
-    received. Only applicable to Chrome OS.
   </summary>
 </histogram>
 

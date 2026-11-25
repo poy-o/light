@@ -150,7 +150,6 @@
 <translation id="1543035591122163372"><ph name="DEVICE_TYPE" /> ನಿಂದ ನಿಮ್ಮ ಪಾಸ್‌ವರ್ಡ್‌ಗಳು ಹಾಗೂ ಇತ್ಯಾದಿಗಳನ್ನು ಪಡೆಯಲು ಸೈನ್ ಇನ್ ಮಾಡಿ</translation>
 <translation id="1544084554881119930">ಪಾವತಿ ವಿಧಾನಗಳು ಮತ್ತು ವಿಳಾಸಗಳನ್ನು ಎನ್‌ಕ್ರಿಪ್ಟ್ ಮಾಡಲಾಗುವುದಿಲ್ಲ. Chrome ನ ಬ್ರೌಸಿಂಗ್ ಇತಿಹಾಸವು ಸಿಂಕ್ ಆಗುವುದಿಲ್ಲ.
 ನಿಮ್ಮ ಪಾಸ್‌ಫ್ರೇಸ್ ಹೊಂದಿರುವವರು ಮಾತ್ರ ನಿಮ್ಮ ಎನ್‌ಕ್ರಿಪ್ಟ್ ಮಾಡಿದ ಡೇಟಾವನ್ನು ಓದಬಹುದು. ಪಾಸ್‌ಫ್ರೇಸ್ ಅನ್ನು Google ಗೆ ಕಳುಹಿಸಲಾಗುವುದಿಲ್ಲ ಅಥವಾ ಅದನ್ನು Google ಸಂಗ್ರಹಿಸುವುದಿಲ್ಲ. ನಿಮ್ಮ ಪಾಸ್‌ಫ್ರೇಸ್ ಅನ್ನು ನೀವು ಮರೆತರೆ ಅಥವಾ ಈ ಸೆಟ್ಟಿಂಗ್ ಅನ್ನು ಬದಲಾಯಿಸಲು ಬಯಸಿದರೆ, <ph name="BEGIN_LINK" />ನಿಮ್ಮ ಖಾತೆಯಲ್ಲಿರುವ Chrome ಡೇಟಾವನ್ನು ತೆರವುಗೊಳಿಸಿ<ph name="END_LINK" />.</translation>
-<translation id="1544826120773021464">ನಿಮ್ಮ Google ಖಾತೆಯನ್ನು ನಿರ್ವಹಿಸಲು, "ಖಾತೆಯನ್ನು ನಿರ್ವಹಿಸಿ" ಬಟನ್ ಅನ್ನು ಟ್ಯಾಪ್ ಮಾಡಿ</translation>
 <translation id="1549000191223877751">ಇತರ ವಿಂಡೋಗೆ ಸರಿಸಿ</translation>
 <translation id="1553358976309200471">Chrome ಅಪ್‌ಡೇಟ್‌ ಮಾಡಿ</translation>
 <translation id="1554352084785952638">"<ph name="SEARCH_TERMS" />" ಗಾಗಿ <ph name="SEARCH_ENGINE" /></translation>
@@ -167,7 +166,6 @@
 <translation id="1600756129506222718"><ph name="TAB_TITLE" />, ಹಂಚಿಕೊಳ್ಳುವಿಕೆ ಟ್ಯಾಬ್</translation>
 <translation id="1601378265092360672">ಬ್ರೌಸಿಂಗ್ ಡೇಟಾವು ನಿಮ್ಮ ಬ್ರೌಸಿಂಗ್ ಇತಿಹಾಸ, ಕುಕೀಗಳು ಮತ್ತು ಇತರ ಸೈಟ್ ಡೇಟಾ, ಕ್ಯಾಷ್ ಮಾಡಿದ ಚಿತ್ರಗಳು ಮತ್ತು ಫೈಲ್‌ಗಳು ಮತ್ತು ತೆರೆದ ಟ್ಯಾಬ್‌ಗಳನ್ನು ಒಳಗೊಂಡಿರುತ್ತದೆ</translation>
 <translation id="160275202205869636">ಆನ್ ಆಗಿರುವಾಗ, ನಿಮ್ಮ Google ಖಾತೆಯಲ್ಲಿ ಡೇಟಾವನ್ನು ಬಳಸಿ ಮತ್ತು ಸೇವ್ ಮಾಡಿ. ಆಫ್ ಆಗಿರುವಾಗ, ಡೇಟಾವನ್ನು ಈ ಸಾಧನದಲ್ಲಿ ಮಾತ್ರ ಸೇವ್ ಮಾಡಲಾಗುತ್ತದೆ.</translation>
-<translation id="160403827062749147">ವಿಶ್ವದ ಅತ್ಯಂತ ಸುರಕ್ಷಿತ ಬ್ರೌಸರ್ ಆದ Google Chrome ಗೆ ಸುಸ್ವಾಗತ</translation>
 <translation id="1628019612362412531">{NUM_SELECTED,plural, =1{ಆಯ್ಕೆಮಾಡಲಾದ 1 ಐಟಂ ತೆಗೆದುಹಾಕಿ}one{ಆಯ್ಕೆಮಾಡಲಾದ # ಐಟಂಗಳನ್ನು ತೆಗೆದುಹಾಕಿ}other{ಆಯ್ಕೆಮಾಡಲಾದ # ಐಟಂಗಳನ್ನು ತೆಗೆದುಹಾಕಿ}}</translation>
 <translation id="1639239467298939599">ಲೋಡ್ ಆಗುತ್ತಿದೆ</translation>
 <translation id="1641113438599504367">ಸುರಕ್ಷಿತ ಬ್ರೌಸಿಂಗ್</translation>
@@ -283,6 +281,7 @@
 <translation id="2122601567107267586">ಆ್ಯಪ್ ತೆರೆಯಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ</translation>
 <translation id="2128579426409352593"><ph name="TAB_TITLE" />, ಬಹು ಆಯ್ಕೆ ಮಾಡಿದ ಪಿನ್ ಮಾಡಿದ ಹಂಚಿಕೊಳ್ಳುವಿಕೆ ಟ್ಯಾಬ್</translation>
 <translation id="213279576345780926"><ph name="TAB_TITLE" /> ಮುಚ್ಚಲಾಗಿದೆ</translation>
+<translation id="2133857665503360653"><ph name="FILE_NAME" /> ಮರುಪ್ರಯತ್ನಿಸಿ</translation>
 <translation id="2138283760993967204">ಐಕಾನ್ ಅನ್ನು ನಿರ್ವಹಿಸಿ</translation>
 <translation id="2138632817776076519"><ph name="TAB_TITLE" />, ಆಯ್ಕೆಮಾಡಿದ ರೆಕಾರ್ಡಿಂಗ್ ಟ್ಯಾಬ್</translation>
 <translation id="2141396931810938595">ನಿಮ್ಮ ಬಳಕೆಯನ್ನು ಆಧರಿಸಿ</translation>
@@ -386,6 +385,7 @@
 <translation id="2496180316473517155">ಬ್ರೌಸಿಂಗ್ ಇತಿಹಾಸ</translation>
 <translation id="250020030759455918">ನಿಮ್ಮ <ph name="SITE_NAME" /> ಸೈನ್-ಇನ್ ಸ್ಥಿತಿ, ಬ್ರೌಸಿಂಗ್ ಡೇಟಾ ಮತ್ತು ಸೈಟ್ ಡೇಟಾವನ್ನು Chrome ನಲ್ಲಿ ನೋಡುವಿರಿ</translation>
 <translation id="2501278716633472235">ಹಿಂದಿರುಗಿ</translation>
+<translation id="2505742559092758182">{COUNT,plural, =1{# ಡೌನ್‌ಲೋಡ್ ಪ್ರಗತಿಯಲ್ಲಿದೆ}one{# ಡೌನ್‌ಲೋಡ್‌ಗಳು ಪ್ರಗತಿಯಲ್ಲಿವೆ}other{# ಡೌನ್‌ಲೋಡ್‌ಗಳು ಪ್ರಗತಿಯಲ್ಲಿವೆ}}</translation>
 <translation id="2510106555128151389"><ph name="WEBAPK_NAME" /> ಅನ್ನು ಇನ್‌ಸ್ಟಾಲ್ ಮಾಡಲಾಗುತ್ತಿದೆ…</translation>
 <translation id="2512234228327349533">ಖರೀದಿ ಆಯ್ಕೆಗಳನ್ನು ಹುಡುಕಿ</translation>
 <translation id="2513403576141822879">ಗೌಪ್ಯತೆ, ಸುರಕ್ಷತೆ ಮತ್ತು ಡೇಟಾ ಸಂಗ್ರಹಕ್ಕೆ ಸಂಬಂಧಿಸಿದ ಹೆಚ್ಚಿನ ಸೆಟ್ಟಿಂಗ್‌ಗಳಿಗಾಗಿ <ph name="BEGIN_LINK" />ಸಿಂಕ್ ಮತ್ತು Google ಸೇವೆಗಳನ್ನು<ph name="END_LINK" /> ನೋಡಿ</translation>
@@ -449,6 +449,7 @@
 <translation id="2762000892062317888">ಈಗತಾನೇ</translation>
 <translation id="276378135349383280">ಕೆಳ ಟೂಲ್‌ಬಾರ್‌ನಲ್ಲಿ Gemini ತೋರಿಸಿ</translation>
 <translation id="276969039800130567"><ph name="USER_EMAIL_ADDRESS" /> ಹೆಸರಿನಲ್ಲಿ ಸೈನ್ ಇನ್ ಮಾಡಲಾಗಿದೆ.</translation>
+<translation id="2770082596325051055"><ph name="FILE_NAME" /> ಅನ್ನು ವಿರಾಮಗೊಳಿಸಿ</translation>
 <translation id="2777555524387840389"><ph name="SECONDS" /> ಸೆಕೆಂಡುಗಳು ಉಳಿದಿವೆ</translation>
 <translation id="2779651927720337254">ವಿಫಲವಾಗಿದೆ</translation>
 <translation id="2781151931089541271">1 ಸೆಕೆಂಡು ಉಳಿದಿದೆ</translation>
@@ -697,6 +698,7 @@
 <translation id="3740290940447881599">ನೀವು ಈ ಸೈಟ್ ಅನ್ನು ನಂಬುತ್ತೀರಿ ಎಂದು ಖಚಿತಪಡಿಸಿಕೊಳ್ಳಿ</translation>
 <translation id="3740525748616366977">ಈ ಸಾಧನದಲ್ಲಿ ಧ್ವನಿ ಹುಡುಕಾಟ ಲಭ್ಯವಿಲ.</translation>
 <translation id="3749289110408117711">ಫೈಲ್ ಹೆಸರು</translation>
+<translation id="3751708358601675711">ದರ ಟ್ರ್ಯಾಕಿಂಗ್ ಅನ್ನು ಎಡಿಟ್ ಮಾಡಿ</translation>
 <translation id="3756823472711156529">ಗುಂಪನ್ನು ಮರುಸ್ಥಾಪಿಸಿ</translation>
 <translation id="3759306015475526475">ಬಳಕೆ ಮತ್ತು ಕ್ರ್ಯಾಶ್ ಡೇಟಾ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ನಿರ್ವಹಿಸಿ</translation>
 <translation id="3763110477555836428">ನಿಮ್ಮ ನೈಜ ವಿವರಗಳನ್ನು ರಕ್ಷಿಸಲು, ಈ ಕಾರ್ಡ್ ಮೂಲಕ ನೀವು ಚೆಕ್ ಔಟ್ ಮಾಡಿದಾಗ ವರ್ಚುವಲ್ ಕಾರ್ಡ್ ಸಂಖ್ಯೆಯನ್ನು ಭರ್ತಿ ಮಾಡಲಾಗುತ್ತದೆ. Google Wallet ನಲ್ಲಿ ನಿರ್ವಹಿಸಿ. <ph name="BEGIN_LINK1" />ವರ್ಚುವಲ್ ಕಾರ್ಡ್‌ಗಳ ಕುರಿತು ಇನ್ನಷ್ಟು ತಿಳಿಯಿರಿ<ph name="END_LINK1" /></translation>
@@ -789,6 +791,7 @@
 <translation id="4121654769234887259">ನೀವು ಈ ಪಾಸ್‌ವರ್ಡ್ ನೆನಪಿಟ್ಟುಕೊಳ್ಳುವ ಅಗತ್ಯವಿಲ್ಲ. ಅದನ್ನು <ph name="USERNAME" /> ನ Google Password Manager ನಲ್ಲಿ ಸೇವ್ ಮಾಡಲಾಗುತ್ತದೆ.</translation>
 <translation id="4128312955780560730">ನಿಮ್ಮ ಇನ್‌ಕಾಗ್ನಿಟೊ ಟ್ಯಾಬ್‌ಗಳನ್ನು ಲಾಕ್ ಮಾಡಿ</translation>
 <translation id="4132137475637520539">ಲಿಂಕ್ ಅನ್ನು ಹೊಂದಿರುವ ಯಾರಿಗಾದರೂ ಸೇರಿಕೊಳ್ಳಲು ಅವಕಾಶ ಮಾಡಿಕೊಡಿ</translation>
+<translation id="4132969033912447558"><ph name="FILE_NAME" /> ಪುನರಾರಂಭಿಸಿ</translation>
 <translation id="4136632885151622181"><ph name="TAB_TITLE" />, ಬಹು ಆಯ್ಕೆಮಾಡಿದ ಪಿನ್ ಮಾಡಿದ ರೆಕಾರ್ಡಿಂಗ್ ಟ್ಯಾಬ್</translation>
 <translation id="4137746084635924146">ಪ್ರಸ್ತುತ ಸಾಧನ ಭಾಷೆ</translation>
 <translation id="414128724510021958">ಡೆಸ್ಕ್‌ಟಾಪ್ ಸೈಟ್‌ಗಳನ್ನು ಡಿಫಾಲ್ಟ್ ಆಗಿ ವಿನಂತಿಸಲಾಗಿದೆ</translation>
@@ -864,7 +867,6 @@
 <translation id="4374192654218566997">\n\nನೀವು ಈ ಸಾಧನದಿಂದ ಈ ಡೇಟಾವನ್ನು ಸಹ ತೆಗೆದುಹಾಕಬಹುದು:</translation>
 <translation id="4378154925671717803">ಫೋನ್</translation>
 <translation id="4380055775103003110">ಈ ಸಮಸ್ಯೆ ಮುಂದುವರಿದರೆ, ನೀವು <ph name="SITE_ETLD_PLUS_ONE" /> ನಲ್ಲಿ ಮುಂದುವರಿಯಲು ಇತರ ಮಾರ್ಗಗಳನ್ನು ಪ್ರಯತ್ನಿಸಬಹುದು.</translation>
-<translation id="4381351546374507910">ನಿಮ್ಮ ಎಲ್ಲಾ ಸಾಧನಗಳಲ್ಲಿ ನಿಮ್ಮ ಬುಕ್‌ಮಾರ್ಕ್‌ಗಳು, ಪಾಸ್‌ವರ್ಡ್‌ಗಳು ಮತ್ತು ಆಟೋಫಿಲ್ ಮಾಹಿತಿಯನ್ನು ಪಡೆಯಲು ಸೈನ್ ಇನ್ ಮಾಡಿ.</translation>
 <translation id="4384468725000734951">ಹುಡುಕಲು Sogou ಬಳಸಲಾಗುತ್ತಿದೆ</translation>
 <translation id="4387647248986092471">ಕಾರ್ ಪ್ರೊಫೈಲ್ ಲಾಕ್ ಅನ್ನು ರಚಿಸಿ</translation>
 <translation id="4387817230000841154">ಡೌನ್‌ಲೋಡ್‌ಗಳನ್ನು ತೆರೆಯಿರಿ</translation>
@@ -1890,6 +1892,7 @@
 <translation id="8152331954420209374">Lens ಗೆ ಹೋಗಿ</translation>
 <translation id="8153206878708357851">ಕೆರೆಟ್ ಬ್ರೌಸಿಂಗ್ ಅನ್ನು ಟಾಗಲ್ ಮಾಡಿ</translation>
 <translation id="8154784523622173959">ಈ ಪುಟದ ಹಿನ್ನೆಲೆಯನ್ನು ವೈಯಕ್ತೀಕರಿಸಿ</translation>
+<translation id="8161480780962562636">ನಿಮ್ಮ ಪಾಸ್‌ವರ್ಡ್‌ಗಳ ಸುರಕ್ಷತೆಯನ್ನು ಖಚಿತಪಡಿಸಿಕೊಳ್ಳಿ, ಅವುಗಳು ಸೋರಿಕೆಯಾಗಿವೆಯೇ ಎಂದು ತಿಳಿಯಿರಿ ಮತ್ತು ಆನ್‌ಲೈನ್‌ನಲ್ಲಿ ನಿಮ್ಮ ರಕ್ಷಣೆಗಾಗಿ ಅಗತ್ಯ ಸಲಹೆಗಳನ್ನು ಪಡೆಯಿರಿ</translation>
 <translation id="8163820386638255770">ನಿಮ್ಮ Google ಖಾತೆಯಲ್ಲಿ ಪಾಸ್‌ವರ್ಡ್‌ಗಳನ್ನು ಬಳಸಲು ಮತ್ತು ಸೇವ್ ಮಾಡಲು, ಇದು ನೀವೇ ಎಂದು ದೃಢೀಕರಿಸಿ</translation>
 <translation id="8174047975335711832">ಸಾಧನದ ಮಾಹಿತಿ</translation>
 <translation id="8175940240143658258">{ARCHIVED_TAB_COUNT,plural, =1{(1) ನಿಷ್ಕ್ರಿಯ ಐಟಂ}one{(#) ನಿಷ್ಕ್ರಿಯ ಐಟಂಗಳು}other{(#) ನಿಷ್ಕ್ರಿಯ ಐಟಂಗಳು}}</translation>
@@ -1904,7 +1907,6 @@
 <translation id="8210770465353466621">ನಿಮ್ಮ ಟ್ಯಾಬ್‌ಗಳನ್ನು ನೀವು ಇಲ್ಲಿ ಕಾಣಬಹುದು</translation>
 <translation id="8212799748012101103">ಟ್ಯಾಬ್ ಹುಡುಕಾಟ ತೆರೆಯಿರಿ</translation>
 <translation id="8215740705341534369">ಸೈಡ್ ಶೀಟ್</translation>
-<translation id="8218622182176210845">ನಿಮ್ಮ ಖಾತೆಯನ್ನು ನಿರ್ವಹಿಸಿ</translation>
 <translation id="8221985041778490865">ಬ್ರೌಸಿಂಗ್ ಡೇಟಾವನ್ನು ಅಳಿಸಲಾಗುತ್ತಿದೆ</translation>
 <translation id="8223642481677794647">ಫೀಡ್ ಕಾರ್ಡ್ ಮೆನು</translation>
 <translation id="82296173028782770">ಹುಡುಕಾಟ ಪ್ರಶ್ನೆಯನ್ನು ಎಡಿಟ್ ಮಾಡಿ: <ph name="SEARCH_QUERY" /></translation>
@@ -2035,6 +2037,7 @@
 <translation id="8676789164135894283">ಸೈನ್ ಇನ್ ದೃಢೀಕರಣಗಳು</translation>
 <translation id="867914734596684889">ಬುಕ್‌ಮಾರ್ಕ್‌ ಪಟ್ಟಿಯನ್ನು ತೋರಿಸಿ ಅಥವಾ ಮರೆಮಾಡಿ</translation>
 <translation id="8683039184091909753">ಚಿತ್ರ</translation>
+<translation id="8687103160920393343"><ph name="FILE_NAME" /> ರದ್ದುಗೊಳಿಸಿ</translation>
 <translation id="8688183792442786085"><ph name="TAB_TITLE" />, ಟ್ಯಾಬ್ ಆಯ್ಕೆಮಾಡಲಾಗಿದೆ</translation>
 <translation id="8694622119922491927">ಈ ಸೈಟ್‌ಗಾಗಿ ಮಾನವ ಇಂಟರ್‌ಫೇಸ್ ಸಾಧನಗಳನ್ನು (HID ಗಳು) ಆ್ಯಕ್ಸೆಸ್ ಮಾಡಲು <ph name="APP_NAME" /> ಗೆ ಅನುಮತಿಯ ಅಗತ್ಯವಿದೆ. ನೀವು ಈ ಸೆಟ್ಟಿಂಗ್ ಅನ್ನು ನಂತರ ಸೆಟ್ಟಿಂಗ್‌ಗಳು &gt; ಆ್ಯಪ್‌ಗಳು &gt; ವಿಶೇಷ ಆ್ಯಪ್ ಆ್ಯಕ್ಸೆಸ್‌ನಲ್ಲಿ ಬದಲಾಯಿಸಬಹುದು.</translation>
 <translation id="8696297579102085705">ನಿಮ್ಮ ಸಾಧನಕ್ಕೆ ಕಳುಹಿಸಿ</translation>

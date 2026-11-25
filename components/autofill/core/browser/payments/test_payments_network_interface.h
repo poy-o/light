@@ -13,11 +13,16 @@
 #include <utility>
 #include <vector>
 
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "components/autofill/core/browser/payments/payments_network_interface.h"
 #include "components/autofill/core/browser/payments/payments_requests/update_virtual_card_enrollment_request.h"
+
+namespace base::i18n {
+class LanguageTag;
+}  // namespace base::i18n
 
 namespace network {
 class SharedURLLoaderFactory;
@@ -40,7 +45,7 @@ class TestPaymentsNetworkInterface : public PaymentsNetworkInterface {
   void GetUnmaskDetails(
       base::OnceCallback<void(PaymentsAutofillClient::PaymentsRpcResult,
                               UnmaskDetails&)> callback,
-      const std::string& app_locale) override;
+      const base::i18n::LanguageTag& app_locale) override;
 
   void UnmaskCard(
       const UnmaskRequestDetails& unmask_request_,
@@ -51,7 +56,7 @@ class TestPaymentsNetworkInterface : public PaymentsNetworkInterface {
       const std::vector<AutofillProfile>& addresses,
       const int detected_values,
       const std::vector<ClientBehaviorConstants>& client_behavior_signals,
-      const std::string& app_locale,
+      const base::i18n::LanguageTag& app_locale,
       base::OnceCallback<void(PaymentsAutofillClient::PaymentsRpcResult,
                               const std::u16string&,
                               std::unique_ptr<base::DictValue>,
@@ -87,6 +92,11 @@ class TestPaymentsNetworkInterface : public PaymentsNetworkInterface {
   // useful to control whether or not GetUnmaskDetails() is responded to.
   void ShouldReturnUnmaskDetailsImmediately(bool should_return_unmask_details);
 
+  // If false, `GetCardUploadDetails()` holds its response until the test runs
+  // the callback returned by `GetGetCardUploadDetailsCallback()`.
+  void ShouldReturnCardUploadDetailsImmediately(
+      bool should_return_card_upload_details);
+
   void AllowFidoRegistration(
       bool server_denotes_fido_eligible_but_not_opted_in = true);
 
@@ -119,6 +129,12 @@ class TestPaymentsNetworkInterface : public PaymentsNetworkInterface {
   }
 
   UnmaskDetails* unmask_details() { return &unmask_details_; }
+  // Returns the held response of the most recent `GetCardUploadDetails()` call
+  // when `should_return_card_upload_details_` is false. Returns a null callback
+  // if there is none.
+  base::OnceClosure GetGetCardUploadDetailsCallback() {
+    return std::move(get_card_upload_details_callback_);
+  }
   const std::optional<UnmaskRequestDetails>& unmask_request() const {
     return unmask_request_;
   }
@@ -161,6 +177,8 @@ class TestPaymentsNetworkInterface : public PaymentsNetworkInterface {
   // Some metrics are affected by the latency of GetUnmaskDetails, so it is
   // useful to control whether or not GetUnmaskDetails() is responded to.
   bool should_return_unmask_details_ = true;
+  bool should_return_card_upload_details_ = true;
+  base::OnceClosure get_card_upload_details_callback_;
   UnmaskDetails unmask_details_;
   std::optional<UnmaskRequestDetails> unmask_request_;
   SelectChallengeOptionRequestDetails select_challenge_option_request_;

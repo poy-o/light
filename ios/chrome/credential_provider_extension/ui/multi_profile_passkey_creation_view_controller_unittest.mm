@@ -55,7 +55,8 @@ class MultiProfilePasskeyCreationViewControllerTest : public PlatformTest {
   // Writes favicon attributes containing `image` to the favicon folder and
   // returns the file name to use as the credential's favicon key.
   NSString* WriteFaviconWithImage(UIImage* image) {
-    NSString* key = @"favicon_key";
+    NSString* key =
+        @"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
     NSURL* file_url = [base::apple::FilePathToNSURL(favicon_folder_.GetPath())
         URLByAppendingPathComponent:key
                         isDirectory:NO];
@@ -160,19 +161,20 @@ TEST_F(MultiProfilePasskeyCreationViewControllerTest,
 // read.
 TEST_F(MultiProfilePasskeyCreationViewControllerTest,
        MissingFaviconKeepsDefaultIcon) {
+  // A valid favicon file key (64 hex characters) not backed by a file.
+  NSString* const kMissingFaviconKey =
+      @"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
   MultiProfilePasskeyCreationViewController* controller =
-      CreateController(@"missing_favicon_key");
+      CreateController(kMissingFaviconKey);
   FaviconView* favicon_view = FindFaviconView(controller.view);
   ASSERT_TRUE(favicon_view);
 
-  // Favicons are fetched on a serial queue and the controller applies the
-  // result on the main queue, so once this second fetch has hopped to the main
-  // queue, the controller's fetch has been fully handled.
+  // Favicons are fetched on a serial queue and completions are invoked
+  // asynchronously on the main queue, so once this second fetch's completion
+  // runs, the controller's fetch has already been handled.
   __block bool done = false;
-  FetchFaviconAsync(@"missing_favicon_key", ^(FaviconAttributes*) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-      done = true;
-    });
+  FetchFaviconAsync(kMissingFaviconKey, ^(FaviconAttributes*) {
+    done = true;
   });
   ASSERT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
       base::test::ios::kWaitForFileOperationTimeout, ^{

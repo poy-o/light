@@ -5,22 +5,32 @@
 #include "chrome/browser/on_device_translation/installer_impl.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "base/byte_size.h"
 #include "base/command_line.h"
 #include "base/containers/flat_map.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "base/system/sys_info.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/component_updater/translate_kit_language_pack_component_installer.h"
+#include "chrome/browser/data_saver/data_saver.h"
 #include "chrome/browser/on_device_translation/component_update_util.h"
 #include "components/component_updater/component_updater_paths.h"
 #include "components/component_updater/component_updater_service.h"
@@ -28,6 +38,7 @@
 #include "components/on_device_translation/constants.h"
 #include "components/on_device_translation/features.h"
 #include "components/on_device_translation/installer.h"
+#include "components/on_device_translation/metrics.h"
 #include "components/on_device_translation/public/language_pack.h"
 #include "components/on_device_translation/public/mojom/on_device_translation_service.mojom-forward.h"
 #include "components/on_device_translation/public/mojom/on_device_translation_service.mojom.h"
@@ -36,8 +47,15 @@
 #include "components/on_device_translation/public/supported_languages.h"
 #include "components/optimization_guide/core/model_execution/on_device_model_download_progress_manager.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "content/public/browser/network_service_instance.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "net/base/network_change_notifier.h"
+#include "services/network/public/cpp/network_connection_tracker.h"
 #include "services/on_device_model/public/mojom/download_observer.mojom.h"
+
+#if BUILDFLAG(IS_ANDROID)
+#include "base/android/device_info.h"
+#endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_WIN)
 #include "base/strings/utf_string_conversions.h"
@@ -58,6 +76,42 @@ const char kTranslateKitPackagePaths[] = "translate-kit-packages";
 std::string GetLanguagePackComponentId(LanguagePackKey language_pack) {
   return crx_file::id_util::GenerateIdFromHash(
       GetLanguagePackComponentConfig(language_pack).public_key_sha);
+}
+
+// Runs `callback` asynchronously with whether the device has a network
+// connection. A connection of unknown type counts as online.
+void CheckOnline(base::OnceCallback<void(bool)> callback) {
+  auto on_connection_type =
+      [](base::OnceCallback<void(bool)> callback,
+         net::NetworkChangeNotifier::ConnectionType type) {
+        std::move(callback).Run(type !=
+                                net::NetworkChangeNotifier::CONNECTION_NONE);
+      };
+  auto callbacks = base::SplitOnceCallback(std::move(callback));
+  net::NetworkChangeNotifier::ConnectionType type;
+  if (content::GetNetworkConnectionTracker()->GetConnectionType(
+          &type,
+          base::BindOnce(on_connection_type, std::move(callbacks.first)))) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(on_connection_type, std::move(callbacks.second), type));
+  }
+}
+
+// Returns the available disk space on the component updater install volume, or
+// `std::nullopt` if the directory or free space cannot be queried. Blocks.
+std::optional<base::ByteSize> GetAvailableDiskSpace() {
+  base::FilePath component_dir;
+  if (!base::PathService::Get(component_updater::DIR_COMPONENT_USER,
+                              &component_dir)) {
+    return std::nullopt;
+  }
+  const std::optional<base::SysInfo::DiskSpaceInfo> disk_space =
+      base::SysInfo::AmountOfDiskSpace(component_dir);
+  if (!disk_space.has_value()) {
+    return std::nullopt;
+  }
+  return disk_space->available;
 }
 
 std::optional<LanguagePackKey> FindLanguagePackKey(
@@ -336,7 +390,10 @@ OnDeviceTranslationInstallerImpl::RegisteredLanguagePacks() const {
     return GetLanguagePackKeysFromCommandLine();
   }
 
-  std::set<LanguagePackKey> registered_pack_keys;
+  // Language packs that wait for the checks before the download count as
+  // registered.
+  std::set<LanguagePackKey> registered_pack_keys =
+      language_pack_checks_in_progress_;
   for (const auto& it : kLanguagePackComponentConfigMap) {
     if (g_browser_process->local_state()->GetBoolean(
             GetRegisteredFlagPrefName(*it.second))) {
@@ -344,6 +401,26 @@ OnDeviceTranslationInstallerImpl::RegisteredLanguagePacks() const {
     }
   }
   return registered_pack_keys;
+}
+
+bool OnDeviceTranslationInstallerImpl::IsSupported() const {
+#if BUILDFLAG(IS_ANDROID)
+  // Automotive devices have tight memory and storage limits for on-device
+  // translation. Holds when a Finch trial or command-line flag enables
+  // `kTranslationAPI` over the default disable override in
+  // `ChromeBrowserFieldTrials`.
+  if (base::android::device_info::is_automotive()) {
+    return false;
+  }
+#endif  // BUILDFLAG(IS_ANDROID)
+  const size_t min_physical_memory_mb =
+      kTranslationAPIMinPhysicalMemoryMB.Get();
+  if (min_physical_memory_mb > 0 &&
+      base::SysInfo::AmountOfTotalPhysicalMemory() <
+          base::MiB(min_physical_memory_mb)) {
+    return false;
+  }
+  return library_source_->IsSupported();
 }
 
 bool OnDeviceTranslationInstallerImpl::IsInit() const {
@@ -358,11 +435,51 @@ void OnDeviceTranslationInstallerImpl::Init(
     }
     return;
   }
+  if (!IsSupported()) {
+    // The library can't be installed, so the callback would never run.
+    FailLibraryInstall(InstallError::kFailed);
+    return;
+  }
   // Callers that only start the install pass a null callback, so that repeated
   // calls don't queue callbacks.
   if (on_ready_callback) {
     on_ready_callbacks_.push_back(std::move(on_ready_callback));
   }
+  if (library_install_in_progress_) {
+    // The callback waits for the install that runs. Don't check the connection
+    // again: a short offline moment, for example a network handover, must not
+    // fail an install that continues. Still ask the source, which ignores the
+    // request while its install runs. The source doesn't report every end of
+    // an install, for example when the periodic update check ran at the same
+    // time, so this request is how the install starts again. Until the source
+    // reports the end of an install, an offline device gets the error of the
+    // source instead of `kOffline` at once.
+    library_source_->Install();
+    return;
+  }
+  if (library_check_in_progress_) {
+    return;
+  }
+  library_check_in_progress_ = true;
+  CheckOnline(
+      base::BindOnce(&OnDeviceTranslationInstallerImpl::OnLibraryOnlineChecked,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+void OnDeviceTranslationInstallerImpl::OnLibraryOnlineChecked(bool online) {
+  library_check_in_progress_ = false;
+  if (IsInit() || library_install_in_progress_) {
+    return;
+  }
+  if (!online) {
+    FailLibraryInstall(InstallError::kOffline);
+    return;
+  }
+  if (IsMeteredDownloadBlocked()) {
+    FailLibraryInstall(InstallError::kMeteredConnectionBlocked);
+    return;
+  }
+  library_install_in_progress_ = true;
   library_source_->Install();
 }
 
@@ -378,6 +495,72 @@ void OnDeviceTranslationInstallerImpl::InstallLanguagePack(
     return;
   }
 
+  if (language_pack_updates_in_progress_.contains(language_pack)) {
+    // A download of the pack runs. Don't check the connection again: a short
+    // offline moment, for example a network handover, must not fail a download
+    // that continues.
+    return;
+  }
+  if (!language_pack_checks_in_progress_.insert(language_pack).second) {
+    return;
+  }
+  CheckOnline(base::BindOnce(
+      &OnDeviceTranslationInstallerImpl::OnLanguagePackOnlineChecked,
+      weak_ptr_factory_.GetWeakPtr(), language_pack));
+}
+
+void OnDeviceTranslationInstallerImpl::OnLanguagePackOnlineChecked(
+    LanguagePackKey language_pack,
+    bool online) {
+  std::optional<InstallError> error;
+  if (!online) {
+    error = InstallError::kOffline;
+  } else if (data_saver::IsDataSaverEnabled()) {
+    error = InstallError::kDataSaverEnabled;
+  } else if (IsMeteredDownloadBlocked()) {
+    error = InstallError::kMeteredConnectionBlocked;
+  }
+  if (error) {
+    language_pack_checks_in_progress_.erase(language_pack);
+    if (!InstalledLanguagePacks().contains(language_pack)) {
+      notifier_->NotifyLanguagePackInstallFailed(language_pack, *error);
+    }
+    return;
+  }
+  const size_t min_free_disk_space_mb =
+      kTranslationAPILanguagePackMinFreeDiskSpaceMB.Get();
+  if (min_free_disk_space_mb == 0) {
+    language_pack_checks_in_progress_.erase(language_pack);
+    DownloadLanguagePack(language_pack);
+    return;
+  }
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+      base::BindOnce(&GetAvailableDiskSpace),
+      base::BindOnce(
+          &OnDeviceTranslationInstallerImpl::OnLanguagePackDiskSpaceChecked,
+          weak_ptr_factory_.GetWeakPtr(), language_pack,
+          min_free_disk_space_mb));
+}
+
+void OnDeviceTranslationInstallerImpl::OnLanguagePackDiskSpaceChecked(
+    LanguagePackKey language_pack,
+    size_t min_free_disk_space_mb,
+    std::optional<base::ByteSize> available) {
+  language_pack_checks_in_progress_.erase(language_pack);
+  // Don't block the download if the free space is unknown.
+  if (available.has_value() && available->InMiB() < min_free_disk_space_mb) {
+    notifier_->NotifyLanguagePackInstallFailed(
+        language_pack, InstallError::kNotEnoughDiskSpace);
+    return;
+  }
+  DownloadLanguagePack(language_pack);
+}
+
+void OnDeviceTranslationInstallerImpl::DownloadLanguagePack(
+    LanguagePackKey language_pack) {
   // Calculate component IDs to track progress
   const std::string component_id = GetLanguagePackComponentId(language_pack);
 
@@ -400,6 +583,9 @@ void OnDeviceTranslationInstallerImpl::InstallLanguagePack(
   }
 
   // Registers the TranslateKit language pack component.
+  RecordLanguagePairUma("Translate.OnDeviceTranslation.Download.LanguagePair",
+                        GetSourceLanguageCode(language_pack),
+                        GetTargetLanguageCode(language_pack));
   notifier_->StartProgressTracking(language_pack, {component_id});
   language_pack_updates_in_progress_.insert(language_pack);
   component_updater::RegisterTranslateKitLanguagePackComponent(
@@ -463,6 +649,7 @@ void OnDeviceTranslationInstallerImpl::RemoveObserver(Observer* observer) {
 
 void OnDeviceTranslationInstallerImpl::OnLibraryChanged() {
   if (IsInit()) {
+    library_install_in_progress_ = false;
     std::vector<base::RepeatingClosure> callbacks =
         std::exchange(on_ready_callbacks_, {});
     for (auto& callback : callbacks) {
@@ -474,6 +661,11 @@ void OnDeviceTranslationInstallerImpl::OnLibraryChanged() {
 
 void OnDeviceTranslationInstallerImpl::OnLibraryInstallFailed(
     InstallError error) {
+  FailLibraryInstall(error);
+}
+
+void OnDeviceTranslationInstallerImpl::FailLibraryInstall(InstallError error) {
+  library_install_in_progress_ = false;
   if (IsInit()) {
     return;
   }

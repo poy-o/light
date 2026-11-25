@@ -36,13 +36,6 @@ type:*JSONArray*
 # Base class's constructor accesses a derived class's member.
 
 fun:*DoublyLinkedListNode*
-type:*content*WebUIExtensionData*
-
-# RenderFrameObserverTracker<T>::RenderFrameObserverTracker()
-fun:*content*RenderFrameObserverTracker*RenderFrame*
-
-# RenderViewObserverTracker<T>::RenderViewObserverTracker()
-fun:*content*RenderViewObserverTracker*RenderView*
 
 #############################################################################
 # Base class's destructor accesses a derived class.

@@ -54,11 +54,6 @@ constexpr char kHatsSurveyProbabilityName[] = "probability";
 // keep-sorted start allow_yaml_lists=yes case=no group_prefixes=["#if", "#else", "#endif", "const", "};", "}", ");", "//", "bool", "base::", "BASE_FEATURE", "BASE_FEATURE_PARAM"] by_regex=["BASE_FEATURE\\(.*\\);"] skip_lines=2
 // clang-format on
 
-#if BUILDFLAG(IS_IOS)
-BASE_FEATURE(kAccountRetrievalWaitsForRestoration,
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif
-
 #if BUILDFLAG(IS_ANDROID)
 // When enabled, an ADDSESSION Mirror header without an email is handled for the
 // primary account if the primary account is not in the Gaia cookies: Chrome
@@ -237,10 +232,19 @@ BASE_FEATURE(kDiceInterceptSanitizeGaiaUrl, base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kDiceLinkedAccounts, base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
+#if BUILDFLAG(IS_ANDROID)
+BASE_FEATURE(kDisableAddAccountWhenRestricted,
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_ANDROID)
+
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 BASE_FEATURE(kDisableFirstRunAnimationsForTesting,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+
+#if BUILDFLAG(IS_ANDROID)
+BASE_FEATURE(kEnableAccountMenu, base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_ANDROID)
 
 // Enables fetching sync preview data from the server for accounts with refresh
 // tokens.
@@ -291,7 +295,12 @@ BASE_FEATURE(kEnableAccountPreviewEntityPreviews,
 // signed-out users to sign in is enabled. This flag has no effect if
 // `kEnableAccountPreviewData` is not enabled.
 BASE_FEATURE(kEnableAccountPreviewPreferredAccount,
-             base::FEATURE_DISABLED_BY_DEFAULT);
+#if BUILDFLAG(IS_ANDROID)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+);
 BASE_FEATURE_PARAM(size_t,
                    kPasswordsQ1Threshold,
                    &kEnableAccountPreviewPreferredAccount,
@@ -426,7 +435,7 @@ BASE_FEATURE_ENUM_PARAM(
 // account when triggered in this context, and passes it to the native
 // AccountPreviewService
 BASE_FEATURE(kEnableAccountPreviewUseAppAccount,
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE_PARAM(base::TimeDelta,
                    kAccountPreviewAppAccountExpirationDuration,
                    &kEnableAccountPreviewUseAppAccount,
@@ -860,10 +869,6 @@ BASE_FEATURE(kSigninButtonProfileMenuRefinements,
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 BASE_FEATURE(kSigninInterceptGraphicUpdate, base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
-
-#if BUILDFLAG(IS_ANDROID)
-BASE_FEATURE(kSigninLevelUpButton, base::FEATURE_ENABLED_BY_DEFAULT);
-#endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 BASE_FEATURE(kSignInPromoMaterialNextUI, base::FEATURE_ENABLED_BY_DEFAULT);

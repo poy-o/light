@@ -4,6 +4,7 @@
 
 #include "chrome/browser/screen_ai/screen_ai_service_handler_base.h"
 
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -26,7 +27,6 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/screen_ai/screen_ai_library_provider.h"
-#include "chrome/browser/screen_ai/screen_ai_service_router.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/service_process_host.h"
 #include "content/public/browser/service_process_host_passkeys.h"
@@ -37,6 +37,32 @@
 #if BUILDFLAG(IS_WIN)
 #include "base/strings/utf_string_conversions.h"
 #endif
+
+namespace {
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// If any value is added, please update `ComponentAvailability` in `enums.xml`.
+enum class ComponentAvailability {
+  kAvailable = 0,
+  kUnavailableWithNetwork = 1,
+  kUnavailableWithoutNetwork = 2,
+
+  kMaxValue = kUnavailableWithoutNetwork,
+};
+
+void RecordComponentAvailability(bool available) {
+  ComponentAvailability availability = ComponentAvailability::kAvailable;
+  if (!available) {
+    availability = content::GetNetworkConnectionTracker()->IsOffline()
+                       ? ComponentAvailability::kUnavailableWithoutNetwork
+                       : ComponentAvailability::kUnavailableWithNetwork;
+  }
+  base::UmaHistogramEnumeration("Accessibility.ScreenAI.Component.Available2",
+                                availability);
+}
+
+}  // namespace
 
 namespace screen_ai {
 
@@ -130,6 +156,14 @@ ScreenAIServiceHandlerBase::ScreenAIServiceHandlerBase(
 
 ScreenAIServiceHandlerBase::~ScreenAIServiceHandlerBase() = default;
 
+// static
+// LINT.IfChange(SuggestedWaitTimeBeforeReAttempt)
+base::TimeDelta ScreenAIServiceHandlerBase::SuggestedWaitTimeBeforeReAttempt(
+    uint32_t reattempt_number) {
+  return base::Minutes(reattempt_number * reattempt_number);
+}
+// LINT.ThenChange(//chrome/browser/ash/app_list/search/local_image_search/image_annotation_worker.cc:SuggestedWaitTimeBeforeReAttempt)
+
 std::string ScreenAIServiceHandlerBase::GetMetricFullName(
     std::string_view metric_name) const {
   return base::StringPrintf("Accessibility.%s.Service.%s", GetServiceName(),
@@ -149,24 +183,47 @@ std::optional<bool> ScreenAIServiceHandlerBase::GetServiceState() {
   return false;
 }
 
-std::optional<bool> ScreenAIServiceHandlerBase::GetServiceStateAsync(
+void ScreenAIServiceHandlerBase::GetServiceStateAsync(
     ServiceStateCallback callback) {
   auto service_state = GetServiceState();
 
-  // If `service_state` has value, the service is already initialized or
-  // disabled.
+  // If `service_state` has value, either the service is already initialized or
+  // disabled. In both cases we can assume the component was ready.
   if (service_state) {
+    RecordComponentAvailability(true);
     std::move(callback).Run(*service_state);
-  } else {
-    // Put the request in queue and wait for ScreenAIServiceRouter to announce
-    // that library download state is changed.
-    pending_state_requests_.emplace_back(std::move(callback));
+    return;
   }
 
-  return service_state;
+  // Put the request in queue. It is answered after the library provider tells
+  // if the library is available.
+  pending_state_requests_.emplace_back(std::move(callback));
+
+  // Ask for the library, unless an earlier request already waits for it.
+  if (waiting_for_library_) {
+    return;
+  }
+  waiting_for_library_ = true;
+  base::WeakPtr<ScreenAIServiceHandlerBase> weak_this =
+      weak_ptr_factory_.GetWeakPtr();
+  base::CallbackListSubscription subscription =
+      library_provider_->EnsureLibraryAvailable(base::BindOnce(
+          &ScreenAIServiceHandlerBase::OnLibraryAvailabilityChanged,
+          weak_this));
+  // The provider can answer before it returns. The callbacks that are then
+  // told that the service is not available can destroy this object, or ask
+  // for the service again, which stores a new subscription. So keep this
+  // subscription only if it is still the request to wait for.
+  if (weak_this && waiting_for_library_ && !library_subscription_) {
+    library_subscription_ = std::move(subscription);
+  }
 }
 
-void ScreenAIServiceHandlerBase::OnLibraryAvailablityChanged(bool available) {
+void ScreenAIServiceHandlerBase::OnLibraryAvailabilityChanged(bool available) {
+  waiting_for_library_ = false;
+  library_subscription_ = {};
+  RecordComponentAvailability(available);
+
   if (pending_state_requests_.empty()) {
     return;
   }
@@ -218,8 +275,7 @@ void ScreenAIServiceHandlerBase::OnScreenAIServiceDisconnected() {
   shutdown_handler_data_.crash_count++;
   shutdown_handler_data_.suspended = true;
   base::TimeDelta suspense_time =
-      ScreenAIServiceRouter::SuggestedWaitTimeBeforeReAttempt(
-          shutdown_handler_data_.crash_count);
+      SuggestedWaitTimeBeforeReAttempt(shutdown_handler_data_.crash_count);
   base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&ScreenAIServiceHandlerBase::ResetSuspend,
@@ -237,7 +293,7 @@ void ScreenAIServiceHandlerBase::CallPendingStatusRequests(bool successful) {
 }
 
 void ScreenAIServiceHandlerBase::LaunchIfNotRunning() {
-  library_provider_->SetLastUsageTime();
+  library_provider_->RecordUsage();
   if (screen_ai_service_factory_.is_bound()) {
     return;
   }
@@ -253,7 +309,8 @@ void ScreenAIServiceHandlerBase::LaunchIfNotRunning() {
   if (binary_path.empty()) {
     VLOG(0) << "ScreenAI service launch triggered when component is not "
                "available.";
-    library_provider_->Download();
+    // Start the download of the library. Nobody waits for it here.
+    std::ignore = library_provider_->EnsureLibraryAvailable(base::DoNothing());
     return;
   }
 

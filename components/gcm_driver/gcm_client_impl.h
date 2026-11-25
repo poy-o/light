@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -31,7 +32,6 @@
 #include "google_apis/gcm/engine/gcm_store.h"
 #include "google_apis/gcm/engine/gservices_settings.h"
 #include "google_apis/gcm/engine/mcs_client.h"
-#include "google_apis/gcm/engine/registration_request.h"
 #include "google_apis/gcm/engine/unregistration_request.h"
 #include "google_apis/gcm/protocol/android_checkin.pb.h"
 #include "google_apis/gcm/protocol/checkin.pb.h"
@@ -68,7 +68,8 @@ class GCMRegistrationManagerImpl;
 // applications that send and receive messages.
 class GCMClientImpl : public GCMClient,
                       public GCMStatsRecorder::Delegate,
-                      public ConnectionFactory::ConnectionListener {
+                      public ConnectionFactory::ConnectionListener,
+                      public MCSClient::Delegate {
  public:
   // State representation of the GCMClient.
   // Any change made to this enum should have corresponding change in the
@@ -112,10 +113,12 @@ class GCMClientImpl : public GCMClient,
   void RemoveObserver(Observer* observer) override;
   void Start(StartMode start_mode) override;
   void Stop() override;
-  void Register(scoped_refptr<RegistrationInfo> registration_info) override;
+  void Register(
+      scoped_refptr<GCMRegistrationInfo> gcm_registration_info) override;
   bool ValidateRegistration(scoped_refptr<RegistrationInfo> registration_info,
                             const std::string& registration_id) override;
-  void Unregister(scoped_refptr<RegistrationInfo> registration_info) override;
+  void Unregister(
+      scoped_refptr<GCMRegistrationInfo> gcm_registration_info) override;
   void Send(const std::string& app_id,
             const std::string& receiver_id,
             const OutgoingMessage& message) override;
@@ -131,6 +134,11 @@ class GCMClientImpl : public GCMClient,
   void GetInstanceIDData(const std::string& app_id,
                          std::string* instance_id,
                          std::string* extra_data) override;
+  void GetToken(scoped_refptr<InstanceIDTokenInfo> token_info,
+                GetTokenCallback callback) override;
+  void DeleteToken(scoped_refptr<InstanceIDTokenInfo> token_info,
+                   DeleteTokenCallback callback) override;
+  void WaitForInitialConnectionReady(base::OnceClosure callback) override;
 
   // GCMStatsRecorder::Delegate implemenation.
   void OnActivityRecorded() override;
@@ -139,6 +147,12 @@ class GCMClientImpl : public GCMClient,
   void OnConnected(const GURL& current_server,
                    const net::IPEndPoint& ip_endpoint) override;
   void OnDisconnected() override;
+
+  // MCSClient::Delegate implementation.
+  void OnMessageReceivedFromMCS(const MCSMessage& message) override;
+  void OnMessageSentToMCS(const std::string& app_id,
+                          const std::string& message_id,
+                          MCSClient::MessageSendStatus status) override;
 
  private:
   // Collection of pending unregistration requests. Keys are RegistrationInfo
@@ -154,14 +168,6 @@ class GCMClientImpl : public GCMClient,
 
   // Returns text representation of the enum State.
   std::string GetStateString() const;
-
-  // Callbacks for the MCSClient.
-  // Receives messages and dispatches them to relevant user delegates.
-  void OnMessageReceivedFromMCS(const gcm::MCSMessage& message);
-  // Receives status updates and errors for sent messages.
-  void OnMessageSentToMCS(const std::string& app_id,
-                          const std::string& message_id,
-                          MCSClient::MessageSendStatus status);
 
   // Runs after GCM Store load is done to trigger continuation of the
   // initialization.
@@ -212,14 +218,43 @@ class GCMClientImpl : public GCMClient,
   // Callback for resetting the GCM store. The store will be reloaded.
   void ResetStoreCallback(bool success);
 
-  // Notifies observers that a registration request has finished.
-  void OnRegisterFinished(scoped_refptr<RegistrationInfo> registration_info,
-                          const std::string& registration_id,
-                          Result result);
+  // Notifies observers that a legacy GCM registration request has finished.
+  void OnRegisterFinished(
+      scoped_refptr<GCMRegistrationInfo> gcm_registration_info,
+      const std::string& registration_id,
+      Result result);
 
-  // Completes the unregistration request.
-  void OnUnregisterCompleted(scoped_refptr<RegistrationInfo> registration_info,
-                             UnregistrationRequest::Status status);
+  // Removes a single matching registration or token from the cache and
+  // persistent store, returning true if found.
+  bool RemoveCachedRegistration(
+      const scoped_refptr<RegistrationInfo>& registration_info);
+
+  // Removes all cached Instance ID tokens for `app_id` from the cache and
+  // persistent store, returning true if at least one token was removed.
+  bool RemoveAllCachedInstanceIDTokens(const std::string& app_id);
+
+  // Starts an unregistration request for `registration_info` and tracks it as
+  // pending, invoking `callback` upon completion.
+  void StartUnregistrationRequest(
+      scoped_refptr<RegistrationInfo> registration_info,
+      const std::string& category,
+      const std::string& subtype,
+      std::unique_ptr<UnregistrationRequest::CustomRequestHandler>
+          request_handler,
+      const std::string& source_to_record,
+      base::OnceCallback<void(Result result)> callback);
+
+  // Completes a pending `UnregistrationRequest`, invoking `callback` with the
+  // mapped result.
+  void OnUnregistrationRequestCompleted(
+      scoped_refptr<RegistrationInfo> registration_info,
+      base::OnceCallback<void(Result result)> callback,
+      UnregistrationRequest::Status status);
+
+  // Notifies observers that an `Unregister()` call has finished.
+  void NotifyUnregisterFinished(
+      scoped_refptr<GCMRegistrationInfo> gcm_registration_info,
+      Result result);
 
   // Handles incoming data message and dispatches it to observers of this class.
   void HandleIncomingMessage(const gcm::MCSMessage& message);
@@ -285,7 +320,7 @@ class GCMClientImpl : public GCMClient,
   std::unique_ptr<GCMStore> gcm_store_;
 
   // Manages registrations and Instance ID data. Must be declared after
-  // `gcm_store_` so `gcm_store_` outlives it.
+  // `gcm_store_`, `clock_`, and `recorder_` so they outlive it.
   // TODO(b/545115204): Move ownership to `GCMDriverDesktop::IOWorker`.
   std::unique_ptr<GCMRegistrationManagerImpl> registration_manager_;
 

@@ -78,6 +78,7 @@
 <translation id="112840717907525620">Memoria cache pentru politică este OK</translation>
 <translation id="1131264053432022307">Imaginea copiată de tine</translation>
 <translation id="1132735979845538847"><ph name="ORIGIN" /> – Pentru a ieși din ecranul complet, trage din partea de sus și atinge butonul Înapoi</translation>
+<translation id="11370190534773372">Detaliile cardului au fost completate</translation>
 <translation id="1138458427267715730">Primește alerte când scade prețul pe orice site de pe web</translation>
 <translation id="1142713751288681188">Tip de hârtie</translation>
 <translation id="1142965388643537393">Informații de călătorie</translation>
@@ -583,6 +584,7 @@
 <translation id="1988881251331415125">Dacă scrierea este corectă, <ph name="BEGIN_LINK" />încearcă să rulezi Diagnosticarea de conectivitate<ph name="END_LINK" />.</translation>
 <translation id="1991370806334788445">Încearcă să permiți cookie-urile terță parte, ceea ce înseamnă mai puțină protecție pentru navigare, dar există șanse mai mari ca funcțiile site-urilor să funcționeze conform așteptărilor.</translation>
 <translation id="1992331125980284532">JIS B3</translation>
+<translation id="1995173078718234136">Se scanează conținutul...</translation>
 <translation id="1996557034791506430">Elimini permisiunea?</translation>
 <translation id="1997484222658892567"><ph name="URL" /> dorește să stocheze permanent cantități mari de date pe computer</translation>
 <translation id="1997774360448418989">Hârtie (ușoară)</translation>
@@ -666,7 +668,6 @@
 <translation id="2126374524350484896">PDF Producer:</translation>
 <translation id="2127090458081644412">Parola s-a salvat pe acest dispozitiv</translation>
 <translation id="2127747486437921899">Cursiv</translation>
-<translation id="2129163794581571479">Dezvoltat de Gemini cu Inteligență personalizată. Solicitările, titlurile paginilor și adresele URL pot fi examinate pentru a îmbunătăți completarea automată îmbunătățită. <ph name="BEGIN_LINK" />Gestionarea setărilor<ph name="END_LINK" /></translation>
 <translation id="2130448033692577677">Șabloanele specificate nu pot fi aplicate, deoarece politica DnsOverHttpsMode nu este setată.</translation>
 <translation id="2130699163006053678">A3x7</translation>
 <translation id="2131006834960167560">Opțiunea Activează completarea automată pentru plăți s-a deschis la înălțimea completă.</translation>
@@ -1216,7 +1217,6 @@
 <translation id="3041584414879052436">Lista emitentelor Cumpără acum, plătește mai târziu este închisă.</translation>
 <translation id="3041612393474885105">Informații despre certificat</translation>
 <translation id="3041835740069544003">Chrome poate acum să detecteze și să completeze mai multe formulare cu ajutorul Completării inteligente a formularelor. În acest scop, conținutul paginii și adresele URL pot fi procesate într-un spațiu privat din cloud. Gestionează în setări.</translation>
-<translation id="3047054686095898948">Salvează informațiile în <ph name="IDS_AUTOFILL_GOOGLE_WALLET_TITLE_1" /> și lucrează mai productiv, de exemplu, completează formulare în produsele Google. Poți să <ph name="BEGIN_LINK" />gestionezi informațiile<ph name="END_LINK" /> în <ph name="IDS_AUTOFILL_GOOGLE_WALLET_TITLE_2" /> pentru <ph name="ACCOUNT" /></translation>
 <translation id="305162504811187366">Istoricul Desktopului la distanță Chrome, inclusiv marcajele temporale, gazdele și ID-urile sesiunii de client</translation>
 <translation id="3052868890529250114">De obicei, te conectezi în siguranță la site-uri, dar Chrome nu a putut folosi o conexiune securizată de data aceasta. Un atacator ar putea încerca să intercepteze sau să modifice conexiunea la rețea. <ph name="BEGIN_LEARN_MORE_LINK" />Află mai multe despre acest mesaj de avertisment<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="3052964831964880138">Scădere de preț de <ph name="PRICE_DROP" /> pentru <ph name="PRODUCT_NAME" /></translation>
@@ -1587,7 +1587,6 @@ Pentru a ascunde opțiunile de plată mai târziu, accesează <ph name="BEGIN_LI
 <translation id="3655670868607891010">Dacă această pagină se afișează în mod frecvent, încercați <ph name="HELP_LINK" />.</translation>
 <translation id="3658742229777143148">Versiune</translation>
 <translation id="3659521826520353662">Ce site-uri definite de administrator sunt accesate și când: <ph name="ALLOWLISTED_WEBSITES" /></translation>
-<translation id="3663760610864720538">Dezvoltat de Gemini cu Inteligență personalizată. <ph name="BEGIN_LINK" />Gestionarea setărilor<ph name="END_LINK" /></translation>
 <translation id="3664479564786885722">Caută mai multe opțiuni de cumpărare de la alte magazine care vând acest produs.</translation>
 <translation id="3664782872746246217">Cuvinte cheie:</translation>
 <translation id="3670030362669914947">Număr</translation>
@@ -1866,7 +1865,6 @@ Pentru a ascunde opțiunile de plată mai târziu, accesează <ph name="BEGIN_LI
 <translation id="4112140312785995938">Derulează înapoi</translation>
 <translation id="4114007503059268298">Dorești să salvezi acest card în Contul Google și pe acest dispozitiv?</translation>
 <translation id="4114146879518089587">Accesează site-ul</translation>
-<translation id="4115378294792113321">Magenta</translation>
 <translation id="4116701314593212016">JIS B7</translation>
 <translation id="4116798170070772848">RA2</translation>
 <translation id="4117700440116928470">Domeniul politicii nu este acceptat.</translation>
@@ -3335,6 +3333,7 @@ Pentru a ascunde opțiunile de plată mai târziu, accesează <ph name="BEGIN_LI
 <translation id="6520509611422418552"><ph name="MEMBER_FIRST_NAME" /> s-a alăturat grupului de file <ph name="GROUP_NAME" /></translation>
 <translation id="6521745193039995384">Inactivă</translation>
 <translation id="6524830701589638230">Butonul Gestionează setările de accesibilitate, activează pentru a personaliza instrumentele de accesibilitate în setările Chrome.</translation>
+<translation id="652643331002043144">Acest site pare similar cu alte site-uri asociate cu phishing, programe malware și escrocherii.</translation>
 <translation id="6529173248185917884">A șaptea rolă</translation>
 <translation id="6529602333819889595">&amp;Repetați ștergerea</translation>
 <translation id="6532101170117367231">Salvați în Google Drive</translation>
@@ -3449,6 +3448,7 @@ Pentru a ascunde opțiunile de plată mai târziu, accesează <ph name="BEGIN_LI
 <translation id="6727094998759448074">SRA4</translation>
 <translation id="672853333773293432">Te-ai conectat folosind contul</translation>
 <translation id="6732087373923685049">Cameră</translation>
+<translation id="6736243959894955139">Adresă</translation>
 <translation id="6738516213925468394">Datele au fost criptate cu <ph name="BEGIN_LINK" />expresia de acces pentru sincronizare<ph name="END_LINK" /> la <ph name="TIME" />. Introdu expresia de acces pentru a începe sincronizarea.</translation>
 <translation id="6740851646645036700">Deocamdată ai atins limita pentru ajutor la scriere. Încearcă din nou mai târziu.</translation>
 <translation id="674375294223700098">Eroare de certificat de server necunoscută.</translation>
@@ -4548,6 +4548,7 @@ Detalii suplimentare:
 <translation id="8577348305244205642">Cardul virtual nu este disponibil</translation>
 <translation id="8579000896558714521">Modificarea tastaturii</translation>
 <translation id="8579561564816585231">Te-ai conectat folosind un serviciu Google, cum ar fi Managerul de parole</translation>
+<translation id="8580478010934016252">Accesează metodele de plată</translation>
 <translation id="8581064022803799721">Pagina se salvează în <ph name="LAST_BOOKMARKS_FOLDER" /></translation>
 <translation id="858637041960032120">Adăugați telefon
 </translation>

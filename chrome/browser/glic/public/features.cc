@@ -265,6 +265,9 @@ BASE_FEATURE(kGeic,
 
 const base::FeatureParam<bool> kGeicEnabledParam{&kGeic, "enabled", true};
 
+const base::FeatureParam<std::string> kGeicProductName{
+    &kGeic, "geic-product-name", "Gemini Enterprise"};
+
 BASE_FEATURE(kGeicActuation, base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kGeicSsr, base::FEATURE_DISABLED_BY_DEFAULT);
@@ -279,10 +282,27 @@ BASE_FEATURE(kGeicProviderChangePrompt,
 #endif
 );
 
-BASE_FEATURE(kGeicProviderSwitchNotice, base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kGeicProviderSwitchNotice,
+#if BUILDFLAG(IS_ANDROID)
+             base::FEATURE_DISABLED_BY_DEFAULT
+#else
+             base::FEATURE_ENABLED_BY_DEFAULT
+#endif
+);
+
+BASE_FEATURE(kGeicAnchorEntryPointForOnboardedUsers,
+#if BUILDFLAG(IS_ANDROID)
+             base::FEATURE_DISABLED_BY_DEFAULT
+#else
+             base::FEATURE_ENABLED_BY_DEFAULT
+#endif
+);
 
 const base::FeatureParam<std::string> kGeicGuestURL{&kGeic, "geic-guest-url",
                                                     ""};
+
+const base::FeatureParam<std::string> kGeicSelectableStages{
+    &kGeic, "geic-selectable-stages", ""};
 
 // Default-enabled platforms: all (gates FRE completion whenever GEiC is
 // active).
@@ -367,6 +387,8 @@ BASE_FEATURE(kGlicNativeFreAndroid, base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kGlicActionFirstFRE, base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kGlicActionFirstSuggestions, base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kGlicWarmOnNudge, base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kGlicWarmOnIph, base::FEATURE_DISABLED_BY_DEFAULT);
@@ -446,8 +468,9 @@ const base::FeatureParam<std::string> kGlicConversationSharingCaptureUrls{
 
 #if BUILDFLAG(IS_ANDROID)
 // crbug.com/577140928
+// Default-enabled platforms: Android only.
 BASE_FEATURE(kGlicExperimentalTriggeringBackgroundOptInNotification,
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 const base::FeatureParam<base::TimeDelta>
     kGlicExperimentalTriggeringBackgroundOptInTimeout{
         &kGlicExperimentalTriggeringBackgroundOptInNotification,
@@ -455,7 +478,9 @@ const base::FeatureParam<base::TimeDelta>
 #endif  // BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kGlicApiBundleResource, base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kGlicDrivePicker, base::FEATURE_DISABLED_BY_DEFAULT);
+// Default-enabled platforms: all (kill switch for the modal Drive picker; only
+// desktop advertises the capability, so this has no effect on Android).
+BASE_FEATURE(kGlicDrivePicker, base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kGlicCic, base::FEATURE_DISABLED_BY_DEFAULT);
 const base::FeatureParam<std::string> kGlicCicUrl{

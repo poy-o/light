@@ -7,22 +7,23 @@
 
 #import <Foundation/Foundation.h>
 
-namespace web {
-class WebState;
-}  // namespace web
-
 // Commands to show/hide the Actor Overlay UI.
 @protocol ActorOverlayCommands <NSObject>
 
-// Shows or updates the Actor Overlay UI for the given `webState`. When
-// `showScrim` is `YES`, a touch-blocking scrim is shown over the content area
-// in addition to the border glow; when `NO`, only the border glow is shown and
-// page interactions remain enabled.
-- (void)showActorOverlayForWebState:(web::WebState*)webState
-                          showScrim:(BOOL)showScrim;
+// Shows or updates the Actor Overlay UI with both the border glow and a
+// touch-blocking scrim over the content area.
+- (void)showActorOverlayWithScrim;
+
+// Shows or updates the Actor Overlay UI with only the border glow, leaving
+// page interactions enabled.
+- (void)showActorOverlayWithoutScrim;
 
 // Hides the Actor Overlay UI.
 - (void)hideActorOverlay;
+
+// Shows a snackbar explaining that interaction with the tab is limited while an
+// actor controls it. No-op when the actor overlay scrim is not shown.
+- (void)showActorInteractionLimitedSnackbar;
 
 @end
 

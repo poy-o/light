@@ -150,7 +150,6 @@ Još podešavanja koja koriste podatke za poboljšanje doživljaja Chrome-a potr
 <translation id="1543035591122163372">Prijavite se da biste mogli da pristupate lozinkama i drugom sadržaju sa <ph name="DEVICE_TYPE" /></translation>
 <translation id="1544084554881119930">Načini plaćanja i adrese neće biti šifrovani. Istorija pregledanja iz Chrome-a se neće sinhronizovati.
 Samo neko ko ima pristupnu frazu može da čita šifrovane podatke. Pristupna fraza se ne šalje Google-u niti se čuva na Google-u. Ako zaboravite pristupnu frazu ili želite da promenite ovo podešavanje, <ph name="BEGIN_LINK" />obrišite Chrome podatke na nalogu<ph name="END_LINK" />.</translation>
-<translation id="1544826120773021464">Da biste upravljali Google nalogom, dodirnite dugme „Upravljajte nalogom“</translation>
 <translation id="1549000191223877751">Premesti u drugi prozor</translation>
 <translation id="1553358976309200471">Ažuriraj Chrome</translation>
 <translation id="1554352084785952638"><ph name="SEARCH_ENGINE" /> za termin: <ph name="SEARCH_TERMS" /></translation>
@@ -167,7 +166,6 @@ Samo neko ko ima pristupnu frazu može da čita šifrovane podatke. Pristupna fr
 <translation id="1600756129506222718"><ph name="TAB_TITLE" />, kartica za deljenje</translation>
 <translation id="1601378265092360672">Podaci pregledanja obuhvataju istoriju pregledanja, kolačiće i druge podatke o sajtovima, keširane slike i fajlove i otvorene kartice</translation>
 <translation id="160275202205869636">Kada je uključeno, koristite i čuvajte podatke na Google nalogu. Kada je isključeno, podaci se čuvaju samo na ovom uređaju.</translation>
-<translation id="160403827062749147">Dobro došli u Google Chrome, najbezbedniji pregledač na svetu</translation>
 <translation id="1628019612362412531">{NUM_SELECTED,plural, =1{Ukloni 1 izabranu stavku}one{Ukloni # izabranu stavku}few{Ukloni # izabrane stavke}other{Ukloni # izabranih stavki}}</translation>
 <translation id="1639239467298939599">Učitava se</translation>
 <translation id="1641113438599504367">Bezbedno pregledanje</translation>
@@ -283,6 +281,7 @@ Samo neko ko ima pristupnu frazu može da čita šifrovane podatke. Pristupna fr
 <translation id="2122601567107267586">Otvaranje aplikacije nije uspelo</translation>
 <translation id="2128579426409352593"><ph name="TAB_TITLE" />, višestruko izabrana zakačena kartica za deljenje</translation>
 <translation id="213279576345780926">Zatvorili ste karticu <ph name="TAB_TITLE" /></translation>
+<translation id="2133857665503360653">Ponovo otvorite <ph name="FILE_NAME" /></translation>
 <translation id="2138283760993967204">Ikona Upravljajte</translation>
 <translation id="2138632817776076519"><ph name="TAB_TITLE" />, izabrana kartica za snimanje</translation>
 <translation id="2141396931810938595">Na osnovu korišćenja</translation>
@@ -450,6 +449,7 @@ Samo neko ko ima pristupnu frazu može da čita šifrovane podatke. Pristupna fr
 <translation id="2762000892062317888">malopre</translation>
 <translation id="276378135349383280">Prikaži Gemini na traci s alatkama u dnu</translation>
 <translation id="276969039800130567">Prijavljeni ste kao <ph name="USER_EMAIL_ADDRESS" />.</translation>
+<translation id="2770082596325051055">Pauzirajte fajl <ph name="FILE_NAME" /></translation>
 <translation id="2777555524387840389">Još <ph name="SECONDS" /> sek</translation>
 <translation id="2779651927720337254">nije uspelo</translation>
 <translation id="2781151931089541271">Još 1 sek</translation>
@@ -791,6 +791,7 @@ Samo neko ko ima pristupnu frazu može da čita šifrovane podatke. Pristupna fr
 <translation id="4121654769234887259">Ne morate da zapamtite ovu lozinku. Čuva se u Google menadžeru lozinki za <ph name="USERNAME" />.</translation>
 <translation id="4128312955780560730">Zaključajte kartice bez arhiviranja</translation>
 <translation id="4132137475637520539">Neka se pridruži svako sa linkom</translation>
+<translation id="4132969033912447558">Nastavite preuzimanje fajla <ph name="FILE_NAME" /></translation>
 <translation id="4136632885151622181"><ph name="TAB_TITLE" />, višestruko izabrana zakačena kartica za snimanje</translation>
 <translation id="4137746084635924146">Aktuelni jezik uređaja</translation>
 <translation id="414128724510021958">Verzije sajtova za računar koje se podrazumevano zahtevaju</translation>
@@ -866,7 +867,6 @@ Samo neko ko ima pristupnu frazu može da čita šifrovane podatke. Pristupna fr
 <translation id="4374192654218566997">\n\nMožete i da uklonite ove podatke sa ovog uređaja:</translation>
 <translation id="4378154925671717803">Telefon</translation>
 <translation id="4380055775103003110">Ako problem nastavi da se javlja, možete da probate druge načine da biste nastavili na <ph name="SITE_ETLD_PLUS_ONE" />.</translation>
-<translation id="4381351546374507910">Prijavite se da biste pristupali obeleživačima, lozinkama i podacima za automatsko popunjavanje na svim uređajima.</translation>
 <translation id="4384468725000734951">Koristite Sogou za pretragu</translation>
 <translation id="4387647248986092471">Primeni zaključavanje profila automobila</translation>
 <translation id="4387817230000841154">Otvori Preuzimanja</translation>
@@ -1893,6 +1893,7 @@ Da biste promenili ovo podešavanje, <ph name="BEGIN_LINK" />izbrišite Chrome p
 <translation id="8152331954420209374">Idi na Objektiv</translation>
 <translation id="8153206878708357851">Uključite/isključite navigaciju kursorom</translation>
 <translation id="8154784523622173959">Personalizujte pozadinu ove stranice</translation>
+<translation id="8161480780962562636">Uverite se da su lozinke bezbedne, saznajte da li su ugrožene i dobijte savete kako da se zaštitite onlajn</translation>
 <translation id="8163820386638255770">Da biste koristili i čuvali lozinke na Google nalogu, potvrdite svoj identitet</translation>
 <translation id="8174047975335711832">Informacije o uređaju</translation>
 <translation id="8175940240143658258">{ARCHIVED_TAB_COUNT,plural, =1{(1) neaktivna stavka}one{(#) neaktivna stavka}few{(#) neaktivne stavke}other{(#) neaktivnih stavki}}</translation>
@@ -1907,7 +1908,6 @@ Da biste promenili ovo podešavanje, <ph name="BEGIN_LINK" />izbrišite Chrome p
 <translation id="8210770465353466621">Ovde ćete pronaći kartice</translation>
 <translation id="8212799748012101103">Otvori pretragu kartica</translation>
 <translation id="8215740705341534369">Bočna tabela</translation>
-<translation id="8218622182176210845">Upravljajte nalogom</translation>
 <translation id="8221985041778490865">Brišu se podaci pregledanja</translation>
 <translation id="8223642481677794647">Meni kartice fida</translation>
 <translation id="82296173028782770">Izmenite upit za pretragu: <ph name="SEARCH_QUERY" /></translation>
@@ -2038,6 +2038,7 @@ Da biste promenili ovo podešavanje, <ph name="BEGIN_LINK" />izbrišite Chrome p
 <translation id="8676789164135894283">Potvrde prijavljivanja</translation>
 <translation id="867914734596684889">Prikažite ili sakrijte traku sa obeleživačima</translation>
 <translation id="8683039184091909753">slika</translation>
+<translation id="8687103160920393343">Otkažite fajl <ph name="FILE_NAME" /></translation>
 <translation id="8688183792442786085"><ph name="TAB_TITLE" />, izabrana kartica</translation>
 <translation id="8694622119922491927"><ph name="APP_NAME" /> traži dozvolu da pristupi uređajima za ljudski interfejs (HID-ovima) za ovaj sajt. Ovo podešavanje možete da promenite kasnije u Podešavanja &gt; Aplikacije &gt; Poseban pristup aplikacijama.</translation>
 <translation id="8696297579102085705">Pošalji na uređaj</translation>

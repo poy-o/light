@@ -578,12 +578,6 @@ inline constexpr char kLevelUpPhotoSearchesPerformedStat[] =
 inline constexpr char kNTPContentSuggestionsEnabled[] =
     "ios.ntp.content_suggestions_enabled";
 
-// Added in M149 to resolve an issue where images were stored too large on disk
-// after being upscaled and transcoded. This will be removed after M153 when the
-// migration is complete.
-inline constexpr char kIosImageFetcherShouldClearCache[] =
-    "ios.image_fetcher_should_clear_cache";
-
 // Preference that holds a boolean indicating whether suggestions for supervised
 // users on the NTP are enabled.
 inline constexpr char kNTPContentSuggestionsForSupervisedUserEnabled[] =
@@ -735,6 +729,9 @@ inline constexpr char kAgeMismatchSignoutTimestamp[] =
 // Bool that represents whether iCloud backups are allowed by policy.
 inline constexpr char kAllowChromeDataInBackups[] =
     "ios.allow_chrome_data_in_backups";
+
+// A boolean specifying whether the dinosaur easter egg game is enabled.
+inline constexpr char kAllowDinosaurEasterEgg[] = "allow_dinosaur_easter_egg";
 
 // Preference that holds the string value indicating the NTP URL to use for the
 // NTP Location policy.

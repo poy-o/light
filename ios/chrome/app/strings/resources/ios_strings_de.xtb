@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">Passwörter teilen</translation>
 <translation id="1554043146674176775">KI‑Modus deaktivieren</translation>
 <translation id="1554477036522844996">Neues Fenster</translation>
+<translation id="1555014818414775661">Bilder hinzufügen</translation>
 <translation id="1557806604681757705">deinem Computer</translation>
 <translation id="1558391695376153246">Inkognitotabs schließen</translation>
 <translation id="1560153516220021659">Button für die minimierte Toolbar in der sekundären Toolbar</translation>
@@ -912,7 +913,6 @@
 <translation id="3857113360369572832">Öffne die <ph name="BEGIN_BOLD" />Safari-Einstellungen<ph name="END_BOLD" /></translation>
 <translation id="3858860766373142691">Name</translation>
 <translation id="386224966259596343">Du kannst diese Informationen in Wallet speichern, wenn du das nächste Mal ein entsprechendes Formular ausfüllst.</translation>
-<translation id="3868495844258915202">Vollständige URL anzeigen</translation>
 <translation id="3870931306085184145">Keine gespeicherten Passwörter für <ph name="DOMAIN" /></translation>
 <translation id="3875783148670536197">So gehts</translation>
 <translation id="3878657761594430423">Sheet Grabber</translation>
@@ -1212,6 +1212,7 @@
 <translation id="479628432297359449">Download beenden?</translation>
 <translation id="4796496140132859135">Tabgruppe. Minimiert.</translation>
 <translation id="4800912004582762296">Klickt</translation>
+<translation id="4800930308997591052">Wechsle zu <ph name="EMAIL" />, um Tabs nahtlos zwischen deinen Geräten zu teilen und deine Passwörter, Lesezeichen und andere Daten aus deinem Google-Konto abzurufen.</translation>
 <translation id="4802185666270672526">„Desktopwebsite anfordern“ ausblenden</translation>
 <translation id="4803185665210547709">Von deiner Organisation verwaltet.
 <ph name="BEGIN_LINK" />Weitere Informationen<ph name="END_LINK" /></translation>
@@ -1393,7 +1394,6 @@
 <translation id="5282340693022193851">Wenn du Benachrichtigungen zum Preis-Tracking erhalten möchtest, aktiviere Benachrichtigungen in den iOS‑Einstellungen.</translation>
 <translation id="528857768909044842">Tabgruppen werden hier gespeichert</translation>
 <translation id="5294624619177114121">Mobile Benachrichtigungen</translation>
-<translation id="5295239312320826323">Konto <ph name="USER_EMAIL" /> entfernen?</translation>
 <translation id="5300589172476337783">Anzeigen</translation>
 <translation id="5311061401280561833">Kamera- und Mikrofonzugriff gewährt</translation>
 <translation id="5313967007315987356">Website hinzufügen</translation>
@@ -2144,11 +2144,11 @@ Du kannst „Level Up“ jederzeit wieder aktivieren.</translation>
 <translation id="7603852183842204213">Pop-ups blockiert (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Synchronisierung funktioniert nicht</translation>
 <translation id="760667371114328991">Sicherheitscheck-Benachrichtigungen deaktivieren</translation>
-<translation id="7612619742409846846">Bei Google angemeldet als</translation>
 <translation id="7612849887607288481">Menü für KI-Prototyping öffnen</translation>
 <translation id="7618220760967055820">Festlegen, welcher Button in der Symbolleiste angezeigt wird</translation>
 <translation id="7620522820075868385">Abbrechen</translation>
 <translation id="762078666799342162">Du kannst deine früheren Downloads in der App <ph name="BEGIN_LINK" />Dateien<ph name="END_LINK" /> ansehen</translation>
+<translation id="7636034359405891151">Auf dem Computer dort weitermachen, wo du aufgehört hast</translation>
 <translation id="7638584964844754484">Falsche Passphrase</translation>
 <translation id="7639276194483401980">{COUNT,plural, =0{Gehackte Passwörter}=1{{COUNT} gehacktes Passwort}other{{COUNT} gehackte Passwörter}}</translation>
 <translation id="7640669552036055091">Tabs von Android</translation>

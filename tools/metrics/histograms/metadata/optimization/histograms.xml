@@ -733,7 +733,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="OptimizationGuide.AIPageContent.ActiveRequestCount"
-    units="requests" expires_after="2027-03-21">
+    units="requests" expires_after="2027-05-23">
   <owner>alexmt@chromium.org</owner>
   <owner>khushalsagar@chromium.org</owner>
   <summary>
@@ -1214,6 +1214,21 @@ chromium-metrics-reviews@google.com.
     successfully received.
   </summary>
   <token key="ModelExecutionFeature" variants="ModelExecutionFeature"/>
+</histogram>
+
+<histogram name="OptimizationGuide.ModelExecution.AndroidManifestLoadResult"
+    enum="OptimizationGuideAndroidManifestLoadResult"
+    expires_after="2027-05-02">
+  <owner>holte@chromium.org</owner>
+  <owner>wittman@chromium.org</owner>
+  <owner>feich@microsoft.com</owner>
+  <summary>
+    Records the result of each completed Android component config load when
+    kAndroidModelConfigComponentLoading is enabled and the provider reports an
+    installed directory, including at startup and after updates. Success means
+    the config was read, parsed, and specifies the expected model execution
+    feature.
+  </summary>
 </histogram>
 
 <histogram
@@ -2083,7 +2098,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="OptimizationGuide.PageContentAnnotations.CategoryClassifier.EducationScore"
-    units="%" expires_after="2027-03-21">
+    units="%" expires_after="2027-05-23">
   <owner>zekunjiang@google.com</owner>
   <owner>chrome-intelligence-core@google.com</owner>
   <summary>
@@ -2094,7 +2109,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="OptimizationGuide.PageContentAnnotations.CategoryClassifier.ShoppingScore"
-    units="%" expires_after="2027-03-21">
+    units="%" expires_after="2027-05-23">
   <owner>zekunjiang@google.com</owner>
   <owner>chrome-intelligence-core@google.com</owner>
   <summary>
@@ -2477,7 +2492,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="OptimizationGuide.PageContentExtraction.AutomaticOnLoad.ExtractionLatency"
-    units="ms" expires_after="2027-03-21">
+    units="ms" expires_after="2027-05-23">
   <owner>alexmt@chromium.org</owner>
   <owner>chrome-intelligence-core@google.com</owner>
   <summary>
@@ -2818,6 +2833,18 @@ chromium-metrics-reviews@google.com.
   <summary>
     Records the time taken inside PageContentStore to fetch and decrypt the page
     context for a tab on the background thread.
+  </summary>
+</histogram>
+
+<histogram name="OptimizationGuide.PageContentStore.SqliteMemoryUsage"
+    units="KB" expires_after="2027-06-01">
+  <owner>alexmt@chromium.org</owner>
+  <owner>chrome-intelligence-core@google.com</owner>
+  <summary>
+    Records the approximate SQLite memory usage (page cache, schema, and
+    prepared statements, in KiB via sql::Database::GetMemoryUsage()) for
+    PageContentStore on the background thread immediately after each successful
+    write commit in AddPageContent().
   </summary>
 </histogram>
 

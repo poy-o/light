@@ -52,6 +52,7 @@
 <translation id="1572572333538561328">Torna a obrir el mode IA de la Cerca</translation>
 <translation id="1574377791422810894">Eines de seguretat de Chromium</translation>
 <translation id="1594928384848033697">Chromium vol suprimir les dades del gestor de contrasenyes. Escriu la teva contrasenya de Windows per permetre-ho.</translation>
+<translation id="1599690375407103815">Quan l'opció està desactivada, Chromium suprimeix els models d'IA del dispositiu i no els torna a baixar. És possible que alguns llocs web i algunes funcions de Chromium no funcionin.</translation>
 <translation id="1607715478322902680">{COUNT,plural, =0{L'administrador necessita que reiniciïs Chromium per aplicar una actualització}=1{L'administrador necessita que reiniciïs Chromium per aplicar una actualització. La finestra d'incògnit no es tornarà a obrir.}other{L'administrador necessita que reiniciïs Chromium per aplicar una actualització. Les # finestres d'incògnit no es tornaran a obrir.}}</translation>
 <translation id="1625909126243026060">Revisa els controls principals de privadesa i seguretat a Chromium</translation>
 <translation id="1640672724030957280">S'està baixant...</translation>
@@ -66,6 +67,7 @@
 <translation id="1745121272106313518">Chromium es reiniciarà d'aquí a <ph name="REMAINING_TIME" /></translation>
 <translation id="1749104137266986751">Quan l'HTTPS no estigui disponible, Chromium utilitzarà una connexió no segura sense avisar-te</translation>
 <translation id="1774152462503052664">Permet que Chromium s'executi en segon pla</translation>
+<translation id="1792680680989393197">Pots suprimir-los en qualsevol moment. És possible que Chromium els torni a baixar automàticament quan un lloc web o una funció els necessitin.</translation>
 <translation id="1793486931176048546">Fes clic a <ph name="BEGIN_BOLD" />Sí<ph name="END_BOLD" /> a la notificació de Windows per fixar Chromium a la barra de tasques i accedir-hi ràpidament.</translation>
 <translation id="1808667845054772817">Torna a instal·lar Chromium</translation>
 <translation id="1820835682567584003">Chromium està intentant <ph name="AUTHENTICATION_PURPOSE" /></translation>
@@ -123,7 +125,6 @@
 <translation id="2287771843518581140">{NUM_TABS,plural, =1{Chromium recomana posar en pausa la pestanya que està alentint el navegador}other{Chromium recomana posar en pausa les pestanyes que estan alentint el navegador}}</translation>
 <translation id="2307973900865360088">Mantén al Dock</translation>
 <translation id="2313870531055795960">Compara els URL amb una llista de llocs web no segurs emmagatzemada a Chromium. Si un lloc web prova de robar-te la contrasenya o si baixes un fitxer maliciós, és possible que Chromium també n'enviï els URL, inclosos fragments de contingut de les pàgines, a Navegació segura.</translation>
-<translation id="2350411688004301551">Canvia a Gemini Enterprise</translation>
 <translation id="2356070529366658676">Pregunta</translation>
 <translation id="2359808026110333948">Continua</translation>
 <translation id="2361918034042471035">L'extensió "<ph name="EXTENSION_NAME" />" vol que iniciïs la sessió a Chromium</translation>
@@ -147,6 +148,7 @@
 <translation id="2572494885440352020">Aplicació d'ajuda de Chromium</translation>
 <translation id="2575822587468774919">Selecciona el que vulguis per cercar-ho amb la cerca d'imatges</translation>
 <translation id="2576118232315942160">Per obtenir les teves contrasenyes i altres dades en tots els dispositius, inicia la sessió a Chromium</translation>
+<translation id="2587622539943955767">Escaneja el codi QR amb el telèfon per baixar Chromium i iniciar la sessió al teu Compte de Google.</translation>
 <translation id="2587885422541096572">per cercar amb Chromium.</translation>
 <translation id="2592940277904433508">Continua utilitzant Chromium</translation>
 <translation id="259935314519650377">No s'ha pogut desar l'instal·lador baixat a la memòria cau. Error: <ph name="UNPACK_CACHING_ERROR_CODE" />.</translation>
@@ -172,7 +174,6 @@
 <translation id="2846251086934905009">Error d'instal·lació: l'instal·lador no ha completat el procés. La instal·lació s'ha anul·lat.</translation>
 <translation id="2850691299438350830">Et protegeix a Chromium i és possible que s'utilitzi per millorar la teva seguretat en altres aplicacions de Google quan tinguis la sessió iniciada</translation>
 <translation id="2885378588091291677">Gestor de tasques</translation>
-<translation id="2898830646167954300">Torna a l'assistent de Gemini no gestionat</translation>
 <translation id="2910007522516064972">Quant a &amp;Chromium</translation>
 <translation id="2915996080311180594">Reinicia més tard</translation>
 <translation id="2933336679234709858">Les teves dades s'encripten amb la teva frase de contrasenya. Per utilitzar i desar les dades de Chromium al teu Compte de Google, introdueix la frase de contrasenya.</translation>
@@ -251,6 +252,7 @@
 <translation id="3751920144677881410">Des del botó "Tauler lateral de la Cerca" de la barra d'eines, pots tornar a obrir el tauler lateral de la Cerca per fer preguntes mentre navegues</translation>
 <translation id="3788675262216168505">Gestiona els perfils de Chromium</translation>
 <translation id="3790262771324122253">Descobreix per què Chromium bloqueja algunes baixades</translation>
+<translation id="3793196697433239004">Utilitza l'emmagatzematge del dispositiu. Chromium suprimeix els models d'IA que no s'utilitzen al cap de 45 dies o quan queda poc emmagatzematge</translation>
 <translation id="379589255253486813">Chromium t'avisarà si hi ha res que hagis de revisar</translation>
 <translation id="3802055581630249637">Chromium precarrega les pàgines que és probable que visitis perquè es carreguin més ràpidament quan ho facis</translation>
 <translation id="3810973564298564668">Gestiona</translation>
@@ -332,6 +334,7 @@
 <translation id="4621240073146040695">Gairebé has acabat amb l'actualització. Reinicia Chromium per completar-la.</translation>
 <translation id="4625064703209785397">Agilitza els llocs web amb el motor V8 de Chromium, però fa que Chromium sigui una mica menys resistent als atacs</translation>
 <translation id="4626321472657185181">Obre la cerca amb Chromium</translation>
+<translation id="4639628733881319833">Comparteix una captura de pantalla de contingut extern a Chromium, com ara altres aplicacions o fitxers</translation>
 <translation id="4654639495249754755">Perfil de Chromium</translation>
 <translation id="4665829708273112819">Advertiment: Chromium no pot evitar que les extensions registrin l'historial de navegació. Per desactivar aquesta extensió en mode d'incògnit, desselecciona aquesta opció.</translation>
 <translation id="4673151026126227699">Si també comparteixes els informes d'ús de Chromium, aquests informes inclouen els URL que visites</translation>
@@ -358,7 +361,6 @@
 <translation id="4950660488495335294">Els perfils de Chromium et permeten separar tot el contingut de Chromium. Crea perfils per a amics i familiars, o separa la feina de la diversió.</translation>
 <translation id="4992938037305302429">El teu compte a Chromium</translation>
 <translation id="5123973130450702873">Chromium necessita permís per fer un seguiment de les teves mans</translation>
-<translation id="5139546603444206048">Pots canviar a l'assistent de Gemini associat originalment al teu Compte de Google i que no gestiona <ph name="DOMAIN" />. Les respostes ja no es basaran en els fitxers ni els serveis gestionats per <ph name="DOMAIN" /> i l'historial de xats no es transferirà. És possible que no sigui adequat utilitzar-lo a la feina. Per canviar, cal reiniciar Chromium.</translation>
 <translation id="5141988424377517949">No l'has visitat recentment. Chromium ha suprimit <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> i <ph name="PERMISSION_3" />.</translation>
 <translation id="5171868502429358653">Inicia la sessió a Chromium</translation>
 <translation id="5174969993834422967">Normalment bloqueges les notificacions. Per permetre que aquest lloc web et mostri notificacions, fes clic a la icona de notificacions que hi ha a l'extrem dret de la barra d'ubicacions.</translation>
@@ -390,6 +392,7 @@
 <translation id="5405650547142096840">Elimina de Chromium</translation>
 <translation id="5424544524441439284">Redueix el rendiment, però fa que Chromium sigui més resistent als atacs</translation>
 <translation id="5427571867875391349">Defineix Chromium com a navegador predeterminat</translation>
+<translation id="5435079900593041559">Mostra la cerca amb Chromium a la barra de tasques de Windows i activa les tecles de drecera</translation>
 <translation id="5438241569118040789"><ph name="PAGE_TITLE" /> - Chromium Beta</translation>
 <translation id="5460618461609401056">{NUM_TABS,plural, =1{Chromium recomana posar en pausa la pestanya que està alentint el navegador}other{Chromium recomana posar en pausa les pestanyes que estan alentint el navegador}}</translation>
 <translation id="5473971139929175403">Pot ser que Chromium no funcioni correctament perquè ja no és compatible amb aquesta distribució de Linux</translation>
@@ -416,6 +419,7 @@ Si aquesta pàgina no funciona de la manera prevista, prova de permetre l'optimi
 <translation id="5690427481109656848">Google LLC</translation>
 <translation id="5698481217667032250">Mostra Chromium en aquest idioma</translation>
 <translation id="569897634095159764">No es pot connectar a Internet. El servidor intermediari necessita autenticació.</translation>
+<translation id="5755377560105094542">Els llocs web i Chromium poden utilitzar la IA que s'executa directament al dispositiu per a funcions com ara resums, correccions, subtítols i més. Aquesta funció és independent de Gemini a Chromium. <ph name="BEGIN_LINK" />Més informació sobre la IA al dispositiu<ph name="END_LINK" /></translation>
 <translation id="5762954990778294910">Des del botó "Tauler de la Cerca" de la barra d'eines, pots tornar a obrir el tauler de la Cerca per fer preguntes mentre navegues</translation>
 <translation id="5768371961535086509">Chromium allibera memòria de les pestanyes inactives. Així, les pestanyes actives i altres aplicacions disposen de més recursos de l'ordinador i es manté l'agilitat de Chromium. Les pestanyes inactives s'activen de nou automàticament quan hi tornes. <ph name="BEGIN_LINK" />Obtén més informació sobre la funció Estalvi de memòria<ph name="END_LINK" />.</translation>
 <translation id="5775198138441669627">Si has oblidat la frase de contrasenya o vols canviar aquesta opció de configuració, <ph name="SETTINGS_LINK" /> les dades de Chromium del teu compte</translation>
@@ -472,6 +476,7 @@ Si aquesta pàgina no funciona de la manera prevista, prova de permetre l'optimi
 <translation id="6245734527075554892">Compara els URL amb una llista de llocs web no segurs emmagatzemada a Chromium</translation>
 <translation id="6248213926982192922">Estableix Chromium com a navegador predeterminat</translation>
 <translation id="6248988683584659830">Cerca a la configuració</translation>
+<translation id="6251986571402453005">Chromium baixa i actualitza aquests models d'IA automàticament</translation>
 <translation id="6268381023930128611">Voleu tancar la sessió de Chromium?</translation>
 <translation id="6270547683008298381">Aquestes pestanyes utilitzen recursos addicionals. Per millorar el rendiment, permet que Chromium les desactivi.</translation>
 <translation id="6281746429495226318">Personalitza el teu perfil de Chromium</translation>
@@ -712,7 +717,6 @@ Chromium no pot recuperar la configuració.</translation>
 <translation id="8447525028100794994">Més informació sobre les consultes amb la cerca d'imatges a Chromium</translation>
 <translation id="8453117565092476964">L'arxiu d'instal·lació està malmès o no és vàlid. Torneu a baixar Chromium.</translation>
 <translation id="8471947159125090285">Per utilitzar i desar les dades de Chromium al teu Compte de Google, verifica la teva identitat</translation>
-<translation id="8473541503127475913">Reinicia Chromium per canviar</translation>
 <translation id="8482493977473846331">Mostra sol·licituds per iniciar la sessió a Chromium</translation>
 <translation id="8493179195440786826">Chromium no està actualitzat</translation>
 <translation id="850264194101621529">Gràcies per triar Chromium com a navegador predeterminat.</translation>
@@ -746,7 +750,6 @@ Chromium no pot recuperar la configuració.</translation>
 <translation id="8906384069222226849">Chromium requereix Windows 10 (versió 1809) o una versió posterior.</translation>
 <translation id="8907580949721785412">Chromium està provant de mostrar contrasenyes. Escriviu la vostra contrasenya de Windows per permetre-ho.</translation>
 <translation id="8910309838319708610">Fet! Ara pots fer preguntes fàcilment mentre navegues amb el mode IA de la Cerca</translation>
-<translation id="8915682436012075700">Aquest navegador gestionat pot utilitzar un assistent de Gemini que <ph name="DOMAIN" /> ha configurat per a la feina. Pot cercar informació i proporcionar respostes basades en els fitxers i els serveis aprovats de l'organització. És possible que no sigui recomanable utilitzar-lo amb un perfil personal. L'historial de xats no es transferirà. Per canviar, cal reiniciar Chromium.</translation>
 <translation id="8932992523185907506">Chromium ja no és el teu navegador predeterminat. Vols establir Chromium com a navegador predeterminat?</translation>
 <translation id="8941642502866065432">Chromium no es pot actualitzar</translation>
 <translation id="8944232836376404813">Amb aquesta acció:
@@ -764,6 +767,7 @@ Chromium no pot recuperar la configuració.</translation>
 <translation id="8981886272598860786">per cercar amb Chromium o personalitzar-ho a <ph name="BEGIN_LINK" />Configuració<ph name="END_LINK" /></translation>
 <translation id="8988036198400390003">Gestiona els perfils de Chromium</translation>
 <translation id="8993855408334954620">Utilitza el teclat per navegar entre Gemini a Chromium i la pestanya oberta.</translation>
+<translation id="9002987346523307190">Chromium suprimirà els models d'IA d'aquest dispositiu. És possible que alguns llocs web i algunes funcions de Chromium no funcionin.</translation>
 <translation id="9018218886431812662">La instal·lació s'ha completat</translation>
 <translation id="9022552996538154597">Inicia la sessió a Chromium</translation>
 <translation id="9035791714111278917">Mostra la cerca amb Chromium a la barra de menú de Mac i activa les tecles de drecera</translation>

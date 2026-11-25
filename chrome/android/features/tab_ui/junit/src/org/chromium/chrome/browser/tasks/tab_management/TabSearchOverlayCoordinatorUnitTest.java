@@ -249,7 +249,6 @@ public class TabSearchOverlayCoordinatorUnitTest {
                         ObservableSuppliers.createNonNull(mModalDialogManager),
                         mActivityLifecycleDispatcher,
                         mTabModelSelectorSupplier,
-                        /* edgeToEdgeSystemBarColorHelper= */ null,
                         mBackPressManager,
                         ObservableSuppliers.createNonNull(mCompositorViewHolder),
                         mTabGroupUiActionHandlerSupplier,
@@ -330,7 +329,6 @@ public class TabSearchOverlayCoordinatorUnitTest {
                         ObservableSuppliers.createNonNull(mModalDialogManager),
                         mActivityLifecycleDispatcher,
                         mTabModelSelectorSupplier,
-                        /* edgeToEdgeSystemBarColorHelper= */ null,
                         mBackPressManager,
                         ObservableSuppliers.createNonNull(mCompositorViewHolder),
                         mTabGroupUiActionHandlerSupplier,
@@ -616,7 +614,7 @@ public class TabSearchOverlayCoordinatorUnitTest {
         Token groupId = new Token(1, 2);
         SavedTabGroup syncGroup = new SavedTabGroup();
         syncGroup.syncId = "sync_id_1";
-        syncGroup.localId = new LocalTabGroupId(groupId);
+        syncGroup.localId = new LocalTabGroupId(TabGroupId.fromRawToken(groupId));
 
         when(mTabGroupSyncService.getGroup("group_id_1")).thenReturn(syncGroup);
         when(mTabModel.getTabsInGroup(TabGroupId.fromOptionalToken(groupId)))
@@ -650,7 +648,7 @@ public class TabSearchOverlayCoordinatorUnitTest {
 
         SavedTabGroup syncGroupAfter = new SavedTabGroup();
         syncGroupAfter.syncId = "sync_id_1";
-        syncGroupAfter.localId = new LocalTabGroupId(groupId);
+        syncGroupAfter.localId = new LocalTabGroupId(TabGroupId.fromRawToken(groupId));
 
         when(mTabGroupSyncService.getGroup("group_id_1"))
                 .thenReturn(syncGroupBefore)
@@ -770,7 +768,6 @@ public class TabSearchOverlayCoordinatorUnitTest {
                         any(),
                         mBringTabGroupToFrontCallbackCaptor.capture(),
                         mOmniboxActionDelegateCaptor.capture(),
-                        any(),
                         any(),
                         any());
     }
@@ -1336,7 +1333,6 @@ public class TabSearchOverlayCoordinatorUnitTest {
                         ObservableSuppliers.createNonNull(mModalDialogManager),
                         mActivityLifecycleDispatcher,
                         mTabModelSelectorSupplier,
-                        /* edgeToEdgeSystemBarColorHelper= */ null,
                         mBackPressManager,
                         ObservableSuppliers.createNonNull(mCompositorViewHolder),
                         mTabGroupUiActionHandlerSupplier,

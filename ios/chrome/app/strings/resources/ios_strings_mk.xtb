@@ -200,6 +200,7 @@
 <translation id="1547610699249301703">Споделувајте лозинки</translation>
 <translation id="1554043146674176775">Исклучи AI Mode</translation>
 <translation id="1554477036522844996">Нов прозорец</translation>
+<translation id="1555014818414775661">Додајте слики</translation>
 <translation id="1557806604681757705">вашиот компјутер</translation>
 <translation id="1558391695376153246">Затвори картички „Инкогнито“</translation>
 <translation id="1560153516220021659">Копче за собран секундарен алатник</translation>
@@ -913,7 +914,6 @@
 <translation id="3857113360369572832">Отворете <ph name="BEGIN_BOLD" />Safari Settings<ph name="END_BOLD" /></translation>
 <translation id="3858860766373142691">Име</translation>
 <translation id="386224966259596343">Ќе имате можност да ги зачувате податоциве во Wallet следниот пат кога ќе пополнувате соодветен формулар.</translation>
-<translation id="3868495844258915202">Прикажи ја целосната URL-адреса</translation>
 <translation id="3870931306085184145">Нема зачувани лозинки за <ph name="DOMAIN" /></translation>
 <translation id="3875783148670536197">Покажи ми како</translation>
 <translation id="3878657761594430423">Фаќач на листови</translation>
@@ -1395,7 +1395,6 @@
 <translation id="5282340693022193851">За да добивате известувања за „Следење цена“, вклучете ги известувањата во Settings на iOS.</translation>
 <translation id="528857768909044842">Групите картички се зачувуваат овде</translation>
 <translation id="5294624619177114121">Известувања на мобилен</translation>
-<translation id="5295239312320826323">Да се отстрани сметката <ph name="USER_EMAIL" />?</translation>
 <translation id="5300589172476337783">Прикажи</translation>
 <translation id="5311061401280561833">Дозволен е пристап до камерата и микрофонот</translation>
 <translation id="5313967007315987356">Додај локација</translation>
@@ -1788,6 +1787,7 @@ Handoff мора да биде овозможен и во Општиот дел 
 <translation id="6504541289630702018">Лесно пристапувајте до вашите групи картички на компјутер</translation>
 <translation id="6505334220040167806">Собери ја групата картички.</translation>
 <translation id="6506996418997555004">Споделете ја групата картички „<ph name="GROUP_NAME" />“</translation>
+<translation id="650770261448122895">Пребарувајте го она што го гледате со Lens</translation>
 <translation id="6507973708545996744">Најавете се за да ја добиете „Список за читање“ на сите ваши уреди.</translation>
 <translation id="6518133107902771759">Потврди</translation>
 <translation id="6523575793810663688">Покажи ми како</translation>
@@ -2147,7 +2147,6 @@ Handoff мора да биде овозможен и во Општиот дел 
 <translation id="7603852183842204213">Појавните прозорци се блокирани (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Синхронизацијата не функционира</translation>
 <translation id="760667371114328991">Исклучете ги известувањата за „Безбедносна проверка“</translation>
-<translation id="7612619742409846846">Најавени на Google како</translation>
 <translation id="7612849887607288481">Отворете го менито за создавање прототипи на AI</translation>
 <translation id="7618220760967055820">Изберете кое копче да се прикажува на алатникот</translation>
 <translation id="7620522820075868385">Откажи</translation>
@@ -2430,6 +2429,7 @@ Handoff мора да биде овозможен и во Општиот дел 
 <translation id="8439758443371991593">Скриј „Додај во список за читање“</translation>
 <translation id="8443986842926457191">URL-адресата има повеќе од 2.048 знаци.</translation>
 <translation id="8449869326050867919">Лозинката е споделена</translation>
+<translation id="8473367210869452063">За да имате интеракција со сајтов, сопрете ја тековната задача или почекајте Gemini да заврши со работа</translation>
 <translation id="8473815223723723001">Изменете ја сликата со Gemini</translation>
 <translation id="8473863474539038330">Адреси и друго</translation>
 <translation id="8474378002946546633">Дозволете известувања</translation>

@@ -91,8 +91,23 @@ TextInputManager* MockRenderWidgetHostDelegate::GetTextInputManager() {
   return &text_input_manager_;
 }
 
+bool MockRenderWidgetHostDelegate::IsWidgetForPrimaryMainFrame(
+    RenderWidgetHostImpl* render_widget_host) {
+  return !primary_main_frame_widget_.has_value() ||
+         primary_main_frame_widget_.value() == render_widget_host;
+}
+
 bool MockRenderWidgetHostDelegate::IsFullscreen() {
   return is_fullscreen_;
+}
+
+std::optional<SkColor> MockRenderWidgetHostDelegate::GetBaseBackgroundColor() {
+  return base_background_color_;
+}
+
+ui::ColorProviderKey::ColorMode MockRenderWidgetHostDelegate::GetColorMode()
+    const {
+  return color_mode_;
 }
 
 RenderViewHostDelegateView* MockRenderWidgetHostDelegate::GetDelegateView() {

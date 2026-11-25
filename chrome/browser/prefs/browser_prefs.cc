@@ -49,7 +49,6 @@
 #include "chrome/browser/media/unified_autoplay_config.h"
 #include "chrome/browser/media/webrtc/capture_policy_utils.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
-#include "chrome/browser/media/webrtc/permission_bubble_media_access_handler.h"
 #include "chrome/browser/memory/enterprise_memory_limit_pref_observer.h"
 #include "chrome/browser/metrics/chrome_metrics_service_client.h"
 #include "chrome/browser/metrics/tab_stats/tab_stats_tracker.h"
@@ -118,6 +117,7 @@
 #include "components/certificate_transparency/pref_names.h"
 #include "components/collaboration/public/pref_names.h"
 #include "components/commerce/core/prefs.h"
+#include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/contextual_search/contextual_search_service.h"
@@ -319,6 +319,7 @@
 #include "chrome/browser/nearby_sharing/common/nearby_share_prefs.h"
 #include "chrome/browser/new_tab_page/modules/file_suggestion/microsoft_files_page_handler.h"
 #include "chrome/browser/new_tab_page/modules/v2/calendar/outlook_calendar_page_handler.h"
+#include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/screen_ai/pref_names.h"
 #include "chrome/browser/search_engine_choice/search_engine_choice_dialog_service.h"
 #include "chrome/browser/signin/signin_promo.h"
@@ -1235,6 +1236,13 @@ constexpr char kObsoleteAccessibilityAXTreeFixingEnabled[] =
     "settings.a11y.enable_ax_tree_fixing";
 #endif  // !BUILDFLAG(IS_ANDROID)
 
+// Deprecated 11/2026.
+constexpr char kDefaultSupervisedUserFilteringBehavior[] =
+    "profile.managed.default_filtering_behavior";
+
+// Deprecated 11/2026.
+inline constexpr char kLomProfileId[] = "private_metrics.lom.profile_id";
+
 // Register local state used only for migration (clearing or moving to a new
 // key).
 void RegisterLocalStatePrefsForMigration(PrefRegistrySimple* registry) {
@@ -1788,6 +1796,13 @@ void RegisterProfilePrefsForMigration(
   registry->RegisterBooleanPref(kObsoleteAccessibilityAXTreeFixingEnabled,
                                 false);
 #endif  // !BUILDFLAG(IS_ANDROID)
+
+  // Deprecated 11/2026.
+  // 0 == static_cast<int>(FilteringBehavior::kAllow)
+  registry->RegisterIntegerPref(kDefaultSupervisedUserFilteringBehavior, 0);
+
+  // Deprecated 11/2026.
+  registry->RegisterUint64Pref(kLomProfileId, 0u);
 }
 
 }  // namespace
@@ -2208,7 +2223,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
   payments::RegisterProfilePrefs(registry);
   performance_manager::user_tuning::prefs::RegisterProfilePrefs(registry);
   permissions::RegisterProfilePrefs(registry);
-  PermissionBubbleMediaAccessHandler::RegisterProfilePrefs(registry);
+  content_settings::RegisterMediaCaptureProfilePrefs(registry);
   PlatformNotificationServiceImpl::RegisterProfilePrefs(registry);
   policy::URLBlocklistManager::RegisterProfilePrefs(registry);
   PolicyUI::RegisterProfilePrefs(registry);
@@ -3295,7 +3310,28 @@ void MigrateObsoleteProfilePrefs(PrefService* profile_prefs,
 #if !BUILDFLAG(IS_ANDROID)
   // Added 11/2026.
   profile_prefs->ClearPref(kObsoleteAccessibilityAXTreeFixingEnabled);
+
+  // Added 11/2026.
+  if (profile_prefs->HasPrefPath(prefs::kProfileAvatarIndex)) {
+    const int avatar_index =
+        profile_prefs->GetInteger(prefs::kProfileAvatarIndex);
+    if (avatar_index >= 0 && static_cast<size_t>(avatar_index) <
+                                 profiles::GetPlaceholderAvatarIndex()) {
+      profile_prefs->SetInteger(
+          prefs::kProfileAvatarIndex,
+          static_cast<int>(profiles::GetPlaceholderAvatarIndex()));
+      profile_prefs->SetBoolean(
+          prefs::kProfileUsingDefaultAvatar,
+          !profile_prefs->GetBoolean(prefs::kProfileUsingGAIAAvatar));
+    }
+  }
 #endif  // !BUILDFLAG(IS_ANDROID)
+
+  // Added 11/2026.
+  profile_prefs->ClearPref(kDefaultSupervisedUserFilteringBehavior);
+
+  // Added 11/2026.
+  profile_prefs->ClearPref(kLomProfileId);
 
   // Please don't delete the following line. It is used by PRESUBMIT.py.
   // END_MIGRATE_OBSOLETE_PROFILE_PREFS
