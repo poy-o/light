@@ -522,19 +522,8 @@ void NetMetricsLogUploader::UploadLog(const std::string& compressed_log_data,
                                       const std::string& log_hash,
                                       const std::string& log_signature,
                                       const ReportingInfo& reporting_info) {
-  // If this attempt is a retry, there was a network error, the last attempt was
-  // over HTTPS, and there is an insecure URL set, then attempt this upload over
-  // HTTP.
-  if (reporting_info.attempt_count() > 1 &&
-      reporting_info.last_error_code() != 0 &&
-      reporting_info.last_attempt_was_https() &&
-      !insecure_server_url_.is_empty()) {
-    UploadLogToURL(compressed_log_data, log_metadata, log_hash, log_signature,
-                   reporting_info, insecure_server_url_);
-    return;
-  }
-  UploadLogToURL(compressed_log_data, log_metadata, log_hash, log_signature,
-                 reporting_info, server_url_);
+  // Light: hard-disabled metrics uploader; never send telemetry over the wire.
+  return;
 }
 
 void NetMetricsLogUploader::UploadLogToURL(

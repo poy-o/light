@@ -36,6 +36,8 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/restore_type.h"
 #include "content/public/browser/session_storage_namespace_handle.h"
+#include "content/public/browser/site_instance.h"
+#include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "ui/gfx/geometry/size.h"
@@ -68,10 +70,32 @@ std::unique_ptr<WebContents> CreateRestoredTab(
   // SessionStorageNamespaceHandle objects. Also remove the
   // session_storage_namespace_handle.h include since we only need that to
   // assign into the map.
-  content::SessionStorageNamespaceHandleMap session_storage_namespace_map =
-      content::CreateMapWithDefaultSessionStorageNamespace(
-          browser->GetProfile(), session_storage_namespace);
-  WebContents::CreateParams create_params(browser->GetProfile());
+  scoped_refptr<content::SiteInstance> container_site_instance;
+  auto container_it = extra_data.find("light_tab_container_id");
+  if (container_it != extra_data.end() && !container_it->second.empty()) {
+    const std::string& cid = container_it->second;
+    GURL seed_site_url("https://" + cid + ".light-container.invalid/");
+    if (selected_navigation >= 0 &&
+        static_cast<size_t>(selected_navigation) < navigations.size() &&
+        navigations[selected_navigation].virtual_url().SchemeIsHTTPOrHTTPS()) {
+      seed_site_url = navigations[selected_navigation].virtual_url();
+    }
+    content::StoragePartitionConfig config =
+        content::StoragePartitionConfig::Create(
+            browser->GetProfile(), "light_container", cid, /*in_memory=*/false);
+    container_site_instance =
+        content::SiteInstance::CreateForFixedStoragePartition(
+            browser->GetProfile(), seed_site_url, config);
+  }
+
+  content::SessionStorageNamespaceHandleMap session_storage_namespace_map;
+  if (!container_site_instance) {
+    session_storage_namespace_map =
+        content::CreateMapWithDefaultSessionStorageNamespace(
+            browser->GetProfile(), session_storage_namespace);
+  }
+  WebContents::CreateParams create_params(browser->GetProfile(),
+                                          std::move(container_site_instance));
   create_params.initially_hidden = initially_hidden;
   create_params.desired_renderer_state =
       WebContents::CreateParams::kNoRendererProcess;

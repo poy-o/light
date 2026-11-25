@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_STARTUP_STARTUP_TAB_H_
 #define CHROME_BROWSER_UI_STARTUP_STARTUP_TAB_H_
 
+#include <string>
 #include <vector>
 
 #include "url/gurl.h"
@@ -27,6 +28,9 @@ struct StartupTab {
   GURL url;
 
   Type type = Type::kNormal;
+
+  // Optional persistent Light Tab Container ID to restore this tab into.
+  std::string light_container_id;
 
   // True if this tab was launched from an untrusted external custom protocol
   // (e.g., google-chrome://) that was stripped on startup.

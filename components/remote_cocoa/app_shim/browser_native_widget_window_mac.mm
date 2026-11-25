@@ -55,38 +55,12 @@ CGFloat UserDefaultDoubleOr(NSString* key, CGFloat fallback) {
   return fallback;
 }
 
-// [LIGHT-DIAG-LOG] Temporary window/resize diagnostic logger (easy to rip out).
 void LightLogWindowDiag(const char* tag,
                         NSWindow* win,
                         const PerCornerRadiiState& c) {
-  if (!UserDefaultBoolOr(@"LightVerboseDiagLogging", true)) {
-    return;
-  }
-  static FILE* fp = nullptr;
-  if (!fp) {
-    fp = std::fopen("/tmp/light_ui_debug.log", "a");
-  }
-  NSRect wf = win ? win.frame : NSZeroRect;
-  NSScreen* scr = win ? (win.screen ?: NSScreen.mainScreen) : nil;
-  NSRect vf = scr ? scr.visibleFrame : NSZeroRect;
-  NSPoint mouseScr = [NSEvent mouseLocation];
-  NSPoint mouseWin = win ? [win convertPointFromScreen:mouseScr] : NSZeroPoint;
-  BOOL live = win ? win.inLiveResize : NO;
-  char buf[512];
-  std::snprintf(
-      buf, sizeof(buf),
-      "[LIGHT-DIAG][%s] liveResize=%d win=(%.1f,%.1f %.1fx%.1f) "
-      "visScr=(%.1f,%.1f %.1fx%.1f) mouseScr=(%.1f,%.1f) mouseWin=(%.1f,%.1f) "
-      "btns=0x%lx corners=(TL:%.1f TR:%.1f BL:%.1f BR:%.1f)\n",
-      tag, live ? 1 : 0, wf.origin.x, wf.origin.y, wf.size.width,
-      wf.size.height, vf.origin.x, vf.origin.y, vf.size.width, vf.size.height,
-      mouseScr.x, mouseScr.y, mouseWin.x, mouseWin.y,
-      (unsigned long)[NSEvent pressedMouseButtons], c.tl, c.tr, c.bl, c.br);
-  std::fputs(buf, stderr);
-  if (fp) {
-    std::fputs(buf, fp);
-    std::fflush(fp);
-  }
+  (void)tag;
+  (void)win;
+  (void)c;
 }
 
 PerCornerRadiiState ComputeWindowPerCornerRadii(NSWindow* window) {

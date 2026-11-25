@@ -6058,7 +6058,17 @@ void BrowserView::FrameColorsChanged() {
     web_app_window_title_->SetBackgroundColor(frame_color);
     web_app_window_title_->SetEnabledColor(caption_color);
   }
+#if BUILDFLAG(IS_MAC)
+  if (GetIsNormalType()) {
+    // Keep the root compositor background transparent on macOS Liquid Glass
+    // windows so transparent webpages show glass rather than #3C3C3C toolbar.
+    GetWidget()->SetBackgroundColor(std::nullopt);
+  } else {
+    GetWidget()->SetBackgroundColor(kColorToolbar);
+  }
+#else
   GetWidget()->SetBackgroundColor(kColorToolbar);
+#endif
 }
 
 void BrowserView::UpdateAccessibleNameForAllTabs() {

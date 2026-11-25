@@ -19,6 +19,10 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/security_principal.h"
+#include "content/public/browser/site_instance.h"
+#include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/web_contents.h"
 
 using content::NavigationEntry;
@@ -27,11 +31,16 @@ namespace {
 
 // Key used in dictionaries for the url.
 const char kURL[] = "url";
+const char kLightContainerId[] = "light_container_id";
 
 // Returns a base::DictValue representing the supplied StartupTab.
-base::DictValue EncodeTab(const GURL& url) {
+base::DictValue EncodeTab(const GURL& url,
+                          const std::string& light_container_id = "") {
   base::DictValue dict;
   dict.Set(kURL, url.spec());
+  if (!light_container_id.empty()) {
+    dict.Set(kLightContainerId, light_container_id);
+  }
   return dict;
 }
 
@@ -45,10 +54,29 @@ void EncodePinnedTabs(BrowserWindowInterface* browser,
     }
 
     content::WebContents* web_contents = tab->GetContents();
+    std::string container_id;
+    if (content::RenderFrameHost* rfh = web_contents->GetPrimaryMainFrame()) {
+      if (content::SiteInstance* si = rfh->GetSiteInstance()) {
+        const auto& cfg =
+            si->GetSecurityPrincipal().GetStoragePartitionConfig();
+        if (!cfg.is_default() &&
+            cfg.partition_domain() == "light_container") {
+          // Never persist ephemeral/wipe-on-close container tabs even if pinned.
+          if (cfg.in_memory()) {
+            continue;
+          }
+          container_id = cfg.partition_name();
+          const size_t pos = container_id.find("#g");
+          if (pos != std::string::npos) {
+            container_id.erase(pos);
+          }
+        }
+      }
+    }
     NavigationEntry* entry =
         web_contents->GetController().GetLastCommittedEntry();
     if (entry) {
-      serialized_tabs.Append(EncodeTab(entry->GetURL()));
+      serialized_tabs.Append(EncodeTab(entry->GetURL(), container_id));
     }
   }
 }
@@ -57,9 +85,14 @@ void EncodePinnedTabs(BrowserWindowInterface* browser,
 // on success.
 std::optional<StartupTab> DecodeTab(const base::DictValue& value) {
   const std::string* const url_string = value.FindString(kURL);
-  return url_string ? std::make_optional(StartupTab(GURL(*url_string),
-                                                    StartupTab::Type::kPinned))
-                    : std::nullopt;
+  if (!url_string) {
+    return std::nullopt;
+  }
+  StartupTab tab(GURL(*url_string), StartupTab::Type::kPinned);
+  if (const std::string* cid = value.FindString(kLightContainerId)) {
+    tab.light_container_id = *cid;
+  }
+  return tab;
 }
 
 }  // namespace
@@ -101,7 +134,7 @@ void PinnedTabCodec::WritePinnedTabs(Profile* profile,
   base::ListValue& values = update.Get();
   values.clear();
   for (const auto& tab : tabs) {
-    values.Append(EncodeTab(tab.url));
+    values.Append(EncodeTab(tab.url, tab.light_container_id));
   }
 }
 

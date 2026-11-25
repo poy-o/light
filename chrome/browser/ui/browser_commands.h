@@ -143,6 +143,7 @@ content::WebContents& NewTab(BrowserWindowInterface* browser,
 void NewTabToRight(BrowserWindowInterface* browser);
 void NewTabFromClipboardURL(BrowserWindowInterface* browser);
 void CloseTab(BrowserWindowInterface* browser);
+void UnloadPinnedTab(BrowserWindowInterface* browser, int index);
 bool CanZoomIn(content::WebContents* contents);
 bool CanZoomOut(content::WebContents* contents);
 bool CanResetZoom(content::WebContents* contents);

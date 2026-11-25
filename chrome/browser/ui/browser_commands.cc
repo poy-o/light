@@ -1463,10 +1463,85 @@ void NewTabFromClipboardURL(BrowserWindowInterface* browser) {
 #endif
 }
 
+void UnloadPinnedTab(BrowserWindowInterface* browser, int index) {
+  if (!browser) {
+    return;
+  }
+  TabStripModel* model = browser->GetTabStripModel();
+  if (!model || !model->ContainsIndex(index) || !model->IsTabPinned(index)) {
+    return;
+  }
+  content::WebContents* target_wc = model->GetWebContentsAt(index);
+  if (!target_wc) {
+    return;
+  }
+
+  // If this pinned tab is currently active, switch focus away first so the
+  // discarded tab stays unloaded until the user clicks it again.
+  if (model->active_index() == index) {
+    int fallback_index = TabStripModel::kNoTab;
+    // Prefer the first loaded unpinned tab, then any unpinned tab, then any
+    // other loaded pinned tab.
+    for (int i = 0; i < model->count(); ++i) {
+      if (i == index) {
+        continue;
+      }
+      content::WebContents* cand = model->GetWebContentsAt(i);
+      if (!model->IsTabPinned(i) && cand && !cand->WasDiscarded()) {
+        fallback_index = i;
+        break;
+      }
+    }
+    if (fallback_index == TabStripModel::kNoTab) {
+      for (int i = 0; i < model->count(); ++i) {
+        if (i != index && !model->IsTabPinned(i)) {
+          fallback_index = i;
+          break;
+        }
+      }
+    }
+    if (fallback_index == TabStripModel::kNoTab) {
+      for (int i = 0; i < model->count(); ++i) {
+        content::WebContents* cand = model->GetWebContentsAt(i);
+        if (i != index && cand && !cand->WasDiscarded()) {
+          fallback_index = i;
+          break;
+        }
+      }
+    }
+    if (fallback_index != TabStripModel::kNoTab) {
+      model->ActivateTabAt(fallback_index);
+    } else {
+      // No other loaded/unpinned tab exists: open a regular blank new tab so
+      // the pinned tab can stay unloaded in place.
+      NavigateParams params(browser, GURL("chrome://newtab/"),
+                            ui::PAGE_TRANSITION_TYPED);
+      params.disposition = ui::mojom::WindowOpenDisposition::kNewForegroundTab;
+      params.source_contents = nullptr;
+      params.suppress_light_container_inheritance = true;
+      Navigate(&params);
+    }
+  }
+
+  // Re-resolve in case activation/new-tab shifted indices.
+  int cur_idx = model->GetIndexOfWebContents(target_wc);
+  if (cur_idx == TabStripModel::kNoTab || !model->IsTabPinned(cur_idx)) {
+    return;
+  }
+  if (auto* lifecycle =
+          resource_coordinator::TabLifecycleUnitExternal::FromWebContents(
+              target_wc)) {
+    if (!target_wc->WasDiscarded()) {
+      lifecycle->DiscardTab(::mojom::LifecycleUnitDiscardReason::EXTERNAL);
+    }
+  }
+}
+
 void CloseTab(BrowserWindowInterface* browser) {
   base::RecordAction(UserMetricsAction("CloseTab_Accelerator"));
 
-  tabs::TabInterface* active_tab = browser->GetTabStripModel()->GetActiveTab();
+  TabStripModel* model = browser->GetTabStripModel();
+  tabs::TabInterface* active_tab = model->GetActiveTab();
   if (!active_tab) {
     return;
   }
@@ -1475,10 +1550,13 @@ void CloseTab(BrowserWindowInterface* browser) {
   // decide if just the active tab in the split is closed instead of all tabs in
   // the split.
   const bool only_active_split_tab_selected =
-      active_tab->IsSplit() &&
-      browser->GetTabStripModel()->selection_model().size() == 2;
+      active_tab->IsSplit() && model->selection_model().size() == 2;
 
   if (only_active_split_tab_selected) {
+    if (active_tab->IsPinned()) {
+      UnloadPinnedTab(browser, model->GetIndexOfTab(active_tab));
+      return;
+    }
     RecordTabCloseCount(1);
     active_tab->GetContents()->Close();
     return;
@@ -1497,42 +1575,43 @@ void CloseTab(BrowserWindowInterface* browser) {
   }
 #endif
 
-  ToastController* toast_controller = ToastController::From(browser);
-  if (!toast_controller) {
+  // Pinned tabs are persistent URL pins: trying to close a pinned tab unloads
+  // it cleanly (no "Press Cmd+W again" toast) while keeping the pin in place so
+  // clicking it later loads it right back up. Unpinned tabs close normally.
+  std::vector<content::WebContents*> pinned_to_unload;
+  std::vector<content::WebContents*> unpinned_to_close;
+  for (tabs::TabInterface* tab : model->selection_model().selected_tabs()) {
+    if (!tab || !tab->GetContents()) {
+      continue;
+    }
+    if (tab->IsPinned()) {
+      pinned_to_unload.push_back(tab->GetContents());
+    } else {
+      unpinned_to_close.push_back(tab->GetContents());
+    }
+  }
+
+  if (pinned_to_unload.empty()) {
     CloseSelectedTabAndRecordTabCountMetric(browser);
     return;
   }
 
-  const auto& selected_tabs =
-      browser->GetTabStripModel()->selection_model().selected_tabs();
-  bool all_selected_tabs_pinned = !selected_tabs.empty();
-  for (const tabs::TabInterface* tab : selected_tabs) {
-    if (!tab->IsPinned()) {
-      all_selected_tabs_pinned = false;
-      break;
+  if (!unpinned_to_close.empty()) {
+    RecordTabCloseCount(unpinned_to_close.size());
+    for (content::WebContents* wc : unpinned_to_close) {
+      int idx = model->GetIndexOfWebContents(wc);
+      if (idx != TabStripModel::kNoTab) {
+        model->CloseWebContentsAt(
+            idx, TabCloseTypes::CLOSE_USER_GESTURE |
+                     TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
+      }
     }
   }
 
-  // If all selected tabs are pinned, show a confirmation toast if one isn't
-  // already shown.
-  if (all_selected_tabs_pinned &&
-      toast_controller->GetCurrentToastId() != ToastId::kClosePinnedTab) {
-    BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
-    CHECK(browser_view);
-    ui::Accelerator accelerator;
-    CHECK(
-        browser_view->GetAcceleratorForCommandId(IDC_CLOSE_TAB, &accelerator));
-
-    ToastParams params(ToastId::kClosePinnedTab);
-    params.body_string_replacement_params.emplace_back(
-        accelerator.GetShortcutText());
-    params.body_string_cardinality_param = selected_tabs.size();
-    toast_controller->MaybeShowToast(std::move(params));
-  } else {
-    CloseSelectedTabAndRecordTabCountMetric(browser);
-    if (all_selected_tabs_pinned) {
-      base::RecordAction(
-          UserMetricsAction("Tab.PinnedTabToastClosedAfterConfirmation"));
+  for (content::WebContents* wc : pinned_to_unload) {
+    int idx = model->GetIndexOfWebContents(wc);
+    if (idx != TabStripModel::kNoTab && model->IsTabPinned(idx)) {
+      UnloadPinnedTab(browser, idx);
     }
   }
 }

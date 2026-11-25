@@ -15,6 +15,7 @@
 
 #include "base/files/file_path.h"
 #include "base/memory/raw_ptr.h"
+#include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -31,6 +32,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
+#import "ui/base/cocoa/macos27_sdk.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -423,13 +425,15 @@ void PrefSetString(PrefService* prefs,
   NSInteger _selectedCategory;
 
   NSView* __strong _detailPane;
-  NSTextField* __strong _pageTitleLabel;
   NSScrollView* __strong _detailScroll;
   LightSettingsFlippedView* __strong _detailDoc;
+  NSMutableArray<NSNumber*>* __strong _categorySectionYs;
+  BOOL _programmaticScrolling;
   LightSettingsCardView* __weak _sidebarPreviewCard;
   NSTimer* __strong _sidebarPreviewWatchTimer;
   BOOL _sidebarPreviewHovering;
   NSMutableArray<LightControlBlockTarget*>* __strong _retainedTargets;
+  NSString* __strong _editingContainerId;
 }
 
 @synthesize window = _window;
@@ -441,6 +445,7 @@ void PrefSetString(PrefService* prefs,
     _browser = browser;
     _retainedTargets = [NSMutableArray array];
     _sidebarRows = [NSMutableArray array];
+    _categorySectionYs = [NSMutableArray array];
     _selectedCategory = 0;
 
     _categories = [@[
@@ -507,9 +512,14 @@ void PrefSetString(PrefService* prefs,
     ] mutableCopy];
 
     [self buildWindow];
-    [self selectCategory:0];
+    [self rebuildDetailPage];
+    [self updateSidebarSelectionHighlight:0];
   }
   return self;
+}
+
+- (void)dealloc {
+  [NSNotificationCenter.defaultCenter removeObserver:self];
 }
 
 - (void)updateContextWithProfile:(Profile*)profile
@@ -572,15 +582,6 @@ void PrefSetString(PrefService* prefs,
     _sidebarHost = vfx;
   }
 
-  // Vertical hairline divider between sidebar and detail pane.
-  NSBox* divider = [[NSBox alloc]
-      initWithFrame:NSMakeRect(kSettingsSidebarWidth, 0, 1.0, 580)];
-  divider.boxType = NSBoxCustom;
-  divider.borderWidth = 0.0;
-  divider.fillColor = [NSColor.separatorColor colorWithAlphaComponent:0.45];
-  divider.autoresizingMask = NSViewMaxXMargin | NSViewHeightSizable;
-  [root addSubview:divider];
-
   // Search field at top of sidebar (below traffic lights).
   _searchField = [[NSSearchField alloc] initWithFrame:NSZeroRect];
   _searchField.placeholderString = @"Search";
@@ -612,19 +613,14 @@ void PrefSetString(PrefService* prefs,
     [_sidebarRows addObject:row];
   }
 
-  // Right detail pane.
+  // Right detail pane (flush against sidebar with no vertical divider line).
   _detailPane = [[NSView alloc]
-      initWithFrame:NSMakeRect(kSettingsSidebarWidth + 1.0, 0,
-                               780 - kSettingsSidebarWidth - 1.0, 580)];
+      initWithFrame:NSMakeRect(kSettingsSidebarWidth, 0,
+                               780 - kSettingsSidebarWidth, 580)];
   _detailPane.wantsLayer = YES;
   _detailPane.layer.backgroundColor = NSColor.windowBackgroundColor.CGColor;
   _detailPane.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   [root addSubview:_detailPane];
-
-  _pageTitleLabel = [NSTextField labelWithString:@"Custom"];
-  _pageTitleLabel.font = [NSFont systemFontOfSize:20.0 weight:NSFontWeightBold];
-  _pageTitleLabel.textColor = NSColor.labelColor;
-  [_detailPane addSubview:_pageTitleLabel];
 
   _detailScroll = [[NSScrollView alloc] initWithFrame:NSZeroRect];
   _detailScroll.drawsBackground = NO;
@@ -633,6 +629,12 @@ void PrefSetString(PrefService* prefs,
   _detailScroll.borderType = NSNoBorder;
   _detailDoc = [[LightSettingsFlippedView alloc] initWithFrame:NSZeroRect];
   _detailScroll.documentView = _detailDoc;
+  _detailScroll.contentView.postsBoundsChangedNotifications = YES;
+  [NSNotificationCenter.defaultCenter
+      addObserver:self
+         selector:@selector(detailScrollBoundsDidChange:)
+             name:NSViewBoundsDidChangeNotification
+           object:_detailScroll.contentView];
   [_detailPane addSubview:_detailScroll];
 
   [self layoutWindowSubviews];
@@ -668,7 +670,7 @@ void PrefSetString(PrefService* prefs,
 }
 
 - (void)checkSidebarPreviewHoverState {
-  if (!_window.isVisible || _selectedCategory != 0 || !_sidebarPreviewCard ||
+  if (!_window.isVisible || !_sidebarPreviewCard ||
       !_sidebarPreviewCard.window) {
     [self setSidebarPreviewHovering:NO];
     return;
@@ -712,10 +714,7 @@ void PrefSetString(PrefService* prefs,
   [self layoutSidebarRows];
 
   NSRect dp = _detailPane.bounds;
-  _pageTitleLabel.frame =
-      NSMakeRect(28.0, dp.size.height - 46.0, dp.size.width - 56.0, 28.0);
-  _detailScroll.frame =
-      NSMakeRect(0.0, 0.0, dp.size.width, std::max<CGFloat>(0.0, dp.size.height - 58.0));
+  _detailScroll.frame = NSMakeRect(0.0, 0.0, dp.size.width, dp.size.height);
 }
 
 - (void)layoutSidebarRows {
@@ -756,19 +755,57 @@ void PrefSetString(PrefService* prefs,
   }
 }
 
-- (void)selectCategory:(NSInteger)index {
-  if (index < 0 || index >= static_cast<NSInteger>(_categories.count)) {
-    return;
-  }
-  if (index != 0) {
-    [self setSidebarPreviewHovering:NO];
-  }
+- (void)updateSidebarSelectionHighlight:(NSInteger)index {
   _selectedCategory = index;
   for (NSUInteger i = 0; i < _sidebarRows.count; ++i) {
     _sidebarRows[i].selected = (static_cast<NSInteger>(i) == index);
   }
-  _pageTitleLabel.stringValue = _categories[index][@"title"];
-  [self rebuildDetailPage];
+}
+
+- (void)detailScrollBoundsDidChange:(NSNotification*)note {
+  if (_programmaticScrolling || _categorySectionYs.count == 0) {
+    return;
+  }
+  CGFloat visY = _detailScroll.contentView.bounds.origin.y + 44.0;
+  NSInteger best = 0;
+  for (NSUInteger i = 0; i < _categorySectionYs.count; ++i) {
+    if (_categorySectionYs[i].doubleValue <= visY) {
+      best = static_cast<NSInteger>(i);
+    } else {
+      break;
+    }
+  }
+  if (best != _selectedCategory) {
+    [self updateSidebarSelectionHighlight:best];
+  }
+}
+
+- (void)selectCategory:(NSInteger)index {
+  if (index < 0 || index >= static_cast<NSInteger>(_categories.count)) {
+    return;
+  }
+  [self updateSidebarSelectionHighlight:index];
+  if (index < static_cast<NSInteger>(_categorySectionYs.count) && _detailScroll) {
+    CGFloat maxScrollY = std::max<CGFloat>(
+        0.0,
+        _detailDoc.frame.size.height - _detailScroll.contentView.bounds.size.height);
+    CGFloat targetY = std::clamp<CGFloat>(
+        _categorySectionYs[index].doubleValue - 16.0, 0.0, maxScrollY);
+    _programmaticScrolling = YES;
+    NSRect targetBounds = _detailScroll.contentView.bounds;
+    targetBounds.origin.y = targetY;
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext* ctx) {
+      ctx.duration = 0.24;
+      ctx.timingFunction =
+          [CAMediaTimingFunction functionWithControlPoints:0.16 :1.0 :0.30 :1.0];
+      _detailScroll.contentView.animator.bounds = targetBounds;
+    }
+                        completionHandler:^{
+                          self->_programmaticScrolling = NO;
+                          [self->_detailScroll reflectScrolledClipView:
+                                                   self->_detailScroll.contentView];
+                        }];
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -953,32 +990,50 @@ void PrefSetString(PrefService* prefs,
 }
 
 - (NSView*)makeGlassTintColorRow:(CGFloat)width {
-  NSView* wrap = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 214, 26)];
+  [NSColorPanel sharedColorPanel].showsAlpha = YES;
+  NSView* wrap = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 250, 26)];
 
-  NSColorWell* well = [[NSColorWell alloc] initWithFrame:NSMakeRect(172, 1, 42, 24)];
-  if (@available(macOS 13.0, *)) {
-    well.colorWellStyle = NSColorWellStyleMinimal;
-  }
   double r = UDGetDouble(@"LightSidebarTintR", 1.0);
   double g = UDGetDouble(@"LightSidebarTintG", 1.0);
   double b = UDGetDouble(@"LightSidebarTintB", 1.0);
-  well.color = [NSColor colorWithSRGBRed:r green:g blue:b alpha:1.0];
+  double alphaPct =
+      std::clamp<double>(UDGetDouble(@"LightSidebarTintAlpha", 4.0), 0.0, 100.0);
+
+  NSTextField* opacityLbl = [NSTextField
+      labelWithString:[NSString stringWithFormat:@"%.0f%%", alphaPct]];
+  opacityLbl.font = [NSFont monospacedDigitSystemFontOfSize:11.5
+                                                     weight:NSFontWeightRegular];
+  opacityLbl.textColor = NSColor.secondaryLabelColor;
+  opacityLbl.alignment = NSTextAlignmentRight;
+  opacityLbl.frame = NSMakeRect(212, 5, 38, 16);
+  [wrap addSubview:opacityLbl];
+
+  NSColorWell* well =
+      [[NSColorWell alloc] initWithFrame:NSMakeRect(166, 1, 42, 24)];
+  if (@available(macOS 13.0, *)) {
+    well.colorWellStyle = NSColorWellStyleMinimal;
+  }
+  if (@available(macOS 14.0, *)) {
+    well.supportsAlpha = YES;
+  }
+  well.color =
+      [NSColor colorWithSRGBRed:r green:g blue:b alpha:(alphaPct / 100.0)];
 
   LightControlBlockTarget* wellTgt =
       [LightControlBlockTarget targetWithBlock:^(id sender) {
         NSColorWell* w = (NSColorWell*)sender;
         NSColor* c = [w.color colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
         if (c) {
+          double pct = std::round(std::clamp<double>(c.alphaComponent, 0.0, 1.0) * 100.0);
           [NSUserDefaults.standardUserDefaults setDouble:c.redComponent
                                                   forKey:@"LightSidebarTintR"];
           [NSUserDefaults.standardUserDefaults setDouble:c.greenComponent
                                                   forKey:@"LightSidebarTintG"];
           [NSUserDefaults.standardUserDefaults setDouble:c.blueComponent
                                                   forKey:@"LightSidebarTintB"];
-          if (UDGetDouble(@"LightSidebarTintAlpha", 4.0) < 1.0) {
-            [NSUserDefaults.standardUserDefaults setDouble:16.0
-                                                    forKey:@"LightSidebarTintAlpha"];
-          }
+          [NSUserDefaults.standardUserDefaults setDouble:pct
+                                                  forKey:@"LightSidebarTintAlpha"];
+          opacityLbl.stringValue = [NSString stringWithFormat:@"%.0f%%", pct];
           PostLightSettingsChanged();
         }
       }];
@@ -1000,7 +1055,6 @@ void PrefSetString(PrefService* prefs,
       {0.25, 0.69, 0.42, @"Emerald"},
       {0.93, 0.52, 0.20, @"Amber"},
   };
-  __weak __typeof(self) weakSelf = self;
   for (size_t i = 0; i < std::size(kSwatches); ++i) {
     CGFloat sx = static_cast<CGFloat>(i) * 23.0;
     NSButton* swBtn = [[NSButton alloc] initWithFrame:NSMakeRect(sx, 4, 18, 18)];
@@ -1029,14 +1083,18 @@ void PrefSetString(PrefService* prefs,
                                                   forKey:@"LightSidebarTintG"];
           [NSUserDefaults.standardUserDefaults setDouble:sb
                                                   forKey:@"LightSidebarTintB"];
-          if (UDGetDouble(@"LightSidebarTintAlpha", 4.0) < 4.0 &&
-              !(sr > 0.99 && sg > 0.99 && sb > 0.99)) {
-            [NSUserDefaults.standardUserDefaults setDouble:18.0
+          double curAlpha = UDGetDouble(@"LightSidebarTintAlpha", 4.0);
+          if (curAlpha < 4.0 && !(sr > 0.99 && sg > 0.99 && sb > 0.99)) {
+            curAlpha = 18.0;
+            [NSUserDefaults.standardUserDefaults setDouble:curAlpha
                                                     forKey:@"LightSidebarTintAlpha"];
           }
-          well.color = [NSColor colorWithSRGBRed:sr green:sg blue:sb alpha:1.0];
+          well.color = [NSColor colorWithSRGBRed:sr
+                                           green:sg
+                                            blue:sb
+                                           alpha:(curAlpha / 100.0)];
+          opacityLbl.stringValue = [NSString stringWithFormat:@"%.0f%%", curAlpha];
           PostLightSettingsChanged();
-          [weakSelf rebuildDetailPage];
         }];
     [_retainedTargets addObject:swTgt];
     swBtn.target = swTgt;
@@ -1044,8 +1102,8 @@ void PrefSetString(PrefService* prefs,
     [wrap addSubview:swBtn];
   }
 
-  return [self makeRowWithTitle:@"Glass Tint Color"
-                       subtitle:@"Pick a preset swatch or custom color well"
+  return [self makeRowWithTitle:@"Glass Tint & Opacity"
+                       subtitle:@"Use the color picker opacity slider to control tint strength"
                         control:wrap
                           width:width];
 }
@@ -1099,11 +1157,43 @@ void PrefSetString(PrefService* prefs,
   return y + cy + 20.0;
 }
 
+- (CGFloat)appendCategoryTitleForIndex:(NSInteger)catIdx
+                                atYPos:(CGFloat)y
+                                 width:(CGFloat)cardWidth
+                                 leftX:(CGFloat)leftX {
+  if (catIdx > 0) {
+    NSBox* sep = [[NSBox alloc]
+        initWithFrame:NSMakeRect(leftX, y, cardWidth, 0.5)];
+    sep.boxType = NSBoxCustom;
+    sep.borderWidth = 0.0;
+    sep.fillColor = [NSColor.separatorColor colorWithAlphaComponent:0.35];
+    [_detailDoc addSubview:sep];
+    y += 18.0;
+  }
+  [_categorySectionYs addObject:@(y)];
+  NSDictionary* cat = _categories[catIdx];
+  LightSettingsIconBadgeView* badge = [[LightSettingsIconBadgeView alloc]
+      initWithSymbol:cat[@"symbol"]
+               color:cat[@"color"]];
+  badge.frame = NSMakeRect(leftX, y + 2.0, 24.0, 24.0);
+  [_detailDoc addSubview:badge];
+
+  NSTextField* titleLbl = [NSTextField labelWithString:cat[@"title"]];
+  titleLbl.font = [NSFont systemFontOfSize:19.0 weight:NSFontWeightBold];
+  titleLbl.textColor = NSColor.labelColor;
+  titleLbl.frame = NSMakeRect(leftX + 34.0, y, cardWidth - 34.0, 26.0);
+  [_detailDoc addSubview:titleLbl];
+  return y + 36.0;
+}
+
 // -----------------------------------------------------------------------------
-// Page Rebuilder
+// Page Rebuilder (Single continuous scroller across all categories)
 // -----------------------------------------------------------------------------
 - (void)rebuildDetailPage {
+  CGFloat savedScrollY =
+      _detailScroll ? _detailScroll.contentView.bounds.origin.y : 0.0;
   [_retainedTargets removeAllObjects];
+  [_categorySectionYs removeAllObjects];
   for (NSView* sub in [_detailDoc.subviews copy]) {
     [sub removeFromSuperview];
   }
@@ -1112,15 +1202,21 @@ void PrefSetString(PrefService* prefs,
   CGFloat cardW = std::min<CGFloat>(kContentMaxWidth,
                                     std::max<CGFloat>(340.0, availW - 56.0));
   CGFloat leftX = 28.0;
-  CGFloat y = 8.0;
+  CGFloat y = 26.0;
 
   PrefService* prefs = _profile ? _profile->GetPrefs() : nullptr;
   PrefService* localState =
       g_browser_process ? g_browser_process->local_state() : nullptr;
   __weak __typeof(self) weakSelf = self;
 
-  switch (_selectedCategory) {
-    case 0: {  // Custom
+  for (NSInteger catIdx = 0;
+       catIdx < static_cast<NSInteger>(_categories.count); ++catIdx) {
+    y = [self appendCategoryTitleForIndex:catIdx
+                                   atYPos:y
+                                    width:cardW
+                                    leftX:leftX];
+    switch (catIdx) {
+      case 0: {  // Custom
       NSArray* cornerRows = @[
         [self makeSwitchRow:@"Dynamic Per-Corner Square on Screen Edges"
                    subtitle:@"Set individual corners (TL, TR, BL, BR) to 0 when touching screen edges"
@@ -1209,45 +1305,12 @@ void PrefSetString(PrefService* prefs,
                      UDSetBool(@"LightSidebarGlassInteractive", v);
                    }],
         [self makeGlassTintColorRow:cardW],
-        [self makeSliderRow:@"Glass Tint Strength"
-                   subtitle:@"0% is completely untinted glass; higher values deepen color tint"
-                      value:UDGetDouble(@"LightSidebarTintAlpha", 4.0)
-                        min:0.0
-                        max:85.0
-                     suffix:@"%"
-                 isFloating:NO
-                      width:cardW
-                   onChange:^(double v) {
-                     UDSetDouble(@"LightSidebarTintAlpha", v);
-                   }],
-        [self makeSliderRow:@"Sidebar Drop Shadow"
-                   subtitle:@"Ambient shadow intensity behind the floating glass panel"
-                      value:UDGetDouble(@"LightSidebarShadowAlpha", 28.0)
-                        min:0.0
-                        max:60.0
-                     suffix:@"%"
-                 isFloating:NO
-                      width:cardW
-                   onChange:^(double v) {
-                     UDSetDouble(@"LightSidebarShadowAlpha", v);
-                   }],
         [self makeSwitchRow:@"Auto-Hide Sidebar When Not Hovering Left"
                    subtitle:@"Automatically spring-hide sidebar when cursor leaves the left side"
                       value:UDGetBool(@"LightSidebarAutoHide", true)
                       width:cardW
                    onChange:^(BOOL v) {
                      UDSetBool(@"LightSidebarAutoHide", v);
-                   }],
-        [self makeSliderRow:@"Sidebar Width"
-                   subtitle:nil
-                      value:UDGetDouble(@"LightSidebarWidth", 228.0)
-                        min:190.0
-                        max:300.0
-                     suffix:@" pt"
-                 isFloating:NO
-                      width:cardW
-                   onChange:^(double v) {
-                     UDSetDouble(@"LightSidebarWidth", v);
                    }],
         [self makeSliderRow:@"Sidebar Corner Radius"
                    subtitle:nil
@@ -1293,17 +1356,6 @@ void PrefSetString(PrefService* prefs,
                    onChange:^(double v) {
                      UDSetDouble(@"LightSidebarBlurRadius", v);
                    }],
-        [self makeSliderRow:@"Left-Edge Hover Trigger Width"
-                   subtitle:@"Active left-edge width that triggers sidebar reveal"
-                      value:UDGetDouble(@"LightSidebarTriggerWidth", 14.0)
-                        min:4.0
-                        max:32.0
-                     suffix:@" pt"
-                 isFloating:NO
-                      width:cardW
-                   onChange:^(double v) {
-                     UDSetDouble(@"LightSidebarTriggerWidth", v);
-                   }],
       ];
       y = [self appendSectionHeader:@"Liquid Glass Sidebar"
                                rows:sidebarRows
@@ -1312,21 +1364,6 @@ void PrefSetString(PrefService* prefs,
                               leftX:leftX];
 
       NSArray* diagRows = @[
-        [self makeSwitchRow:@"Verbose Window & Mouse Logging"
-                   subtitle:@"Logs resize, corner state, and cursor geometry to /tmp/light_ui_debug.log"
-                      value:UDGetBool(@"LightVerboseDiagLogging", true)
-                      width:cardW
-                   onChange:^(BOOL v) {
-                     UDSetBool(@"LightVerboseDiagLogging", v);
-                   }],
-        [self makeButtonRow:@"Diagnostic Log File"
-                   subtitle:@"/tmp/light_ui_debug.log"
-                buttonTitle:@"Open Log…"
-                      width:cardW
-                   onAction:^{
-                     [NSWorkspace.sharedWorkspace
-                         openURL:[NSURL fileURLWithPath:@"/tmp/light_ui_debug.log"]];
-                   }],
         [self makeButtonRow:@"Reset Custom Preferences"
                    subtitle:@"Restore all Custom corner & sidebar settings to defaults"
                 buttonTitle:@"Reset Defaults"
@@ -1382,34 +1419,110 @@ void PrefSetString(PrefService* prefs,
                                    alpha:1.0];
       };
 
+      auto makeSwatch = [](NSColor* col) -> NSImage* {
+        NSImage* img = [NSImage imageWithSize:NSMakeSize(12.0, 12.0)
+                                      flipped:NO
+                               drawingHandler:^BOOL(NSRect dst) {
+                                 [col setFill];
+                                 [[NSBezierPath
+                                     bezierPathWithOvalInRect:NSInsetRect(dst, 1.0, 1.0)]
+                                     fill];
+                                 return YES;
+                               }];
+        [img setTemplate:NO];
+        return img;
+      };
+
+      auto describeBehavior = [](const LightTabContainer& c) -> NSString* {
+        switch (c.clear_behavior) {
+          case LightContainerClearBehavior::kOnAllTabsClosed:
+            return @"Clears when all tabs in container close (no history)";
+          case LightContainerClearBehavior::kOnBrowserQuit:
+            return @"Clears when Light quits (no history)";
+          case LightContainerClearBehavior::kKeep:
+          default:
+            return @"Isolated persistent cookies & site data";
+        }
+      };
+
+      NSArray* behaviorRows = @[
+        [self makeSwitchRow:@"Open new tabs in active container"
+                   subtitle:@"When enabled, clicking + or opening a new tab while viewing a contained tab inherits its container."
+                      value:(LightNewTabInheritsActiveContainer() ? YES : NO)
+                      width:cardW
+                   onChange:^(BOOL on) {
+                     LightSetNewTabInheritsActiveContainer(on ? true : false);
+                   }],
+      ];
+      y = [self appendSectionHeader:@"Behavior"
+                               rows:behaviorRows
+                             atYPos:y
+                              width:cardW
+                              leftX:leftX];
+
       std::vector<LightTabContainer> containers = LightGetTabContainers();
+      std::optional<LightTabContainer> editingContainer;
+      if (_editingContainerId.length > 0) {
+        std::string editCid = base::SysNSStringToUTF8(_editingContainerId);
+        for (const auto& c : containers) {
+          if (c.id == editCid) {
+            editingContainer = c;
+            break;
+          }
+        }
+        if (!editingContainer) {
+          _editingContainerId = nil;
+        }
+      }
+
       NSMutableArray* existingRows = [NSMutableArray array];
       for (const auto& c : containers) {
         std::string cid = c.id;
+        NSString* nsCid = base::SysUTF8ToNSString(cid);
         NSView* row = [[LightSettingsFlippedView alloc]
             initWithFrame:NSMakeRect(0, 0, cardW, 52.0)];
 
-        LightSettingsIconBadgeView* badge = [[LightSettingsIconBadgeView alloc]
-            initWithSymbol:base::SysUTF8ToNSString(c.symbol)
-                     color:parseHex(c.color_hex)];
-        badge.frame = NSMakeRect(14.0, 14.0, 24.0, 24.0);
-        [row addSubview:badge];
+        // Flat-colored SF Symbol preview (no colored background squircle).
+        NSImageView* iconPreview =
+            [[NSImageView alloc] initWithFrame:NSMakeRect(14.0, 14.0, 24.0, 24.0)];
+        iconPreview.imageScaling = NSImageScaleProportionallyDown;
+        iconPreview.image =
+            SettingsSymbol(base::SysUTF8ToNSString(c.symbol), 16.0,
+                           NSFontWeightSemibold);
+        iconPreview.contentTintColor = parseHex(c.color_hex);
+        [row addSubview:iconPreview];
 
         NSTextField* titleLbl =
             [NSTextField labelWithString:base::SysUTF8ToNSString(c.name)];
         titleLbl.font = [NSFont systemFontOfSize:13.0 weight:NSFontWeightMedium];
         titleLbl.textColor = NSColor.labelColor;
-        titleLbl.frame = NSMakeRect(48.0, 9.0, std::max<CGFloat>(100.0, cardW - 210.0), 17.0);
+        titleLbl.frame = NSMakeRect(48.0, 9.0, std::max<CGFloat>(100.0, cardW - 266.0), 17.0);
         [row addSubview:titleLbl];
 
-        NSString* subText =
-            c.in_memory ? @"Private (in-memory, clears on close)"
-                        : @"Isolated persistent cookies & site data";
-        NSTextField* subLbl = [NSTextField labelWithString:subText];
+        NSTextField* subLbl = [NSTextField labelWithString:describeBehavior(c)];
         subLbl.font = [NSFont systemFontOfSize:11.0 weight:NSFontWeightRegular];
         subLbl.textColor = NSColor.secondaryLabelColor;
-        subLbl.frame = NSMakeRect(48.0, 28.0, std::max<CGFloat>(100.0, cardW - 210.0), 15.0);
+        subLbl.frame = NSMakeRect(48.0, 28.0, std::max<CGFloat>(100.0, cardW - 266.0), 15.0);
         [row addSubview:subLbl];
+
+        NSButton* editBtn = [NSButton buttonWithTitle:@"Edit"
+                                               target:nil
+                                               action:nil];
+        editBtn.bezelStyle = NSBezelStylePush;
+        editBtn.font = [NSFont systemFontOfSize:12.0];
+        editBtn.frame = NSMakeRect(cardW - 210.0, 12.0, 48.0, 26.0);
+        LightControlBlockTarget* editTgt =
+            [LightControlBlockTarget targetWithBlock:^(id sender) {
+              __strong __typeof(weakSelf) s = weakSelf;
+              if (s) {
+                s->_editingContainerId = nsCid;
+                [s rebuildDetailPage];
+              }
+            }];
+        [_retainedTargets addObject:editTgt];
+        editBtn.target = editTgt;
+        editBtn.action = @selector(invoke:);
+        [row addSubview:editBtn];
 
         NSButton* clearBtn = [NSButton buttonWithTitle:@"Clear Data"
                                                 target:nil
@@ -1437,6 +1550,10 @@ void PrefSetString(PrefService* prefs,
         delBtn.frame = NSMakeRect(cardW - 68.0, 12.0, 56.0, 26.0);
         LightControlBlockTarget* delTgt =
             [LightControlBlockTarget targetWithBlock:^(id sender) {
+              __strong __typeof(weakSelf) s = weakSelf;
+              if (s && [s->_editingContainerId isEqualToString:nsCid]) {
+                s->_editingContainerId = nil;
+              }
               LightDeleteTabContainer(cid);
               [weakSelf rebuildDetailPage];
             }];
@@ -1460,25 +1577,43 @@ void PrefSetString(PrefService* prefs,
                               width:cardW
                               leftX:leftX];
 
-      // Create New Container card.
+      // Create or Edit Container card.
       NSTextField* nameField =
-          [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 190, 24)];
+          [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 210, 24)];
       nameField.placeholderString = @"e.g. Banking, Social, Work";
       nameField.font = [NSFont systemFontOfSize:12.5];
+      if (editingContainer) {
+        nameField.stringValue = base::SysUTF8ToNSString(editingContainer->name);
+      }
 
       NSArray<NSString*>* symbolNames = @[
         @"eye.slash", @"person", @"briefcase", @"bag", @"shield", @"star",
         @"flame", @"globe", @"lock", @"heart"
       ];
       NSArray<NSString*>* symbolLabels = @[
-        @"Private (Eye Slash)", @"Person", @"Briefcase", @"Shopping Bag",
-        @"Shield", @"Star", @"Flame", @"Globe", @"Lock", @"Heart"
+        @"Private", @"Person", @"Briefcase", @"Shopping Bag", @"Shield",
+        @"Star", @"Flame", @"Globe", @"Lock", @"Heart"
       ];
       NSPopUpButton* symbolPop =
-          [[NSPopUpButton alloc] initWithFrame:NSMakeRect(0, 0, 190, 26)
+          [[NSPopUpButton alloc] initWithFrame:NSMakeRect(0, 0, 210, 26)
                                      pullsDown:NO];
       symbolPop.font = [NSFont systemFontOfSize:12.5];
-      [symbolPop addItemsWithTitles:symbolLabels];
+      NSInteger selectedSymIdx = 0;
+      for (NSUInteger i = 0; i < symbolLabels.count; ++i) {
+        [symbolPop addItemWithTitle:symbolLabels[i]];
+        NSMenuItem* mi = symbolPop.lastItem;
+        NSImage* symImg = SettingsSymbol(symbolNames[i], 13.0, NSFontWeightRegular);
+        [symImg setTemplate:YES];
+        mi.image = symImg;
+        if (@available(macOS 27, *)) {
+          mi.preferredImageVisibility = NSMenuItemImageVisibilityVisible;
+        }
+        if (editingContainer &&
+            editingContainer->symbol == base::SysNSStringToUTF8(symbolNames[i])) {
+          selectedSymIdx = static_cast<NSInteger>(i);
+        }
+      }
+      [symbolPop selectItemAtIndex:selectedSymIdx];
 
       NSArray<NSString*>* colorLabels = @[
         @"Purple", @"Blue", @"Orange", @"Green", @"Red", @"Cyan", @"Pink",
@@ -1489,18 +1624,42 @@ void PrefSetString(PrefService* prefs,
         @"#FF375F", @"#8E8E93"
       ];
       NSPopUpButton* colorPop =
-          [[NSPopUpButton alloc] initWithFrame:NSMakeRect(0, 0, 190, 26)
+          [[NSPopUpButton alloc] initWithFrame:NSMakeRect(0, 0, 210, 26)
                                      pullsDown:NO];
       colorPop.font = [NSFont systemFontOfSize:12.5];
-      [colorPop addItemsWithTitles:colorLabels];
-      [colorPop selectItemAtIndex:1];
+      NSInteger selectedColIdx = 1;
+      for (NSUInteger i = 0; i < colorLabels.count; ++i) {
+        [colorPop addItemWithTitle:colorLabels[i]];
+        NSMenuItem* mi = colorPop.lastItem;
+        mi.image = makeSwatch(parseHex(base::SysNSStringToUTF8(colorHexes[i])));
+        if (@available(macOS 27, *)) {
+          mi.preferredImageVisibility = NSMenuItemImageVisibilityVisible;
+        }
+        if (editingContainer &&
+            base::EqualsCaseInsensitiveASCII(
+                editingContainer->color_hex,
+                base::SysNSStringToUTF8(colorHexes[i]))) {
+          selectedColIdx = static_cast<NSInteger>(i);
+        }
+      }
+      [colorPop selectItemAtIndex:selectedColIdx];
 
-      NSSwitch* privateSwitch =
-          [[NSSwitch alloc] initWithFrame:NSMakeRect(0, 0, 38, 22)];
-      privateSwitch.state = NSControlStateValueOff;
-      [privateSwitch sizeToFit];
+      NSPopUpButton* behaviorPop =
+          [[NSPopUpButton alloc] initWithFrame:NSMakeRect(0, 0, 210, 26)
+                                     pullsDown:NO];
+      behaviorPop.font = [NSFont systemFontOfSize:12.5];
+      [behaviorPop addItemsWithTitles:@[
+        @"Keep Data (Persistent)",
+        @"Clear on Browser Quit",
+        @"Clear When All Tabs Close"
+      ]];
+      NSInteger behaviorIdx =
+          editingContainer ? static_cast<NSInteger>(editingContainer->clear_behavior)
+                           : 0;
+      [behaviorPop selectItemAtIndex:std::clamp<NSInteger>(behaviorIdx, 0, 2)];
 
-      NSArray* createRows = @[
+      std::string capturedEditId = editingContainer ? editingContainer->id : "";
+      NSMutableArray* editorRows = [NSMutableArray arrayWithArray:@[
         [self makeRowWithTitle:@"Container Name"
                       subtitle:@"Shown when right-clicking the + button in the sidebar"
                        control:nameField
@@ -1513,13 +1672,15 @@ void PrefSetString(PrefService* prefs,
                       subtitle:nil
                        control:colorPop
                          width:cardW],
-        [self makeRowWithTitle:@"Private (In-Memory)"
-                      subtitle:@"Discard cookies, logins, and storage when Light quits"
-                       control:privateSwitch
+        [self makeRowWithTitle:@"Data Lifetime"
+                      subtitle:@"Choose when cookies, logins, and site data clear"
+                       control:behaviorPop
                          width:cardW],
-        [self makeButtonRow:@"Add Container"
-                   subtitle:@"Right-click the + button under your tabs to open a tab in any container"
-                buttonTitle:@"Add Container"
+        [self makeButtonRow:(editingContainer ? @"Save Container" : @"Add Container")
+                   subtitle:(editingContainer
+                                 ? @"Update this container's name, icon, color, and data behavior"
+                                 : @"Right-click the + button under your tabs to open a tab in any container")
+                buttonTitle:(editingContainer ? @"Save Changes" : @"Add Container")
                       width:cardW
                    onAction:^{
                      NSString* rawName =
@@ -1529,40 +1690,71 @@ void PrefSetString(PrefService* prefs,
                      if (rawName.length == 0) {
                        return;
                      }
-                     NSString* slug =
-                         [[rawName lowercaseString]
-                             stringByReplacingOccurrencesOfString:@" "
-                                                       withString:@"_"];
-                     NSString* uniqueId = [NSString
-                         stringWithFormat:@"%@_%ld", slug,
-                                          (long)[NSDate.date timeIntervalSince1970]];
                      NSInteger symIdx = std::clamp<NSInteger>(
                          symbolPop.indexOfSelectedItem, 0,
                          static_cast<NSInteger>(symbolNames.count) - 1);
                      NSInteger colIdx = std::clamp<NSInteger>(
                          colorPop.indexOfSelectedItem, 0,
                          static_cast<NSInteger>(colorHexes.count) - 1);
+                     NSInteger behIdx = std::clamp<NSInteger>(
+                         behaviorPop.indexOfSelectedItem, 0, 2);
+                     auto beh = static_cast<LightContainerClearBehavior>(behIdx);
+
                      LightTabContainer c;
-                     c.id = base::SysNSStringToUTF8(uniqueId);
+                     if (!capturedEditId.empty()) {
+                       c.id = capturedEditId;
+                     } else {
+                       NSString* slug =
+                           [[rawName lowercaseString]
+                               stringByReplacingOccurrencesOfString:@" "
+                                                         withString:@"_"];
+                       NSString* uniqueId = [NSString
+                           stringWithFormat:@"%@_%ld", slug,
+                                            (long)[NSDate.date timeIntervalSince1970]];
+                       c.id = base::SysNSStringToUTF8(uniqueId);
+                     }
                      c.name = base::SysNSStringToUTF8(rawName);
                      c.symbol = base::SysNSStringToUTF8(symbolNames[symIdx]);
                      c.color_hex = base::SysNSStringToUTF8(colorHexes[colIdx]);
-                     c.in_memory =
-                         (privateSwitch.state == NSControlStateValueOn);
+                     c.clear_behavior = beh;
+                     c.in_memory = (beh != LightContainerClearBehavior::kKeep);
                      LightAddTabContainer(c);
-                     [weakSelf rebuildDetailPage];
+                     __strong __typeof(weakSelf) s = weakSelf;
+                     if (s) {
+                       s->_editingContainerId = nil;
+                       [s rebuildDetailPage];
+                     }
                    }],
-        [self makeButtonRow:@"Reset Defaults"
-                   subtitle:@"Restore Private, Personal, Work, and Shopping containers"
-                buttonTitle:@"Reset Defaults"
-                      width:cardW
-                   onAction:^{
-                     LightResetDefaultTabContainers();
-                     [weakSelf rebuildDetailPage];
-                   }],
-      ];
-      y = [self appendSectionHeader:@"New Container"
-                               rows:createRows
+      ]];
+      if (editingContainer) {
+        [editorRows addObject:[self makeButtonRow:@"Cancel Editing"
+                                         subtitle:nil
+                                      buttonTitle:@"Cancel"
+                                            width:cardW
+                                         onAction:^{
+                                           __strong __typeof(weakSelf) s = weakSelf;
+                                           if (s) {
+                                             s->_editingContainerId = nil;
+                                             [s rebuildDetailPage];
+                                           }
+                                         }]];
+      }
+      [editorRows addObject:[self makeButtonRow:@"Reset Defaults"
+                                       subtitle:@"Restore Private, Personal, Work, and Shopping containers"
+                                    buttonTitle:@"Reset Defaults"
+                                          width:cardW
+                                       onAction:^{
+                                         __strong __typeof(weakSelf) s = weakSelf;
+                                         if (s) {
+                                           s->_editingContainerId = nil;
+                                         }
+                                         LightResetDefaultTabContainers();
+                                         [weakSelf rebuildDetailPage];
+                                       }]];
+
+      y = [self appendSectionHeader:(editingContainer ? @"Edit Container"
+                                                      : @"New Container")
+                               rows:editorRows
                              atYPos:y
                               width:cardW
                               leftX:leftX];
@@ -1957,10 +2149,16 @@ void PrefSetString(PrefService* prefs,
                               leftX:leftX];
       break;
     }
+    }
   }
 
-  _detailDoc.frame = NSMakeRect(
-      0.0, 0.0, availW, std::max<CGFloat>(_detailScroll.bounds.size.height, y + 16.0));
+  CGFloat docH = std::max<CGFloat>(_detailScroll.bounds.size.height, y + 28.0);
+  _detailDoc.frame = NSMakeRect(0.0, 0.0, availW, docH);
+  CGFloat maxScrollY =
+      std::max<CGFloat>(0.0, docH - _detailScroll.contentView.bounds.size.height);
+  [_detailScroll.contentView
+      scrollToPoint:NSMakePoint(0.0, std::clamp<CGFloat>(savedScrollY, 0.0, maxScrollY))];
+  [_detailScroll reflectScrolledClipView:_detailScroll.contentView];
 }
 
 @end

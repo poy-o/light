@@ -97,12 +97,6 @@ bool IsManifestSupported(int manifest_version,
   // Supported versions are always safe.
   if (manifest_version >= kMinimumSupportedManifestVersion &&
       manifest_version <= kMaximumSupportedManifestVersion) {
-    // Emit a warning for unpacked extensions on Manifest V2 warning that
-    // MV2 is deprecated.
-    if (type == Manifest::Type::kExtension && manifest_version == 2 &&
-        Manifest::IsUnpackedLocation(location)) {
-      *warning = errors::kManifestV2IsDeprecatedWarning;
-    }
     return true;
   }
 

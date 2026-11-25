@@ -77,22 +77,27 @@ NSMenuItem* BuildAppMenu(NSApplication* nsapp,
                   .string_format_1(product_name)
                   .tag(IDC_ABOUT)
                   .target(app_delegate)
-                  .action(@selector(orderFrontStandardAboutPanel:)),
+                  .action(@selector(orderFrontStandardAboutPanel:))
+                  .sf_symbol(@"info.circle"),
               Item().is_separator(),
               Item(IDS_PREFERENCES)
                   .tag(IDC_OPTIONS)
                   .target(app_delegate)
                   .action(@selector(showPreferences:))
+                  .sf_symbol(@"gearshape")
                   .remove_if(is_pwa),
               Item(IDS_PREFERENCES)
                   .command_id(IDC_WEB_APP_SETTINGS)
+                  .sf_symbol(@"gearshape")
                   .remove_if(!is_pwa),
               Item().is_separator(),
               Item(IDS_CLEAR_BROWSING_DATA_MAC)
                   .command_id(IDC_CLEAR_BROWSING_DATA)
+                  .sf_symbol(@"trash")
                   .remove_if(is_pwa),
               Item(IDS_IMPORT_SETTINGS_MENU_MAC)
                   .command_id(IDC_IMPORT_SETTINGS)
+                  .sf_symbol(@"square.and.arrow.down")
                   .remove_if(is_pwa),
               Item().is_separator(),
               Item(IDS_SERVICES_MAC)
@@ -102,24 +107,29 @@ NSMenuItem* BuildAppMenu(NSApplication* nsapp,
               Item(IDS_HIDE_APP_MAC)
                   .string_format_1(product_name)
                   .tag(IDC_HIDE_APP)
-                  .action(@selector(hide:)),
+                  .action(@selector(hide:))
+                  .sf_symbol(@"eye.slash"),
               Item(IDS_HIDE_OTHERS_MAC)
                   .action(@selector(hideOtherApplications:))
                   .key_equivalent(@"h", NSEventModifierFlagCommand |
-                                            NSEventModifierFlagOption),
+                                            NSEventModifierFlagOption)
+                  .sf_symbol(@"eye.slash.circle"),
               Item(IDS_SHOW_ALL_MAC)
-                  .action(@selector(unhideAllApplications:)),
+                  .action(@selector(unhideAllApplications:))
+                  .sf_symbol(@"eye"),
               Item().is_separator(),
               Item(IDS_CONFIRM_TO_QUIT_OPTION)
                   .target(app_delegate)
                   .action(@selector(toggleConfirmToQuit:))
+                  .sf_symbol(@"exclamationmark.triangle")
                   .remove_if(is_pwa),
               Item().is_separator(),
               Item(IDS_EXIT_MAC)
                   .string_format_1(product_name)
                   .tag(IDC_EXIT)
                   .target(nsapp)
-                  .action(@selector(terminate:)),
+                  .action(@selector(terminate:))
+                  .sf_symbol(@"power"),
           })
           .Build();
   // clang-format on
@@ -144,48 +154,62 @@ NSMenuItem* BuildFileMenu(NSApplication* nsapp,
           .submenu({
               Item(IDS_NEW_TAB_MAC)
                   .command_id(IDC_NEW_TAB)
+                  .sf_symbol(@"plus.square")
                   .remove_if(is_pwa),
               Item(IDS_NEW_WINDOW_MAC)
-                  .command_id(IDC_NEW_WINDOW),
+                  .command_id(IDC_NEW_WINDOW)
+                  .sf_symbol(@"macwindow.badge.plus"),
               Item(IDS_NEW_INCOGNITO_WINDOW_MAC)
                   .command_id(IDC_NEW_INCOGNITO_WINDOW)
+                  .sf_symbol(@"eyeglasses")
                   .remove_if(is_pwa),
               Item(IDS_NEW_ISOLATED_WINDOW_MAC)
                   .command_id(IDC_NEW_ISOLATED_WINDOW)
+                  .sf_symbol(@"lock.shield")
                   .remove_if(is_pwa),
               Item(IDS_REOPEN_CLOSED_TABS_MAC)
                   .command_id(IDC_RESTORE_TAB)
+                  .sf_symbol(@"arrow.uturn.backward")
                   .remove_if(is_pwa),
               Item(IDS_OPEN_FILE_MAC)
                   .command_id(IDC_OPEN_FILE)
+                  .sf_symbol(@"doc")
                   .remove_if(is_pwa),
               Item(IDS_OPEN_LOCATION_MAC)
                   .command_id(IDC_FOCUS_LOCATION)
+                  .sf_symbol(@"magnifyingglass")
                   .remove_if(is_pwa),
               Item().is_separator(),
               Item(IDS_CLOSE_WINDOW_MAC)
                   .tag(IDC_CLOSE_WINDOW)
-                  .action(@selector(performClose:)),
+                  .action(@selector(performClose:))
+                  .sf_symbol(@"xmark.rectangle"),
               Item(IDS_CLOSE_ALL_WINDOWS_MAC)
                   .action(@selector(closeAll:))
                   .is_alternate()
                   .key_equivalent(@"W", NSEventModifierFlagCommand |
-                                            NSEventModifierFlagOption),
+                                            NSEventModifierFlagOption)
+                  .sf_symbol(@"xmark.rectangle.portrait"),
               Item(IDS_CLOSE_TAB_MAC)
                   .command_id(IDC_CLOSE_TAB)
+                  .sf_symbol(@"xmark")
                   .remove_if(is_pwa),
               Item(IDS_SAVE_PAGE_MAC)
-                  .command_id(IDC_SAVE_PAGE),
+                  .command_id(IDC_SAVE_PAGE)
+                  .sf_symbol(@"square.and.arrow.down"),
               Item().is_separator()
                   .remove_if(is_pwa),
               Item(IDS_SHARE_MAC)
+                  .sf_symbol(@"square.and.arrow.up")
                   .remove_if(is_pwa),
               Item().is_separator(),
               Item(IDS_PRINT)
-                  .command_id(IDC_PRINT),
+                  .command_id(IDC_PRINT)
+                  .sf_symbol(@"printer"),
               Item(IDS_PRINT_USING_SYSTEM_DIALOG_MAC)
                   .command_id(IDC_BASIC_PRINT)
                   .is_alternate()
+                  .sf_symbol(@"printer")
                   .remove_if(is_pwa),
           })
           .Build();
@@ -206,56 +230,73 @@ NSMenuItem* BuildEditMenu(NSApplication* nsapp,
           .submenu({
               Item(IDS_EDIT_UNDO_MAC)
                   .tag(IDC_CONTENT_CONTEXT_UNDO)
-                  .action(@selector(undo:)),
+                  .action(@selector(undo:))
+                  .sf_symbol(@"arrow.uturn.backward"),
               Item(IDS_EDIT_REDO_MAC)
                   .tag(IDC_CONTENT_CONTEXT_REDO)
-                  .action(@selector(redo:)),
+                  .action(@selector(redo:))
+                  .sf_symbol(@"arrow.uturn.forward"),
               Item().is_separator(),
               Item(IDS_CUT_MAC)
                   .tag(IDC_CONTENT_CONTEXT_CUT)
-                  .action(@selector(cut:)),
+                  .action(@selector(cut:))
+                  .sf_symbol(@"scissors"),
               Item(IDS_COPY_MAC)
                   .tag(IDC_CONTENT_CONTEXT_COPY)
-                  .action(@selector(copy:)),
+                  .action(@selector(copy:))
+                  .sf_symbol(@"doc.on.doc"),
               Item(IDS_PASTE_MAC)
                   .tag(IDC_CONTENT_CONTEXT_PASTE)
-                  .action(@selector(paste:)),
+                  .action(@selector(paste:))
+                  .sf_symbol(@"doc.on.clipboard"),
               Item(IDS_PASTE_MATCH_STYLE_MAC)
                   .tag(IDC_CONTENT_CONTEXT_PASTE_AND_MATCH_STYLE)
-                  .action(@selector(pasteAndMatchStyle:)),
+                  .action(@selector(pasteAndMatchStyle:))
+                  .sf_symbol(@"doc.on.clipboard"),
               Item(IDS_PASTE_MATCH_STYLE_MAC)
                   .action(@selector(pasteAndMatchStyle:))
                   .is_alternate()
                   .key_equivalent(@"V", NSEventModifierFlagCommand |
-                                            NSEventModifierFlagOption),
+                                            NSEventModifierFlagOption)
+                  .sf_symbol(@"doc.on.clipboard"),
               Item(IDS_EDIT_DELETE_MAC)
                   .tag(IDC_CONTENT_CONTEXT_DELETE)
-                  .action(@selector(delete:)),
+                  .action(@selector(delete:))
+                  .sf_symbol(@"delete.left"),
               Item(IDS_EDIT_SELECT_ALL_MAC)
                   .tag(IDC_CONTENT_CONTEXT_SELECTALL)
-                  .action(@selector(selectAll:)),
+                  .action(@selector(selectAll:))
+                  .sf_symbol(@"selection.pin.in.out"),
               Item().is_separator(),
               Item(IDS_EDIT_FIND_SUBMENU_MAC)
                   .tag(IDC_FIND_MENU)
+                  .sf_symbol(@"magnifyingglass")
                   .submenu({
                       Item(IDS_EDIT_SEARCH_WEB_MAC)
-                          .command_id(IDC_FOCUS_SEARCH),
+                          .command_id(IDC_FOCUS_SEARCH)
+                          .sf_symbol(@"globe"),
                       Item().is_separator(),
                       Item(IDS_EDIT_FIND_MAC)
-                          .command_id(IDC_FIND),
+                          .command_id(IDC_FIND)
+                          .sf_symbol(@"magnifyingglass"),
                       Item(IDS_EDIT_FIND_NEXT_MAC)
-                          .command_id(IDC_FIND_NEXT),
+                          .command_id(IDC_FIND_NEXT)
+                          .sf_symbol(@"chevron.down"),
                       Item(IDS_EDIT_FIND_PREVIOUS_MAC)
-                          .command_id(IDC_FIND_PREVIOUS),
+                          .command_id(IDC_FIND_PREVIOUS)
+                          .sf_symbol(@"chevron.up"),
                       Item(IDS_EDIT_USE_SELECTION_MAC)
                           .action(@selector(copyToFindPboard:))
-                          .key_equivalent(@"e", NSEventModifierFlagCommand),
+                          .key_equivalent(@"e", NSEventModifierFlagCommand)
+                          .sf_symbol(@"text.magnifyingglass"),
                       Item(IDS_EDIT_JUMP_TO_SELECTION_MAC)
                           .action(@selector(centerSelectionInVisibleArea:))
-                          .key_equivalent(@"j", NSEventModifierFlagCommand),
+                          .key_equivalent(@"j", NSEventModifierFlagCommand)
+                          .sf_symbol(@"arrow.down.to.line"),
               }),
               Item(IDS_EDIT_SPELLING_GRAMMAR_MAC)
                   .tag(IDC_SPELLCHECK_MENU)
+                  .sf_symbol(@"textformat.abc.dottedunderline")
                   .submenu({
                       Item(IDS_EDIT_SHOW_SPELLING_GRAMMAR_MAC)
                           .action(@selector(showGuessPanel:))
@@ -270,6 +311,7 @@ NSMenuItem* BuildEditMenu(NSApplication* nsapp,
                           .action(@selector(toggleGrammarChecking:)),
                   }),
               Item(IDS_EDIT_SUBSTITUTIONS_MAC)
+                  .sf_symbol(@"text.quote")
                   .submenu({
                       Item(IDS_EDIT_SHOW_SUBSTITUTIONS_MAC)
                           .action(@selector(orderFrontSubstitutionsPanel:)),
@@ -282,6 +324,7 @@ NSMenuItem* BuildEditMenu(NSApplication* nsapp,
                           .action(@selector(toggleAutomaticTextReplacement:)),
               }),
               Item(IDS_EDIT_TRANSFORMATIONS_MAC)
+                  .sf_symbol(@"textformat")
                   .submenu({
                       Item(IDS_EDIT_MAKE_UPPERCASE_MAC)
                           .action(@selector(uppercaseWord:)),
@@ -291,6 +334,7 @@ NSMenuItem* BuildEditMenu(NSApplication* nsapp,
                           .action(@selector(capitalizeWord:)),
               }),
               Item(IDS_SPEECH_MAC)
+                  .sf_symbol(@"waveform")
                   .submenu({
                       Item(IDS_SPEECH_START_SPEAKING_MAC)
                           .action(@selector(startSpeaking:)),
@@ -317,68 +361,84 @@ NSMenuItem* BuildViewMenu(NSApplication* nsapp,
           .submenu({
               Item(IDS_BOOKMARK_BAR_ALWAYS_SHOW_MAC)
                   .command_id(IDC_SHOW_BOOKMARK_BAR)
+                  .sf_symbol(@"book")
                   .remove_if(is_pwa),
               Item(IDS_TOGGLE_FULLSCREEN_TOOLBAR_MAC)
-                  .command_id(IDC_TOGGLE_FULLSCREEN_TOOLBAR),
+                  .command_id(IDC_TOGGLE_FULLSCREEN_TOOLBAR)
+                  .sf_symbol(@"menubar.rectangle"),
               Item(IDS_CONTEXT_MENU_SHOW_FULL_URLS)
-                  .command_id(IDC_SHOW_FULL_URLS),
-              Item(IDS_CONTEXT_MENU_SHOW_GOOGLE_LENS_SHORTCUT)
-                  .command_id(IDC_SHOW_GOOGLE_LENS_SHORTCUT),
-               Item(IDS_AI_MODE_ENTRYPOINT_CONTEXT_MENU_SHOW)
-                   .string_format_1(
-                       l10n_util::GetStringUTF16(IDS_AI_MODE_ENTRYPOINT_LABEL))
-                   .command_id(IDC_SHOW_AI_MODE_OMNIBOX_BUTTON),
+                  .command_id(IDC_SHOW_FULL_URLS)
+                  .sf_symbol(@"link"),
               Item(IDS_CONTEXT_MENU_SHOW_SEARCH_TOOLS)
-                  .command_id(IDC_SHOW_SEARCH_TOOLS),
-               Item(IDS_SWITCH_TO_VERTICAL_TAB_MAC)
-                   .command_id(IDC_TOGGLE_VERTICAL_TABS),
+                  .command_id(IDC_SHOW_SEARCH_TOOLS)
+                  .sf_symbol(@"magnifyingglass"),
+              Item(IDS_SWITCH_TO_VERTICAL_TAB_MAC)
+                  .command_id(IDC_TOGGLE_VERTICAL_TABS)
+                  .sf_symbol(@"sidebar.left"),
               Item(IDS_VERTICAL_TABS_VIEW_MENU_TOGGLE_COLLAPSE)
                   .command_id(IDC_TOGGLE_VERTICAL_TABS_COLLAPSE)
-                  .key_equivalent(@"L", NSEventModifierFlagCommand),
+                  .key_equivalent(@"L", NSEventModifierFlagCommand)
+                  .sf_symbol(@"sidebar.leading"),
               Item(IDS_CUSTOMIZE_TOUCH_BAR)
                   .tag(IDC_CUSTOMIZE_TOUCH_BAR)
                   .action(@selector(toggleTouchBarCustomizationPalette:))
+                  .sf_symbol(@"slider.horizontal.3")
                   .remove_if(is_pwa),
               Item().is_separator(),
               Item(IDS_STOP_MENU_MAC)
-                  .command_id(IDC_STOP),
+                  .command_id(IDC_STOP)
+                  .sf_symbol(@"xmark"),
               Item(IDS_RELOAD_MENU_MAC)
-                  .command_id(IDC_RELOAD),
+                  .command_id(IDC_RELOAD)
+                  .sf_symbol(@"arrow.clockwise"),
               Item(IDS_RELOAD_BYPASSING_CACHE_MENU_MAC)
                   .command_id(IDC_RELOAD_BYPASSING_CACHE)
-                  .is_alternate(),
+                  .is_alternate()
+                  .sf_symbol(@"arrow.clockwise"),
               Item().is_separator(),
               Item(IDS_ENTER_FULLSCREEN_MAC)
                   .tag(IDC_FULLSCREEN)
-                  .action(@selector(toggleFullScreen:)),
+                  .action(@selector(toggleFullScreen:))
+                  .sf_symbol(@"arrow.up.left.and.arrow.down.right"),
               Item(IDS_ENTER_FULLSCREEN_MAC)
                   .action(@selector(toggleFullScreen:))
                   .is_alternate()
                   .key_equivalent(@"f", NSEventModifierFlagCommand |
-                                            NSEventModifierFlagControl),
+                                            NSEventModifierFlagControl)
+                  .sf_symbol(@"arrow.up.left.and.arrow.down.right"),
               Item(IDS_TEXT_DEFAULT_MAC)
-                  .command_id(IDC_ZOOM_NORMAL),
+                  .command_id(IDC_ZOOM_NORMAL)
+                  .sf_symbol(@"1.magnifyingglass"),
               Item(IDS_TEXT_BIGGER_MAC)
-                  .command_id(IDC_ZOOM_PLUS),
+                  .command_id(IDC_ZOOM_PLUS)
+                  .sf_symbol(@"plus.magnifyingglass"),
               Item(IDS_TEXT_SMALLER_MAC)
-                  .command_id(IDC_ZOOM_MINUS),
+                  .command_id(IDC_ZOOM_MINUS)
+                  .sf_symbol(@"minus.magnifyingglass"),
               Item().is_separator(),
               Item(IDS_MEDIA_ROUTER_MENU_ITEM_TITLE)
-                  .command_id(IDC_ROUTE_MEDIA),
+                  .command_id(IDC_ROUTE_MEDIA)
+                  .sf_symbol(@"airplayvideo"),
               Item().is_separator(),
               Item(IDS_DEVELOPER_MENU_MAC)
                   .tag(IDC_DEVELOPER_MENU)
+                  .sf_symbol(@"chevron.left.forwardslash.chevron.right")
                   .submenu({
                       Item(IDS_VIEW_SOURCE_MAC)
-                          .command_id(IDC_VIEW_SOURCE),
+                          .command_id(IDC_VIEW_SOURCE)
+                          .sf_symbol(@"doc.text.magnifyingglass"),
                       Item(IDS_DEV_TOOLS_MAC)
-                          .command_id(IDC_DEV_TOOLS),
+                          .command_id(IDC_DEV_TOOLS)
+                          .sf_symbol(@"wrench.and.screwdriver"),
                       Item(IDS_DEV_TOOLS_ELEMENTS_MAC)
-                          .command_id(IDC_DEV_TOOLS_INSPECT),
+                          .command_id(IDC_DEV_TOOLS_INSPECT)
+                          .sf_symbol(@"cursorarrow.click.2"),
                       Item(IDS_DEV_TOOLS_CONSOLE_MAC)
-                          .command_id(IDC_DEV_TOOLS_CONSOLE),
+                          .command_id(IDC_DEV_TOOLS_CONSOLE)
+                          .sf_symbol(@"terminal"),
                       Item(IDS_ALLOW_JAVASCRIPT_APPLE_EVENTS_MAC)
-                          .command_id(IDC_TOGGLE_JAVASCRIPT_APPLE_EVENTS),
+                          .command_id(IDC_TOGGLE_JAVASCRIPT_APPLE_EVENTS)
+                          .sf_symbol(@"applescript"),
                   }),
         })
         .Build();
@@ -398,11 +458,14 @@ NSMenuItem* BuildHistoryMenu(NSApplication* nsapp,
           .submenu({
               Item(IDS_HISTORY_HOME_MAC)
                   .command_id(IDC_HOME)
+                  .sf_symbol(@"house")
                   .remove_if(is_pwa),
               Item(IDS_HISTORY_BACK_MAC)
-                  .command_id(IDC_BACK),
+                  .command_id(IDC_BACK)
+                  .sf_symbol(@"chevron.left"),
               Item(IDS_HISTORY_FORWARD_MAC)
-                  .command_id(IDC_FORWARD),
+                  .command_id(IDC_FORWARD)
+                  .sf_symbol(@"chevron.right"),
               Item().is_separator()
                   .tag(HistoryMenuBridge::kRecentlyClosedSeparator)
                   .remove_if(is_pwa),
@@ -449,13 +512,16 @@ NSMenuItem* BuildBookmarksMenu(NSApplication* nsapp,
           .tag(AppMenuModel::kBookmarksMenuPlaceholder)
           .submenu({
               Item(bookmarks_manager_string_id)
-                  .command_id(IDC_SHOW_BOOKMARK_MANAGER),
+                  .command_id(IDC_SHOW_BOOKMARK_MANAGER)
+                  .sf_symbol(@"book"),
               Item().is_separator()
                   .tag(IDC_BOOKMARK_THIS_TAB),
               Item(IDS_BOOKMARK_THIS_TAB_MAC)
-                  .command_id(IDC_BOOKMARK_THIS_TAB),
+                  .command_id(IDC_BOOKMARK_THIS_TAB)
+                  .sf_symbol(@"star"),
               Item(IDS_BOOKMARK_ALL_TABS_MAC)
-                  .command_id(IDC_BOOKMARK_ALL_TABS),
+                  .command_id(IDC_BOOKMARK_ALL_TABS)
+                  .sf_symbol(@"star.fill"),
               Item().is_separator()
                   .tag(IDC_BOOKMARK_THIS_TAB),
           })
@@ -493,8 +559,10 @@ NSMenuItem* BuildExtensionsMenu(NSApplication* nsapp,
                                          keyEquivalent:@""];
   NSMenu* submenu = [[NSMenu alloc] initWithTitle:@"Extensions"];
   submenu.delegate = GetExtensionsMenuDelegate();
-  NSMenuItem* manageItem =
-      Item(IDS_SHOW_EXTENSIONS_MAC).command_id(IDC_MANAGE_EXTENSIONS).Build();
+  NSMenuItem* manageItem = Item(IDS_SHOW_EXTENSIONS_MAC)
+                               .command_id(IDC_MANAGE_EXTENSIONS)
+                               .sf_symbol(@"slider.horizontal.3")
+                               .Build();
   if (manageItem) {
     [submenu addItem:manageItem];
   }
@@ -518,52 +586,70 @@ NSMenuItem* BuildTabMenu(NSApplication* nsapp,
           .submenu({
               Item(is_rtl ? IDS_TAB_CXMENU_NEWTABTOLEFT
                           : IDS_TAB_CXMENU_NEWTABTORIGHT)
-                  .command_id(IDC_NEW_TAB_TO_RIGHT),
+                  .command_id(IDC_NEW_TAB_TO_RIGHT)
+                  .sf_symbol(@"plus.square"),
               Item(IDS_TAB_CXMENU_NEWTABBELOW)
                   .command_id(IDC_NEW_TAB_TO_RIGHT)
+                  .sf_symbol(@"plus.square")
                   .set_hidden(true),
               Item(IDS_NEXT_TAB_MAC)
-                  .command_id(IDC_CYCLE_TO_NEXT_TAB),
+                  .command_id(IDC_CYCLE_TO_NEXT_TAB)
+                  .sf_symbol(@"chevron.right.square"),
               Item(IDS_PREV_TAB_MAC)
-                  .command_id(IDC_CYCLE_TO_PREV_TAB),
+                  .command_id(IDC_CYCLE_TO_PREV_TAB)
+                  .sf_symbol(@"chevron.left.square"),
               Item(IDS_DUPLICATE_TAB_MAC)
-                  .command_id(IDC_DUPLICATE_TAB),
+                  .command_id(IDC_DUPLICATE_TAB)
+                  .sf_symbol(@"plus.square.on.square"),
               Item(IDS_DUPLICATE_TARGET_TAB_MAC)
                   .command_id(IDC_DUPLICATE_TARGET_TAB)
                   .is_alternate()
-                  .key_equivalent(@"", NSEventModifierFlagOption),
+                  .key_equivalent(@"", NSEventModifierFlagOption)
+                  .sf_symbol(@"plus.square.on.square"),
               Item(IDS_MUTE_SITE_MAC)
-                  .command_id(IDC_WINDOW_MUTE_SITE),
+                  .command_id(IDC_WINDOW_MUTE_SITE)
+                  .sf_symbol(@"speaker.slash"),
               Item(IDS_MUTE_TARGET_SITE_MAC)
                   .command_id(IDC_MUTE_TARGET_SITE)
                   .is_alternate()
-                  .key_equivalent(@"", NSEventModifierFlagOption),
+                  .key_equivalent(@"", NSEventModifierFlagOption)
+                  .sf_symbol(@"speaker.slash"),
               Item(IDS_PIN_TAB_MAC)
-                  .command_id(IDC_WINDOW_PIN_TAB),
+                  .command_id(IDC_WINDOW_PIN_TAB)
+                  .sf_symbol(@"pin"),
               Item(IDS_PIN_TARGET_TAB_MAC)
                   .command_id(IDC_PIN_TARGET_TAB)
                   .is_alternate()
-                  .key_equivalent(@"", NSEventModifierFlagOption),
+                  .key_equivalent(@"", NSEventModifierFlagOption)
+                  .sf_symbol(@"pin"),
               Item(IDS_GROUP_TAB_MAC)
-                  .command_id(IDC_WINDOW_GROUP_TAB),
+                  .command_id(IDC_WINDOW_GROUP_TAB)
+                  .sf_symbol(@"rectangle.stack"),
               Item(IDS_GROUP_TARGET_TAB_MAC)
                   .command_id(IDC_GROUP_TARGET_TAB)
                   .is_alternate()
-                  .key_equivalent(@"", NSEventModifierFlagOption),
+                  .key_equivalent(@"", NSEventModifierFlagOption)
+                  .sf_symbol(@"rectangle.stack"),
               Item(IDS_TAB_CXMENU_CLOSEOTHERTABS)
-                  .command_id(IDC_WINDOW_CLOSE_OTHER_TABS),
+                  .command_id(IDC_WINDOW_CLOSE_OTHER_TABS)
+                  .sf_symbol(@"xmark.circle"),
               Item(is_rtl ? IDS_TAB_CXMENU_CLOSETABSTOLEFT
                           : IDS_TAB_CXMENU_CLOSETABSTORIGHT)
-                  .command_id(IDC_WINDOW_CLOSE_TABS_TO_RIGHT),
+                  .command_id(IDC_WINDOW_CLOSE_TABS_TO_RIGHT)
+                  .sf_symbol(@"arrow.right.to.line"),
               Item(IDS_TAB_CXMENU_CLOSETABSBELOW)
                   .command_id(IDC_WINDOW_CLOSE_TABS_TO_RIGHT)
+                  .sf_symbol(@"arrow.down.to.line")
                   .set_hidden(true),
               Item(IDS_MOVE_TAB_TO_NEW_WINDOW)
-                  .command_id(IDC_MOVE_TAB_TO_NEW_WINDOW),
+                  .command_id(IDC_MOVE_TAB_TO_NEW_WINDOW)
+                  .sf_symbol(@"macwindow.on.rectangle"),
               Item(IDS_TAB_CXMENU_ADD_TAB_TO_NEW_SPLIT)
-                  .command_id(IDC_NEW_SPLIT_TAB),
+                  .command_id(IDC_NEW_SPLIT_TAB)
+                  .sf_symbol(@"rectangle.split.2x1"),
               Item(IDS_SEARCH_TABS)
-                  .command_id(IDC_TAB_SEARCH),
+                  .command_id(IDC_TAB_SEARCH)
+                  .sf_symbol(@"magnifyingglass"),
               Item().is_separator(),
           })
           .Build();
@@ -596,7 +682,8 @@ NSMenuItem* BuildHelpMenu(NSApplication* nsapp,
 #endif
   items.push_back(Item(IDS_HELP_MAC)
                       .string_format_1(product_name)
-                      .command_id(IDC_HELP_PAGE_VIA_MENU));
+                      .command_id(IDC_HELP_PAGE_VIA_MENU)
+                      .sf_symbol(@"questionmark.circle"));
   NSMenuItem* item =
       Item(IDS_HELP_MENU_MAC)
           .submenu(items)

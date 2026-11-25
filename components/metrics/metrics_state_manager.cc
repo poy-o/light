@@ -290,7 +290,7 @@ std::unique_ptr<MetricsProvider> MetricsStateManager::GetProvider() {
 }
 
 bool MetricsStateManager::IsMetricsReportingEnabled() {
-  return enabled_state_provider_->IsReportingEnabled();
+  return false;
 }
 
 bool MetricsStateManager::IsExtendedSafeModeSupported() const {

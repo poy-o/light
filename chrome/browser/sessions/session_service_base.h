@@ -334,6 +334,10 @@ class SessionServiceBase : public sessions::CommandStorageManagerDelegate,
   // commands are written before the user acknowledges/restores the crash.
   void SetSavingEnabled(bool enabled);
 
+  bool IsEphemeralTabId(SessionID tab_id) const {
+    return ephemeral_tab_ids_.contains(tab_id);
+  }
+
  private:
   friend class SessionServiceBaseTestHelper;
   friend class SessionServiceTestHelper;
@@ -380,6 +384,10 @@ class SessionServiceBase : public sessions::CommandStorageManagerDelegate,
 
   // Closed windows can't fire: TabInserted ignores untracked windows.
   base::flat_set<SessionID> windows_empty_at_last_rebuild_;
+
+  // Tabs belonging to ephemeral/in-memory Light Tab Containers that must never
+  // be persisted across browser restarts (even when pinned).
+  base::flat_set<SessionID> ephemeral_tab_ids_;
 
   bool is_saving_enabled_ = true;
 

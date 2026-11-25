@@ -236,6 +236,14 @@ struct NavigateParams {
   // If non-empty, the new tab is an app tab.
   std::string app_id;
 
+  // If true, never inherit the source WebContents's isolated Light Tab
+  // Container StoragePartition when creating a new tab.
+  bool suppress_light_container_inheritance = false;
+
+  // If non-empty, explicitly locks the newly created WebContents to this
+  // persistent Light Tab Container StoragePartition.
+  std::string light_container_id;
+
   // Specifies the desired window features if `disposition` is NEW_POPUP.
   blink::mojom::WindowFeatures window_features;
 

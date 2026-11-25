@@ -18,14 +18,7 @@ bool g_ignore_force_field_trials_for_testing = false;
 }  // namespace
 
 bool EnabledStateProvider::IsReportingEnabled() const {
-  // Disable metrics reporting when field trials are forced, as otherwise this
-  // would pollute experiment results in UMA. Note: This is done here and not
-  // in IsConsentGiven() as we do not want this to affect field trial entropy
-  // logic (i.e. high entropy source should still be used if UMA is on).
-  return IsConsentGiven() &&
-         (g_ignore_force_field_trials_for_testing ||
-          !base::CommandLine::ForCurrentProcess()->HasSwitch(
-              switches::kForceFieldTrials));
+  return false;
 }
 
 void EnabledStateProvider::SetIgnoreForceFieldTrialsForTesting(

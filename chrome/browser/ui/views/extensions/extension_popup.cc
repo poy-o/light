@@ -41,6 +41,7 @@
 
 #if BUILDFLAG(IS_MAC)
 #include "base/message_loop/message_pump_apple.h"
+#include "chrome/browser/ui/views/frame/light_glass_sidebar_controller.h"
 #endif
 
 constexpr gfx::Size ExtensionPopup::kMinSize;
@@ -82,6 +83,13 @@ void ExtensionPopup::ShowPopup(
 }
 
 ExtensionPopup::~ExtensionPopup() {
+#if BUILDFLAG(IS_MAC)
+  if (sidebar_popup_locked_) {
+    sidebar_popup_locked_ = false;
+    LightEndSidebarExtensionPopup(sidebar_browser_window_);
+    sidebar_browser_window_ = gfx::NativeWindow();
+  }
+#endif
   // The ExtensionPopup may close before it was ever shown. If so, indicate such
   // through the callback.
   if (shown_callback_) {
@@ -129,6 +137,13 @@ views::View* ExtensionPopup::GetInitiallyFocusedView() {
 }
 
 void ExtensionPopup::OnWidgetDestroying(views::Widget* widget) {
+#if BUILDFLAG(IS_MAC)
+  if (sidebar_popup_locked_) {
+    sidebar_popup_locked_ = false;
+    LightEndSidebarExtensionPopup(sidebar_browser_window_);
+    sidebar_browser_window_ = gfx::NativeWindow();
+  }
+#endif
   BubbleDialogDelegateView::OnWidgetDestroying(widget);
   anchor_widget_observation_.Reset();
   extension_registry_observation_.Reset();
@@ -334,6 +349,21 @@ void ExtensionPopup::ShowBubble() {
     CloseDeferredIfNecessary();
     return;
   }
+
+#if BUILDFLAG(IS_MAC)
+  if (!sidebar_popup_locked_ && browser_ && browser_->GetWindow()) {
+    sidebar_browser_window_ = browser_->GetWindow()->GetNativeWindow();
+    gfx::Rect sidebar_anchor =
+        LightBeginSidebarExtensionPopup(sidebar_browser_window_);
+    sidebar_popup_locked_ = true;
+    if (!sidebar_anchor.IsEmpty()) {
+      SetAnchorView(nullptr);
+      SetAnchorRect(sidebar_anchor);
+      SetArrow(views::BubbleBorder::LEFT_TOP);
+      SizeToContents();
+    }
+  }
+#endif
 
   GetWidget()->Show();
   withheld_from_view_.reset();

@@ -245,6 +245,11 @@ class Observer : public BrowserCollectionObserver, public AvatarMenuObserver {
       [self createItemWithTitle:l10n_util::GetNSStringWithFixup(
                                     IDS_PROFILES_MANAGE_BUTTON_LABEL)
                          action:@selector(editProfile:)];
+  item.image = [NSImage imageWithSystemSymbolName:@"pencil"
+                         accessibilityDescription:nil];
+  if (@available(macOS 27, *)) {
+    item.preferredImageVisibility = NSMenuItemImageVisibilityVisible;
+  }
   [self.menu addItem:item];
 
   if (_avatarMenu->ShouldShowAddNewProfileLink()) {
@@ -253,6 +258,11 @@ class Observer : public BrowserCollectionObserver, public AvatarMenuObserver {
     item = [self createItemWithTitle:l10n_util::GetNSStringWithFixup(
                                          IDS_PROFILES_ADD_PROFILE_LABEL)
                               action:@selector(newProfile:)];
+    item.image = [NSImage imageWithSystemSymbolName:@"person.badge.plus"
+                           accessibilityDescription:nil];
+    if (@available(macOS 27, *)) {
+      item.preferredImageVisibility = NSMenuItemImageVisibilityVisible;
+    }
     [self.menu addItem:item];
   }
 

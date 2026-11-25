@@ -271,7 +271,7 @@ void SessionService::DeleteLastSession() {
 void SessionService::SetSplitTab(SessionID window_id,
                                  SessionID tab_id,
                                  std::optional<split_tabs::SplitTabId> split) {
-  if (!ShouldTrackChangesToWindow(window_id)) {
+  if (!ShouldTrackChangesToWindow(window_id) || IsEphemeralTabId(tab_id)) {
     return;
   }
 
@@ -306,7 +306,7 @@ void SessionService::SetSplitTabData(
 void SessionService::SetTabGroup(SessionID window_id,
                                  SessionID tab_id,
                                  std::optional<tab_groups::TabGroupId> group) {
-  if (!ShouldTrackChangesToWindow(window_id)) {
+  if (!ShouldTrackChangesToWindow(window_id) || IsEphemeralTabId(tab_id)) {
     return;
   }
 
@@ -372,7 +372,7 @@ void SessionService::AddTabExtraData(SessionID window_id,
                                      SessionID tab_id,
                                      const char* key,
                                      const std::string& data) {
-  if (!ShouldTrackChangesToWindow(window_id)) {
+  if (!ShouldTrackChangesToWindow(window_id) || IsEphemeralTabId(tab_id)) {
     return;
   }
 
@@ -391,8 +391,8 @@ void SessionService::AddWindowExtraData(SessionID window_id,
 }
 
 void SessionService::TabClosed(SessionID window_id, SessionID tab_id) {
-  if (!tab_id.id()) {
-    return;  // Happens when the tab is replaced.
+  if (!tab_id.id() || IsEphemeralTabId(tab_id)) {
+    return;  // Happens when the tab is replaced or ephemeral.
   }
 
   if (!ShouldTrackChangesToWindow(window_id)) {
@@ -576,7 +576,7 @@ void SessionService::SetTabUserAgentOverride(
     SessionID window_id,
     SessionID tab_id,
     const sessions::SerializedUserAgentOverride& user_agent_override) {
-  if (!ShouldTrackChangesToWindow(window_id)) {
+  if (!ShouldTrackChangesToWindow(window_id) || IsEphemeralTabId(tab_id)) {
     return;
   }
 

@@ -74,6 +74,9 @@
 #include "content/public/browser/permission_descriptor_util.h"
 #include "content/public/browser/picture_in_picture_window_controller.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/security_principal.h"
+#include "content/public/browser/storage_partition_config.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/site_isolation_policy.h"
@@ -580,10 +583,57 @@ std::unique_ptr<content::WebContents> CreateTargetContents(
   // subsequent navigation is cross-process (i.e. cross-SiteInstance), then it
   // will stay in the same BrowsingInstance (creating frame proxies as needed)
   // preserving the requested opener relationship along the way.
-  scoped_refptr<content::SiteInstance> initial_site_instance_for_new_contents =
-      params.opener ? params.opener->GetSiteInstance()
-                    : tab_util::GetSiteInstanceForNewTab(
-                          params.browser->GetProfile(), url);
+  scoped_refptr<content::SiteInstance> initial_site_instance_for_new_contents;
+  if (params.opener) {
+    initial_site_instance_for_new_contents = params.opener->GetSiteInstance();
+  } else {
+    if (!params.light_container_id.empty()) {
+      content::StoragePartitionConfig cfg =
+          content::StoragePartitionConfig::Create(
+              params.browser->GetProfile(), "light_container",
+              params.light_container_id, /*in_memory=*/false);
+      const GURL seed_url =
+          url.SchemeIsHTTPOrHTTPS()
+              ? url
+              : GURL("https://" + params.light_container_id +
+                     ".light-container.invalid/");
+      initial_site_instance_for_new_contents =
+          content::SiteInstance::CreateForFixedStoragePartition(
+              params.browser->GetProfile(), seed_url, cfg);
+    }
+    // Inherit isolated Tab Container storage partition when opening links/tabs
+    // from inside a container tab (e.g. Cmd+click, target="_blank", context
+    // menu), unless explicitly suppressed (e.g. New Tab / Spotlight when
+    // inheritance is off) or navigating to a blank/newtab URL.
+    const bool is_new_tab_url =
+        url.is_empty() ||
+        (url.SchemeIs("chrome") && url.host() == "newtab") ||
+        (url.SchemeIs("light") && url.host() == "newtab");
+    if (!initial_site_instance_for_new_contents && params.source_contents &&
+        !params.suppress_light_container_inheritance && !is_new_tab_url) {
+      if (content::RenderFrameHost* src_rfh =
+              params.source_contents->GetPrimaryMainFrame()) {
+        if (content::SiteInstance* src_si = src_rfh->GetSiteInstance()) {
+          const auto& cfg =
+              src_si->GetSecurityPrincipal().GetStoragePartitionConfig();
+          if (!cfg.is_default() && cfg.partition_domain() == "light_container") {
+            const GURL seed_url =
+                url.SchemeIsHTTPOrHTTPS()
+                    ? url
+                    : GURL("https://" + cfg.partition_name() +
+                           ".light-container.invalid/");
+            initial_site_instance_for_new_contents =
+                content::SiteInstance::CreateForFixedStoragePartition(
+                    params.browser->GetProfile(), seed_url, cfg);
+          }
+        }
+      }
+    }
+    if (!initial_site_instance_for_new_contents) {
+      initial_site_instance_for_new_contents =
+          tab_util::GetSiteInstanceForNewTab(params.browser->GetProfile(), url);
+    }
+  }
 
   WebContents::CreateParams create_params(
       params.browser->GetProfile(), initial_site_instance_for_new_contents);

@@ -1817,13 +1817,26 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
         chrome::OpenDownloadsWindow(profile);
       }
       break;
-    case IDC_MANAGE_EXTENSIONS:
+    case IDC_MANAGE_EXTENSIONS: {
+      Class bridgeClass = NSClassFromString(@"LightExtensionsManagerMenuBridge");
       if (BrowserWindowInterface* browser = ActivateBrowser(profile)) {
-        chrome::ShowExtensions(browser);
+        if (bridgeClass &&
+            [bridgeClass respondsToSelector:@selector(openForBrowserPtr:)]) {
+          [bridgeClass performSelector:@selector(openForBrowserPtr:)
+                            withObject:[NSValue valueWithPointer:browser]];
+        } else {
+          chrome::ShowExtensions(browser);
+        }
+      } else if (bridgeClass &&
+                 [bridgeClass
+                     respondsToSelector:@selector(openForProfilePtr:)]) {
+        [bridgeClass performSelector:@selector(openForProfilePtr:)
+                          withObject:[NSValue valueWithPointer:profile]];
       } else {
         chrome::OpenExtensionsWindow(profile);
       }
       break;
+    }
     case IDC_HELP_PAGE_VIA_MENU:
       if (BrowserWindowInterface* browser = ActivateBrowser(profile)) {
         chrome::ShowHelp(browser, chrome::HelpSource::kMenu);

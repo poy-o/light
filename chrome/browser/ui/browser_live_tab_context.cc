@@ -61,7 +61,11 @@
 #include "components/tabs/public/tab_group.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/security_principal.h"
 #include "content/public/browser/session_storage_namespace_handle.h"
+#include "content/public/browser/site_instance.h"
+#include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/mojom/window_show_state.mojom.h"
 
@@ -207,6 +211,26 @@ std::map<std::string, std::string> BrowserLiveTabContext::GetExtraDataForTab(
           contextual_tasks::ContextualTasksPanelController::From(
               &browser_.get())) {
     extra_data.merge(contextual_tasks_controller->GetTabRestoreData(tab));
+  }
+
+  if (content::WebContents* wc = tab ? tab->GetContents() : nullptr) {
+    if (content::RenderFrameHost* rfh = wc->GetPrimaryMainFrame()) {
+      if (content::SiteInstance* si = rfh->GetSiteInstance()) {
+        const auto& cfg =
+            si->GetSecurityPrincipal().GetStoragePartitionConfig();
+        if (!cfg.is_default() &&
+            cfg.partition_domain() == "light_container" && !cfg.in_memory()) {
+          std::string cid = cfg.partition_name();
+          const size_t pos = cid.find("#g");
+          if (pos != std::string::npos) {
+            cid.erase(pos);
+          }
+          if (!cid.empty()) {
+            extra_data["light_tab_container_id"] = cid;
+          }
+        }
+      }
+    }
   }
 
   return extra_data;

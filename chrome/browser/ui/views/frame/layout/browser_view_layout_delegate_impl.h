@@ -35,6 +35,7 @@ class BrowserViewLayoutDelegateImpl : public BrowserViewLayoutDelegate {
   bool IsInfobarVisible() const override;
   bool IsContentsSeparatorEnabled() const override;
   int GetLightPinnedSidebarWidth() const override;
+  gfx::Insets GetLightContentFrameInsets() const override;
   bool IsActiveTabSplit() const override;
   bool IsActiveTabAtLeadingWindowEdge() const override;
   const ImmersiveModeController* GetImmersiveModeController() const override;

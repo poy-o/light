@@ -189,141 +189,16 @@ void ReportingService::OnAppEnterForeground() {
 //------------------------------------------------------------------------------
 
 void ReportingService::SendNextLogWhenPossible() {
-#if BUILDFLAG(IS_ANDROID)
-  // If possible, schedule the upload of the next log with the OS through a
-  // JobScheduler. See metrics::BackgroundUploadTask for implementation of the
-  // background task.
-  if (client_->IsJobSchedulerSupported()) {
-    // There should not be two upload tasks scheduled simultaneously. Note that
-    // the following fields are intentionally set *before* we call Schedule() in
-    // case that function can in-line the execution of the task immediately.
-    CHECK(!background_upload_task_scheduled_);
-    CHECK(!background_upload_task_scheduled_time_.has_value());
-    background_upload_task_scheduled_ = true;
-    background_upload_task_scheduled_time_ = base::TimeTicks::Now();
-    // We intentionally do not reset `on_stop_task_called_` before scheduling
-    // a new task here. Due to all JobScheduler-related messages being processed
-    // on the main thread, it's possible we only set `on_stop_task_called_`
-    // *after* its corresponding task was already finished (e.g. during an
-    // upload, the OS sent a notification to stop the task and OnStopTask() was
-    // scheduled to run on the main thread, but the upload already finished and
-    // its callback ran before the OnStopTask()). As a result, don't reset
-    // `on_stop_task_called_` so that the next upload will pick up the previous
-    // upload's OnStopTask() and use backoff logic.
-
-    // For consistency with other platforms, we use OneOffInfo (rather than
-    // PeriodicInfo), as we have our own scheduling mechanisms. When the task
-    // is finished, another upload will be scheduled if necessary.
-    background_task::OneOffInfo one_off;
-    // Note: it is possible to specify requirements, e.g. what kind of network
-    // connectivity is needed for the task, such that the Android OS will only
-    // run the task when the requirements are met. We don't specify such
-    // requirements here however (we have our own backoff logic for when there
-    // is no connectivity, which we want to exercise for consistency with other
-    // platforms).
-    background_task::TaskInfo task_info(background_upload_task_id_, one_off);
-    bool success =
-        background_task::BackgroundTaskSchedulerFactory::GetScheduler()
-            ->Schedule(task_info);
-    if (success) {
-      return;
-    }
-
-    // If we couldn't schedule the task for whatever reason, fall back to
-    // uploading without JobScheduler (though the network request may fail if
-    // the browser is currently in the background). Clear the "pending" fields
-    // first.
-    background_upload_task_scheduled_ = false;
-    background_upload_task_scheduled_time_ = std::nullopt;
-  }
-#endif  // BUILDFLAG(IS_ANDROID)
-  SendNextLogImpl(base::DoNothing());
+  // Light: telemetry log uploads disabled.
+  return;
 }
 
 void ReportingService::SendNextLogImpl(base::OnceClosure done_callback) {
-  DVLOG(1) << "SendNextLogImpl";
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  CHECK(upload_scheduler_);
-
-#if BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_IOS_APP_EXTENSION)
-  if (base::FeatureList::IsEnabled(features::kIOSBackgroundMetrics)) {
-    // Create a ScopedCriticalAction to indicate to the OS that a critical task
-    // is being run and that it should avoid shutting down Chrome in the
-    // background.
-    done_callback =
-        std::move(done_callback)
-            .Then(base::BindOnce(
-                [](std::unique_ptr<base::ios::ScopedCriticalAction>) {
-                  // This function does nothing but keep the
-                  // ScopedCriticalAction param alive until we have
-                  // finished the upload task.
-                },
-                std::make_unique<base::ios::ScopedCriticalAction>(
-                    "NetMetricsLogUploaderUpload")));
+  // Light: telemetry log uploads disabled.
+  if (done_callback) {
+    std::move(done_callback).Run();
   }
-#endif  // BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_IOS_APP_EXTENSION)
-
-  upload_scheduler_->SetDoneCallback(std::move(done_callback));
-
-  const base::TimeTicks now = base::TimeTicks::Now();
-  LogActualUploadInterval(last_upload_finish_time_.is_null()
-                              ? base::TimeDelta()
-                              : now - last_upload_finish_time_);
-  last_upload_finish_time_ = now;
-
-  if (!reporting_active()) {
-    upload_scheduler_->StopAndUploadCancelled();
-    return;
-  }
-  if (!log_store()->has_unsent_logs()) {
-    // Should only get here if serializing the log failed somehow.
-    upload_scheduler_->Stop();
-    // Reset backoff interval
-    upload_scheduler_->UploadFinished(/*backoff=*/false);
-    return;
-  }
-  if (!log_store()->has_staged_log()) {
-    reporting_info_.set_attempt_count(0);
-    log_store()->StageNextLog();
-  }
-
-#if BUILDFLAG(IS_CHROMEOS)
-  // Check whether the log should be uploaded based on user id. If it should not
-  // be sent, then discard the log from the store and notify the scheduler.
-  auto staged_user_id = log_store()->staged_log_user_id();
-  if (staged_user_id.has_value() &&
-      !client_->ShouldUploadMetricsForUserId(staged_user_id.value())) {
-    // Remove the log and update list to disk.
-    log_store()->DropUnsentStagedLog("Disallowed by user preference.",
-                                     UnsentLogDropReason::kUserPreference);
-    log_store()->TrimAndPersistUnsentLogs(/*overwrite_in_memory_store=*/true);
-
-    // Notify the scheduler that the next log should be uploaded. If there are
-    // no more logs, then stop the scheduler.
-    if (!log_store()->has_unsent_logs()) {
-      DVLOG(1) << "Stopping upload_scheduler_.";
-      upload_scheduler_->Stop();
-    }
-    upload_scheduler_->UploadFinished(/*backoff=*/false);
-    return;
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS)
-
-  // Proceed to stage the log for upload if log size satisfies cellular log
-  // upload constrains.
-  bool upload_canceled = false;
-  bool is_cellular_logic = client_->IsOnCellularConnection();
-  if (is_cellular_logic && data_use_tracker_ &&
-      !data_use_tracker_->ShouldUploadLogOnCellular(
-          log_store()->staged_log().size())) {
-    upload_scheduler_->UploadOverDataUsageCap();
-    upload_canceled = true;
-  } else {
-    SendStagedLog();
-  }
-  if (is_cellular_logic) {
-    LogCellularConstraint(upload_canceled);
-  }
+  return;
 }
 
 void ReportingService::SendStagedLog() {

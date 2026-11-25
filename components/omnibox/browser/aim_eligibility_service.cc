@@ -265,14 +265,13 @@ void AimEligibilityService::RegisterProfilePrefs(PrefRegistrySimple* registry) {
 
 // static
 bool AimEligibilityService::IsAimAllowedByPolicy(const PrefService* prefs) {
-  return prefs->GetInteger(omnibox::kAIModeSettings) == kAiModeAllowedDefault;
+  return false;
 }
 
 // static
 bool AimEligibilityService::IsAimAllowedByThirdPartyPolicy(
     const PrefService* prefs) {
-  return prefs->GetInteger(omnibox::kThirdPartyAiChatSettings) ==
-         kAiModeAllowedDefault;
+  return false;
 }
 
 // static
@@ -323,70 +322,11 @@ AimEligibilityService::AimEligibilityService(
       url_loader_factory_(url_loader_factory),
       identity_manager_(identity_manager),
       configuration_(std::move(configuration)) {
-  if (!base::FeatureList::IsEnabled(omnibox::kAimEnabled)) {
-    return;
-  }
-
-  if (!template_url_service_) {
-    return;
-  }
-
-  pref_change_registrar_.Init(&pref_service_.get());
-  pref_change_registrar_.Add(
-      kResponsePrefName,
-      base::BindRepeating(&AimEligibilityService::OnEligibilityResponseChanged,
-                          weak_factory_.GetWeakPtr()));
-  pref_change_registrar_.Add(
-      omnibox::kAIModeSettings,
-      base::BindRepeating(&AimEligibilityService::OnPolicyChanged,
-                          weak_factory_.GetWeakPtr()));
-  pref_change_registrar_.Add(
-      omnibox::kThirdPartyAiChatSettings,
-      base::BindRepeating(&AimEligibilityService::OnPolicyChanged,
-                          weak_factory_.GetWeakPtr()));
-
-  is_dse_google_ = search::DefaultSearchProviderIsGoogle(template_url_service_);
-  template_url_service_->AddObserver(this);
-
-  LoadMostRecentResponse();
-
-  if (IsManualOverrideActive()) {
-    base::Time override_time =
-        pref_service_->GetTime(kManualOverrideTimestampPrefName);
-    LOG(WARNING) << "AIM eligibility manual override is active. "
-                 << "Automatic background requests are disabled. "
-                 << "It will expire on " << (override_time + base::Hours(24));
-  }
-
-  bool startup_request_enabled =
-      base::FeatureList::IsEnabled(omnibox::kAimServerRequestOnStartupEnabled);
-  bool startup_request_delayed_until_network_available_enabled =
-      base::FeatureList::IsEnabled(
-          omnibox::kAimStartupRequestDelayedUntilNetworkAvailableEnabled);
-  bool is_offline = net::NetworkChangeNotifier::IsOffline();
-
-  if (startup_request_enabled &&
-      startup_request_delayed_until_network_available_enabled && is_offline) {
-    net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
-  } else if (startup_request_enabled) {
-    startup_request_sent_ = true;
-    ScheduleServerEligibilityRequest(RequestSource::kStartup, locale);
-  }
-
-  if (identity_manager_) {
-    identity_manager_observation_.Observe(identity_manager_);
-  }
+  // Light: AI Mode / search eligibility fetching is completely disabled.
+  return;
 }
 
-AimEligibilityService::~AimEligibilityService() {
-  if (template_url_service_) {
-    template_url_service_->RemoveObserver(this);
-  }
-  if (base::FeatureList::IsEnabled(
-          omnibox::kAimStartupRequestDelayedUntilNetworkAvailableEnabled)) {
-    net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
-  }
-}
+AimEligibilityService::~AimEligibilityService() = default;
 
 // static
 bool AimEligibilityService::IsIetfBcp47(const std::string& locale) {
@@ -430,50 +370,27 @@ AimEligibilityService::RegisterEligibilityChangedCallback(
 }
 
 bool AimEligibilityService::IsServerEligibilityEnabled() const {
-  return base::FeatureList::IsEnabled(omnibox::kAimServerEligibilityEnabled);
+  return false;
 }
 
 bool AimEligibilityService::IsAimAllowedByDse() const {
-  return search::DefaultSearchProviderIsGoogle(template_url_service_);
+  return false;
 }
 
 bool AimEligibilityService::IsAimAllowedByFeatureAndPolicy() const {
-  // Kill switch: If AIM is completely disabled, return false.
-  if (!base::FeatureList::IsEnabled(omnibox::kAimEnabled)) {
-    return false;
-  }
-
-  // Check Policy requirements.
-  if (!IsAimAllowedByPolicy(&pref_service_.get())) {
-    return false;
-  }
-
-  return true;
+  return false;
 }
 
 bool AimEligibilityService::IsAimAllowedByThirdPartyPolicy() const {
-  return IsAimAllowedByThirdPartyPolicy(&pref_service_.get());
+  return false;
 }
 
 bool AimEligibilityService::IsAimLocallyEligible() const {
-  // Check core baseline eligibility and Google DSE requirement.
-  return IsAimAllowedByFeatureAndPolicy() && IsAimAllowedByDse();
+  return false;
 }
 
 bool AimEligibilityService::IsAimEligible() const {
-  // Check local eligibility first.
-  if (!IsAimLocallyEligible()) {
-    return false;
-  }
-
-  // Conditionally check server response eligibility requirement.
-  if (IsServerEligibilityEnabled()) {
-    base::UmaHistogramEnumeration(kEligibilityResponseSourceHistogramName,
-                                  most_recent_response_source_);
-    return most_recent_response_.is_eligible();
-  }
-
-  return true;
+  return false;
 }
 
 bool AimEligibilityService::IsPdfUploadEligible() const {

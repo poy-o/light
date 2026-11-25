@@ -324,6 +324,11 @@ BrowserViewTabbedLayoutImpl::CalculateSeparatorInfo() const {
       break;
   }
 
+  if (!delegate().IsContentsSeparatorEnabled()) {
+    info.multi_contents_separator = false;
+    info.top_container_separator = false;
+  }
+
   return info;
 }
 
@@ -841,8 +846,11 @@ BrowserViewTabbedLayoutImpl::CalculateProposedLayout(
   }
 
   BrowserLayoutParams params = layout_data_->revised_params;
-  if (const int light_pinned_w = delegate().GetLightPinnedSidebarWidth();
-      light_pinned_w > 0) {
+  if (const gfx::Insets light_insets = delegate().GetLightContentFrameInsets();
+      !light_insets.IsEmpty()) {
+    params.visual_client_area.Inset(light_insets);
+  } else if (const int light_pinned_w = delegate().GetLightPinnedSidebarWidth();
+             light_pinned_w > 0) {
     params.visual_client_area.Inset(gfx::Insets::TLBR(0, light_pinned_w, 0, 0));
   }
   bool needs_exclusion = true;
@@ -1590,8 +1598,14 @@ void BrowserViewTabbedLayoutImpl::DoPreLayoutComputations(
 
 void BrowserViewTabbedLayoutImpl::DoPostLayoutVisualAdjustments(
     const BrowserLayoutParams& params) {
-  // If the window goes out of glass mode, these changes won't hurt anything.
-  if (in_glass_mode()) {
+  const gfx::Insets light_insets = delegate().GetLightContentFrameInsets();
+  if (!light_insets.IsEmpty()) {
+    // Match curved window corners smoothly (0 when filling screen in compact
+    // mode, ~10pt concentric curve when windowed or sidebar pinned).
+    const float r = std::clamp(
+        static_cast<float>(light_insets.top()) * 1.65f, 0.0f, 10.5f);
+    views().multi_contents_view->SetBackgroundRadii(gfx::RoundedCornersF(r));
+  } else if (in_glass_mode()) {
     gfx::RoundedCornersF content_corners;
     if (layout_data_->tab_strip_type == TabStripType::kVertical &&
         !is_fullscreen(layout_data_->window_state)) {
@@ -1607,6 +1621,8 @@ void BrowserViewTabbedLayoutImpl::DoPostLayoutVisualAdjustments(
       }
     }
     views().multi_contents_view->SetBackgroundRadii(content_corners);
+  } else {
+    views().multi_contents_view->SetBackgroundRadii(gfx::RoundedCornersF());
   }
 
   // Want to cut the vertical tabstrip and its decorations out of the top

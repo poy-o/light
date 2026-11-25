@@ -936,11 +936,10 @@ bool ChromeDownloadManagerDelegate::ShouldAutomaticallyOpenFile(
     return false;
   }
 #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
-  // TODO(crbug.com/40129365): This determination is done based on |path|, while
-  // ShouldOpenDownload() detects extension downloads based on the
-  // characteristics of the download. Reconcile this.
+  // Light: automatically open downloaded .crx files so CrxInstaller prompts
+  // the user to add the extension.
   if (path.MatchesExtension(extensions::kExtensionFileExtension)) {
-    return false;
+    return true;
   }
 #endif
 
@@ -968,11 +967,10 @@ bool ChromeDownloadManagerDelegate::ShouldAutomaticallyOpenFileByPolicy(
     return false;
   }
 #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
-  // TODO(crbug.com/40129365): This determination is done based on |path|, while
-  // ShouldOpenDownload() detects extension downloads based on the
-  // characteristics of the download. Reconcile this.
+  // Light: automatically open downloaded .crx files so CrxInstaller prompts
+  // the user to add the extension.
   if (path.MatchesExtension(extensions::kExtensionFileExtension)) {
-    return false;
+    return true;
   }
 #endif
   return download_prefs_->IsAutoOpenByPolicy(url, path);

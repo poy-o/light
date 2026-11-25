@@ -70,7 +70,7 @@ namespace internal {
 // consent is given, then there will be no recording or reporting.
 BASE_FEATURE(kMetricsReportingFeature,
              "MetricsReporting",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_ANDROID)
 // Same as |kMetricsReportingFeature|, but this feature is associated with a
@@ -122,19 +122,7 @@ bool ShouldUsePostFREFixSamplingTrial() {
 
 // Implementation of IsClientInSample() that takes a PrefService param.
 bool IsClientInSampleImpl(PrefService* local_state) {
-  // Test the MetricsReporting or PostFREFixMetricsReporting feature (depending
-  // on the |kUsePostFREFixSamplingTrial| pref and platform) for all users to
-  // ensure that the trial is reported. See the comment on
-  // |kUsePostFREFixSamplingTrial| for more details on why there are two
-  // different features.
-#if BUILDFLAG(IS_ANDROID)
-  if (ShouldUsePostFREFixSamplingTrial(local_state)) {
-    return base::FeatureList::IsEnabled(
-        metrics::internal::kPostFREFixMetricsReportingFeature);
-  }
-#endif  // BUILDFLAG(IS_ANDROID)
-  return base::FeatureList::IsEnabled(
-      metrics::internal::kMetricsReportingFeature);
+  return false;
 }
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -171,15 +159,9 @@ class ChromeMetricsServicesManagerClient::ChromeEnabledStateProvider
 
   ~ChromeEnabledStateProvider() override = default;
 
-  bool IsConsentGiven() const override {
-    return ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled(
-        local_state_);
-  }
+  bool IsConsentGiven() const override { return false; }
 
-  bool IsReportingEnabled() const override {
-    return metrics::EnabledStateProvider::IsReportingEnabled() &&
-           IsClientInSampleImpl(local_state_);
-  }
+  bool IsReportingEnabled() const override { return false; }
 
  private:
   const raw_ptr<PrefService> local_state_;

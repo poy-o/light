@@ -5838,6 +5838,17 @@ FrameTree* WebContentsImpl::CreateNewWindow(
       // as long as they preserve the guest's StoragePartition.
       site_instance =
           SiteInstance::CreateForGuest(GetBrowserContext(), partition_config);
+    } else if (source_site_instance->IsFixedStoragePartition() &&
+               !partition_config.is_default()) {
+      // Preserve fixed storage partitions (e.g. Light Tab Containers) across
+      // target="_blank" rel="noopener" links.
+      GURL seed_url =
+          params.target_url.SchemeIsHTTPOrHTTPS()
+              ? params.target_url
+              : GURL("https://" + partition_config.partition_name() +
+                     ".light-container.invalid/");
+      site_instance = SiteInstance::CreateForFixedStoragePartition(
+          GetBrowserContext(), seed_url, partition_config);
     } else {
       site_instance = SiteInstance::Create(GetBrowserContext());
     }

@@ -63,6 +63,10 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/security_principal.h"
+#include "content/public/browser/site_instance.h"
+#include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/session_storage_namespace_handle.h"
 #include "ui/base/mojom/window_show_state.mojom.h"
 
@@ -228,6 +232,45 @@ BrowserWindowInterface::Type SessionServiceBase::GetBrowserTypeFromWebContents(
   return data->type();
 }
 
+namespace {
+
+constexpr char kLightContainerPartitionDomain[] = "light_container";
+constexpr char kLightContainerExtraDataKey[] = "light_tab_container_id";
+
+std::string GetLightTabContainerInfo(content::WebContents* tab,
+                                     bool* is_ephemeral) {
+  if (is_ephemeral) {
+    *is_ephemeral = false;
+  }
+  if (!tab) {
+    return std::string();
+  }
+  content::RenderFrameHost* rfh = tab->GetPrimaryMainFrame();
+  if (!rfh) {
+    return std::string();
+  }
+  content::SiteInstance* si = rfh->GetSiteInstance();
+  if (!si) {
+    return std::string();
+  }
+  const auto& config = si->GetSecurityPrincipal().GetStoragePartitionConfig();
+  if (config.is_default() ||
+      config.partition_domain() != kLightContainerPartitionDomain) {
+    return std::string();
+  }
+  if (is_ephemeral) {
+    *is_ephemeral = config.in_memory();
+  }
+  std::string name = config.partition_name();
+  const size_t pos = name.find("#g");
+  if (pos != std::string::npos) {
+    name.erase(pos);
+  }
+  return name;
+}
+
+}  // namespace
+
 void SessionServiceBase::SetWindowVisibleOnAllWorkspaces(
     SessionID window_id,
     bool visible_on_all_workspaces) {
@@ -258,7 +301,7 @@ void SessionServiceBase::ResetFromCurrentBrowsersForTesting() {
 }
 
 void SessionServiceBase::SetTabWindow(SessionID window_id, SessionID tab_id) {
-  if (!ShouldTrackChangesToWindow(window_id)) {
+  if (!ShouldTrackChangesToWindow(window_id) || IsEphemeralTabId(tab_id)) {
     return;
   }
 
@@ -296,7 +339,7 @@ void SessionServiceBase::SetWindowWorkspace(SessionID window_id,
 void SessionServiceBase::SetTabIndexInWindow(SessionID window_id,
                                              SessionID tab_id,
                                              int new_index) {
-  if (!ShouldTrackChangesToWindow(window_id)) {
+  if (!ShouldTrackChangesToWindow(window_id) || IsEphemeralTabId(tab_id)) {
     return;
   }
 
@@ -310,12 +353,24 @@ void SessionServiceBase::TabInserted(WebContents* contents) {
   if (!ShouldTrackChangesToWindow(session_tab_helper->window_id())) {
     return;
   }
+  bool is_ephemeral = false;
+  const std::string container_id =
+      GetLightTabContainerInfo(contents, &is_ephemeral);
+  if (is_ephemeral) {
+    ephemeral_tab_ids_.insert(session_tab_helper->session_id());
+    return;
+  }
   if (windows_empty_at_last_rebuild_.erase(session_tab_helper->window_id())) {
     base::UmaHistogramBoolean(
         "Session.Counterfactual.EmptyWindowTabWouldHaveBeenLost", true);
   }
   SetTabWindow(session_tab_helper->window_id(),
                session_tab_helper->session_id());
+  if (!container_id.empty()) {
+    ScheduleCommand(sessions::CreateAddTabExtraDataCommand(
+        session_tab_helper->session_id(), kLightContainerExtraDataKey,
+        container_id));
+  }
   std::string app_id = apps::GetAppIdForWebContents(contents);
   if (!app_id.empty()) {
     SetTabExtensionAppID(session_tab_helper->window_id(),
@@ -344,6 +399,9 @@ void SessionServiceBase::TabInserted(WebContents* contents) {
 void SessionServiceBase::TabClosing(WebContents* contents) {
   sessions::SessionTabHelper* session_tab_helper =
       sessions::SessionTabHelper::FromWebContents(contents);
+  if (ephemeral_tab_ids_.erase(session_tab_helper->session_id()) > 0) {
+    return;
+  }
   if (ShouldDeleteSessionStorageOnTabClosing(session_tab_helper->window_id())) {
     content::SessionStorageNamespaceHandle* session_storage_namespace =
         contents->GetController().GetDefaultSessionStorageNamespace();
@@ -362,6 +420,12 @@ void SessionServiceBase::TabRestored(WebContents* tab, bool pinned) {
   sessions::SessionTabHelper* session_tab_helper =
       sessions::SessionTabHelper::FromWebContents(tab);
   if (!ShouldTrackChangesToWindow(session_tab_helper->window_id())) {
+    return;
+  }
+  bool is_ephemeral = false;
+  GetLightTabContainerInfo(tab, &is_ephemeral);
+  if (is_ephemeral) {
+    ephemeral_tab_ids_.insert(session_tab_helper->session_id());
     return;
   }
 
@@ -390,7 +454,7 @@ void SessionServiceBase::SetTabExtensionAppID(
     SessionID window_id,
     SessionID tab_id,
     const std::string& extension_app_id) {
-  if (!ShouldTrackChangesToWindow(window_id)) {
+  if (!ShouldTrackChangesToWindow(window_id) || IsEphemeralTabId(tab_id)) {
     return;
   }
 
@@ -401,7 +465,7 @@ void SessionServiceBase::SetTabExtensionAppID(
 void SessionServiceBase::SetLastActiveTime(SessionID window_id,
                                            SessionID tab_id,
                                            base::Time last_active_time) {
-  if (!ShouldTrackChangesToWindow(window_id)) {
+  if (!ShouldTrackChangesToWindow(window_id) || IsEphemeralTabId(tab_id)) {
     return;
   }
 
@@ -429,7 +493,7 @@ void SessionServiceBase::SetWindowAppName(SessionID window_id,
 void SessionServiceBase::SetPinnedState(SessionID window_id,
                                         SessionID tab_id,
                                         bool is_pinned) {
-  if (!ShouldTrackChangesToWindow(window_id)) {
+  if (!ShouldTrackChangesToWindow(window_id) || IsEphemeralTabId(tab_id)) {
     return;
   }
 
@@ -473,7 +537,7 @@ void SessionServiceBase::SetTabUserAgentOverride(
 void SessionServiceBase::SetSelectedNavigationIndex(SessionID window_id,
                                                     SessionID tab_id,
                                                     int index) {
-  if (!ShouldTrackChangesToWindow(window_id)) {
+  if (!ShouldTrackChangesToWindow(window_id) || IsEphemeralTabId(tab_id)) {
     return;
   }
 
@@ -510,7 +574,7 @@ void SessionServiceBase::UpdateTabNavigation(
     SessionID tab_id,
     const SerializedNavigationEntry& navigation) {
   if (!ShouldTrackURLForRestore(navigation.virtual_url()) ||
-      !ShouldTrackChangesToWindow(window_id)) {
+      !ShouldTrackChangesToWindow(window_id) || IsEphemeralTabId(tab_id)) {
     return;
   }
 
@@ -527,7 +591,7 @@ void SessionServiceBase::TabNavigationPathPruned(SessionID window_id,
                                                  SessionID tab_id,
                                                  int index,
                                                  int count) {
-  if (!ShouldTrackChangesToWindow(window_id)) {
+  if (!ShouldTrackChangesToWindow(window_id) || IsEphemeralTabId(tab_id)) {
     return;
   }
 
@@ -666,8 +730,20 @@ void SessionServiceBase::BuildCommandsForTab(
   sessions::SessionTabHelper* session_tab_helper =
       sessions::SessionTabHelper::FromWebContents(tab);
   const SessionID session_id(session_tab_helper->session_id());
+  bool is_ephemeral = false;
+  const std::string container_id =
+      GetLightTabContainerInfo(tab, &is_ephemeral);
+  if (is_ephemeral) {
+    ephemeral_tab_ids_.insert(session_id);
+    return;
+  }
   command_storage_manager()->AppendRebuildCommand(
       sessions::CreateSetTabWindowCommand(window_id, session_id));
+  if (!container_id.empty()) {
+    command_storage_manager()->AppendRebuildCommand(
+        sessions::CreateAddTabExtraDataCommand(
+            session_id, kLightContainerExtraDataKey, container_id));
+  }
 
   const int current_index = tab->GetController().GetCurrentEntryIndex();
   const int min_index =
@@ -774,13 +850,29 @@ void SessionServiceBase::BuildCommandsForBrowser(
           browser->GetSessionID(),
           BrowserWindow::FromBrowser(browser)->IsVisibleOnAllWorkspaces()));
 
+  TabStripModel* tab_strip = browser->GetTabStripModel();
+  int persisted_active_index = 0;
+  {
+    int raw_active = tab_strip->active_index();
+    int persisted_idx = 0;
+    int raw_idx = 0;
+    for (const tabs::TabInterface* tab_interface : *tab_strip) {
+      bool is_ephemeral = false;
+      GetLightTabContainerInfo(tab_interface->GetContents(), &is_ephemeral);
+      if (!is_ephemeral) {
+        if (raw_idx == raw_active) {
+          persisted_active_index = persisted_idx;
+        }
+        persisted_idx++;
+      }
+      raw_idx++;
+    }
+  }
   command_storage_manager()->AppendRebuildCommand(
       sessions::CreateSetSelectedTabInWindowCommand(
-          browser->GetSessionID(),
-          browser->GetTabStripModel()->active_index()));
+          browser->GetSessionID(), persisted_active_index));
 
   // Set the visual data for each tab group.
-  TabStripModel* tab_strip = browser->GetTabStripModel();
   if (tab_strip->SupportsTabGroups()) {
     TabGroupModel* group_model = tab_strip->group_model();
     tab_groups::TabGroupSyncService* tab_group_service =
@@ -845,18 +937,31 @@ void SessionServiceBase::BuildCommandsForBrowser(
   }
 
   int index = 0;
+  int persisted_index = 0;
   for (const tabs::TabInterface* tab_interface : *tab_strip) {
     WebContents* tab = tab_interface->GetContents();
     CHECK(tab, base::NotFatalUntil::M163);
+    bool is_ephemeral = false;
+    GetLightTabContainerInfo(tab, &is_ephemeral);
+    if (is_ephemeral) {
+      if (sessions::SessionTabHelper* sth =
+              sessions::SessionTabHelper::FromWebContents(tab)) {
+        ephemeral_tab_ids_.insert(sth->session_id());
+      }
+      index++;
+      continue;
+    }
     const std::optional<tab_groups::TabGroupId> group_id =
         session_tab_group_utils::GetPersistableTabGroupForTab(*tab_strip,
                                                               index);
     const std::optional<split_tabs::SplitTabId> split_id =
         tab_strip->GetSplitForTab(index);
 
-    BuildCommandsForTab(browser->GetSessionID(), tab, index, group_id, split_id,
-                        tab_interface->IsPinned(), tab_to_available_range);
+    BuildCommandsForTab(browser->GetSessionID(), tab, persisted_index, group_id,
+                        split_id, tab_interface->IsPinned(),
+                        tab_to_available_range);
 
+    persisted_index++;
     index++;
   }
 
@@ -868,6 +973,7 @@ void SessionServiceBase::BuildCommandsFromBrowsers(
     std::set<SessionID>* windows_to_track) {
   windows_empty_at_last_rebuild_.clear();
   tabs_past_rebuild_bound_.clear();
+  ephemeral_tab_ids_.clear();
   CHECK(is_saving_enabled_, base::NotFatalUntil::M163);
   // The platform session id is only written once, when the platform session is
   // initialized, so it has to be carried over when the commands are rebuilt.

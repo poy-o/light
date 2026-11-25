@@ -18,12 +18,20 @@ namespace content {
 class WebContents;
 }
 
+enum class LightContainerClearBehavior : int {
+  kKeep = 0,            // Persistent isolated storage until cleared manually.
+  kOnBrowserQuit = 1,   // Ephemeral in-memory storage; cleared when Light quits.
+  kOnAllTabsClosed = 2, // Ephemeral in-memory; cleared once all tabs in container close.
+};
+
 struct LightTabContainer {
   std::string id;
   std::string name;
   std::string symbol;
   std::string color_hex;
   bool in_memory = false;
+  LightContainerClearBehavior clear_behavior =
+      LightContainerClearBehavior::kKeep;
 };
 
 // Returns the configured list of Tab Containers (seeding built-in defaults
@@ -63,5 +71,19 @@ content::WebContents* LightOpenNewTabInContainer(
 // uses the default browser storage partition.
 std::string LightGetTabContainerIdForWebContents(
     content::WebContents* web_contents);
+
+// Returns true if `web_contents` belongs to an ephemeral/in-memory (Private)
+// tab container whose history and session state must never be persisted.
+bool LightIsPrivateContainerWebContents(content::WebContents* web_contents);
+
+// Attaches the Tab Container tag `container_id` to `web_contents` (used when
+// inheriting a container on child/duplicated tabs).
+void LightAttachTabContainerTag(content::WebContents* web_contents,
+                                const std::string& container_id);
+
+// Returns whether opening a new tab (via + button / Cmd+T / Spotlight) while
+// focused on a contained tab should inherit that container. Off by default.
+bool LightNewTabInheritsActiveContainer();
+void LightSetNewTabInheritsActiveContainer(bool inherit);
 
 #endif  // CHROME_BROWSER_UI_VIEWS_FRAME_LIGHT_TAB_CONTAINERS_MAC_H_

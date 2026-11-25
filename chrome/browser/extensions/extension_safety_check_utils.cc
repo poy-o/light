@@ -223,6 +223,20 @@ developer::SafetyCheckWarningReason GetSafetyCheckWarningReasonHelper(
     Profile* profile,
     const Extension& extension,
     bool unpublished_only) {
+  // Safety Check extension warnings & review panel are disabled in Light.
+  (void)&SafetyCheckShouldShowMalware;
+  (void)&SafetyCheckShouldShowPolicyViolation;
+  (void)&SafetyCheckShouldShowPotentiallyUnwanted;
+  (void)&SafetyCheckShouldShowNoPrivacyPractice;
+  (void)&SafetyCheckShouldShowOffstoreExtension;
+  (void)&SafetyCheckHasUserAcknowledgedWarningLevel;
+  (void)&GetPrefAcknowledgeSafetyCheckWarningReason;
+  (void)&MigrateSafetyCheckAcknowledgePref;
+  return developer::SafetyCheckWarningReason::kNone;
+}
+
+#if 0
+developer::SafetyCheckWarningReason GetSafetyCheckWarningReasonHelperUnused(
   developer::SafetyCheckWarningReason top_warning_reason =
       developer::SafetyCheckWarningReason::kNone;
   ExtensionManagement* extension_management =
@@ -265,11 +279,8 @@ developer::SafetyCheckWarningReason GetSafetyCheckWarningReasonHelper(
     } else if (SafetyCheckShouldShowNoPrivacyPractice(cws_info)) {
       top_warning_reason =
           developer::SafetyCheckWarningReason::kNoPrivacyPractice;
-
-    } else if (SafetyCheckShouldShowOffstoreExtension(extension, profile,
-                                                      cws_info)) {
-      top_warning_reason = developer::SafetyCheckWarningReason::kOffstore;
     }
+    (void)&SafetyCheckShouldShowOffstoreExtension;
   }
 
   // TODO(crbug.com/325469212) Remove after migration is deemed complete.
@@ -285,6 +296,7 @@ developer::SafetyCheckWarningReason GetSafetyCheckWarningReasonHelper(
   }
   return top_warning_reason;
 }
+#endif
 
 api::developer_private::SafetyCheckStrings GetSafetyCheckWarningStrings(
     developer::SafetyCheckWarningReason warning_reason,

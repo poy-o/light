@@ -307,6 +307,11 @@ void DownloadToolbarUIController::OpenSecuritySubpage(
 // we do not show the partial view. If the partial view is already showing,
 // there is nothing to do here, the controller should update the partial view.
 void DownloadToolbarUIController::ShowDetails() {
+#if BUILDFLAG(IS_MAC)
+  // Light renders downloads via its native Liquid Glass sidebar Downloads
+  // popup instead of Chromium's toolbar download bubble.
+  return;
+#else
   if (bubble_delegate_ || pending_bubble_) {
     return;
   }
@@ -318,6 +323,7 @@ void DownloadToolbarUIController::ShowDetails() {
                             base::Unretained(this)));
   }
   ShowBubble(DownloadBubbleMode::kPartial);
+#endif
 }
 
 void DownloadToolbarUIController::HideDetails() {
@@ -519,6 +525,10 @@ void DownloadToolbarUIController::InvokeUI() {
 }
 
 void DownloadToolbarUIController::ShowPendingDownloadStartedAnimation() {
+#if BUILDFLAG(IS_MAC)
+  has_pending_download_started_animation_ = false;
+  return;
+#else
   if (!has_pending_download_started_animation_) {
     return;
   }
@@ -541,6 +551,7 @@ void DownloadToolbarUIController::ShowPendingDownloadStartedAnimation() {
         button->GetColor(kColorDownloadToolbarButtonAnimationForeground),
         button->GetColor(kColorDownloadToolbarButtonAnimationBackground));
   }
+#endif
 }
 
 bool DownloadToolbarUIController::IsProgressRingInDownloadingStateForTesting() {
@@ -617,6 +628,9 @@ void DownloadToolbarUIController::BubbleCloser::OnWidgetDestroyed(
 void DownloadToolbarUIController::ShowBubble(
     DownloadBubbleMode mode,
     std::optional<ContentId> content_id) {
+#if BUILDFLAG(IS_MAC)
+  return;
+#else
   // Requests for a complete (i.e. non-partial) window override requests for a
   // partial window.
   if (!pending_bubble_ || mode == DownloadBubbleMode::kComplete) {
@@ -640,6 +654,7 @@ void DownloadToolbarUIController::ShowBubble(
       kActionShowDownloads,
       base::BindOnce(&DownloadToolbarUIController::OnBubbleAnchorAssembled,
                      weak_factory_.GetWeakPtr()));
+#endif
 }
 
 void DownloadToolbarUIController::OnBubbleAnchorAssembled(

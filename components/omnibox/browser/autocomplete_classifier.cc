@@ -53,93 +53,20 @@ void AutocompleteClassifier::Shutdown() {
 
 // static
 int AutocompleteClassifier::DefaultOmniboxProviders(bool is_low_memory_device) {
+  // Light: strictly local, non-AI providers only (no zero-suggest network
+  // calls, no AI Mode / contextual / featured / on-device / remote telemetry).
   return static_cast<int>(
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-      // Custom search engines cannot be used on mobile.
       AutocompleteProvider::Type::kKeyword |
       AutocompleteProvider::Type::kOpenTab |
-      AutocompleteProvider::Type::kFeaturedSearch |
-      // Most visited sites for desktop.
-      (omnibox_feature_configs::OmniboxUrlSuggestionsOnFocus::Get().enabled
-           ? AutocompleteProvider::Type::kMostVisitedSites
-           : AutocompleteProvider::Type::kNone) |
-      (omnibox_feature_configs::OmniboxUrlSuggestionsOnFocus::Get()
-               .show_recently_closed_tabs
-           ? AutocompleteProvider::Type::kRecentlyClosedTabs
-           : AutocompleteProvider::Type::kNone) |
-      AutocompleteProvider::Type::kContextualSearch |
-#elif !BUILDFLAG(IS_DESKTOP_ANDROID)
-      AutocompleteProvider::Type::kClipboard |
-      AutocompleteProvider::Type::kMostVisitedSites |
-#endif
-#if BUILDFLAG(IS_ANDROID)
-      AutocompleteProvider::Type::kVoiceSuggest |
-      // For Desktop Android's Lens Overlay integration.
-      AutocompleteProvider::Type::kContextualSearch |
-      // Only enabled for hub search.
-      AutocompleteProvider::Type::kOpenTab |
-      // Only enabled for hub search.
-      AutocompleteProvider::Type::kTabGroup |
-      // Only enabled for the Tab Search overlay.
-      (base::FeatureList::IsEnabled(omnibox::kAndroidTabSearchRecentTabs)
-           ? AutocompleteProvider::Type::kRecentlyClosedTabs
-           : AutocompleteProvider::Type::kNone) |
-      // Keyword search for Android.
-      (base::FeatureList::IsEnabled(omnibox::kOmniboxSiteSearch)
-           ? AutocompleteProvider::Type::kKeyword |
-                 AutocompleteProvider::Type::kFeaturedSearch
-           : AutocompleteProvider::Type::kNone) |
-#endif
-#if !BUILDFLAG(IS_IOS)
-      (history_clusters::GetConfig().is_journeys_enabled_no_locale_check &&
-               history_clusters::GetConfig().omnibox_history_cluster_provider
-           ? AutocompleteProvider::Type::kHistoryClusterProvider
-           : AutocompleteProvider::Type::kNone) |
-      AutocompleteProvider::Type::kEnterpriseSearchAggregator |
-#endif
-      AutocompleteProvider::Type::kZeroSuggest |
       AutocompleteProvider::Type::kZeroSuggestLocalHistory |
-      (base::FeatureList::IsEnabled(omnibox::kDocumentProvider)
-#if BUILDFLAG(IS_ANDROID)
-               && base::android::device_info::is_desktop()
-#endif
-           ? AutocompleteProvider::Type::kDocument
-           : AutocompleteProvider::Type::kNone) |
-      (OmniboxFieldTrial::IsOnDeviceHeadSuggestEnabledForAnyMode()
-           ? AutocompleteProvider::Type::kOnDeviceHead
-           : AutocompleteProvider::Type::kNone) |
-      (base::FeatureList::IsEnabled(omnibox::kOmniboxCrossDeviceTabZeroSuggest)
-           ? AutocompleteProvider::Type::kCrossDeviceTab
-           : AutocompleteProvider::Type::kNone) |
       AutocompleteProvider::Type::kBookmark |
       AutocompleteProvider::Type::kBuiltin |
       AutocompleteProvider::Type::kHistoryQuick |
       AutocompleteProvider::Type::kHistoryUrl |
-      AutocompleteProvider::Type::kSearch |
       AutocompleteProvider::Type::kShortcuts |
       AutocompleteProvider::Type::kHistoryFuzzy |
       AutocompleteProvider::Type::kCalculator |
-      AutocompleteProvider::Type::kVerbatimMatch |
-#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
-  // The `chrome.omnibox` extension API uses
-  // `AutocompleteProvider::Type::kKeyword`, including on desktop Android.
-#if BUILDFLAG(IS_ANDROID)
-      (base::FeatureList::IsEnabled(omnibox::kOmniboxSiteSearch)
-           ? AutocompleteProvider::Type::kKeyword
-           : AutocompleteProvider::Type::kNone) |
-#else
-      AutocompleteProvider::Type::kKeyword |
-#endif
-      // `UnscopedExtensionProvider` should only be included when extensions are
-      // enabled and the `ExperimentalOmniboxLabs` feature is enabled.
-      (base::FeatureList::IsEnabled(
-           extensions_features::kExperimentalOmniboxLabs)
-           ? AutocompleteProvider::Type::kUnscopedExtension
-           : AutocompleteProvider::Type::kNone)
-#else
-      AutocompleteProvider::Type::kNone
-#endif
-  );
+      AutocompleteProvider::Type::kVerbatimMatch);
 }
 
 void AutocompleteClassifier::Classify(

@@ -321,39 +321,13 @@ bool UkmService::IsDebugDataAllowed() const {
 }
 
 void UkmService::Initialize() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!initialize_started_);
-  DVLOG(DebuggingLogLevel::Rare) << "UkmService::Initialize";
-  initialize_started_ = true;
-
-  DCHECK_EQ(0, report_count_);
-  if (client_->ShouldResetClientIdsOnClonedInstall()) {
-    ResetClientState(ResetReason::kClonedInstall);
-  } else {
-    client_id_ = LoadOrGenerateAndStoreClientId(pref_service_);
-    session_id_ = LoadAndIncrementSessionId(pref_service_);
-  }
-
-  metrics_providers_.Init();
-
-  StartInitTask();
+  // Light: UKM disabled.
+  return;
 }
 
 void UkmService::EnableReporting() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DVLOG(DebuggingLogLevel::Rare) << "UkmService::EnableReporting";
-  if (reporting_service_.reporting_active()) {
-    return;
-  }
-
-  log_creation_time_ = base::TimeTicks::Now();
-  metrics_providers_.OnRecordingEnabled();
-
-  if (!initialize_started_) {
-    Initialize();
-  }
-  scheduler_->Start();
-  reporting_service_.EnableReporting();
+  // Light: UKM reporting disabled.
+  return;
 }
 
 void UkmService::DisableReporting() {

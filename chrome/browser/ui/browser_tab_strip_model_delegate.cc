@@ -60,7 +60,10 @@
 #include "components/split_tabs/split_tab_visual_data.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tabs/public/tab_group.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/security_principal.h"
 #include "content/public/browser/site_instance.h"
+#include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "ui/base/mojom/window_show_state.mojom.h"
@@ -232,6 +235,17 @@ std::optional<SessionID> BrowserTabStripModelDelegate::CreateHistoricalTab(
     content::WebContents* contents) {
   if (!BrowserSupportsHistoricalEntries()) {
     return std::nullopt;
+  }
+  if (contents) {
+    if (content::RenderFrameHost* rfh = contents->GetPrimaryMainFrame()) {
+      if (content::SiteInstance* si = rfh->GetSiteInstance()) {
+        const auto& config =
+            si->GetSecurityPrincipal().GetStoragePartitionConfig();
+        if (!config.is_default() && config.in_memory()) {
+          return std::nullopt;
+        }
+      }
+    }
   }
 
   sessions::TabRestoreService* service =

@@ -165,6 +165,11 @@ class ExtensionPopup : public views::BubbleDialogDelegateView,
   base::ScopedObservation<views::Widget, views::WidgetObserver>
       anchor_widget_observation_{this};
 
+#if BUILDFLAG(IS_MAC)
+  bool sidebar_popup_locked_ = false;
+  gfx::NativeWindow sidebar_browser_window_ = gfx::NativeWindow();
+#endif
+
   base::WeakPtrFactory<ExtensionPopup> deferred_close_weak_ptr_factory_;
 };
 

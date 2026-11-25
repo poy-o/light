@@ -210,6 +210,15 @@ int BrowserViewLayoutDelegateImpl::GetLightPinnedSidebarWidth() const {
 #endif
 }
 
+gfx::Insets BrowserViewLayoutDelegateImpl::GetLightContentFrameInsets() const {
+#if BUILDFLAG(IS_MAC)
+  return LightGlassSidebarBridge::GetContentFrameInsetsForBrowserView(
+      &browser_view_.get());
+#else
+  return gfx::Insets();
+#endif
+}
+
 bool BrowserViewLayoutDelegateImpl::IsActiveTabSplit() const {
   // Use the model state as this can be called during active tab change
   // when the multi contents view hasn't been fully setup and this

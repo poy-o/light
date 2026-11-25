@@ -47,6 +47,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/browser_widget.h"
 #include "chrome/browser/ui/views/frame/glass_frame_service.h"
+#include "chrome/browser/ui/views/frame/light_extensions_manager_controller.h"
 #include "chrome/browser/ui/views/frame/light_glass_sidebar_controller.h"
 #include "chrome/browser/ui/views/frame/light_native_settings_controller.h"
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_frame_toolbar_utils.h"
@@ -705,6 +706,10 @@ bool BrowserNativeWidgetMac::ExecuteCommand(
     LightNativeSettingsController::ShowForBrowser(browser);
     return true;
   }
+  if (command == IDC_MANAGE_EXTENSIONS) {
+    LightExtensionsManagerController::ShowForBrowser(browser);
+    return true;
+  }
 
   if (light_sidebar_bridge_) {
     if (command == IDC_FOCUS_LOCATION || command == IDC_FOCUS_TOOLBAR) {
@@ -713,6 +718,18 @@ bool BrowserNativeWidgetMac::ExecuteCommand(
     }
     if (command == IDC_NEW_TAB) {
       light_sidebar_bridge_->ShowSpotlightCommandBar();
+      return true;
+    }
+    if (command == IDC_FIND) {
+      light_sidebar_bridge_->ShowFindBar();
+      return true;
+    }
+    if (command == IDC_FIND_NEXT) {
+      light_sidebar_bridge_->FindNext(/*forward=*/true);
+      return true;
+    }
+    if (command == IDC_FIND_PREVIOUS) {
+      light_sidebar_bridge_->FindNext(/*forward=*/false);
       return true;
     }
     if (command == IDC_TOGGLE_VERTICAL_TABS ||
@@ -812,6 +829,9 @@ NativeWidgetMacNSWindow* BrowserNativeWidgetMac::CreateNSWindow(
     const remote_cocoa::mojom::CreateWindowParams* params) {
   CHECK(browser_view_);
   NativeWidgetMacNSWindow* ns_window = NativeWidgetMac::CreateNSWindow(params);
+  if (browser_view_->GetIsNormalType()) {
+    ns_window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
+  }
   touch_bar_delegate_ = [[BrowserWindowTouchBarViewsDelegate alloc]
       initWithBrowser:browser_view_->browser()
                window:ns_window];

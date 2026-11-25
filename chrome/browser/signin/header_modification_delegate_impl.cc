@@ -166,6 +166,18 @@ bool HeaderModificationDelegateImpl::ShouldInterceptNavigation(
 #endif
   }
 
+  if (contents) {
+    if (content::RenderFrameHost* rfh = contents->GetPrimaryMainFrame()) {
+      if (content::SiteInstance* si = rfh->GetSiteInstance()) {
+        const auto& config =
+            si->GetSecurityPrincipal().GetStoragePartitionConfig();
+        if (!config.is_default()) {
+          return false;
+        }
+      }
+    }
+  }
+
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   if (ShouldIgnoreGuestWebViewRequest(contents)) {
     return false;

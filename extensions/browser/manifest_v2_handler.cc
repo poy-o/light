@@ -109,12 +109,8 @@ bool ManifestV2HandlerFactory::ServiceIsCreatedWithBrowserContext() const {
 
 // Returns true if legacy extensions should be disabled.
 bool ShouldDisableLegacyExtensions() {
-  if (g_allow_mv2_for_testing) {
-    // We allow legacy MV2 extensions for testing purposes.
-    return false;
-  }
-
-  return true;
+  // Light: full Manifest V2 support enabled.
+  return false;
 }
 
 }  // namespace

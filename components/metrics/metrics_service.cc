@@ -438,9 +438,8 @@ void MetricsService::InitializeMetricsRecordingState() {
 }
 
 void MetricsService::Start() {
-  HandleIdleSinceLastTransmission(false);
-  EnableRecording();
-  EnableReporting();
+  DisableReporting();
+  DisableRecording();
 }
 
 void MetricsService::StartRecordingForTests() {
@@ -464,11 +463,8 @@ void MetricsService::Stop() {
 }
 
 void MetricsService::EnableReporting() {
-  if (reporting_service_.reporting_active()) {
-    return;
-  }
-  reporting_service_.EnableReporting();
-  StartSchedulerIfNecessary();
+  // Light: metrics reporting disabled.
+  return;
 }
 
 void MetricsService::DisableReporting() {

@@ -51,6 +51,7 @@ class BrowserViewLayoutDelegate {
   virtual bool IsInfobarVisible() const = 0;
   virtual bool IsContentsSeparatorEnabled() const = 0;
   virtual int GetLightPinnedSidebarWidth() const = 0;
+  virtual gfx::Insets GetLightContentFrameInsets() const = 0;
   virtual bool IsActiveTabSplit() const = 0;
   virtual bool IsActiveTabAtLeadingWindowEdge() const = 0;
   virtual const ImmersiveModeController* GetImmersiveModeController() const = 0;

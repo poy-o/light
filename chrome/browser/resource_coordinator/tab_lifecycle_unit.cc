@@ -41,6 +41,10 @@
 #include "components/permissions/permission_manager.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/security_principal.h"
+#include "content/public/browser/site_instance.h"
+#include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
 #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
@@ -271,7 +275,26 @@ void TabLifecycleUnitSource::TabLifecycleUnit::FinishDiscard(
     LifecycleUnitDiscardReason discard_reason,
     uint64_t tab_memory_footprint_estimate) {
   content::WebContents* const old_contents = web_contents();
-  content::WebContents::CreateParams create_params(tab_strip_model_->profile());
+  scoped_refptr<content::SiteInstance> preserved_container_si;
+  if (content::RenderFrameHost* rfh = old_contents->GetPrimaryMainFrame()) {
+    if (content::SiteInstance* si = rfh->GetSiteInstance()) {
+      const auto& cfg =
+          si->GetSecurityPrincipal().GetStoragePartitionConfig();
+      if (!cfg.is_default() && cfg.partition_domain() == "light_container") {
+        const GURL vis_url = old_contents->GetVisibleURL();
+        const GURL seed_url =
+            vis_url.SchemeIsHTTPOrHTTPS()
+                ? vis_url
+                : GURL("https://" + cfg.partition_name() +
+                       ".light-container.invalid/");
+        preserved_container_si =
+            content::SiteInstance::CreateForFixedStoragePartition(
+                tab_strip_model_->profile(), seed_url, cfg);
+      }
+    }
+  }
+  content::WebContents::CreateParams create_params(
+      tab_strip_model_->profile(), std::move(preserved_container_si));
   // TODO(fdoray): Consider setting |initially_hidden| to true when the tab is
   // OCCLUDED. Will require checking that the tab reload correctly when it
   // becomes VISIBLE.

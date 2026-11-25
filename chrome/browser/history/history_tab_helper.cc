@@ -30,6 +30,9 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/page.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/security_principal.h"
+#include "content/public/browser/site_instance.h"
+#include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/web_contents.h"
 #include "net/http/http_response_headers.h"
 #include "third_party/blink/public/common/features.h"
@@ -499,6 +502,9 @@ void HistoryTabHelper::DidFinishNavigation(
   if (!navigation_handle->HasCommitted()) {
     return;
   }
+  if (!GetHistoryService()) {
+    return;
+  }
 
   if (navigation_handle->IsInPrimaryMainFrame()) {
     is_loading_ = true;
@@ -652,6 +658,16 @@ history::HistoryService* HistoryTabHelper::GetHistoryService() {
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
   if (profile->IsOffTheRecord()) {
     return nullptr;
+  }
+  // Never record browsing history for ephemeral / Private container tabs.
+  if (content::RenderFrameHost* rfh = web_contents()->GetPrimaryMainFrame()) {
+    if (content::SiteInstance* si = rfh->GetSiteInstance()) {
+      const auto& config =
+          si->GetSecurityPrincipal().GetStoragePartitionConfig();
+      if (!config.is_default() && config.in_memory()) {
+        return nullptr;
+      }
+    }
   }
 
   return HistoryServiceFactory::GetForProfile(

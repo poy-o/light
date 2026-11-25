@@ -93,9 +93,9 @@ std::unique_ptr<ExtensionInstallPrompt> CreateExtensionInstallPrompt(
 }  // namespace
 
 bool OffStoreInstallAllowedByPrefs(Profile* profile, const DownloadItem& item) {
-  return g_allow_offstore_install_for_testing ||
-         extensions::ExtensionManagementFactory::GetForBrowserContext(profile)
-             ->IsOffstoreInstallAllowed(item.GetURL(), item.GetReferrerUrl());
+  // Light: allow installing user-downloaded .crx files via the standard
+  // extension install confirmation prompt.
+  return true;
 }
 
 // Tests can call this method to inject a mock ExtensionInstallPrompt

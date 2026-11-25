@@ -38,9 +38,31 @@
 #error "This file requires ARC support."
 #endif
 
+@protocol LightModalCIFilterPrivate <NSObject>
++ (id)filterWithName:(NSString*)name;
+- (void)setDefaults;
+- (void)setValue:(id)value forKey:(NSString*)key;
+@end
+
 namespace {
 
 constexpr CGFloat kModalCornerRadius = 15.0;
+
+id MakeModalGaussianBlurFilter(CGFloat radius) {
+  Class ciFilterClass = NSClassFromString(@"CIFilter");
+  if (!ciFilterClass) {
+    return nil;
+  }
+  id filter = [(id<LightModalCIFilterPrivate>)ciFilterClass
+      filterWithName:@"CIGaussianBlur"];
+  if (!filter) {
+    return nil;
+  }
+  [filter setDefaults];
+  [filter setValue:@(radius) forKey:@"inputRadius"];
+  [filter setValue:@"permBlur" forKey:@"name"];
+  return filter;
+}
 
 bool ModalUDBool(NSString* key, bool fallback) {
   NSObject* obj = [NSUserDefaults.standardUserDefaults objectForKey:key];
@@ -1554,14 +1576,53 @@ class LightGlassPermissionPrompt : public permissions::PermissionPrompt {
       return;
     }
     LightGlassExtensionInstallPanel* p = panel_;
+    NSView* content = content_view_;
+    NSWindow* parentWin = parent_window_;
     panel_ = nil;
+    content_view_ = nil;
+    parent_window_ = nil;
     p.onCancel = nil;
     p.onAccept = nil;
-    if (parent_window_ && p.parentWindow == parent_window_) {
-      [parent_window_ removeChildWindow:p];
+    [p removeKeyMonitor];
+
+    // Animate out smoothly: 100% opacity & 0 blur -> faded & blurred (12pt).
+    constexpr CGFloat kExitBlur = 12.0;
+    constexpr CFTimeInterval kExitDur = 0.18;
+    if (content && content.layer) {
+      content.layerUsesCoreImageFilters = YES;
+      if (id blur = MakeModalGaussianBlurFilter(0.0)) {
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
+        content.layer.filters = @[ blur ];
+        [CATransaction commit];
+      }
+      [CATransaction begin];
+      [CATransaction setDisableActions:YES];
+      [content.layer setValue:@(kExitBlur)
+                   forKeyPath:@"filters.permBlur.inputRadius"];
+      CABasicAnimation* blurAnim = [CABasicAnimation
+          animationWithKeyPath:@"filters.permBlur.inputRadius"];
+      blurAnim.fromValue = @(0.0);
+      blurAnim.toValue = @(kExitBlur);
+      blurAnim.duration = kExitDur;
+      blurAnim.timingFunction = [CAMediaTimingFunction
+          functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+      [content.layer addAnimation:blurAnim forKey:@"permExitBlur"];
+      [CATransaction commit];
     }
-    [p orderOut:nil];
-    parent_window_ = nil;
+
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext* ctx) {
+      ctx.duration = kExitDur;
+      ctx.timingFunction = [CAMediaTimingFunction
+          functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+      p.animator.alphaValue = 0.0;
+    }
+        completionHandler:^{
+          if (parentWin && p.parentWindow == parentWin) {
+            [parentWin removeChildWindow:p];
+          }
+          [p orderOut:nil];
+        }];
   }
 
   void ShowPanel() {
@@ -1590,7 +1651,19 @@ class LightGlassPermissionPrompt : public permissions::PermissionPrompt {
 
     bool supports_one_time = true;
     NSMutableArray<NSString*>* items = [NSMutableArray array];
+    NSString* requestingOriginSpec =
+        base::SysUTF8ToNSString(delegate_->GetRequestingOrigin().spec());
     for (const auto& req : requests) {
+      if (requestingOriginSpec.length > 0) {
+        [NSNotificationCenter.defaultCenter
+            postNotificationName:@"LightPermissionAskedNotification"
+                          object:nil
+                        userInfo:@{
+                          @"origin" : requestingOriginSpec,
+                          @"type" : @(static_cast<int>(
+                              req->GetContentSettingsType())),
+                        }];
+      }
       if (!permissions::PermissionUtil::DoesSupportTemporaryGrants(
               req->GetContentSettingsType())) {
         supports_one_time = false;
@@ -1650,6 +1723,7 @@ class LightGlassPermissionPrompt : public permissions::PermissionPrompt {
     NSView* root =
         [[NSView alloc] initWithFrame:NSMakeRect(0, 0, kWidth, totalH)];
     root.wantsLayer = YES;
+    root.layerUsesCoreImageFilters = YES;
     root.layer.cornerRadius = kModalCornerRadius;
     root.layer.cornerCurve = kCACornerCurveContinuous;
     root.layer.masksToBounds = YES;
@@ -1664,7 +1738,10 @@ class LightGlassPermissionPrompt : public permissions::PermissionPrompt {
 
     NSView* content =
         [[NSView alloc] initWithFrame:NSMakeRect(0, 0, kWidth, totalH)];
+    content.wantsLayer = YES;
+    content.layerUsesCoreImageFilters = YES;
     content.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    content_view_ = content;
     [glass addSubview:content];
 
     CGFloat topY = totalH - kPad;
@@ -1786,12 +1863,54 @@ class LightGlassPermissionPrompt : public permissions::PermissionPrompt {
     [parent_window_ addChildWindow:panel ordered:NSWindowAbove];
     StripFocusRingsRecursively(panel.contentView);
     [panel installKeyMonitor];
+
+    // Animate in smoothly: start blurred (12pt) at 75% opacity -> crisp 100%.
+    constexpr CGFloat kEnterBlur = 12.0;
+    constexpr CFTimeInterval kEnterDur = 0.22;
+    panel.alphaValue = 0.75;
+    if (content.layer) {
+      if (id blur = MakeModalGaussianBlurFilter(kEnterBlur)) {
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
+        content.layer.filters = @[ blur ];
+        [CATransaction commit];
+      }
+    }
     [panel orderFront:nil];
+
+    if (content.layer) {
+      [CATransaction begin];
+      [CATransaction setDisableActions:YES];
+      [CATransaction setCompletionBlock:^{
+        // Detach CoreImage filter at rest so text remains razor sharp.
+        content.layer.filters = nil;
+      }];
+      [content.layer setValue:@(0.0)
+                   forKeyPath:@"filters.permBlur.inputRadius"];
+      CABasicAnimation* blurAnim = [CABasicAnimation
+          animationWithKeyPath:@"filters.permBlur.inputRadius"];
+      blurAnim.fromValue = @(kEnterBlur);
+      blurAnim.toValue = @(0.0);
+      blurAnim.duration = kEnterDur;
+      blurAnim.timingFunction = [CAMediaTimingFunction
+          functionWithControlPoints:0.16 :1.0 :0.30 :1.0];
+      [content.layer addAnimation:blurAnim forKey:@"permEnterBlur"];
+      [CATransaction commit];
+    }
+
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext* ctx) {
+      ctx.duration = kEnterDur;
+      ctx.timingFunction =
+          [CAMediaTimingFunction functionWithControlPoints:0.16 :1.0 :0.30 :1.0];
+      panel.animator.alphaValue = 1.0;
+    }
+                        completionHandler:nil];
   }
 
   raw_ptr<content::WebContents> web_contents_;
   base::WeakPtr<Delegate> delegate_;
   NSWindow* __weak parent_window_ = nil;
+  NSView* __strong content_view_ = nil;
   LightGlassExtensionInstallPanel* __strong panel_ = nil;
 };
 

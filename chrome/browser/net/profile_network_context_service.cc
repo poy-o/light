@@ -1365,7 +1365,7 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
   network_context_params->http_auth_static_network_context_params =
       network::mojom::HttpAuthStaticNetworkContextParams::New();
 
-  if (IsAmbientAuthAllowedForProfile(profile_)) {
+  if (!in_memory && IsAmbientAuthAllowedForProfile(profile_)) {
     network_context_params->http_auth_static_network_context_params
         ->allow_default_credentials =
         net::HttpAuthPreferences::ALLOW_DEFAULT_CREDENTIALS;
@@ -1476,33 +1476,15 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
 
   proxy_config_monitor_->AddToNetworkContextParams(network_context_params);
 
-  network_context_params->enable_certificate_reporting = true;
-
-  SCTReportingService* sct_reporting_service =
-      SCTReportingServiceFactory::GetForBrowserContext(profile_);
-  if (sct_reporting_service) {
-    network_context_params->sct_auditing_mode =
-        sct_reporting_service->GetReportingMode();
-  } else {
-    network_context_params->sct_auditing_mode =
-        network::mojom::SCTAuditingMode::kDisabled;
-  }
+  network_context_params->enable_certificate_reporting = false;
+  network_context_params->sct_auditing_mode =
+      network::mojom::SCTAuditingMode::kDisabled;
 
   network_context_params->ct_policy = GetCTPolicy();
   cert_verifier_creation_params->ct_policy = GetCTPolicy();
 
-  ChromeDomainReliabilityDelegate delegate;
-  if (domain_reliability::ShouldCreateService(&delegate)) {
-    network_context_params->enable_domain_reliability = true;
-    network_context_params->domain_reliability_upload_reporter =
-        domain_reliability::kUploadReporterString;
-    network_context_params->discard_domain_reliablity_uploads =
-        g_discard_domain_reliability_uploads_for_testing
-            ? *g_discard_domain_reliability_uploads_for_testing
-            : !metrics::MetricsReportingChoiceService::
-                  IsBasicMetricsReportingEnabled(
-                      g_browser_process->local_state());
-  }
+  network_context_params->enable_domain_reliability = false;
+  network_context_params->discard_domain_reliablity_uploads = true;
 
 #if BUILDFLAG(IS_CHROMEOS)
   bool profile_supports_policy_certs = false;

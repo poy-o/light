@@ -74,6 +74,15 @@ scoped_refptr<SiteInstanceImpl> BrowsingInstance::GetSiteInstanceForURL(
   // No current SiteInstance for this site, so let's create one.
   scoped_refptr<SiteInstanceImpl> instance = new SiteInstanceImpl(this);
 
+  // Ensure fixed-storage-partition BrowsingInstances lock their partition
+  // immediately, even if the initial URL (e.g. about:blank) does not normally
+  // assign a site.
+  if (is_fixed_storage_partition_ &&
+      url_info.storage_partition_config.has_value() &&
+      !storage_partition_config_.has_value()) {
+    storage_partition_config_ = url_info.storage_partition_config;
+  }
+
   // Set the site of this new SiteInstance, which will register it with us.
   // Some URLs should leave the SiteInstance's site unassigned, though if
   // `instance` is for a guest, we should always set the site to ensure that it

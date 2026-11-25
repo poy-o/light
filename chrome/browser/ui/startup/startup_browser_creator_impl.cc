@@ -443,6 +443,10 @@ BrowserWindowInterface* StartupBrowserCreatorImpl::OpenTabsInBrowser(
     }
 
     NavigateParams params(browser, tab.url, ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+    params.suppress_light_container_inheritance = true;
+    if (!tab.light_container_id.empty()) {
+      params.light_container_id = tab.light_container_id;
+    }
     if (tab.is_untrusted_launch) {
       // Force an opaque initiator origin for custom scheme launches triggered
       // externally (e.g., from another browser). This prevents downstream

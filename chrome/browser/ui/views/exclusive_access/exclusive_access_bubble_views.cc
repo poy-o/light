@@ -467,29 +467,9 @@ void ExclusiveAccessBubbleViews::Hide() {
 }
 
 void ExclusiveAccessBubbleViews::Show() {
-  if (animation_->IsShowing()) {
-    return;
-  }
-  animation_->SetSlideDuration(base::Milliseconds(350));
-  animation_->Show();
-
-#if !BUILDFLAG(IS_MAC)
-  // presentation_watchdog_timer_ does not play nicely with the OS-native
-  // fullscreen capabilities on Mac. See crbug.com/524763230 and
-  // crbug.com/527790135
-  // TODO(crbug.com/528276492): Reenable on Mac.
-  //
-  // In headless mode frames are never presented to a display, so
-  // OnFirstPresentation() never runs to stop the watchdog. There is also no
-  // human-facing browser window: fullscreen is controlled by the automation
-  // client, which can restore the window or terminate the browser without
-  // relying on visible exit instructions. Arming the watchdog would make it
-  // always fire and spuriously exit fullscreen (e.g. reverting the
-  // --start-fullscreen switch shortly after startup).
-  if (!headless::IsHeadlessMode()) {
-    ArmPresentationWatchdog();
-  }
-#endif
+  // Light intentionally suppresses the "To exit full screen, press Esc" popup.
+  RunHideCallbackIfNeeded(ExclusiveAccessBubbleHideReason::kTimeout);
+  return;
 }
 
 void ExclusiveAccessBubbleViews::ArmPresentationWatchdog() {

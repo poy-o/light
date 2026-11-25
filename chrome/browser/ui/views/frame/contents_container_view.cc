@@ -85,6 +85,11 @@ ContentsContainerView::ContentsContainerView(BrowserView* browser_view)
   contents_view_ = AddChildView(
       std::make_unique<ContentsWebView>(browser_view->GetProfile()));
   contents_view_->SetID(VIEW_ID_TAB_CONTAINER);
+#if BUILDFLAG(IS_MAC)
+  // Allow webpages with `background: transparent` to composite cleanly over
+  // macOS Liquid Glass instead of painting an opaque #3C3C3C backing layer.
+  contents_view_->SetBackgroundVisible(false);
+#endif
 
   if (base::FeatureList::IsEnabled(ntp_features::kNtpFooter)) {
     new_tab_footer_view_separator_ =
